@@ -1,0 +1,169 @@
+//go:build cgo
+
+package treesitter
+
+import (
+	sitter "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/rerorets/hadome/internal/facts"
+)
+
+var ktLoops = set("for_statement", "while_statement", "do_while_statement")
+
+func (k *kotlin) tests(f *file, t *tables) []facts.Test {
+	if !f.test {
+		return nil
+	}
+	jf := &jvmFile{f: f, j: &k.jvm, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{}}
+	for _, fn := range k.functions[f.unit] {
+		jf.names[fn] = f.unit + "." + fn
+	}
+	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
+	var out []facts.Test
+	for _, n := range named(f.root) {
+		if ktTypes[n.Kind()] {
+			out = append(out, jf.ktClass(n, "", nil)...)
+		}
+	}
+	return out
+}
+
+// ktAnnotations returns a declaration's annotations by name.
+func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
+	out := map[string]*sitter.Node{}
+	for _, c := range named(n) {
+		if c.Kind() != "modifiers" {
+			continue
+		}
+		for _, a := range named(c) {
+			if a.Kind() != "annotation" {
+				continue
+			}
+			walk(a, func(x *sitter.Node) bool {
+				if x.Kind() == "user_type" {
+					out[lastElem(f.text(x))] = a
+					return false
+				}
+				return true
+			})
+		}
+	}
+	return out
+}
+
+func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node) []facts.Test {
+	f := jf.f
+	name := prefix + f.field(n, "name")
+	for k, a := range ktAnnotations(f, n) {
+		if jvmSkipAnnotations[k] {
+			classSkip = a
+		}
+	}
+	var tests []*sitter.Node
+	for _, m := range ktMembers(n) {
+		switch m.Kind() {
+		case "property_declaration":
+			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
+				jf.mocks = append(jf.mocks, m)
+			}
+		case "function_declaration":
+			if hasAny(ktAnnotations(f, m), jvmTestAnnotations) {
+				tests = append(tests, m)
+			} else {
+				jf.helpers[f.field(m, "name")] = ktBody(m)
+			}
+		}
+	}
+	var out []facts.Test
+	for _, m := range tests {
+		out = append(out, jf.ktTest(name+"."+f.field(m, "name"), m, classSkip))
+	}
+	for _, m := range ktMembers(n) {
+		if ktTypes[m.Kind()] {
+			out = append(out, jf.ktClass(m, name+".", classSkip)...)
+		}
+	}
+	return out
+}
+
+func ktBody(fn *sitter.Node) *sitter.Node {
+	for _, c := range named(fn) {
+		if c.Kind() == "function_body" {
+			return c
+		}
+	}
+	return nil
+}
+
+func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node) facts.Test {
+	t := newTest(jf.f, name, m)
+	skip := classSkip
+	for k, a := range ktAnnotations(jf.f, m) {
+		if jvmSkipAnnotations[k] {
+			skip = a
+		}
+	}
+	if skip != nil {
+		t.skip(annotationReason(jf.f, skip), skip)
+	}
+	for _, mk := range jf.mocks {
+		t.hazard(facts.HazardMock, mk)
+	}
+	w := &jvmWalk{jf: jf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w.walk(ktBody(m), ktLoops, w.ktVisit)
+	return t.done()
+}
+
+func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
+	switch n.Kind() {
+	case "property_declaration":
+		w.ktProperty(n)
+	case "call_expression":
+		w.ktCall(n)
+	}
+	return true
+}
+
+// ktProperty records a local variable, typed when a constructor of a known class builds it.
+func (w *jvmWalk) ktProperty(n *sitter.Node) {
+	f := w.jf.f
+	name := ""
+	for _, c := range named(n) {
+		switch c.Kind() {
+		case "variable_declaration":
+			name = f.text(c.NamedChild(0))
+			w.locals[name] = true
+		case "call_expression":
+			if class, ok := w.jf.names[f.text(c.NamedChild(0))]; ok && name != "" {
+				w.vars[name] = class
+			}
+		}
+	}
+}
+
+func (w *jvmWalk) ktCall(n *sitter.Node) {
+	f := w.jf.f
+	callee := n.NamedChild(0)
+	var args []*sitter.Node
+	for _, c := range named(n) {
+		if c.Kind() == "value_arguments" {
+			for _, a := range named(c) {
+				args = append(args, a.NamedChild(0))
+			}
+		}
+	}
+	obj, name := "", f.text(callee)
+	if callee.Kind() == "navigation_expression" && callee.NamedChildCount() == 2 {
+		obj, name = f.text(callee.NamedChild(0)), f.text(callee.NamedChild(1))
+	}
+	if obj == "" && w.jf.names[name] != "" && w.jf.j.classes[packageOf(w.jf.names[name])][name] {
+		w.t.call(w.jf.names[name], nil) // a constructor call: Store()
+		return
+	}
+	w.invoke(n, obj, name, args, func(body *sitter.Node) { w.walk(body, ktLoops, w.ktVisit) })
+}
+
+// packageOf returns the package of a class target ("a.b.Store" -> "a.b").
+func packageOf(class string) string {
+	return class[:len(class)-len(lastElem(class))-1]
+}

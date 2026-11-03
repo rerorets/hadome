@@ -1,0 +1,2 @@
+# Every text file is LF on every platform: tests compare generated files and embedded text byte for byte.
+* text=auto eol=lf

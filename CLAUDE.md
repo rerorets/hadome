@@ -1,0 +1,57 @@
+# CLAUDE.md
+
+hadome (歯止め) is a ratcheting checker: it compares a change against the main branch and fails only on regressions — new violations, and anything that shrinks what the tests guard. Start with `README.md`.
+
+## Hard rules
+
+1. **This is a public repository. Bring in no knowledge from any employer or private project.** No code, names, domains, paths, table names, or examples taken from private codebases. Use generic examples only (`store.Append`, `worker/queue`, "product A"). Ideas that are common knowledge are fine; specifics are not.
+2. **Design before code.** Every package starts as a design document in `docs/design/` (responsibility, what it does not do, a Mermaid diagram of types and interfaces, invariants, what is deliberately left out). Stop there for the owner's review before writing code.
+3. **Fail on regressions, not on history.** Every rule compares against the base branch and reports only new violations and regressions.
+4. **Exceptions carry reasons.** An exception marker without a written reason has no effect. Markers in users' source code must not contain the tool's name (use the neutral `gate:` prefix) so that renaming the tool never forces users to rewrite their code.
+5. **Every rule ships with a self-test.**
+6. **No network, no telemetry.** hadome only reads the repository it is pointed at.
+
+## Shape
+
+| Layer | What it is | Where |
+|---|---|---|
+| Engine | Base comparison, violations, reasoned exceptions, self-test harness, output | this repository |
+| Language adapters | Finding tests, reading imports, measuring size, reading docblocks — for Go, TypeScript, Python, Rust, Java, Kotlin | this repository |
+| Generic rules | `tests/`, `deps/`, `size/`, `comments/` | this repository, tuned by configuration |
+| Product configuration | Thresholds, dependency diagram, invariant list, enabled rules | each user's repository |
+| Product-specific gates | Anything a single product needs | each user's repository, using the same interface |
+
+Distributed as a single Go binary, through six ecosystems (`packaging/`, [docs/releasing.md](docs/releasing.md)).
+
+hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs/dependencies.md](docs/dependencies.md) is the diagram its imports must follow. A new package or import starts there.
+
+## Writing
+
+- Code, comments, commit messages and design documents are in English. The README is bilingual (`README.md` is the source of truth, `README.ja.md` follows it).
+- Comments say what the code cannot: why an unusual approach was taken, invariants, and facts a reader would otherwise get wrong. No history, no progress notes, no ticket numbers.
+- Tests follow the model in the README: invariants, writing rules, gate. Test observable behavior only, never copy expected values from the implementation, never read the clock or sleep, never skip silently.
+
+## Local setup
+
+Go with cgo builds all six languages; `CGO_ENABLED=0 go test ./...` checks the Go-only build. `packaging/smoke.sh <version>` builds and uses every package.
+
+Enable the repository hooks once:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` blocks commits containing terms from a private denylist kept **outside** the repository (`$HADOME_DENYLIST` or `~/.config/hadome-dev/denylist.txt`). Never commit that list.
+
+<!-- hadome:begin -->
+## hadome
+
+This repository uses hadome to stop regressions in code and tests.
+
+- Before you finish any change, run `hadome check --format json` and fix every regression it reports.
+- Exit codes: `0` done · `1` regression, fix it · `2` configuration error, fix the configuration · `3` a person must review (a new exception, a loosened configuration, code that stopped being pure, or something hadome could not identify). On `3`, stop and ask. Never change the code just to make it pass.
+- Never add `gate:allow` to get a check to pass. Add one only when the rule truly does not apply, with a specific reason, and tell the person.
+- When a test guards a product-specific invariant, add `guards: <id>` to its doc comment; for `durable`, `erasable`, `append-only` and `fail-closed`, add `guards: <type> <target>`. `idempotent`, `round-trip` and `isolated` are recognised from the test's calls. `hadome explain invariants` lists them.
+- When `hadome check` lists invariant candidates and one covers behaviour that matters, propose it to the person instead of adding it yourself.
+- Before changing `.hadome.yml`, run `hadome explain <key>`. After changing it, run `hadome config check`.
+<!-- hadome:end -->

@@ -1,0 +1,40 @@
+# The crate that lets Rust projects pin hadome: `cargo binstall hadome@<version>` downloads the
+# release's prebuilt binary. The release workflow sets the version; 0.0.0 is never published.
+[package]
+name = "hadome"
+version = "0.0.0"
+edition = "2021"
+description = "Stops regressions in code and tests, not progress."
+license = "MIT"
+repository = "https://github.com/rerorets/hadome"
+readme = "README.md"
+keywords = ["testing", "lint", "ci", "regression"]
+categories = ["development-tools", "development-tools::testing"]
+
+[[bin]]
+name = "hadome"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_{ target }{ archive-suffix }"
+bin-dir = "hadome{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_linux_amd64.tar.gz"
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_linux_amd64.tar.gz"
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_linux_arm64.tar.gz"
+[package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_linux_arm64.tar.gz"
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_darwin_amd64.tar.gz"
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_darwin_arm64.tar.gz"
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_windows_amd64.zip"
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_windows_arm64.zip"
+pkg-fmt = "zip"

@@ -1,0 +1,21 @@
+# hadome checks itself. `hadome explain <key>` describes each key.
+schema: 1
+
+rules:
+  deps:
+    diagram: docs/dependencies.md
+
+# The promises hadome keeps. Each is guarded by a test whose doc comment says `guards: <id>`.
+invariants:
+  - id: base-never-blocks
+    says: "A violation already on the base branch never fails a check, wherever it moves"
+  - id: no-guessing-configuration
+    says: "A configuration that does not match the specification, in either version, stops the check"
+  - id: loosening-is-reviewed
+    says: "A change that loosens the rules judging it needs a person's review"
+  - id: broken-gate-stops
+    says: "A gate that cannot run or breaks the protocol never lets a check pass"
+  - id: same-rules-every-language
+    says: "The same change fails the same rule in every language"
+  - id: no-network
+    says: "hadome never reads configuration from the network"

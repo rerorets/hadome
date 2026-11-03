@@ -1,0 +1,54 @@
+# Every push and pull request: tests in both builds on three operating systems, the rules' own
+# self-tests, and hadome checking itself against the base branch.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test with cgo (all six languages)
+        run: go test ./...
+      - name: Test without cgo (Go only)
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./...
+      - name: Self-test every rule
+        run: go run ./cmd/hadome self-test
+      - name: Check hadome with hadome
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/hadome check --base origin/${{ github.base_ref }}
+
+  packaging:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Build the packages of a pretend release, and use each one
+        run: packaging/smoke.sh 0.0.0

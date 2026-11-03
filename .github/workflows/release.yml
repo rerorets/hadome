@@ -1,0 +1,229 @@
+# A tag vX.Y.Z builds hadome natively on six platforms with cgo, publishes the archives and
+# SHA256SUMS as a GitHub release, then publishes to every ecosystem whose repository variable
+# PUBLISH_<ECOSYSTEM> is "true" (docs/design/distribution.md). Run it by hand to build without
+# publishing anything.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-dev' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, goos: linux, goarch: amd64 }
+          - { runner: ubuntu-24.04-arm, goos: linux, goarch: arm64 }
+          - { runner: macos-13, goos: darwin, goarch: amd64 }
+          - { runner: macos-14, goos: darwin, goarch: arm64 }
+          - { runner: windows-2022, goos: windows, goarch: amd64 }
+          - { runner: windows-11-arm, goos: windows, goarch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Use Zig as the C compiler on Windows ARM64, where no other is installed
+        if: matrix.goos == 'windows' && matrix.goarch == 'arm64'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          v="${VERSION#v}"
+          flags="-s -w -X main.version=$v"
+          exe=hadome
+          case "${{ matrix.goos }}" in
+            linux) flags="$flags -linkmode external -extldflags -static" ;; # one binary for glibc and musl
+            windows) exe=hadome.exe ;;
+          esac
+          if [ "${{ matrix.goos }}/${{ matrix.goarch }}" = windows/arm64 ]; then
+            export CC="zig cc -target aarch64-windows-gnu"
+          fi
+          mkdir -p out
+          go build -trimpath -ldflags "$flags" -o "out/$exe" ./cmd/hadome
+          "out/$exe" version
+          "out/$exe" self-test
+      - name: Archive
+        run: |
+          v="${VERSION#v}"
+          name="hadome_${v}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p dist
+          if [ "${{ matrix.goos }}" = windows ]; then
+            (cd out && 7z a -tzip "../dist/$name.zip" hadome.exe >/dev/null)
+          else
+            tar -C out -czf "dist/$name.tar.gz" hadome
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hadome-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum hadome_* > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/*
+      - name: Publish the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$VERSION" dist/* --title "hadome ${VERSION#v}" --generate-notes --verify-tag
+
+  npm:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: dist }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Build and publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          packaging/extract.sh dist bins
+          node packaging/npm/build.mjs "${VERSION#v}" bins npm
+          for dir in npm/hadome-*; do (cd "$dir" && npm publish --provenance --access public); done
+          cd npm/hadome && npm publish --provenance --access public
+
+  pypi:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: dist }
+      - run: |
+          packaging/extract.sh dist bins
+          python3 -I packaging/python/build_wheels.py "${VERSION#v}" bins wheels
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheels
+
+  crates:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_CRATES == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cd packaging/cargo
+          sed -i "s/^version = \"0.0.0\"/version = \"${VERSION#v}\"/" Cargo.toml
+          cp ../../README.md README.md
+          cargo publish --allow-dirty
+
+  gradle:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_GRADLE == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: dist }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Publish to the Gradle Plugin Portal
+        env:
+          GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+          GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+        run: |
+          packaging/jvm/release.sh "${VERSION#v}" dist/SHA256SUMS
+          cd packaging/jvm/gradle-plugin
+          gradle publishPlugins -PhadomeVersion="${VERSION#v}" \
+            -Pgradle.publish.key="$GRADLE_PUBLISH_KEY" -Pgradle.publish.secret="$GRADLE_PUBLISH_SECRET"
+
+  maven:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_MAVEN == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: dist }
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: Publish to Maven Central
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          packaging/jvm/release.sh "${VERSION#v}" dist/SHA256SUMS
+          cd packaging/jvm/maven-plugin
+          mvn -B deploy -Prelease -Drevision="${VERSION#v}"
+
+  homebrew:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_HOMEBREW == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release, path: dist }
+      - uses: actions/checkout@v4
+        with:
+          repository: rerorets/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Update the formula
+        run: |
+          mkdir -p tap/Formula
+          python3 -I packaging/homebrew/formula.py "${VERSION#v}" dist/SHA256SUMS > tap/Formula/hadome.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/hadome.rb
+          git commit -m "hadome ${VERSION#v}"
+          git push

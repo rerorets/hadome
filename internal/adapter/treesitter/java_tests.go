@@ -1,0 +1,266 @@
+//go:build cgo
+
+package treesitter
+
+import (
+	sitter "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/rerorets/hadome/internal/facts"
+)
+
+var (
+	jvmTestAnnotations = set("Test", "ParameterizedTest", "RepeatedTest", "TestFactory", "TestTemplate")
+	jvmSkipAnnotations = set("Disabled", "Ignore")
+	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK")
+	javaLoops          = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
+)
+
+// jvmFile is what a Java or Kotlin test file binds: class names it can use, helpers, and mocks.
+type jvmFile struct {
+	f       *file
+	j       *jvm
+	t       *tables
+	names   map[string]string // simple name -> target: a class ("a.b.Store") or a static import ("a.b.Store.create")
+	helpers map[string]*sitter.Node
+	mocks   []*sitter.Node
+}
+
+// bindClasses binds the classes of the file's own package and of what it imports.
+func (jf *jvmFile) bindClasses(imports func(visit func(name string, wildcard bool, n *sitter.Node))) {
+	for c := range jf.j.classes[jf.f.unit] {
+		jf.names[c] = jf.f.unit + "." + c
+	}
+	imports(func(name string, wildcard bool, n *sitter.Node) {
+		if jf.t.isMock(name) {
+			jf.mocks = append(jf.mocks, n)
+		}
+		pkg, class, internal := jf.j.resolve(name, wildcard)
+		switch {
+		case !internal:
+		case wildcard && class == "":
+			for c := range jf.j.classes[pkg] {
+				jf.names[c] = pkg + "." + c
+			}
+		case class != "":
+			rest := name[len(pkg)+1:] // "Store", or "Store.create" for a static import
+			jf.names[lastElem(rest)] = pkg + "." + rest
+		}
+	})
+}
+
+func lastElem(dotted string) string {
+	for i := len(dotted) - 1; i >= 0; i-- {
+		if dotted[i] == '.' {
+			return dotted[i+1:]
+		}
+	}
+	return dotted
+}
+
+func (j *java) tests(f *file, t *tables) []facts.Test {
+	if !f.test {
+		return nil
+	}
+	jf := &jvmFile{f: f, j: &j.jvm, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{}}
+	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { javaImports(f, v) })
+	var out []facts.Test
+	for _, n := range named(f.root) {
+		if javaTypes[n.Kind()] {
+			out = append(out, jf.javaClass(n, "", nil)...)
+		}
+	}
+	return out
+}
+
+// annotations returns the annotations of a declaration by name, with their first string argument.
+func annotations(f *file, n *sitter.Node) map[string]*sitter.Node {
+	out := map[string]*sitter.Node{}
+	for _, c := range named(n) {
+		if c.Kind() != "modifiers" {
+			continue
+		}
+		walk(c, func(a *sitter.Node) bool {
+			if a.Kind() == "marker_annotation" || a.Kind() == "annotation" {
+				out[lastElem(f.field(a, "name"))] = a
+				return false
+			}
+			return true
+		})
+	}
+	return out
+}
+
+// annotationReason is an annotation's first string argument.
+func annotationReason(f *file, a *sitter.Node) string {
+	reason := ""
+	walk(a, func(x *sitter.Node) bool {
+		if reason == "" && (x.Kind() == "string_literal" || x.Kind() == "string_fragment" || x.Kind() == "string_content") {
+			reason = unquote(f.text(x))
+			return false
+		}
+		return reason == ""
+	})
+	return reason
+}
+
+func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.Node) []facts.Test {
+	f := jf.f
+	name := prefix + f.field(n, "name")
+	anns := annotations(f, n)
+	for k := range jvmSkipAnnotations {
+		if a, ok := anns[k]; ok {
+			classSkip = a
+		}
+	}
+	body := n.ChildByFieldName("body")
+	var methods []*sitter.Node
+	for _, m := range named(body) {
+		switch {
+		case m.Kind() == "field_declaration":
+			for k := range annotations(f, m) {
+				if jvmMockAnnotations[k] {
+					jf.mocks = append(jf.mocks, m)
+				}
+			}
+		case m.Kind() == "method_declaration":
+			methods = append(methods, m)
+			jf.helpers[f.field(m, "name")] = m.ChildByFieldName("body")
+		}
+	}
+	var out []facts.Test
+	for _, m := range methods {
+		if a := annotations(f, m); hasAny(a, jvmTestAnnotations) {
+			out = append(out, jf.javaTest(name+"."+f.field(m, "name"), m, a, classSkip))
+		}
+	}
+	for _, m := range named(body) {
+		if javaTypes[m.Kind()] {
+			out = append(out, jf.javaClass(m, name+".", classSkip)...)
+		}
+	}
+	return out
+}
+
+func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
+	for k := range m {
+		if keys[k] {
+			return true
+		}
+	}
+	return false
+}
+
+func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node) facts.Test {
+	t := newTest(jf.f, name, m)
+	skip := classSkip
+	for k := range jvmSkipAnnotations {
+		if a, ok := anns[k]; ok {
+			skip = a
+		}
+	}
+	if skip != nil {
+		t.skip(annotationReason(jf.f, skip), skip)
+	}
+	for _, mk := range jf.mocks {
+		t.hazard(facts.HazardMock, mk)
+	}
+	w := &jvmWalk{jf: jf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w.walk(m.ChildByFieldName("body"), javaLoops, w.javaVisit)
+	return t.done()
+}
+
+// jvmWalk walks one Java or Kotlin test body.
+type jvmWalk struct {
+	jf      *jvmFile
+	t       *testFacts
+	vars    map[string]string
+	locals  map[string]bool
+	walking map[string]bool
+}
+
+func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
+	w.t.body(body, func(n *sitter.Node) bool { return loops[n.Kind()] }, visit)
+}
+
+// invoke handles a call to name on obj ("" for an unqualified call). It reports hazards,
+// always-true assertions, targets and helpers.
+func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, follow func(*sitter.Node)) {
+	f := w.jf.f
+	key := name
+	if obj != "" {
+		key = obj + "." + name
+	}
+	if cat, ok := w.jf.t.calls[key]; ok {
+		w.t.hazard(cat, n)
+		return
+	}
+	if jvmAlwaysTrue(f, name, args) {
+		w.t.hazard(facts.HazardAlwaysTrue, n)
+		return
+	}
+	target := ""
+	switch {
+	case obj == "":
+		if tg, ok := w.jf.names[name]; ok {
+			target = tg
+		} else if body, ok := w.jf.helpers[name]; ok && !w.walking[name] {
+			w.walking[name] = true
+			follow(body)
+			delete(w.walking, name)
+		}
+	case w.vars[obj] != "":
+		target = w.vars[obj] + "." + name
+	case w.jf.names[obj] != "":
+		target = w.jf.names[obj] + "." + name
+	case w.locals[obj]:
+		w.t.test.Unresolved++
+	}
+	if target != "" {
+		w.t.call(target, scopeArg(w.jf.j.scopes, target, args))
+	}
+}
+
+func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {
+	switch name {
+	case "assertTrue":
+		return len(args) == 1 && f.text(args[0]) == "true"
+	case "assertFalse":
+		return len(args) == 1 && f.text(args[0]) == "false"
+	case "assertEquals", "assertSame":
+		return len(args) >= 2 && f.text(args[0]) == f.text(args[1])
+	}
+	return false
+}
+
+func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
+	f := w.jf.f
+	switch n.Kind() {
+	case "local_variable_declaration":
+		typ := f.field(n, "type")
+		for _, d := range named(n) {
+			if d.Kind() != "variable_declarator" {
+				continue
+			}
+			name := f.field(d, "name")
+			w.locals[name] = true
+			if class, ok := w.jf.names[typ]; ok {
+				w.vars[name] = class
+			} else if v := d.ChildByFieldName("value"); v != nil && v.Kind() == "object_creation_expression" {
+				if class, ok := w.jf.names[f.field(v, "type")]; ok {
+					w.vars[name] = class
+				}
+			}
+		}
+	case "object_creation_expression":
+		typ := f.field(n, "type")
+		if cat, ok := w.jf.t.calls["new "+typ]; ok {
+			w.t.hazard(cat, n)
+		} else if class, ok := w.jf.names[typ]; ok {
+			w.t.call(class, nil)
+		}
+	case "method_invocation":
+		w.invoke(n, f.field(n, "object"), f.field(n, "name"), named(n.ChildByFieldName("arguments")),
+			func(body *sitter.Node) { w.walk(body, javaLoops, w.javaVisit) })
+	}
+	return true
+}

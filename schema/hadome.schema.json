@@ -1,0 +1,280 @@
+{
+  "$id": "https://github.com/rerorets/hadome/blob/main/schema/hadome.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The configuration of hadome, `.hadome.yml` at the repository root.",
+  "properties": {
+    "extends": {
+      "description": "Local files whose settings this file builds on, relative to this file. Later layers add to or override earlier ones. Never a URL.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "gates": {
+      "description": "Product-specific gates: external commands that look at one version and report findings or items as JSON. Removing or changing one needs a person's review.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "\u003cnamespace\u003e/\u003cname\u003e; the namespace is yours.",
+            "pattern": "^[a-z0-9-]+/[a-z0-9-]+$",
+            "type": "string"
+          },
+          "kind": {
+            "description": "What the gate reports.",
+            "enum": [
+              "finding",
+              "measure"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "description": "Anything the gate needs; passed to it untouched."
+          },
+          "paths": {
+            "description": "Globs of the files passed to the gate; * stays within one path element, ** spans any number. Omitted: every file.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "run": {
+            "description": "The command and its arguments. A command containing / is a path from the repository root; otherwise it is looked up on PATH. It runs in the root of the version being checked.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "timeout": {
+            "description": "How long the gate may run on one version. Default 60s.",
+            "pattern": "^[0-9]+(ms|s|m)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "run"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "invariants": {
+      "description": "Promises the product keeps. Every enabled invariant must be guarded by at least one active test. Removing one needs a person's review.",
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "target"
+                ]
+              },
+              {
+                "required": [
+                  "targets"
+                ]
+              }
+            ],
+            "properties": {
+              "target": {
+                "description": "What the invariant is about: a function or method, written as \u003cunit\u003e.\u003cname\u003e.",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_./-]*$",
+                "type": "string"
+              },
+              "targets": {
+                "description": "Two or more functions the invariant is about together, such as an export and an import.",
+                "items": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_./-]*$",
+                  "type": "string"
+                },
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": {
+                "description": "A built-in invariant type.",
+                "enum": [
+                  "idempotent",
+                  "isolated",
+                  "round-trip",
+                  "durable",
+                  "erasable",
+                  "append-only",
+                  "fail-closed"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "built-in",
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "A name for the invariant. Tests that guard it say `guards: \u003cid\u003e` in their doc comment.",
+                "pattern": "^[a-z0-9][a-z0-9-]*$",
+                "type": "string"
+              },
+              "says": {
+                "description": "The promise in one sentence, for people.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "says"
+            ],
+            "title": "product-specific",
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "languages": {
+      "description": "Languages to check. Detected when omitted.",
+      "items": {
+        "enum": [
+          "go",
+          "typescript",
+          "python",
+          "rust",
+          "java",
+          "kotlin"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "rules": {
+      "additionalProperties": false,
+      "description": "Settings of the built-in rules. Only what differs from the defaults.",
+      "properties": {
+        "comments": {
+          "additionalProperties": false,
+          "description": "Settings of the comments/ rules.",
+          "properties": {
+            "todo": {
+              "default": "^TODO\\([^)]+\\): \\S",
+              "description": "A regular expression every comment line starting with TODO, FIXME or XXX must match. Default `^TODO\\([^)]+\\): \\S`, that is TODO(\u003cwhen or who\u003e): \u003cwhat\u003e. Changing it needs a person's review.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "deps": {
+          "additionalProperties": false,
+          "description": "Settings of the deps/ rules.",
+          "properties": {
+            "diagram": {
+              "description": "The Markdown file, from the repository root, whose Mermaid flowchart is the dependency diagram. Node labels name directories (dir, or dir/... for everything under it); an arrow a --\u003e b lets a import b. Without it, the deps/ rules find nothing. Adding an arrow needs a person's review.",
+              "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\\.md$",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "size": {
+          "additionalProperties": false,
+          "description": "Limits of the size/ rules. Only product code is measured, never tests or generated code.",
+          "properties": {
+            "complexity": {
+              "default": 15,
+              "description": "The most cyclomatic complexity of a function or method: 1, plus one per if, for, case, \u0026\u0026 and || allowed. Default 15.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "file-lines": {
+              "default": 400,
+              "description": "The most lines in a source file allowed. Default 400.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "function-lines": {
+              "default": 60,
+              "description": "The most lines in a function or method, from its declaration to its closing brace allowed. Default 60.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "interface-methods": {
+              "default": 5,
+              "description": "The most methods in an interface allowed. Default 5.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "params": {
+              "default": 5,
+              "description": "The most parameters of a function or method, not counting the receiver allowed. Default 5.",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "tests": {
+          "additionalProperties": false,
+          "description": "Settings of the tests/ rules.",
+          "properties": {
+            "hazards": {
+              "additionalProperties": false,
+              "description": "Calls that count as hazards in tests, in addition to the built-in ones.",
+              "properties": {
+                "clock": {
+                  "description": "Adds functions that read the clock to the built-in table. Entries can be added, never removed from the built-in table.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "mock": {
+                  "description": "Adds import paths of mocking libraries to the built-in table. Entries can be added, never removed from the built-in table.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "sleep": {
+                  "description": "Adds functions that wait for time to pass to the built-in table. Entries can be added, never removed from the built-in table.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "io": {
+              "description": "Adds units that perform input or output, which make every unit importing them not pure; end an entry with /... to include everything under it to the built-in table. Entries can be added, never removed from the built-in table.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "schema": {
+      "description": "The configuration format version.",
+      "enum": [
+        1
+      ],
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": ".hadome.yml",
+  "type": "object"
+}

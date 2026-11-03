@@ -1,0 +1,354 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"testing/fstest"
+)
+
+func product(yml string) fstest.MapFS {
+	return fstest.MapFS{FileName: {Data: []byte(yml)}}
+}
+
+func mustLoad(t *testing.T, yml, workdir string) Config {
+	t.Helper()
+	c, err := Load(product(yml), workdir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return c
+}
+
+// loadErrors returns the validation errors, failing the test if loading did not fail with them.
+func loadErrors(t *testing.T, yml, workdir string) Errors {
+	t.Helper()
+	_, err := Load(product(yml), workdir)
+	var es Errors
+	if !errors.As(err, &es) {
+		t.Fatalf("Load succeeded or failed without validation errors: %v", err)
+	}
+	return es
+}
+
+const full = `schema: 1
+languages: [go, typescript]
+invariants:
+  - type: idempotent
+    target: api.CreatePost
+  - type: round-trip
+    targets: [store.Export, store.Import]
+  - id: billing-1
+    says: "Totals match"
+rules:
+  tests:
+    hazards:
+      sleep: [acme/testutil.Wait]
+    io: [example.com/acme/db]
+gates:
+  - id: acme/log-append-only
+    kind: finding
+    run: [scripts/gates/log-append-only]
+    paths: ["internal/store/**"]
+    timeout: 30s
+    options:
+      forbidden: [UPDATE, DELETE]
+      limit: 3
+`
+
+// Invariant 1 of docs/design/configuration.md: with no configuration file, hadome runs.
+func TestNoFileMeansBuiltInSettings(t *testing.T) {
+	c, err := Load(fstest.MapFS{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("Load without a file must not fail: %v", err)
+	}
+	if c.Schema != 1 || len(c.Layers) != 0 || len(c.Invariants) != 0 {
+		t.Fatalf("want built-in settings only, got %+v", c)
+	}
+}
+
+func TestEveryDocumentedKeyIsRead(t *testing.T) {
+	c := mustLoad(t, full, t.TempDir())
+	var keys []string
+	for _, i := range c.Invariants {
+		keys = append(keys, i.Key())
+	}
+	if got := strings.Join(keys, "|"); got != "idempotent api.CreatePost|round-trip store.Export,store.Import|billing-1" {
+		t.Errorf("invariants: %s", got)
+	}
+	if len(c.Gates) != 1 || c.Gates[0].ID != "acme/log-append-only" || c.Gates[0].Timeout != "30s" ||
+		strings.Join(c.Gates[0].Paths, ",") != "internal/store/**" {
+		t.Errorf("gates: %+v", c.Gates)
+	}
+	if got := fmt.Sprint(c.Gates[0].Options); got != "map[forbidden:[UPDATE DELETE] limit:3]" {
+		t.Errorf("options are passed on untouched, got %s", got)
+	}
+	if strings.Join(c.Hazards["sleep"], ",") != "acme/testutil.Wait" || strings.Join(c.IO, ",") != "example.com/acme/db" {
+		t.Errorf("rules: hazards %v io %v", c.Hazards, c.IO)
+	}
+	if strings.Join(c.Languages, ",") != "go,typescript" || strings.Join(c.Layers, ",") != FileName {
+		t.Errorf("languages %v layers %v", c.Languages, c.Layers)
+	}
+}
+
+// Invariant 2 of docs/design/configuration.md: a configuration that does not match the schema never runs a check.
+// Each error must say where, what is wrong and what would be right.
+func TestErrorsNameTheKeyTheLineAndAFix(t *testing.T) {
+	cases := []struct {
+		name, yml, key string
+		line           int
+		mention        string // must appear in the allowed values or the example
+	}{
+		{"unknown key", "schema: 1\nlanguage: [go]\n", "language", 2, "languages"},
+		{"unknown nested key", "schema: 1\nrules:\n  tests:\n    i0: []\n", "rules.tests.i0", 4, "hazards, io"},
+		{"string where an integer goes", "schema: \"1\"\n", "schema", 1, "schema: 1"},
+		{"unknown schema version", "schema: 7\n", "schema", 1, "1"},
+		{"unknown invariant type", "schema: 1\ninvariants:\n  - type: idempotant\n    target: a.B\n", "invariants[0].type", 3, "idempotent"},
+		{"both target and targets", "schema: 1\ninvariants:\n  - type: idempotent\n    target: a.B\n    targets: [a.B, a.C]\n",
+			"invariants[0]", 3, "target"},
+		{"neither shape", "schema: 1\ninvariants:\n  - target: a.B\n", "invariants[0]", 3, "type"},
+		{"missing schema", "languages: [go]\n", "schema", 1, "schema: 1"},
+		{"gate without a namespace", "schema: 1\ngates:\n  - id: mine\n    kind: finding\n    run: [x]\n", "gates[0].id", 3, "acme/"},
+		{"list where a mapping goes", "schema: 1\nrules: [tests]\n", "rules", 2, "rules:"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			es := loadErrors(t, tc.yml, t.TempDir())
+			for _, e := range es {
+				if e.Key == tc.key {
+					if e.Line != tc.line || e.File != FileName {
+						t.Errorf("at %s:%d, want %s:%d", e.File, e.Line, FileName, tc.line)
+					}
+					if !strings.Contains(e.Allowed+e.Example, tc.mention) {
+						t.Errorf("error does not show %q: %v", tc.mention, e)
+					}
+					return
+				}
+			}
+			t.Errorf("no error for key %s: %v", tc.key, es)
+		})
+	}
+}
+
+func TestAllErrorsAreReportedTogether(t *testing.T) {
+	es := loadErrors(t, "schema: 2\nlanguages: [cobol]\nextra: 1\n", t.TempDir())
+	lines := map[int]bool{}
+	for _, e := range es {
+		lines[e.Line] = true
+	}
+	if len(lines) != 3 {
+		t.Fatalf("want errors on lines 1, 2 and 3, got %v", es)
+	}
+}
+
+func TestInvalidYAMLIsAnErrorNotAPanic(t *testing.T) {
+	es := loadErrors(t, "schema: [\n", t.TempDir())
+	if es[0].Key != "(file)" {
+		t.Fatalf("got %v", es)
+	}
+}
+
+func write(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSharedLayersAreMergedUnderTheProduct(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "shared", "base.yml"), `schema: 1
+languages: [go, python]
+invariants:
+  - id: shared-1
+    says: "Shared promise"
+rules:
+  tests:
+    io: [example.com/shared/db]
+`)
+	c := mustLoad(t, `schema: 1
+extends: [shared/base.yml]
+languages: [go]
+invariants:
+  - type: erasable
+    target: store.Delete
+rules:
+  tests:
+    io: [example.com/acme/db]
+`, dir)
+	var keys []string
+	for _, i := range c.Invariants {
+		keys = append(keys, i.Key())
+	}
+	if strings.Join(keys, ",") != "shared-1,erasable store.Delete" {
+		t.Errorf("invariants from both layers, shared first: %v", keys)
+	}
+	if strings.Join(c.Languages, ",") != "go" {
+		t.Errorf("the product's languages replace the shared ones: %v", c.Languages)
+	}
+	if strings.Join(c.IO, ",") != "example.com/shared/db,example.com/acme/db" {
+		t.Errorf("added table entries from both layers: %v", c.IO)
+	}
+	if len(c.Layers) != 2 || c.Layers[1] != FileName {
+		t.Errorf("layers, earliest first: %v", c.Layers)
+	}
+}
+
+// Invariant 4 of docs/design/configuration.md: hadome never reads configuration from the network.
+// guards: no-network
+func TestExtendsRefusesURLsCyclesAndMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "a.yml"), "schema: 1\nextends: [b.yml]\n")
+	write(t, filepath.Join(dir, "b.yml"), "schema: 1\nextends: [a.yml]\n")
+	cases := map[string]string{
+		"url":     "https://example.com/hadome.yml",
+		"cycle":   "a.yml",
+		"missing": "nowhere.yml",
+	}
+	for name, ref := range cases {
+		t.Run(name, func(t *testing.T) {
+			yml := "schema: 1\nlanguages: [go]\nextends:\n  - " + ref + "\n"
+			es := loadErrors(t, yml, dir)
+			if len(es) != 1 || es[0].Key != "extends" {
+				t.Fatalf("got %v", es)
+			}
+			if name != "cycle" && (es[0].File != FileName || es[0].Line != 4) {
+				t.Errorf("points at %s:%d, want the extends entry at %s:4", es[0].File, es[0].Line, FileName)
+			}
+		})
+	}
+}
+
+func looser(changes []Change) []string {
+	var out []string
+	for _, c := range changes {
+		if c.Looser {
+			out = append(out, c.Key+" -"+c.Removed)
+		}
+	}
+	return out
+}
+
+// Invariant 5 of docs/design/configuration.md: a change cannot loosen the rules that judge it without review.
+func TestDiffMarksLooseningOnly(t *testing.T) {
+	dir := t.TempDir()
+	base := mustLoad(t, full, dir)
+	cases := []struct {
+		name, head string
+		wantLooser int
+	}{
+		{"unchanged", full, 0},
+		{"adding an invariant", strings.Replace(full, "invariants:\n", "invariants:\n  - id: new-1\n    says: x\n", 1), 0},
+		{"removing an invariant", strings.Replace(full, "  - id: billing-1\n    says: \"Totals match\"\n", "", 1), 1},
+		{"removing a gate", full[:strings.Index(full, "gates:")], 1},
+		{"removing an io entry", strings.Replace(full, "io: [example.com/acme/db]", "io: []", 1), 1},
+		{"narrowing languages", strings.Replace(full, "[go, typescript]", "[go]", 1), 1},
+		{"changing a gate's options", strings.Replace(full, "limit: 3", "limit: 4", 1), 1},
+		{"changing a gate's command", strings.Replace(full, "run: [scripts/gates/log-append-only]", "run: [\"true\"]", 1), 1},
+		{"changing what an invariant says", strings.Replace(full, "Totals match", "Totals agree", 1), 0},
+		{"omitting languages detects all of them", strings.Replace(full, "languages: [go, typescript]\n", "", 1), 0},
+		{"deleting the file", "", 6},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var head Config
+			if tc.head == "" {
+				head, _ = Load(fstest.MapFS{}, dir)
+			} else {
+				head = mustLoad(t, tc.head, dir)
+			}
+			if got := looser(Diff(base, head)); len(got) != tc.wantLooser {
+				t.Errorf("want %d looser changes, got %v", tc.wantLooser, got)
+			}
+		})
+	}
+}
+
+// Invariant 3 of docs/design/configuration.md: the published schema is generated, never edited by hand.
+func TestPublishedSchemaIsGenerated(t *testing.T) {
+	published, err := os.ReadFile(filepath.Join("..", "..", "schema", "hadome.schema.json"))
+	if err != nil {
+		t.Fatalf("reading the published schema: %v", err)
+	}
+	if string(published) != string(JSONSchema()) {
+		t.Fatal("schema/hadome.schema.json differs from the specification; regenerate it with `hadome schema > schema/hadome.schema.json`")
+	}
+}
+
+func TestExplainKnowsKeysAndValues(t *testing.T) {
+	for _, name := range []string{"invariants", "invariants.target", "rules.tests.io", "idempotent", "typescript", "gates.kind"} {
+		if text, ok := Explain(name); !ok || !strings.HasPrefix(text, name+" — ") {
+			t.Errorf("Explain(%q) = %q, %v", name, text, ok)
+		}
+	}
+	if _, ok := Explain("nonsense"); ok {
+		t.Error("an unknown name must not be explained")
+	}
+}
+
+func TestMisspeltKeysGetASuggestion(t *testing.T) {
+	es := loadErrors(t, "schema: 1\ninvarients: []\nzzz: 1\n", t.TempDir())
+	if !strings.Contains(es[0].Problem, "did you mean invariants?") {
+		t.Errorf("a near miss gets a suggestion: %v", es[0])
+	}
+	if strings.Contains(es[1].Problem, "did you mean") {
+		t.Errorf("an unrelated key gets none: %v", es[1])
+	}
+}
+
+// Invariant 5 of docs/design/configuration.md, for limits: raising one, or dropping a lowered one back to its
+// default, loosens; lowering never does.
+func TestLimitsDefaultAndLoosenUpward(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	if none.Size["function-lines"] != 60 || none.Size["file-lines"] != 400 {
+		t.Fatalf("defaults fill omitted limits: %v", none.Size)
+	}
+	lower := mustLoad(t, "schema: 1\nrules:\n  size:\n    function-lines: 40\n", dir)
+	higher := mustLoad(t, "schema: 1\nrules:\n  size:\n    function-lines: 80\n", dir)
+	cases := []struct {
+		name       string
+		base, head Config
+		want       int
+	}{
+		{"lowering", none, lower, 0},
+		{"raising", none, higher, 1},
+		{"dropping a lowered limit", lower, none, 1},
+		{"unchanged default written out", none, mustLoad(t, "schema: 1\nrules:\n  size:\n    function-lines: 60\n", dir), 0},
+	}
+	for _, tc := range cases {
+		if got := looser(Diff(tc.base, tc.head)); len(got) != tc.want {
+			t.Errorf("%s: want %d looser changes, got %v", tc.name, tc.want, got)
+		}
+	}
+	if es := loadErrors(t, "schema: 1\nrules:\n  size:\n    params: 0\n", dir); es[0].Key != "rules.size.params" {
+		t.Errorf("a limit below 1 is an error: %v", es)
+	}
+}
+
+func TestTheTodoFormIsARegularExpressionAndChangingItNeedsReview(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	if none.TodoForm != DefaultTodo {
+		t.Fatalf("the default form applies when omitted: %q", none.TodoForm)
+	}
+	own := mustLoad(t, "schema: 1\nrules:\n  comments:\n    todo: '^TODO\\(stage[0-9]+\\): \\S'\n", dir)
+	if own.TodoForm != `^TODO\(stage[0-9]+\): \S` {
+		t.Fatalf("got %q", own.TodoForm)
+	}
+	if got := looser(Diff(none, own)); len(got) != 1 {
+		t.Errorf("changing the form, in either direction, needs review: %v", got)
+	}
+	if got := looser(Diff(own, own)); len(got) != 0 {
+		t.Errorf("an unchanged form needs none: %v", got)
+	}
+	if es := loadErrors(t, "schema: 1\nrules:\n  comments:\n    todo: 'TODO('\n", dir); es[0].Key != "rules.comments.todo" {
+		t.Errorf("an invalid regular expression is an error: %v", es)
+	}
+}

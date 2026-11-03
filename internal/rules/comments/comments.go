@@ -1,0 +1,133 @@
+// Package comments holds the comments/ rules: TODOs say when, public code says what it is, and
+// references to documents lead somewhere.
+//
+// Design: docs/design/rules-comments.md
+package comments
+
+import (
+	"io/fs"
+	"path"
+	"regexp"
+	"strings"
+
+	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
+)
+
+// line is one line of a comment in a file that is not generated.
+type line struct {
+	path string
+	n    int
+	text string
+}
+
+// lines splits the comments of files that are not generated into lines, without the leading
+// spaces and the asterisks of block comments. Directives are not prose and are left out.
+func lines(a *facts.Analysis) []line {
+	generated := map[string]bool{}
+	for _, f := range a.Files {
+		generated[f.Path] = f.Role == facts.RoleGenerated
+	}
+	var out []line
+	for _, c := range a.Comments {
+		if generated[c.Path] || c.Directive {
+			continue
+		}
+		for i, t := range strings.Split(c.Text, "\n") {
+			t = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), "*"))
+			out = append(out, line{path: c.Path, n: c.Line + i, text: t})
+		}
+	}
+	return out
+}
+
+// todoFormat is comments/todo-format.
+type todoFormat struct{}
+
+func (todoFormat) ID() string           { return "comments/todo-format" }
+func (todoFormat) Cases() []engine.Case { return todoCases() }
+
+var todoWord = regexp.MustCompile(`^(TODO|FIXME|XXX)\b`)
+
+// Find reports TODO, FIXME and XXX lines that do not have the configured form.
+func (r todoFormat) Find(in engine.Input) ([]engine.Finding, error) {
+	form, err := regexp.Compile(in.Config.TodoForm)
+	if err != nil {
+		return nil, err // validation already rejects this; a check that cannot run never passes
+	}
+	var out []engine.Finding
+	for _, l := range lines(in.Facts) {
+		if !todoWord.MatchString(l.text) || form.MatchString(l.text) {
+			continue
+		}
+		out = append(out, engine.Finding{
+			Rule: r.ID(), File: l.path, Line: l.n, Anchor: strings.Join(strings.Fields(l.text), " "),
+			Message: "TODO without the required form: " + l.text,
+			Why:     "a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished",
+			Fix:     "write it in the form " + in.Config.TodoForm + " (for example TODO(stage 2): …), do it now, or delete it",
+		})
+	}
+	return out, nil
+}
+
+// missingDoc is comments/missing-doc.
+type missingDoc struct{}
+
+func (missingDoc) ID() string           { return "comments/missing-doc" }
+func (missingDoc) Cases() []engine.Case { return docCases() }
+
+// Find reports exported symbols of product code without a doc comment.
+func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
+	var out []engine.Finding
+	for _, s := range in.Facts.Symbols {
+		if !s.Exported || s.Doc {
+			continue
+		}
+		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
+		out = append(out, engine.Finding{
+			Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
+			Message: "exported " + string(s.Kind) + " " + name + " has no doc comment",
+			Why:     "callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses",
+			Fix:     "write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong",
+		})
+	}
+	return out, nil
+}
+
+// brokenReference is comments/broken-reference.
+type brokenReference struct{}
+
+func (brokenReference) ID() string           { return "comments/broken-reference" }
+func (brokenReference) Cases() []engine.Case { return referenceCases() }
+
+// reference is a word ending in .md, optionally followed by a section.
+var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'])((?:\\.{1,2}/)*[A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.md)(?:#[A-Za-z0-9_-]*)?")
+
+// Find reports references to Markdown files that do not exist in the version.
+func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
+	var out []engine.Finding
+	for _, l := range lines(in.Facts) {
+		for _, m := range reference.FindAllStringSubmatch(l.text, -1) {
+			ref := m[1]
+			target := strings.TrimPrefix(path.Clean(ref), "/")
+			if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") {
+				target = path.Join(path.Dir(l.path), ref)
+			}
+			if _, err := fs.Stat(in.Version.FS, target); err == nil {
+				continue
+			}
+			out = append(out, engine.Finding{
+				Rule: r.ID(), File: l.path, Line: l.n, Anchor: ref,
+				Message: "comment refers to " + ref + ", which does not exist",
+				Why:     "a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere",
+				Fix:     "point at the document's current path, or remove the reference",
+			})
+		}
+	}
+	return out, nil
+}
+
+// All returns the comments/ rules.
+func All() []engine.Rule {
+	return []engine.Rule{todoFormat{}, missingDoc{}, brokenReference{}}
+}
