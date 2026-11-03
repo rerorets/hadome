@@ -212,7 +212,11 @@ jobs:
         run: |
           packaging/jvm/release.sh "${VERSION#v}" dist/SHA256SUMS
           cd packaging/jvm/maven-plugin
-          mvn -B deploy -Prelease -Drevision="${VERSION#v}"
+          # Central reads the deployed POM as it is on disk, where -Drevision would leave the literal
+          # ${revision} and the coordinates would not match the files. Write the version into it.
+          sed -i "s|<version>\${revision}</version>|<version>${VERSION#v}</version>|" pom.xml
+          grep -q "<version>${VERSION#v}</version>" pom.xml
+          mvn -B deploy -Prelease
 
   homebrew:
     needs: release
