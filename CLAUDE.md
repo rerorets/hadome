@@ -27,7 +27,8 @@ hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs
 
 ## Writing
 
-- Code, comments, commit messages and design documents are in English. The README is bilingual (`README.md` is the source of truth, `README.ja.md` follows it).
+- Code, comments and commit messages are in English.
+- Every document is bilingual: `foo.md` in English and `foo.ja.md` in Japanese next to it. **The Japanese file is the source of truth.** Write or change the Japanese first, then bring the English up to it in the same change. Links in a Japanese document point to the Japanese documents. The two files must have the same headings and code blocks (`cmd/hadome/docs_test.go` fails otherwise).
 - Comments say what the code cannot: why an unusual approach was taken, invariants, and facts a reader would otherwise get wrong. No history, no progress notes, no ticket numbers.
 - Tests follow the model in the README: invariants, writing rules, gate. Test observable behavior only, never copy expected values from the implementation, never read the clock or sleep, never skip silently.
 

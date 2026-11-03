@@ -1,0 +1,94 @@
+# 不変条件の候補と入口
+
+## 責務
+
+人が hadome を設定しなくて済み、エージェントが hadome を自分で探り当てなくて済むようにする。この文書はそれを実現する部分を扱う。
+
+- **不変条件の候補**: まだ誰も書き出していない不変条件を持つことが多い、コードの場所（パッケージ `internal/suggest`）
+- **`hadome suggest`**: 候補を `.hadome.yml` にそのまま貼れるエントリとして出す
+- **`hadome agents`**: エージェントに hadome を伝えるブロックを出す、またはファイルに書き込む
+- **`hadome init`**: 最小の `.hadome.yml` を書く
+
+しないこと:
+
+- 何かを決めること。候補は情報で、終了コードを変えず、hadome が自分で設定に足すこともない
+- 候補が正しいかを判断すること。`CreatePost` という関数が冪等である必要はないかもしれない。決めるのは人である
+
+## 候補
+
+候補は、テストでも生成されたものでもないコードのシンボルから見つける。数えるのは公開されたシンボルだけで、不変条件はそれらの入口について書くものだからだ。
+
+| 型 | シンボルが候補になる条件 |
+|---|---|
+| `idempotent` | 名前が `Create`、`Add`、`Insert`、`Register`、`Submit`、`Enqueue` で始まる |
+| `erasable` | 名前が `Delete`、`Remove`、`Erase`、`Purge` で始まる |
+| `isolated` | 名前が `Get`、`List`、`Find`、`Search`、`Read`、`Load`、`Fetch`、`Query` で始まり、範囲の引数（名前が user、tenant、owner、account、org、team、workspace、customer、project を表す引数。[rules-tests.ja.md](rules-tests.ja.md) を参照）を持つ |
+| `round-trip` | 同じユニット・同じレシーバにある組の1つ目である: `Export`/`Import`、`Encode`/`Decode`、`Marshal`/`Unmarshal`、`Serialize`/`Deserialize`、`Save`/`Load` の後に同じ残りの名前が続く（`ExportRows` と `ImportRows`） |
+
+「で始まる」は、その語が名前全体であるか、後に大文字か数字が続くことを指す。なので `Address` は `Add` ではない。
+
+同じ型の設定済みの不変条件がすでに名指ししているシンボルは候補にならない。候補の対象は設定と同じ書き方で書く。ユニットのパスの最後の要素、続けて名前（`api.CreatePost`、`store.Store.Delete`）。
+
+### 候補が出る場所
+
+| 場所 | どの候補か | 理由 |
+|---|---|---|
+| `hadome check` | **この変更で新しく出た**もの: head では候補で、base では候補でなかったもの | チェックのほかのすべてと同じく、変更についての話だから。前からある候補を毎回繰り返さない |
+| `hadome suggest` | 作業ツリーのすべて | 不変条件を探す人やエージェントは一覧全体が欲しい |
+
+どちらも終了コードを変えない。
+
+```mermaid
+classDiagram
+  class Candidate {
+    +Type string
+    +Targets []string
+    +File string
+    +Line int
+    +Why string
+  }
+  class Engine {
+    +Candidates func(Input) []Candidate
+  }
+  class Report {
+    +Candidates []Candidate
+  }
+  class suggest {
+    <<package>>
+    +Candidates(in engine.Input) []engine.Candidate
+  }
+  Engine ..> Candidate : base と head
+  Report --> Candidate : head で新しいもの
+  suggest ..> Candidate
+```
+
+エンジンが知っているのは関数の型だけである。`cmd/hadome` が `suggest.Candidates` を渡すので、エンジンは候補を出すロジックに依存しない。
+
+## `hadome suggest`
+
+作業ツリーをその設定で解析し、候補を `invariants:` のエントリとして出す。各エントリには、どこにあり、なぜ候補にしたかを書いたコメントが付く。受け入れるには `.hadome.yml` に写せばよい。
+
+## `hadome agents`
+
+| 形 | すること |
+|---|---|
+| `hadome agents` | ブロックを出す |
+| `hadome agents --lang ja` | 日本語で出す |
+| `hadome agents --write <file>` | ブロックをファイルに入れる: `<!-- hadome:begin -->` と `<!-- hadome:end -->` の間を置き換える。印が無ければブロックを末尾に足し、ファイルが無ければ作る |
+
+英語のブロックは README のクイックスタートにあるものと同じで、両者が食い違うとテストが落ちる。
+
+## `hadome init`
+
+`schema: 1`、見つけた言語のコメント、`hadome suggest` と `hadome explain` を指すコメントを入れた `.hadome.yml` を書く。既存のファイルは上書きしない。hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
+
+## 不変条件
+
+1. 候補は終了コードを変えない
+2. `hadome agents --write` を2回実行しても、ファイルは1回目の後と同じまま
+3. `hadome init` はファイルを上書きしない
+
+## 意図して入れなかったもの
+
+- コードの振る舞い（何を書くか、どの表に触るか）から出す候補。今の事実が持っているのは名前と引数だけである
+- 候補を受け入れる対話的なモード。出力はそのまま有効な設定で、受け入れるのは貼るだけでよい
