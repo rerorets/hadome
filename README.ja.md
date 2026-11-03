@@ -289,7 +289,8 @@ flowchart TB
 - [x] 製品固有の門番（[約束事](docs/external-gates.ja.md)）
 - [x] `deps/`・`size/`・`comments/`ルール
 - [x] TypeScript・Python・Rust・Java・Kotlin（tree-sitterで読む。純粋なGoのビルドはGoだけを読み、ほかは「読めなかった」と報告する）
-- [ ] 各エコシステムへの公開 — パッケージとリリースの流れはできている（[公開の手順](docs/releasing.ja.md)）。公開は各レジストリのアカウント待ち
+- [x] GitHubのリリース・PyPI・crates.io・Homebrew・Gradle Plugin Portal・Goへの公開（[公開の手順](docs/releasing.ja.md)）
+- [ ] npmとMaven Centralへの公開
 - [ ] ミューテーションによる範囲
 
 ## ライセンス

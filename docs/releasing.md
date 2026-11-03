@@ -17,13 +17,20 @@ Each ecosystem publishes only when its repository variable is `true` (Settings �
 
 | Ecosystem | Variable | Secrets | Set up once |
 |---|---|---|---|
-| npm | `PUBLISH_NPM` | `NPM_TOKEN` | An npm automation token of an account that may publish `hadome` and `hadome-<os>-<arch>` |
+| npm | `PUBLISH_NPM` | `NPM_TOKEN` | A granular access token of an account that may publish `hadome` and `hadome-<os>-<arch>` (read and write, all packages, bypassing 2FA; a token with write access expires after 90 days at most) |
 | PyPI | `PUBLISH_PYPI` | none | A trusted publisher on PyPI for project `hadome`: this repository, workflow `release.yml`, environment `pypi` |
-| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN` | A crates.io token that may publish `hadome` |
+| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN` | A crates.io token that may publish `hadome` (publish-new and publish-update) |
 | Gradle Plugin Portal | `PUBLISH_GRADLE` | `GRADLE_PUBLISH_KEY`, `GRADLE_PUBLISH_SECRET` | A Plugin Portal account; the namespace `io.github.rerorets` is verified through GitHub |
 | Maven Central | `PUBLISH_MAVEN` | `CENTRAL_USERNAME`, `CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`, `MAVEN_GPG_PASSPHRASE` | A Central Portal user token, the namespace `io.github.rerorets` verified, and a GPG key published to a keyserver |
-| Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | The repository `rerorets/homebrew-tap`, and a token that may push to it |
+| Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | The repository `rerorets/homebrew-tap` (with at least one commit), and a fine-grained token allowed to write Contents there only |
 | Go | — | — | Nothing: the module proxy serves the tag |
+
+### The first publish
+
+- Trusted publishing (publishing without a token) can be set up on npm and crates.io only once the package exists. The first publish uses a token
+- npm may answer 403 from its spam detection when several new packages with similar names are created in a row. Ask npm support to lift it
+- The Gradle Plugin Portal approves a new plugin's first publish by hand; it can take days to become available
+- Maven Central matches the version in the published POM against the files' location. The workflow writes the version into the POM's `${revision}` just before publishing
 
 ## Trying the packages before a release
 

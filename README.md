@@ -289,7 +289,8 @@ flowchart TB
 - [x] Product-specific gates ([protocol](docs/external-gates.md))
 - [x] `deps/`, `size/` and `comments/` rules
 - [x] TypeScript, Python, Rust, Java and Kotlin (with tree-sitter; the pure-Go build reads Go only and reports the rest as unread)
-- [ ] Published in every ecosystem — the packages and the release workflow are ready ([releasing](docs/releasing.md)); publishing waits for the registries' accounts
+- [x] Published to GitHub releases, PyPI, crates.io, Homebrew, the Gradle Plugin Portal and Go ([releasing](docs/releasing.md))
+- [ ] Published to npm and Maven Central
 - [ ] Mutation-based scope
 
 ## License
