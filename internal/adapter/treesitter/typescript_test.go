@@ -4,6 +4,7 @@ package treesitter
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -145,4 +146,30 @@ test "posts creates once" calls=[src/store.Store×1/0 src/store.Store.add×1/1 s
 test "posts later" calls=[src/store.listPosts×2/2] hazards=[] skip=true:"flaky on CI" unresolved=0
 test "posts loop" calls=[src/store.createPost×2/1] hazards=[always-true] skip=false:"" unresolved=1
 `)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// Bun's test runner mocks a module with mock.module; a test of pure code using it is as unsafe as
+// one using jest.mock or vi.mock.
+func TestBunModuleMocksAreMockHazards(t *testing.T) {
+	a := analyze(t, "typescript", tree(
+		"src/store.ts", "export function add(a: number, b: number) { return a + b }\n",
+		"src/store.test.ts", `import { test, expect, mock } from "bun:test"
+import { add } from "./store"
+test("adds", () => {
+  mock.module("./other", () => ({}))
+  expect(add(1, 2)).toBe(3)
+})
+`))
+	if len(a.Tests) != 1 {
+		t.Fatalf("want one test, got %d", len(a.Tests))
+	}
+	var categories []string
+	for _, h := range a.Tests[0].Hazards {
+		categories = append(categories, string(h.Category))
+	}
+	if !slices.Contains(categories, string(facts.HazardMock)) {
+		t.Errorf("want a mock hazard, got %v", categories)
+	}
 }

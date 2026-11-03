@@ -96,7 +96,7 @@ Calls from tests are resolved to targets through the names each file imports fro
 |---|---|---|---|---|---|
 | `clock` | `Date.now`, `new Date()`, `performance.now` | `datetime.now`, `datetime.utcnow`, `date.today`, `time.time` | `SystemTime::now`, `Instant::now`, `Utc::now`, `Local::now` | `Instant.now`, `LocalDate(Time).now`, `System.currentTimeMillis`, `System.nanoTime` | as Java, `Clock.System.now` |
 | `sleep` | `setTimeout` | `time.sleep`, `asyncio.sleep` | `thread::sleep`, `tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`, `delay` |
-| `mock` | `jest.mock`, `vi.mock`, importing `sinon` | importing `unittest.mock`, `mock`; `mocker` | `mock!`, `#[automock]`, importing `mockall` | importing `org.mockito` | importing `io.mockk`, `org.mockito` |
+| `mock` | `jest.mock`, `vi.mock`, `mock.module` (bun), importing `sinon` | importing `unittest.mock`, `mock`; `mocker` | `mock!`, `#[automock]`, importing `mockall` | importing `org.mockito` | importing `io.mockk`, `org.mockito` |
 | `always-true` | `expect(true).toBe(true)`, `expect(x).toBe(x)` | `assert True`, `assert x == x` | `assert!(true)`, `assert_eq!(x, x)` | `assertTrue(true)`, `assertEquals(x, x)` | as Java |
 | `io` (units) | `fs`, `net`, `http`, `https`, `child_process` (with or without `node:`), `axios`, `pg`, `mysql2`, `mongodb`, `redis` | `socket`, `os`, `subprocess`, `sqlite3`, `requests`, `httpx`, `urllib.request`, `psycopg`, `pymongo`, `redis` | `std::fs`, `std::net`, `std::process`, `tokio::fs`, `tokio::net`, `reqwest`, `sqlx`, `diesel` | `java.io`, `java.nio.file`, `java.net`, `java.sql`, `javax.sql` | as Java, `io.ktor.client` |
 

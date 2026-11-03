@@ -122,3 +122,29 @@ func TestTheSameRegressionFailsInEveryLanguage(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: external contract
+// target: tests/skip-without-reason through engine.Engine.Check
+// The fix is read by agents in every language; an example in another language's syntax sends them
+// to write something their test runner ignores.
+func TestTheSkipFixShowsTheTestsOwnLanguage(t *testing.T) {
+	for _, p := range projects {
+		t.Run(p.lang, func(t *testing.T) {
+			e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
+			r, err := e.Check(trees{base: p.tree(p.test("", p.call)), head: p.tree(p.test(p.bareSkip, p.call))})
+			if err != nil {
+				t.Fatal(err)
+			}
+			skip := strings.TrimRight(p.bareSkip, "()]")
+			for _, f := range r.Regressions {
+				if f.Rule == "tests/skip-without-reason" {
+					if !strings.Contains(f.Fix, skip) {
+						t.Errorf("fix %q does not show %q", f.Fix, skip)
+					}
+					return
+				}
+			}
+			t.Errorf("no tests/skip-without-reason among %v", r.Regressions)
+		})
+	}
+}

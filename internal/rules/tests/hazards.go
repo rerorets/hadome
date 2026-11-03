@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"path/filepath"
 	"strconv"
 
 	"github.com/rerorets/hadome/internal/engine"
@@ -107,7 +108,7 @@ func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 				Rule: r.ID(), File: t.Path, Line: t.Skip.Line, Anchor: t.Name,
 				Message: t.Name + " is skipped without a reason",
 				Why:     "a skipped test protects nothing, and without a reason nobody can decide when it should come back",
-				Fix:     "write the reason in the skip itself, for example t.Skip(\"waits for …\")",
+				Fix:     "write the reason in the skip itself, for example " + skipExample(t.Path),
 			})
 		}
 	}
@@ -115,3 +116,20 @@ func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// skipExample shows a skip with a reason in the form the test file's language reads it.
+func skipExample(path string) string {
+	switch filepath.Ext(path) {
+	case ".go":
+		return `t.Skip("waits for …")`
+	case ".py":
+		return `@pytest.mark.skip(reason="waits for …")`
+	case ".rs":
+		return `#[ignore = "waits for …"]`
+	case ".java", ".kt":
+		return `@Disabled("waits for …")`
+	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs":
+		return "a comment on or above it.skip: // waits for …"
+	}
+	return "a reason the language's skip accepts"
+}

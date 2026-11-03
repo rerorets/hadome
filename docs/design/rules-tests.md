@@ -46,7 +46,7 @@ These four rules work on the adapters' hazard categories. Each finding's anchor 
 
 - **Finds**: a skip whose reason is missing or empty
 - **Why**: a skipped test protects nothing, and without a reason nobody can decide when it should come back
-- **Fix**: write the reason in the skip itself: `t.Skip("…")`, `pytest.skip(reason="…")`, `@Disabled("…")`, `#[ignore = "…"]`, or a comment on or above `it.skip`
+- **Fix**: write the reason in the skip itself: `t.Skip("…")`, `pytest.skip(reason="…")`, `@Disabled("…")`, `#[ignore = "…"]`, or a comment on or above `it.skip`. The message shows the example in the test file's language
 - Skips that happen only in some cases (`if runtime.GOOS == "windows"`) need a reason too
 - A skip **with** a reason is not a regression here, but the test stops counting towards the guarded scope (below)
 

@@ -151,7 +151,7 @@ Rules about how tests are written work on categories, not API names. Each adapte
 |---|---|---|---|---|---|
 | `clock` | `time.Now`, `time.Since` | `datetime.now`, `time.time` | `Date.now`, `new Date()` | `Instant.now`, `LocalDateTime.now`, `System.currentTimeMillis` | `SystemTime::now`, `Instant::now` |
 | `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` used to wait | `Thread.sleep`, `delay` | `thread::sleep` |
-| `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock` | `jest.mock`, `vi.mock` | Mockito, MockK | `mockall` |
+| `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock` | `jest.mock`, `vi.mock`, `mock.module` | Mockito, MockK | `mockall` |
 | `skip` | `t.Skip` | `pytest.skip`, `@skip` | `it.skip`, `describe.skip` | `@Disabled`, `@Ignore` | `#[ignore]` |
 | `always-true` | `if true`, comparing a value with itself | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 

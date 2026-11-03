@@ -33,7 +33,8 @@ var tsBranches = branches{
 
 var tsTables = &tables{
 	calls: map[string]facts.HazardCategory{"Date.now": facts.HazardClock, "performance.now": facts.HazardClock,
-		"setTimeout": facts.HazardSleep, "jest.mock": facts.HazardMock, "vi.mock": facts.HazardMock},
+		"setTimeout": facts.HazardSleep, "jest.mock": facts.HazardMock, "vi.mock": facts.HazardMock,
+		"mock.module": facts.HazardMock},
 	mocks: []string{"sinon", "jest-mock", "ts-mockito", "testdouble"},
 	io: []string{"fs", "node:fs", "net", "node:net", "http", "node:http", "https", "node:https", "child_process",
 		"node:child_process", "dgram", "node:dgram", "axios", "node-fetch", "pg", "mysql2", "mongodb", "redis", "ioredis"},
