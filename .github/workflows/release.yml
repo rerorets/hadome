@@ -123,8 +123,13 @@ jobs:
           node packaging/npm/build.mjs "${VERSION#v}" bins npm
           tag=latest
           case "$VERSION" in *-*) tag=next ;; esac # a trial version never becomes what `npm install hadome` gets
-          for dir in npm/hadome-*; do (cd "$dir" && npm publish --provenance --access public --tag "$tag"); done
-          cd npm/hadome && npm publish --provenance --access public --tag "$tag"
+          # A version already on the registry is skipped, so re-running the job after a partial publish
+          # finishes it. The platform packages go first: the launcher is useless without them.
+          for dir in npm/hadome-* npm/hadome; do
+            name=$(node -p "require('./$dir/package.json').name")
+            if npm view "$name@${VERSION#v}" version >/dev/null 2>&1; then echo "skip: $name@${VERSION#v} is published"; continue; fi
+            (cd "$dir" && npm publish --provenance --access public --tag "$tag")
+          done
 
   pypi:
     needs: release

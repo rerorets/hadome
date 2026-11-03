@@ -6,3 +6,4 @@
 .idea/
 .vscode/
 /hadome
+__pycache__/

@@ -4,7 +4,7 @@
 name = "hadome"
 version = "0.0.0"
 edition = "2021"
-description = "Stops regressions in code and tests, not progress."
+description = "Reports the violations a change adds and the tests it weakens."
 license = "MIT"
 repository = "https://github.com/rerorets/hadome"
 readme = "README.md"

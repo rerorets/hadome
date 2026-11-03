@@ -9,7 +9,7 @@
   <version>${revision}</version>
   <packaging>maven-plugin</packaging>
   <name>hadome Maven plugin</name>
-  <description>Stops regressions in code and tests, not progress.</description>
+  <description>Reports the violations a change adds and the tests it weakens.</description>
   <url>https://github.com/rerorets/hadome</url>
   <licenses><license><name>MIT</name><url>https://opensource.org/licenses/MIT</url></license></licenses>
   <developers><developer><id>rerorets</id><url>https://github.com/rerorets</url></developer></developers>
@@ -89,7 +89,7 @@
           <plugin>
             <groupId>org.sonatype.central</groupId>
             <artifactId>central-publishing-maven-plugin</artifactId>
-            <version>0.7.0</version>
+            <version>0.12.0</version>
             <extensions>true</extensions>
             <configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish></configuration>
           </plugin>

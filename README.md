@@ -69,7 +69,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.1.0                   # or pip install hadome==0.1.0
+uv add --dev hadome==0.1.1                   # or pip install hadome==0.1.1
 uv run hadome check
 ```
 
@@ -86,7 +86,7 @@ Built from source. With a C compiler it reads all six languages; without one, Go
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.1.0" }
+plugins { id("io.github.rerorets.hadome") version "0.1.1" }
 ```
 
 Run it with `./gradlew hadomeCheck`.
@@ -98,7 +98,7 @@ Run it with `./gradlew hadomeCheck`.
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </plugin>
 ```
 
@@ -107,7 +107,7 @@ Run it with `mvn hadome:check`.
 #### Rust
 
 ```sh
-cargo binstall hadome@0.1.0
+cargo binstall hadome@0.1.1
 hadome check
 ```
 

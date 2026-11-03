@@ -48,7 +48,7 @@ def build(version, binary, exe, tag, out):
         f"{dist}.data/scripts/{exe}": open(binary, "rb").read(),
         f"{dist}.dist-info/METADATA": (
             "Metadata-Version: 2.1\nName: hadome\n"
-            f"Version: {version}\nSummary: Stops regressions in code and tests, not progress.\n"
+            f"Version: {version}\nSummary: Reports the violations a change adds and the tests it weakens.\n"
             "Home-page: https://github.com/rerorets/hadome\nLicense: MIT\nRequires-Python: >=3.8\n"
         ).encode(),
         f"{dist}.dist-info/WHEEL": (

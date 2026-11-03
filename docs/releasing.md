@@ -9,6 +9,8 @@ git push origin v1.2.0
 
 The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS`, then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
 
+If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions already on the registry.
+
 ## Switching an ecosystem on
 
 Each ecosystem publishes only when its repository variable is `true` (Settings → Secrets and variables → Actions → Variables), and needs its credentials as secrets.

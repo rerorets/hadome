@@ -24,7 +24,7 @@ gradlePlugin {
             id = "io.github.rerorets.hadome"
             implementationClass = "io.github.rerorets.hadome.gradle.HadomePlugin"
             displayName = "hadome"
-            description = "Stops regressions in code and tests, not progress."
+            description = "Reports the violations a change adds and the tests it weakens."
             tags = listOf("testing", "verification", "regression", "ci")
         }
     }

@@ -49,7 +49,7 @@ copyFileSync(join(here, "hadome", "bin", "hadome.js"), join(main, "bin", "hadome
 copyFileSync(join(here, "..", "..", "README.md"), join(main, "README.md"));
 writeFileSync(join(main, "package.json"), JSON.stringify({
   name: "hadome", ...common,
-  description: "Stops regressions in code and tests, not progress.",
+  description: "Reports the violations a change adds and the tests it weakens.",
   bin: { hadome: "bin/hadome.js" }, files: ["bin", "README.md"],
   optionalDependencies: optional,
   engines: { node: ">=18" },

@@ -69,7 +69,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.1.0                   # pip なら pip install hadome==0.1.0
+uv add --dev hadome==0.1.1                   # pip なら pip install hadome==0.1.1
 uv run hadome check
 ```
 
@@ -86,7 +86,7 @@ go tool hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.1.0" }
+plugins { id("io.github.rerorets.hadome") version "0.1.1" }
 ```
 
 `./gradlew hadomeCheck`で動かします。
@@ -98,7 +98,7 @@ plugins { id("io.github.rerorets.hadome") version "0.1.0" }
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </plugin>
 ```
 
@@ -107,7 +107,7 @@ plugins { id("io.github.rerorets.hadome") version "0.1.0" }
 #### Rust
 
 ```sh
-cargo binstall hadome@0.1.0
+cargo binstall hadome@0.1.1
 hadome check
 ```
 
