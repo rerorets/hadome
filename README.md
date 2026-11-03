@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-orange.svg">
+  <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
   <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin-555.svg">
 </p>
 
@@ -23,7 +23,7 @@
 ---
 
 > [!NOTE]
-> **hadome has not been released yet.** Everything in this README works when hadome is built from source (`go install github.com/rerorets/hadome/cmd/hadome@main`, with a C compiler for languages other than Go). The package-manager lines of the quick start work from the first release on. "Status and roadmap" at the end says what is left.
+> **hadome is young (0.x).** Rules and output may still change between minor versions, so pin the exact version, as the quick start does. Problems and ideas are welcome in [Issues](https://github.com/rerorets/hadome/issues).
 
 ## The problem
 
@@ -62,15 +62,15 @@ Pick the line for your ecosystem (versions are pinned; see [distribution](docs/d
 
 ```sh
 npm install --save-dev --save-exact hadome      # TypeScript / JavaScript
-uv add --dev hadome==1.2.0                       # Python
+uv add --dev hadome==0.1.0                       # Python
 go get -tool github.com/rerorets/hadome/cmd/hadome  # Go (all six languages with a C compiler, Go only without)
-cargo binstall hadome@1.2.0                      # Rust
+cargo binstall hadome@0.1.0                      # Rust
 brew install rerorets/tap/hadome                 # anything else
 ```
 
 ```kotlin
 // build.gradle.kts — Java / Kotlin
-plugins { id("io.github.rerorets.hadome") version "1.2.0" }
+plugins { id("io.github.rerorets.hadome") version "0.1.0" }
 ```
 
 ### 2. Run it

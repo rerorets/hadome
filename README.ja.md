@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-orange.svg">
+  <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
   <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin-555.svg">
 </p>
 
@@ -23,7 +23,7 @@
 ---
 
 > [!NOTE]
-> **hadome はまだリリースしていません。** この README に書いたことは、ソースからビルドすれば動きます（`go install github.com/rerorets/hadome/cmd/hadome@main`。Go 以外の言語を読むには C コンパイラが要ります）。はじめかたのパッケージマネージャの行は、最初のリリースから使えます。残っていることは末尾の「状況とロードマップ」にあります。
+> **hadome はまだ若い版（0.x）です。** マイナーバージョンの間でルールや出力が変わることがあるので、はじめかたのとおり版を固定して使ってください。不具合や要望は [Issues](https://github.com/rerorets/hadome/issues) へどうぞ。
 
 ## 問題
 
@@ -61,15 +61,15 @@ hadome（歯止め）は、コードの品質のための**ラチェット**で�
 
 ```sh
 npm install --save-dev --save-exact hadome      # TypeScript / JavaScript
-uv add --dev hadome==1.2.0                       # Python
+uv add --dev hadome==0.1.0                       # Python
 go get -tool github.com/rerorets/hadome/cmd/hadome  # Go（C コンパイラがあれば6言語、無ければ Go だけを読む）
-cargo binstall hadome@1.2.0                      # Rust
+cargo binstall hadome@0.1.0                      # Rust
 brew install rerorets/tap/hadome                 # それ以外
 ```
 
 ```kotlin
 // build.gradle.kts — Java / Kotlin
-plugins { id("io.github.rerorets.hadome") version "1.2.0" }
+plugins { id("io.github.rerorets.hadome") version "0.1.0" }
 ```
 
 ### 2. 動かす
