@@ -15,6 +15,8 @@ git push origin v1.2.0
 
 各エコシステムは、リポジトリの変数が `true` のときだけ公開する（Settings → Secrets and variables → Actions → Variables）。資格情報はシークレットとして要る。
 
+シークレットはリポジトリ直下ではなく、環境 `release` に入れる（Settings → Environments → release）。環境 `release` と `pypi` は、どちらもデプロイできる参照をタグ `v*` だけにする。こうすると、ブランチで動くワークフローは資格情報を読めない。
+
 | エコシステム | 変数 | シークレット | 一度だけ用意するもの |
 |---|---|---|---|
 | npm | `PUBLISH_NPM` | `NPM_TOKEN` | `hadome` と `hadome-<os>-<arch>` を公開できるアカウントの granular access token（Read and write・All packages・2FA の迂回。書き込みのトークンは最長90日で切れる） |
