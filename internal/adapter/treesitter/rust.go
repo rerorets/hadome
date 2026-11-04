@@ -22,6 +22,9 @@ type rust struct {
 	crates  map[string]bool     // directories holding a Cargo.toml
 	defs    map[string][]string // module location -> names of its top-level items, for use ...::*
 	scopes  map[string]int
+	// automocks are the types mockall's #[automock] generates (MockStore for trait Store). The
+	// attribute sits on product code, so a test that uses one imports nothing that says mock.
+	automocks map[string]bool
 }
 
 func (*rust) grammar() *sitter.Language { return sitter.NewLanguage(rustgrammar.Language()) }
@@ -49,6 +52,7 @@ var rustTestDir = regexp.MustCompile(`(^|/)(tests|benches)/`)
 
 func (r *rust) index(v engine.Version, files []*file) {
 	r.modules, r.crates, r.defs, r.scopes = map[string]bool{}, map[string]bool{}, map[string][]string{}, map[string]int{}
+	r.automocks = map[string]bool{}
 	paths, _ := fsFiles(v)
 	for _, p := range paths {
 		if path.Base(p) == "Cargo.toml" {
@@ -60,7 +64,27 @@ func (r *rust) index(v engine.Version, files []*file) {
 		f.unit = rustModule(f.path)
 		f.unitPath = f.unit
 		r.modules[f.unit] = true
+		walk(f.root, func(n *sitter.Node) bool {
+			if (n.Kind() == "trait_item" || n.Kind() == "impl_item" || rustTypes[n.Kind()]) && automocked(f, n) {
+				name := f.field(n, "name")
+				if n.Kind() == "impl_item" {
+					name = strings.SplitN(f.field(n, "type"), "<", 2)[0]
+				}
+				r.automocks["Mock"+name] = true
+			}
+			return true
+		})
 	}
+}
+
+// automocked reports an item under #[automock], #[mockall::automock] or #[cfg_attr(test, automock)].
+func automocked(f *file, n *sitter.Node) bool {
+	for _, a := range attributes(f, n) {
+		if strings.Contains(a, "automock") {
+			return true
+		}
+	}
+	return false
 }
 
 // rustModule is the location of the module a file defines.

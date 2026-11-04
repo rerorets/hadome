@@ -237,6 +237,10 @@ func (w *rustWalk) call(n *sitter.Node) {
 		w.t.hazard(cat, n)
 		return
 	}
+	if w.sc.r.automocks[strings.SplitN(callee, "::", 2)[0]] {
+		w.t.hazard(facts.HazardMock, n)
+		return
+	}
 	target := ""
 	switch fn.Kind() {
 	case "identifier":

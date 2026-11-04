@@ -2,7 +2,10 @@
 
 package treesitter
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // viewpoint: behaviour
 // target: the Rust reader
@@ -85,4 +88,54 @@ test "external" calls=[src/store.create_post×1/1] hazards=[] skip=true:"" unres
 test "tests::creates_twice" calls=[src/store.Store.add×1/1 src/store.Store.new×1/0 src/store.create_post×2/2] hazards=[sleep always-true] skip=false:"" unresolved=0
 test "tests::later" calls=[src/store.create_post×2/1] hazards=[] skip=true:"needs a database" unresolved=1
 `)
+}
+
+// viewpoint: behaviour
+// target: the Rust reader
+// A type that mockall's #[automock] generates is a mock wherever a test uses it, although the test
+// imports nothing that says mock. A type that only happens to start with Mock is not.
+func TestRustAutomock(t *testing.T) {
+	a := analyze(t, "rust", tree(
+		"Cargo.toml", "[package]\nname = \"app\"\n",
+		"src/lib.rs", `#[cfg_attr(test, mockall::automock)]
+pub trait Store {
+    fn get(&self) -> i32;
+}
+
+pub struct MockClock;
+
+impl MockClock {
+    pub fn new() -> Self { MockClock }
+}
+
+pub fn read(s: &dyn Store) -> i32 { s.get() }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated() {
+        let s = MockStore::new();
+        assert_eq!(read(&s), 0);
+    }
+
+    #[test]
+    fn handwritten() {
+        let c = MockClock::new();
+        let _ = c;
+    }
+}
+`))
+	got := map[string]string{}
+	for _, ts := range a.Tests {
+		var hs []string
+		for _, h := range ts.Hazards {
+			hs = append(hs, string(h.Category))
+		}
+		got[ts.Name] = strings.Join(hs, " ")
+	}
+	if got["tests::generated"] != "mock" || got["tests::handwritten"] != "" {
+		t.Errorf("hazards: %v", got)
+	}
 }
