@@ -159,8 +159,32 @@ jobs:
     if: github.event_name == 'push' && vars.PUBLISH_CRATES == 'true'
     runs-on: ubuntu-24.04
     environment: release
+    permissions:
+      contents: write # attaches the signatures to the release
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      # cargo binstall checks a minisign signature, not SHA256SUMS. The signatures are made and
+      # checked against the public key in Cargo.toml before the crate that names that key is published.
+      - name: Sign the archives
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -n "$MINISIGN_SECRET_KEY" || { echo "::error::MINISIGN_SECRET_KEY is not set in the release environment"; exit 1; }
+          sudo apt-get install -y minisign
+          key="$RUNNER_TEMP/minisign.key"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          pub=$(sed -n 's/^pubkey = "\(.*\)"$/\1/p' packaging/cargo/Cargo.toml)
+          for f in dist/hadome_*.tar.gz dist/hadome_*.zip; do
+            minisign -S -s "$key" -m "$f" -x "$f.sig"
+            minisign -V -P "$pub" -m "$f" -x "$f.sig"
+          done
+          rm "$key"
+          gh release upload "$VERSION" dist/*.sig
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

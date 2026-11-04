@@ -37,7 +37,7 @@ A Go project that also has TypeScript or Python files gets all six where a C com
 
 - One release produces binaries for each supported operating system and architecture (Linux, macOS and Windows; x86-64 and ARM64), each built natively with cgo on GitHub Actions, then publishes them to every ecosystem above
 - A release starts from a tag `vX.Y.Z`. The version is stamped into the binary (`hadome version`) and into every package
-- Every binary is published with a checksum in `SHA256SUMS`; installers that download binaries verify it before running anything
+- Every binary is published with a checksum in `SHA256SUMS`. Archives also get a minisign signature (`.sig`), because a signature is all `cargo binstall` can check. Installers that download binaries verify a checksum or a signature before running anything
 - All ecosystems receive the same version number at the same time. Which ecosystems it is published to is decided by the repository variables `PUBLISH_<ECOSYSTEM>` ([how to publish](../maintaining/releasing.md))
 
 ```mermaid
@@ -59,17 +59,17 @@ Everything that turns a release into a package lives under `packaging/`, one dir
 |---|---|---|
 | `packaging/npm` | `hadome` and one `hadome-<os>-<arch>` package per platform | The platform packages are optional dependencies limited by `os` and `cpu`; npm installs only the matching one. `hadome`'s launcher runs it |
 | `packaging/python` | One wheel per platform (`py3-none-<platform>`) | The binary is a script of the wheel, installed onto `PATH` |
-| `packaging/cargo` | The `hadome` crate | `cargo binstall` reads the crate's metadata and downloads the release archive. Building the crate from source only explains how to install |
+| `packaging/cargo` | The `hadome` crate | `cargo binstall` reads the crate's metadata, downloads the release archive, and checks its signature with the public key in the metadata. Building the crate from source only explains how to install |
 | `packaging/jvm` | The Gradle plugin and the Maven plugin, sharing one installer | On first use, downloads the archive for the platform from the release, checks it against the checksums built into the plugin, and keeps it in the build tool's cache |
 | `packaging/homebrew` | The formula for the `rerorets/homebrew-tap` repository | Homebrew downloads the archive and checks its SHA-256 |
 
-The npm and Python packages carry the binary itself, so installing them never touches the network beyond the registry. The JVM plugins download, because the registries for build plugins do not select files by platform; they check every download against checksums fixed at release time.
+The npm and Python packages carry the binary itself, so installing them never touches the network beyond the registry. The JVM plugins download, because the registries for build plugins do not select files by platform. The JVM plugins and Homebrew check each download against checksums fixed at release time. `cargo binstall` checks the signature with the public key fixed in the crate.
 
 ## Invariants
 
 1. Every ecosystem can pin an exact version
 2. The same version behaves the same regardless of how it was installed
-3. Installers never execute a binary whose checksum does not match
+3. Installers never execute a binary whose checksum or signature does not match
 4. hadome never updates itself
 
 ## Deliberately left out
