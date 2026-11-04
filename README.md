@@ -239,7 +239,7 @@ A rule such as "never UPDATE the log store" is a small program in your own repos
 - Publishing to npm and Maven Central (in progress; the other ways to install are published, see [releasing](docs/maintaining/releasing.md))
 - Measuring what tests guard with mutations
 
-While hadome is 0.x, behaviour may change between versions. Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues).
+While hadome is 0.x, behaviour may change between versions ([versioning](CONTRIBUTING.md#versioning)). Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues).
 
 ## License
 

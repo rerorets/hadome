@@ -10,6 +10,7 @@ Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues). Sen
 | Agents working in a user's repository | [The guide for agents](docs/for-agents.md). The block `hadome agents` writes is `cmd/hadome/agents.en.md` |
 | People who build hadome | This document, [the design documents](docs/design), [the dependency diagram](docs/design/dependencies.md) |
 | Maintainers | [Releasing](docs/maintaining/releasing.md), [the JVM plugins](packaging/jvm/README.md) |
+| People who found a vulnerability | [Security](SECURITY.md) |
 
 ## Running it locally
 
@@ -43,6 +44,12 @@ git config core.hooksPath .githooks
 - When `go run ./cmd/hadome check` returns exit code `3`, say in the pull request what needs a person's review.
 - Pull requests are squash-merged. The pull request's title becomes the commit message on main, and a line of the release notes.
 
+## Review
+
+- The maintainer (rerorets) reviews and merges pull requests.
+- Only a pull request whose four CI checks pass (the tests on three operating systems and the packaging check) can be merged.
+- There is one maintainer, so an answer may take a few days.
+
 ## Writing
 
 - Code, comments and commit messages are in English.
@@ -50,6 +57,19 @@ git config core.hooksPath .githooks
 - Comments say only what reading the code does not tell: for example, why an unusual approach was taken, or an invariant. No history, progress notes or ticket numbers.
 - Tests follow [the three layers for trusting tests](docs/model.md): test observable behaviour only, never copy expected values from the implementation, never read the clock, never wait with sleep, never skip silently.
 - This is a public repository: bring in no code, names, paths or table names from an employer or a private project. Use generic examples such as `store.Append` or "product A".
+
+## Versioning
+
+Versions are `vX.Y.Z` and follow [Semantic Versioning](https://semver.org/).
+
+| Change | While 0.x | From 1.0 |
+|---|---|---|
+| A bug fix | Patch (0.1.2) | Patch |
+| A new rule, a stricter rule, a new language or configuration key | Minor (0.2.0) | Minor |
+| Changing or removing a configuration key, the shape of the JSON output, the meaning of an exit code, or how an exception marker is written | Minor | Major |
+
+- A stricter rule ships as a minor version because hadome reports only the violations a change adds compared with main. Upgrading never fails code already on main; only code that later changes add can fail.
+- hadome never stops reading a `schema:` version it once accepted. A `.hadome.yml` written for an old `schema:` still reads after an upgrade.
 
 ## License
 
