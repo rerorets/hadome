@@ -64,6 +64,7 @@ classDiagram
     +ToUnit string
     +Internal bool
     +IO bool
+    +Unknown bool
   }
   class Test {
     +Name string
@@ -118,8 +119,8 @@ classDiagram
 | 役割 | 意味 | 決め方 |
 |---|---|---|
 | `source` | 製品のコード | 既定 |
-| `test` | テストのコード | 言語の慣習（下表）、次に設定による上書き |
-| `generated` | 生成されたコード。大きさとコメントのルールは飛ばす | 標準のヘッダ（Go の `Code generated … DO NOT EDIT.` など）、次に設定の glob |
+| `test` | テストのコード | 言語の慣習（下表）、または設定の `files.tests` の glob |
+| `generated` | 生成されたコード。大きさとコメントのルールは飛ばす | 標準のヘッダ（Go の `Code generated … DO NOT EDIT.` など）、または設定の `files.generated` の glob |
 | `other` | hadome が知らない言語、またはコードでないもの | それでも一覧には載せ、ファイル単位のルールから見えるようにする |
 
 テストファイルの慣習:
@@ -132,6 +133,15 @@ classDiagram
 | Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
 | Kotlin | Java と同じ |
+
+慣習から外れた配置のリポジトリのために、設定で役割を足せる。
+
+- `files.tests` の glob に合うファイルは、言語の慣習に合わなくてもテストのファイルとして読む。Go のファイルには当てない。Go のテストかどうかはコンパイラが `_test.go` で決めるので、hadome が変えると実際のビルドと食い違う
+- `files.generated` の glob に合うファイルは、ヘッダが無くても生成されたコードとして扱う
+- 両方に合うファイルは生成されたコードになる
+- glob の書き方は門番の `paths` と同じ（`**` は任意の深さのディレクトリ）
+- glob は役割を足すだけで、慣習やヘッダで決まった役割を外すことはできない
+- 役割を決めてから、言語がファイルを読む。テストのファイルかどうかで、読み取る事実（テストか、シンボルか）が変わるからだ
 
 ### ユニット（依存のルール向け）
 
@@ -146,6 +156,27 @@ classDiagram
 | Java / Kotlin | パッケージ |
 
 `Internal` は、import がリポジトリの中を指すときに真になる。`IO` は、import したユニットが入出力を行うときに真になる。判断はアダプタの `io` の表と、設定が足す項目（`rules.tests.io`）による。一覧に載るのはテストでないファイルの import だけだ。それがユニット自身の依存だからだ。
+
+### 行き先の分からない import
+
+実行するまで行き先の決まらない import がある。こうした import は `Unknown` を真にし、`ToUnit` を空にして一覧に載せる。外部の import として扱って何も言わずに外すと、依存のルールからも純粋さの判断からも見えなくなるからだ。
+
+| 言語 | 行き先の分からない import |
+|---|---|
+| TypeScript | 引数が文字列でない `import(…)`、`require(…)` |
+| Python | 引数が文字列でない `importlib.import_module(…)`、`__import__(…)` |
+| Java / Kotlin | 引数が文字列でない `Class.forName(…)` |
+| Go、Rust | 無い。import はいつも文字列で書く |
+
+引数が文字列なら、ふつうの import と同じく行き先を解決する。
+
+`unknown/import` は、変更で増えた行き先の分からない import を人の確認（終了コード `3`）に回す。落とさないのは、行き先を確かめられないものでチェックを落とすことはしないからだ。アンカーはファイルと、正規化した呼び出しの文字列なので、import を動かしても新しいものにはならない。
+
+| ルール | 事例 |
+|---|---|
+| `unknown/import` | 新しい行き先の分からない import は `3` を返す · base にあるものは返さない · 引数が文字列の動的な import はふつうの import になる · テストのファイルの中のものは返さない |
+
+base にある行き先の分からない import を持つユニットは、純粋さが `unknown` になる。`unknown` は純粋ではない（[rules-tests.ja.md](rules-tests.ja.md) の「純粋なユニット」）。
 
 ### 危険の分類
 

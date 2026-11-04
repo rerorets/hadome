@@ -78,6 +78,10 @@ rules:                         # 任意。既定と違うものだけ
   deps:
     diagram: docs/conventions/dependencies.md  # Mermaid の flowchart。矢印を足すには人の確認が要る
 
+files:                         # 任意。言語の慣習から外れた配置のため
+  tests: ["checks/**"]         # テストのファイルとして読む（Go のファイルには当てない）。変えるには人の確認が要る
+  generated: ["gen/**"]        # 生成されたコードとして扱う。足すには人の確認が要る
+
 gates:                         # 任意。製品固有の門番
   - id: acme/log-append-only
     kind: finding
@@ -123,7 +127,7 @@ gates:                         # 任意。製品固有の門番
 
 両方の版のファイルは、比べられるようにそれぞれ全体を読んで検証する。
 
-ルールを base より緩くする変更（上限を上げる、表に足した項目を消す、不変条件を取り除く）は `config/loosened` として報告し、終了コード `3` を返す。厳しくするのに人の確認は要らない。仕様の各設定がどちらの向きが緩いかを書いているので、ルールごとのコードは要らない。効き方を hadome が判断できない門番は、既存の項目を変えることも緩めることとして数える（`LooserWhenChanged`）。assert とみなす関数（`rules.tests.assertions`）は、項目を足すと緩くなる。項目を足すと、何も確かめない関数でもテストを通せるからだ（`LooserWhenAdded`）。
+ルールを base より緩くする変更（上限を上げる、表に足した項目を消す、不変条件を取り除く）は `config/loosened` として報告し、終了コード `3` を返す。厳しくするのに人の確認は要らない。仕様の各設定がどちらの向きが緩いかを書いているので、ルールごとのコードは要らない。効き方を hadome が判断できない門番は、既存の項目を変えることも緩めることとして数える（`LooserWhenChanged`）。assert とみなす関数（`rules.tests.assertions`）は、項目を足すと緩くなる。項目を足すと、何も確かめない関数でもテストを通せるからだ（`LooserWhenAdded`）。`files.generated` も、足すと緩くなる。合うファイルが大きさとコメントのルールから外れるからだ（`LooserWhenAdded`）。`files.tests` は、変えること自体を緩めることとして数える（`LooserWhenChanged`）。どのファイルがテストかが変わると、ルールの当たる範囲がどちらの向きにも動き、hadome にはどちらが厳しいかを決められないからだ。
 
 base の設定が不正なら、推測せずに `2` を返す。空として扱うと、取り除いた不変条件が隠れてしまう。hadome はこれまでに受け付けたすべての `schema:` の版を読むので、hadome を上げたことで正しい base が不正になることはない。
 
@@ -170,6 +174,8 @@ classDiagram
     +Hazards map~string,[]string~
     +IO []string
     +Assertions []string
+    +TestFiles []string
+    +GeneratedFiles []string
     +Size Limits
     +TodoForm string
     +Diagram *Diagram
