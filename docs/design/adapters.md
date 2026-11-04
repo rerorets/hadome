@@ -72,6 +72,9 @@ classDiagram
     +Declared map~string,[]string~
     +Calls []Call
     +Unresolved int
+    +Asserts int
+    +AssertsUnknown bool
+    +Body string
     +Hazards []Hazard
     +Skip Skip
   }
@@ -158,6 +161,26 @@ Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a ha
 
 These lists are examples, not the full tables. The full tables live in each adapter, and configuration can add entries (a product's own clock wrapper that tests must not bypass, a mocking library hadome does not know). Configuration cannot remove built-in entries.
 
+### Assertions
+
+For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts each test's calls that check something (assertions) into `Test.Asserts`, including those made through helpers in test files.
+
+| Language | Counted as an assertion (examples) |
+|---|---|
+| Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require` |
+| Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
+| TypeScript | `expect(…)`, `assert` and `assert.…` |
+| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…` |
+| Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
+
+As with hazard categories, these are examples; each adapter holds the full table. Configuration can add entries under `rules.tests.assertions`, but never remove built-in ones.
+
+When a test passes its testing handle (Go's `*testing.T`, Python's `self` and so on) to a function the adapter cannot read, it may check there, so the adapter sets `Test.AssertsUnknown`.
+
+### The body's fingerprint
+
+For `tests/duplicate`, the adapter makes a fingerprint of the sequence of tokens in each test's body and stores it in `Test.Body`. The test's name, comments and whitespace are not part of it. Literals are, with their values, so tests that differ in even one input have different fingerprints.
+
 ### What a test guards
 
 People never classify tests. What a test guards is mostly worked out by machine, and the little that is declared is written by whoever writes the test (usually an agent).
@@ -211,6 +234,7 @@ Full parsers are used for every language because what users get (accurate functi
 3. Text inside a string literal or a comment is never reported as code (no hazard, import or symbol comes from it)
 4. A file no adapter claims is still listed with role `other`
 5. Configuration can add hazard entries but never remove built-in ones
+6. A test body's fingerprint does not change when the name, comments or whitespace change. It changes when any literal changes
 
 ## Deliberately left out
 

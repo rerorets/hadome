@@ -22,6 +22,9 @@ They work on the facts from the language adapters ([adapters.md](adapters.md)) a
 | `tests/scope-shrunk` | measure | Something guarded in base is guarded by no test in head |
 | `tests/target-unknown` | finding (review) | A new active test whose target could not be identified at all — returns exit code `3`, never `1` |
 | `tests/invariant-unguarded` | finding | An enabled invariant has no active guarding test |
+| `tests/guards-nothing` | finding | A test calls no product code at all |
+| `tests/no-assertion` | finding | A test has no call that checks anything (an assertion) |
+| `tests/duplicate` | finding | A test's body is the same as another test's |
 
 All are on by default and need no configuration.
 
@@ -84,6 +87,33 @@ hadome decides purity from imports, on every check:
 - **Treatment**: returns exit code `3` (a person reviews it), never `1`
 - **Legitimate removal**: the unit no longer exists in head
 - The `io` table comes from head's configuration for both versions, so adding an entry never asks for a review of units that were already importing it
+
+## Tests that are not needed
+
+Adding tests does not always widen what they guard. These three rules stop tests that check nothing and tests that copy another. Like every rule, they report only what a change adds, never what the base already has. Skipped tests are left out.
+
+### `tests/guards-nothing`
+
+- **Finds**: a test with no targets (`Calls`) and no call it could not identify (`Unresolved`). Calls through helpers in test files count as targets
+- **Why it matters**: the test calls no product code, so no change to the product changes its result. A test that calls only the standard library or third-party libraries is one of these
+- **Fix**: call the product function you mean to check, or delete the test
+- A test with any call that could not be identified may be calling product code, so it is not reported. A test none of whose targets can be identified is `tests/target-unknown`'s
+
+### `tests/no-assertion`
+
+- **Finds**: a test with no call that checks anything (`Test.Asserts` is zero), counting the test body and the helpers in test files
+- **Why it matters**: a test that only calls passes even when the product returns the wrong value. It fails only on an exception or a panic
+- **Fix**: assert the behaviour. For a test that only checks that nothing throws, write a reasoned exception marker
+- A test that passes its testing handle (Go's `t`, Python's `self` and so on) to a function the adapter cannot read (`Test.AssertsUnknown`) may check there, so it is not reported
+- What counts as an assertion is in each language's table ([adapters.md](adapters.md)). Configuration can add assertion functions under `rules.tests.assertions`, but never remove the built-in ones
+
+### `tests/duplicate`
+
+- **Finds**: a group of tests with the same body, compared as the sequence of tokens without the name, comments and whitespace (`Test.Body`)
+- **Why it matters**: checking the same thing twice does not widen what is guarded, and changing the behaviour means making the same fix in two places
+- **Fix**: delete one. If it was meant to check another input, change the input
+- Tests that differ in even one literal are different tests
+- Like the quantity rules, there is one item per body fingerprint, and its value is the number of tests with that body. A higher number is a regression, and renaming a test does not make it new
 
 ## What the tests guard
 
@@ -168,6 +198,9 @@ Each rule ships with at least these cases.
 | `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes |
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test passes |
 | `tests/invariant-unguarded` | a new invariant without a test fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
+| `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a skipped test passes |
+| `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes |
+| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new |
 | `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` |
 
 ## Invariants
@@ -182,6 +215,8 @@ Each rule ships with at least these cases.
 - Checking that a test is *correct*. Only mutation analysis gets close, and it comes later
 - `tests/no-network` (reserved): calling real external services from tests (decision 3)
 - Test speed (belongs to a separate rule group with its own design)
+- Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect. Once mutation analysis arrives, such a test is one that catches no new breakage
+- Treating tests that call the same way (the same targets, times and scopes) as duplicates. Legitimate tests that differ only in input, such as `TestAddPositive` and `TestAddNegative`, would be caught
 
 ## Decisions
 
@@ -189,3 +224,4 @@ Each rule ships with at least these cases.
 2. Guarding tests of built-in invariant types with a shape are found automatically; `guards:` is needed only for product-specific invariants and for types without a shape. There is no separate `tests/guard-shape` rule
 3. `tests/no-network` is reserved: tests must not talk to real external services. It is added when adapters can identify such calls
 4. Removing an invariant from configuration returns exit code `3`, once, in the change that removes it. After that change reaches the base branch, the invariant is simply absent and later changes return `0`. The same holds for every exit-code-`3` situation
+5. Only what can be said for certain makes an unneeded test a regression: it calls no product code, it has no assertion, or its body is the same as another's. A call that cannot be identified, or a testing handle passed to a function that cannot be read, means no report
