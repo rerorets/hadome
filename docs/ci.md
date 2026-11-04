@@ -94,6 +94,43 @@ jobs:
         run: exit ${{ steps.check.outputs.code }}
 ```
 
+## Trying mutations too
+
+Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apart from `check`. `mutate` runs the tests once per mutant, so it takes far longer than `check`, and a separate job shows `check`'s result first. Add this job under `jobs:` in the example above.
+
+```yaml
+  mutate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6 # and whatever else the test command needs
+        with:
+          go-version-file: go.mod
+      - name: Try mutations with hadome
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          report="$RUNNER_TEMP/mutate.json"
+          code=0
+          go tool hadome mutate --base "$BASE" --format json > "$report" || code=$?
+          jq -r '
+            def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            (.regressions[] | "::error file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .fix) | esc)"),
+            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+          ' "$report" 2>/dev/null || true
+          case "$code" in 0|3) exit 0 ;; *) exit "$code" ;; esac
+```
+
+- Exit codes are handled as for `check`: `1` and `2` fail the job, and `3` passes it
+- A surviving mutant shows as an error annotation on the line it broke. What needs a person's review (mutants beyond the limit, and the like) shows as a warning annotation
+- Whatever the test command (`mutation.test`) needs is set up by the job's steps. The example installs only Go
+- `mutate`'s results are not written to the PR comment. The one comment is the `check` job's, so that no two jobs rewrite it
+
 ## What the example assumes
 
 - `fetch-depth: 0` fetches the whole history: hadome reads the base branch from git

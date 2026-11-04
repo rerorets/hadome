@@ -100,7 +100,17 @@ hadome agents --write AGENTS.md CLAUDE.md
 
 ## `hadome init`
 
-`schema: 1`、見つけた言語のコメント、`hadome suggest` と `hadome explain` を指すコメントを入れた `.hadome.yml` を書く。既存のファイルは上書きしない。hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
+`schema: 1`、見つけた言語のコメント、`hadome suggest` と `hadome explain` を指すコメントを入れた `.hadome.yml` を書く。既存のファイルは上書きしない。
+
+`mutation` の設定もコメントにして書く（[mutation.ja.md](mutation.ja.md)）。見つけた言語ごとに、よく使うテストのコマンドを1行ずつ並べる。利用者は1つを残し、そのコメントを外して使う。推測したコマンドなので、有効にはしない。
+
+| 言語 | テストのコマンド |
+|---|---|
+| Go | `[go, test, ./...]` |
+| TypeScript | `[npm, test]` |
+| Python | `[python, -m, pytest]` |
+| Rust | `[cargo, test]` |
+| Java、Kotlin | `[./gradlew, test]` |hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
 
 ## 不変条件
 

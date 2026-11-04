@@ -21,6 +21,27 @@ Only regressions fail. A finding that was already on the base branch is counted 
 
 Proved by: `hadome check` exits `0`.
 
+## Trying mutations
+
+Only when `.hadome.yml` has `mutation`. Run it once before finishing a change, after `hadome check` exits `0`.
+
+```sh
+hadome mutate --format json
+```
+
+| Exit code | Meaning | What to do |
+|---|---|---|
+| `0` | Every way of breaking the code the change touched failed a test | Finish |
+| `1` | Some way of breaking it goes unnoticed by the tests | Add tests as each entry's `fix` in `regressions` says, and run it again |
+| `2` | The tests failed with nothing broken, or the configuration is invalid | Fix the tests first. Do not remove the `mutation` setting |
+| `3` | A person must review something (mutants beyond the limit went untried, and the like) | Stop. Tell the person what was listed |
+
+- Do not change the code to make the tests pass. `1` says the tests are not enough
+- Write `gate:allow mutation/survived reason: <reason>` only after confirming the replacement does not change behaviour (an equivalent mutant). The reason says why the result stays the same
+- Do not remove or weaken the `mutation` setting for being slow. Such a change gives `3`
+
+How to confirm: `hadome mutate` exits `0`.
+
 ## Asking a person to review
 
 On `3`, a person judges what was listed. Give them what they need to judge, not the conclusion.

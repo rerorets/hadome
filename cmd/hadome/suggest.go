@@ -67,7 +67,29 @@ schema: 1
 # invariants:
 #   - type: idempotent
 #     target: api.CreatePost
-`
+%s`
+
+// testCommands are the usual test commands of each language, offered by init for hadome mutate. They
+// are guesses, so init writes them as comments and never turns one on.
+var testCommands = map[string]string{
+	"go": "[go, test, ./...]", "typescript": "[npm, test]", "python": "[python, -m, pytest]",
+	"rust": "[cargo, test]", "java": "[./gradlew, test]", "kotlin": "[./gradlew, test]",
+}
+
+// mutationComment is the commented mutation setting, with one test command per language found.
+func mutationComment(langs []string) string {
+	if len(langs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n# hadome mutate breaks the functions a change touched and runs your tests once per break.\n")
+	b.WriteString("# Keep the test command that runs your tests, then uncomment. `hadome explain mutation` describes the keys.\n")
+	b.WriteString("# mutation:\n")
+	for _, l := range langs {
+		fmt.Fprintf(&b, "#   test: %s  # %s\n", testCommands[l], l)
+	}
+	return b.String()
+}
 
 // initCmd writes a minimal configuration file, and never overwrites one.
 func initCmd(args []string, stdout, stderr io.Writer) int {
@@ -88,7 +110,7 @@ func initCmd(args []string, stdout, stderr io.Writer) int {
 	if detected == "" {
 		detected = "none yet"
 	}
-	text := fmt.Sprintf(initTemplate, detected, strings.Join(langs, ", "))
+	text := fmt.Sprintf(initTemplate, detected, strings.Join(langs, ", "), mutationComment(langs))
 	if err := os.WriteFile(config.FileName, []byte(text), 0o644); err != nil {
 		fmt.Fprintln(stderr, "hadome:", err)
 		return engine.ExitConfig
