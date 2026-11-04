@@ -96,6 +96,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 	f := pf.f
 	def := definition(n)
 	t := newTest(f, name, def)
+	t.test.Declared = declaredBefore(f, def, docstringLines(f, def)...)
 	t.fingerprint([]*sitter.Node{n}, def.ChildByFieldName("name"))
 	for _, d := range []*sitter.Node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
@@ -302,4 +303,13 @@ func passes(f *file, args *sitter.Node, name string) bool {
 		}
 	}
 	return false
+}
+
+// docstringLines returns the lines of a function's docstring. Python's doc comment lives there
+// rather than before the function.
+func docstringLines(f *file, def *sitter.Node) []string {
+	if !docstring(def) {
+		return nil
+	}
+	return strings.Split(strings.Trim(f.text(def.ChildByFieldName("body").NamedChild(0)), `"'`), "\n")
 }

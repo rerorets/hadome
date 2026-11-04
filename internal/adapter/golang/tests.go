@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"go/types"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -302,26 +301,13 @@ func (w *walker) inLoop(nodes ...ast.Node) {
 	w.loops--
 }
 
-// declared collects the "key: value" lines of a doc comment, with whitespace normalised.
+// declared collects the "key: value" lines of a doc comment.
 func declared(doc *ast.CommentGroup) map[string][]string {
 	if doc == nil {
 		return nil
 	}
-	var out map[string][]string
-	for _, line := range strings.Split(doc.Text(), "\n") {
-		m := declLine.FindStringSubmatch(strings.TrimSpace(line))
-		if m == nil {
-			continue
-		}
-		if out == nil {
-			out = map[string][]string{}
-		}
-		out[m[1]] = append(out[m[1]], strings.Join(strings.Fields(m[2]), " "))
-	}
-	return out
+	return facts.Declarations(strings.Split(doc.Text(), "\n"))
 }
-
-var declLine = regexp.MustCompile(`^([a-z][a-z-]*):\s+(\S.*)$`)
 
 func (w *walker) line(n ast.Node) int { return w.fset.Position(n.Pos()).Line }
 

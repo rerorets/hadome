@@ -71,7 +71,7 @@ time.Sleep(d) // gate:allow tests/no-sleep reason: the OS file watcher offers no
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-`guards:` の後の値は、メッセージが不変条件を呼ぶとおりに書く: `<type> <target>`、対象が複数なら `<type> <a>,<b>`、または `id`。スキップしたテストは何も守らない。
+どの言語でも、テストの直前のコメントに書く（Python では docstring でもよい）。`guards:` の後の値は、メッセージが不変条件を呼ぶとおりに書く: `<type> <target>`、対象が複数なら `<type> <a>,<b>`、または `id`。スキップしたテストは何も守らない。
 
 テストファイルのヘルパー関数を通した呼び出しも数える。この形を満たしていても、テストが不変条件を確かめているとは限らない。不変条件が破れたら落ちるテストを書くこと。
 

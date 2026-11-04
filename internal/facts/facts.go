@@ -5,6 +5,7 @@ package facts
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strings"
 )
 
@@ -208,3 +209,23 @@ func Fingerprint(tokens []string) string {
 	}
 	return hex.EncodeToString(h.Sum(nil)[:16])
 }
+
+// Declarations collects the "key: value" lines of a doc comment's text (a lowercase key, a colon,
+// a value), values by key in order, with whitespace in each value normalised. It is nil when there
+// are none. Adapters strip the comment delimiters before passing the lines.
+func Declarations(lines []string) map[string][]string {
+	var out map[string][]string
+	for _, line := range lines {
+		m := declLine.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		if out == nil {
+			out = map[string][]string{}
+		}
+		out[m[1]] = append(out[m[1]], strings.Join(strings.Fields(m[2]), " "))
+	}
+	return out
+}
+
+var declLine = regexp.MustCompile(`^([a-z][a-z-]*):\s+(\S.*)$`)

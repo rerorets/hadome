@@ -226,7 +226,7 @@ People never classify tests. What a test guards is mostly worked out by machine,
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-The adapter only collects `key: value` lines (a lower-case key, a colon, a value) from the doc comment into `Declared`, one entry per line, with whitespace normalised. The adapter does not know which keys exist. What a key means is decided by the rule that reads it ([rules-tests.md](rules-tests.md) for `guards`).
+The adapter only collects `key: value` lines (a lower-case key, a colon, a value) from the doc comment into `Declared`, one entry per line, with whitespace normalised. The doc comment is the run of comments that ends on the line right before the test. Rust attributes, Java and Kotlin annotations and Python decorators may sit between the comment and the test. In Python the docstring is read as a doc comment too. A comment set apart by a blank line is not read. The adapter does not know which keys exist. What a key means is decided by the rule that reads it ([rules-tests.md](rules-tests.md) for `guards`).
 
 ### Identified or not
 

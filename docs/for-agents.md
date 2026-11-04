@@ -71,7 +71,7 @@ Proved by: `hadome config check` exits `0`, and `hadome check` reports no `tests
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-The value after `guards:` is written exactly as the messages name the invariant: `<type> <target>`, `<type> <a>,<b>` for several targets, or the `id`. A skipped test guards nothing.
+In every language, write it in the comment right before the test (in Python, the docstring also works). The value after `guards:` is written exactly as the messages name the invariant: `<type> <target>`, `<type> <a>,<b>` for several targets, or the `id`. A skipped test guards nothing.
 
 Calls made through helper functions in test files count. A test that has this shape does not necessarily check the invariant. Write a test that would fail if the invariant were broken.
 

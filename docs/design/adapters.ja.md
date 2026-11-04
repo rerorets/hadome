@@ -226,7 +226,7 @@ classDiagram
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-アダプタは doc コメントから `key: value` の行（小文字のキー、コロン、値）を集めて `Declared` に入れるだけだ。1行で1項目とし、空白は正規化する。アダプタはどんなキーがあるかを知らない。キーの意味は、そのキーを読むルールが決める（`guards` は [rules-tests.ja.md](rules-tests.ja.md)）。
+アダプタは doc コメントから `key: value` の行（小文字のキー、コロン、値）を集めて `Declared` に入れるだけだ。1行で1項目とし、空白は正規化する。doc コメントとは、テストの直前の行で終わるコメントの並びである。Rust の属性、Java と Kotlin のアノテーション、Python のデコレータは、コメントとテストの間にあってよい。Python では docstring も doc コメントとして読む。空行で離れたコメントは読まない。アダプタはどんなキーがあるかを知らない。キーの意味は、そのキーを読むルールが決める（`guards` は [rules-tests.ja.md](rules-tests.ja.md)）。
 
 ### 特定できたかどうか
 
