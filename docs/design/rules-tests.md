@@ -30,7 +30,7 @@ All are on by default and need no configuration.
 
 ## How tests are written
 
-These four rules work on the adapters' hazard categories. Each finding's anchor is the test's name plus the normalised offending line, so moving the test does not make it new.
+`no-clock`, `no-sleep` and `always-true` work on the adapters' hazard categories. Each finding's anchor is the test's name plus the normalised offending line (or, when the hazard is in a helper in another file, that file and the line). `skip-without-reason` works on the skip facts, and its anchor is the test's name. Neither holds a line number, so moving the test does not make it new.
 
 ### `tests/no-clock`
 
@@ -90,7 +90,7 @@ hadome decides purity from imports, on every check:
 
 ## Tests that are not needed
 
-Adding tests does not always widen what they guard. These three rules stop tests that check nothing and tests that copy another. Like every rule, they report only what a change adds, never what the base already has. Skipped tests are left out.
+Adding tests does not always widen what they guard. These three rules stop tests that check nothing and tests that copy another. Like every rule, they report only what a change adds, never what the base already has. Skipped tests are left out. Only what is certain becomes a regression: a call that cannot be identified, a read of a product value, or a testing handle passed to a function that cannot be read means the test is not reported.
 
 ### `tests/guards-nothing`
 
@@ -133,8 +133,6 @@ A test counts only when it is active: skipped tests (with or without a reason) d
 - **Cleanup passes**: merging duplicate tests, deleting tests that guard nothing new, moving or renaming tests — the set of guarded targets is unchanged
 - **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable
 
-When mutation analysis arrives, the items become "breakages the tests catch", and this rule tells regressions apart more finely than now, without changing its name or its meaning.
-
 ### Which tests guard an invariant
 
 hadome finds which tests guard which invariant, so people and agents rarely need to write it.
@@ -149,20 +147,20 @@ hadome finds which tests guard which invariant, so people and agents rarely need
 | `idempotent` | Calls the target two or more times |
 | `round-trip` | Calls the target (so a test calling both operations of the pair guards it) |
 | `isolated` | Calls the target with at least two distinct scopes (below) |
-| `durable`, `erasable`, `append-only`, `fail-closed` | Calls the target, and carries `guards: <type> <target>` (no reliable shape from syntax alone yet, so these still need a declaration) |
+| `durable`, `erasable`, `append-only`, `fail-closed` | Calls the target, and carries `guards: <type> <target>` (syntax alone gives no reliable shape, so these need a declaration) |
 
 Only active tests count: a test that is always skipped guards nothing; one that skips only in some cases still guards.
 
 The adapter reports, for each target a test calls, how many times and with how many distinct scopes:
 
 - **Times** counts call sites, including those in helpers the test calls. A call site inside a loop counts twice, because it runs more than once (table-driven tests)
-- The **scope** of a call is the argument passed to the target's scope parameter: the first parameter whose name contains `user`, `tenant`, `owner`, `account`, `org`, `team`, `workspace`, `customer` or `project` (case-insensitive), or else the first parameter that is not a request context. Distinct scopes are counted by the normalised source text of that argument
+- The **scope** of a call is the argument passed to the target's scope parameter: the first parameter whose name contains `user`, `tenant`, `owner`, `account`, `org`, `team`, `workspace`, `customer` or `project` (case-insensitive), or else the first parameter (in Go, not counting a request context `context.Context`). Distinct scopes are counted by the normalised source text of that argument
 
 A configured target names a symbol by its unit and name, the way code calls it (`store.Append`, `store.Store.Len`). It matches every symbol whose ID ends with it after a path separator, so `api.CreatePost` matches `example.com/app/api.CreatePost`. A target that matches no symbol is reported as unguarded, and the message says so.
 
 A declaration is one line of the test's doc comment, `guards: <invariant>`, where `<invariant>` is written the way `hadome explain` and the messages name it: the `id` of a product-specific invariant, or `<type> <target>` (`<type> <a>,<b>` for several targets).
 
-A test that only calls the target twice by coincidence is counted as a guard. This miscount is accepted because no declaration is needed. Mutation analysis later replaces shape with "does the test actually fail when the invariant is broken".
+A test that only calls the target twice by coincidence is counted as a guard. This miscount is accepted in exchange for needing no declaration.
 
 ### `tests/invariant-unguarded`
 
@@ -172,7 +170,7 @@ A test that only calls the target twice by coincidence is counted as a guard. Th
 - The anchor is the invariant, so the finding is matched across versions however tests move
 - Because it is compared with base, enabling a new invariant without a test is a regression; an invariant that was already unguarded in base does not block
 - Losing a guard gives the same finding. When the last guarding test is deleted, skipped, stops fitting the shape or loses its `guards:` line, the invariant becomes unguarded in head while it was guarded in base: a new finding, so a regression. Moving the guard to another test changes nothing, because the invariant stays guarded
-- Removing the invariant itself from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because whether to drop an invariant is for a person to decide
+- Removing the invariant itself from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because whether to drop an invariant is for a person to decide. Only the change that removes it returns `3`: once that change is on the base branch, the invariant is simply absent and later changes return `0`
 
 A separate measure rule over (invariant, guarding test) pairs would fire in exactly the same situations, so there is none.
 
@@ -193,17 +191,18 @@ Each rule ships with at least these cases.
 | Rule | Cases |
 |---|---|
 | `tests/no-clock` | a new clock read fails · an existing one moved within the file passes · a clock read inside a string passes |
-| `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business |
-| `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails |
+| `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business · calling a helper that sleeps once more is not a new sleep |
+| `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails · a conditional skip without a reason fails |
 | `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes |
 | `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes |
-| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes |
-| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test passes |
-| `tests/invariant-unguarded` | a new invariant without a test fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
+| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
+| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards |
+| `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes |
+| `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |
 | `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes · a skipped test passes · a test already in base is not reported |
-| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
-| `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` |
+| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name, comments and whitespace changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
+| `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · a helper called twice counts as two calls · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` · `durable` is not guarded without `guards:`, and is with it |
 
 ## Invariants
 
@@ -214,16 +213,8 @@ Each rule ships with at least these cases.
 
 ## Deliberately left out
 
-- Checking that a test is *correct*. Only mutation analysis gets close, and it comes later
-- `tests/no-network` (reserved): calling real external services from tests (decision 3)
+- Checking that a test is *correct*. Only mutation analysis gets close, and it sits outside the `tests/` rules
+- A rule that stops tests from calling real external services (`tests/no-network`). The adapters cannot identify such calls, so it cannot be stopped in a way that is certain
 - Test speed (belongs to a separate rule group with its own design)
-- Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect. Once mutation analysis arrives, such a test is one that catches no new breakage
+- Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect.
 - Treating tests that call the same way (the same targets, times and scopes) as duplicates. Legitimate tests that differ only in input, such as `TestAddPositive` and `TestAddNegative`, would be caught
-
-## Decisions
-
-1. Purity is decided by hadome from imports on every check; `tests/no-mock` needs no configuration. A unit that stops being pure returns exit code `3`. Invariant candidates appear in `hadome check` output as information
-2. Guarding tests of built-in invariant types with a shape are found automatically; `guards:` is needed only for product-specific invariants and for types without a shape. There is no separate `tests/guard-shape` rule
-3. `tests/no-network` is reserved: tests must not talk to real external services. It is added when adapters can identify such calls
-4. Removing an invariant from configuration returns exit code `3`, once, in the change that removes it. After that change reaches the base branch, the invariant is simply absent and later changes return `0`. The same holds for every exit-code-`3` situation
-5. Only what can be said for certain makes an unneeded test a regression: it calls no product code, it has no assertion, or its body is the same as another's. A call that cannot be identified, a product value the test reads, or a testing handle passed to a function that cannot be read, means no report

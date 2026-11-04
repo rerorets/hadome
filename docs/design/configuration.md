@@ -27,7 +27,7 @@ A person never has to open the specification.
 - `hadome schema` prints the JSON Schema of `.hadome.yml` for the installed version
 - The same schema is published in this repository (`schema/hadome.schema.json`) and versioned with hadome
 - Editors pick it up for completion and validation
-- The reference documentation is generated from the schema, never written separately, so the two cannot drift
+- The key descriptions `hadome explain` prints come from the same table of keys as the schema (`config.Spec`). They are never written separately, so the two cannot drift
 
 ### Strict validation
 
@@ -70,7 +70,7 @@ invariants:
 rules:                         # optional; only what differs from the defaults
   tests:
     io: [example.com/acme/db]  # adds to the built-in table; entries are never removed from it
-    assertions: [acme.MustEqual] # adds functions that count as assertions (tests/no-assertion); built-in ones are never removed
+    assertions: [acme.MustEqual] # adds functions that count as assertions (tests/no-assertion); adding one needs review; built-in ones are never removed
   size:
     file-lines: 300            # limits; raising one needs a person's review
   comments:
@@ -123,13 +123,13 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 
 Both versions' files are still read and validated in full, so that the two can be compared.
 
-A change that makes a rule more permissive than base — a higher limit, a rule turned off, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`).
+A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`).
 
 If base's configuration is invalid, the check returns `2` rather than guessing: treating it as empty would hide removed invariants. hadome reads every `schema:` version it has ever accepted, so a valid base never becomes invalid by upgrading hadome.
 
 ## Package shape
 
-One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions, a description and an example. Everything else is generated from it, which is how the schema, the reference documentation, `explain` and the validation messages stay in agreement.
+One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions, a description and an example. Everything else is generated from it, which is how the schema, `explain` and the validation messages stay in agreement.
 
 ```mermaid
 classDiagram
@@ -169,6 +169,7 @@ classDiagram
     +Gates []Gate
     +Hazards map~string,[]string~
     +IO []string
+    +Assertions []string
     +Size Limits
     +TodoForm string
     +Diagram *Diagram
@@ -234,16 +235,11 @@ classDiagram
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration
 - `Diff(base, head)` lists changed entries; the engine turns the looser ones into `config/loosened` reviews. Omitting a key marked `OmittedIsWidest` never counts as loosening, because omitting it covers everything
 
-## Decisions
-
-1. People are guided, never required to configure: `hadome check` works with no file, `hadome init` is an optional shortcut, `hadome suggest` proposes invariants to accept
-2. Agents get a strict contract: a published, versioned JSON Schema, generated reference docs, `hadome explain`, strict validation with fix-oriented errors, and a guide written for agents
-
 ## Invariants
 
 1. With no configuration file, hadome runs and its result is meaningful
 2. A configuration that does not match the schema never runs a check (exit code `2`)
-3. The schema, the reference documentation and `hadome explain` always agree, because the latter two are generated from the first
+3. The schema and the key descriptions of `hadome explain` always agree, because both come from the same table of keys
 4. hadome never reads configuration from the network
 5. A change cannot loosen the rules that judge it without a person's review (exit code `3`)
 

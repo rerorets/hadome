@@ -105,7 +105,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 ## 製品のことを hadome に教える
 
-設定は hadome の表にエントリを足せるが、組み込みのエントリは消せない。前に足したエントリを消すと、ルールが緩むので `3` になる。
+設定は hadome の表にエントリを足せるが、組み込みのエントリは消せない。前に足したエントリを消すと、ルールが緩むので `3` になる。ただし assert とみなす関数（`rules.tests.assertions`）は逆で、足すと `3` になる。
 
 | hadome に… | `.hadome.yml` に足すもの |
 |---|---|

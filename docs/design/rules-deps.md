@@ -31,7 +31,7 @@ flowchart LR
 - A unit belongs to the most specific node that covers it: an exact directory before a `/...`, a longer `/...` before a shorter one
 - Imports within one node are always allowed
 
-The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing one never does.
+The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing an arrow never does. Removing `rules.deps.diagram` itself does, because every import then passes.
 
 ## The rules
 
@@ -71,7 +71,6 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes |
 | `deps/not-in-diagram` (more) | an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` (more) | a node naming a directory of tests only fails · moving a unit away from its node fails |
-| (configuration) | adding an arrow, or widening a label, needs review · removing one does not |
 
 ## Invariants
 

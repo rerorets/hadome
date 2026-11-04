@@ -58,9 +58,9 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 |---|---|
 | `size/function-lines` | a new long function fails · an existing long function that moved passes · an existing long function that grew fails · one that shrank passes · a long test function passes |
 | `size/file-lines` | a file that grows past the limit fails · a generated file passes |
-| `size/params` | a new function with too many parameters fails |
-| `size/complexity` | a new function with too many branches fails |
-| `size/interface-methods` | a new wide interface fails |
+| `size/params` | a new function with too many parameters fails · five parameters pass |
+| `size/complexity` | a new function with too many branches fails · a function at the limit passes · `default` is not a branch |
+| `size/interface-methods` | a new wide interface fails · an interface of five passes |
 | (configuration) | a lowered limit reports only new code · a raised limit needs review |
 
 ## Invariants
@@ -70,5 +70,5 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 
 ## Deliberately left out
 
-- Per-path limits (a smaller limit for a frontend directory). Added when a product needs it, as a list of path globs with their own limits
+- Per-path limits (a smaller limit for a frontend directory)
 - Counting "logical" lines (without comments or blank lines). Lines on screen are what a reader reads

@@ -105,7 +105,7 @@ Proved by: `hadome check` reports no `deps/` regression.
 
 ## Teaching hadome about the product
 
-Configuration can add entries to hadome's tables, never remove built-in ones. Removing an entry you added earlier returns `3`, because it loosens the rules.
+Configuration can add entries to hadome's tables, never remove built-in ones. Removing an entry you added earlier returns `3`, because it loosens the rules. The functions that count as assertions (`rules.tests.assertions`) are the other way round: adding one returns `3`.
 
 | To make hadome… | Add to `.hadome.yml` |
 |---|---|

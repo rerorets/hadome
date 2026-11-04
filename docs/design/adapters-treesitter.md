@@ -21,25 +21,33 @@ classDiagram
   }
   class treesitter {
     <<package, cgo>>
-    +Languages() []Language
+    +Languages() []*lang
   }
-  class spec {
+  class lang {
     +name string
-    +extensions []string
-    +grammar
-    +isTest(path) bool
-    +units, imports, symbols, tests
+    +r reader
+    +tables *tables
+    +directive func(text string) bool
+  }
+  class reader {
+    <<interface>>
+    +grammar() *sitter.Language
+    +index(v Version, files []*file)
+    +imports(f *file, t *tables) []facts.Import
+    +symbols(f *file) []facts.Symbol
+    +tests(f *file, t *tables) []facts.Test
   }
   Analyzer --> Language
   golang ..|> Language
-  treesitter ..> spec : one per language
-  spec ..|> Language
+  treesitter ..> lang : one per language
+  lang ..|> Language
+  lang --> reader
 ```
 
 - Package `internal/adapter` is the analyzer the engine uses. It walks the version once, gives each file to the first language that claims it, merges what the languages report, and lists every unclaimed file with role `other` ([adapters.md](adapters.md), invariant 4)
 - `languages:` in configuration limits which languages claim files; omitted, all of them do
 - Package `internal/adapter/treesitter` builds only with cgo (`//go:build cgo`). Without it, `Languages()` returns readers that claim the five languages' files and mark them `Unread`, so the pure-Go build ([distribution.md](distribution.md)) never ignores them silently
-- One generic reader walks tree-sitter trees; each language is a `spec` of node types and a few functions (how a path maps to a unit, how an import resolves, what makes a symbol exported, which calls are hazards)
+- One generic reader walks tree-sitter trees; each language is a `lang`. A `lang` holds the language's name, its hazard and io tables, and a reader (`reader`) of node types and a few functions (how a path maps to a unit, how an import resolves, what makes a symbol exported, how tests are read). Whether a language claims a file is decided by its extension
 
 ## Units
 
@@ -82,11 +90,11 @@ Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not pr
 
 | Language | Test files | A test is | Skipped | Reason |
 |---|---|---|---|---|
-| TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/` | A call to `it` or `test` with a name and a function | `.skip`, `xit`, `xtest`, `.todo`, or inside `describe.skip` | A comment on the skip's line or the line before |
-| Python | `test_*.py`, `*_test.py` | A `test_*` function at module level or in a `Test*` class | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
-| Rust | Files under `tests/`; `#[cfg(test)]` modules in any file | A function with `#[test]` or `#[<crate>::test]` | `#[ignore]` | `#[ignore = "…"]` |
-| Java | Under `src/test/` | A method annotated `@Test`, `@ParameterizedTest` or `@RepeatedTest` | `@Disabled`, `@Ignore` | The annotation's string argument |
-| Kotlin | Under `src/test/` | A function annotated `@Test` | `@Disabled`, `@Ignore` | The annotation's string argument |
+| TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/` | A call to `it` or `test` with a name and a function | `.skip`, `xit`, `xtest`, `.todo`, or inside `describe.skip` or `xdescribe` | A comment on the skip's line or the line before |
+| Python | `test_*.py`, `*_test.py` | A function whose name starts with `test`, at module level or in a `Test*` class | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
+| Rust | Files under `tests/` and `benches/`; `#[cfg(test)]` modules in any file | A function with `#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[sqlx::test]`, `#[test_log::test]` or `#[rstest]` | `#[ignore]` | `#[ignore = "…"]` |
+| Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/` and the like) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
+| Kotlin | Same as Java | A function with the same annotations as Java | `@Disabled`, `@Ignore` | The annotation's string argument |
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
 

@@ -21,25 +21,33 @@ classDiagram
   }
   class treesitter {
     <<package, cgo>>
-    +Languages() []Language
+    +Languages() []*lang
   }
-  class spec {
+  class lang {
     +name string
-    +extensions []string
-    +grammar
-    +isTest(path) bool
-    +units, imports, symbols, tests
+    +r reader
+    +tables *tables
+    +directive func(text string) bool
+  }
+  class reader {
+    <<interface>>
+    +grammar() *sitter.Language
+    +index(v Version, files []*file)
+    +imports(f *file, t *tables) []facts.Import
+    +symbols(f *file) []facts.Symbol
+    +tests(f *file, t *tables) []facts.Test
   }
   Analyzer --> Language
   golang ..|> Language
-  treesitter ..> spec : 言語ごとに1つ
-  spec ..|> Language
+  treesitter ..> lang : 言語ごとに1つ
+  lang ..|> Language
+  lang --> reader
 ```
 
 - パッケージ `internal/adapter` は、エンジンが使う解析器だ。版を1回たどり、各ファイルを最初に受け持つと言った言語に渡し、言語たちの報告をまとめ、どの言語も受け持たないファイルを役割 `other` で一覧に載せる（[adapters.ja.md](adapters.ja.md) の不変条件4）
 - 設定の `languages:` で、ファイルを受け持つ言語を絞れる。省くと全言語が受け持つ
 - パッケージ `internal/adapter/treesitter` は cgo があるときだけビルドされる（`//go:build cgo`）。無いときの `Languages()` は5言語のファイルを受け持って `Unread` と印を付ける読み手を返す。こうして純粋な Go のビルド（[distribution.ja.md](distribution.ja.md)）がそれらを黙って無視することは無い
-- tree-sitter の木をたどる汎用の読み手は1つだけだ。各言語はノードの種類と少しの関数（パスをユニットにどう対応させるか、import をどう解決するか、何でシンボルが公開になるか、どの呼び出しが危険か）からなる `spec` で表す
+- tree-sitter の木をたどる汎用の読み手は1つだけだ。各言語は `lang` で表す。`lang` は言語の名前、危険と io の表、ノードの種類と少しの関数からなる読み手（`reader`。パスをユニットにどう対応させるか、import をどう解決するか、何でシンボルが公開になるか、テストをどう読むか）を持つ。ファイルを受け持つかどうかは拡張子で決める
 
 ## ユニット
 
@@ -82,11 +90,11 @@ classDiagram
 
 | 言語 | テストファイル | テストとは | スキップ | 理由 |
 |---|---|---|---|---|
-| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下 | 名前と関数を渡す `it` か `test` の呼び出し | `.skip`、`xit`、`xtest`、`.todo`、または `describe.skip` の中 | スキップの行かその前の行のコメント |
-| Python | `test_*.py`、`*_test.py` | モジュールの直下か `Test*` クラスの中の `test_*` 関数 | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
-| Rust | `tests/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]` か `#[<crate>::test]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
-| Java | `src/test/` の下 | `@Test`、`@ParameterizedTest`、`@RepeatedTest` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
-| Kotlin | `src/test/` の下 | `@Test` の付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
+| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下 | 名前と関数を渡す `it` か `test` の呼び出し | `.skip`、`xit`、`xtest`、`.todo`、または `describe.skip`・`xdescribe` の中 | スキップの行かその前の行のコメント |
+| Python | `test_*.py`、`*_test.py` | モジュールの直下か `Test*` クラスの中の、名前が `test` で始まる関数 | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
+| Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
+| Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
+| Kotlin | Java と同じ | Java と同じアノテーションの付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 
 テストからの呼び出しは、Go のアダプタと同じように、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数を通して対象に解決する。解決できない呼び出しは未解決として数える。
 

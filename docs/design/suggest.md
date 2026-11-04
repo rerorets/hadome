@@ -111,7 +111,7 @@ Writes `.hadome.yml` with `schema: 1`, the detected languages as a comment, and 
 
 ## Deliberately left out
 
-- Candidates from how code behaves (what it writes, which tables it touches). Names and parameters are all the facts hold today
+- Candidates from how code behaves (what it writes, which tables it touches). Names and parameters are all the facts hold
 - An interactive mode for accepting candidates. The output is valid configuration; accepting is pasting
 - Searching for where `hadome agents` writes. The reason is in "Writing into files"
 - Asking where `hadome agents` writes, interactively. Agents run `hadome agents` most, and an agent cannot answer a question. It would also stop CI

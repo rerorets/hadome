@@ -40,13 +40,13 @@ classDiagram
   }
   class findingGate {
     +ID() string
-    +Find(in Input) []Finding
+    +Find(in Input) ([]Finding, error)
     +SelfTest() error
   }
   class measureGate {
     +ID() string
-    +Measure(in Input) []Item
-    +RemovedLegitimately(it Item, head Input) bool
+    +Measure(in Input) ([]Item, error)
+    +RemovedLegitimately(it Item, head Input) (bool, error)
     +SelfTest() error
   }
   class gate {
@@ -99,5 +99,5 @@ Gates are matched across versions by `id`. Any change to an existing gate needs 
 
 ## Deliberately left out
 
-- Running gates in parallel. One command at a time keeps diagnostics readable; it can come later without changing the protocol
+- Running gates in parallel. One command at a time keeps diagnostics readable. The protocol does not stand in the way of running them in parallel
 - Sandboxing. A gate runs with the permissions of any script in the repository (external-gates.md, "Trust")

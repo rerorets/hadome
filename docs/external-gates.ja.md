@@ -58,7 +58,7 @@ sequenceDiagram
 }
 ```
 
-`files` は `root` からの相対パスで、`paths` で絞り込み済み、並べ替え済みである。
+`files` は `root` からの相対パスで、`paths` で絞り込み済み、並べ替え済みである。`label` は表示のための名前で、git から読むときはリビジョンの名前か `working tree` になる。
 
 ### finding の門番の応答
 

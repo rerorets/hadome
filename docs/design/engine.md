@@ -57,12 +57,12 @@ An exception is written where it applies:
 gate:allow <rule-id> reason: <text>
 ```
 
-- It applies to the line it is on, or to the next line when it stands alone
+- It applies to the line it is on and to the next line
 - A marker without `reason:` followed by text has no effect, and is itself reported as a finding (`engine/marker-without-reason`)
 - A marker naming an unknown rule is reported as a finding (`engine/marker-unknown-rule`)
 - A marker that suppresses nothing is reported as a finding (`engine/marker-unused`), so stale exceptions do not pile up
 - The prefix is `gate:`, never the tool's name, so renaming hadome never forces users to edit their code
-- An exception is new when it is in head and has no match in base, matched like findings (rule id, file after renames, anchor). An exception whose reason text changed counts as new, because the justification is what a person must review. Exceptions that were already in base are never reported again
+- An exception is new when it is in head and has no match in base, matched by rule id, file after renames and reason text. So an exception whose reason text changed counts as new, because the justification is what a person must review. Exceptions that were already in base are never reported again
 - New exceptions do not fail the check, but they make the result need review (exit code `3`): no regressions, and at least one new exception for a person to look at. Who approves it is up to the workflow (a label, a reviewer, a decision queue)
 
 How the marker is found inside a comment is the language adapter's job. The engine receives markers as data.
@@ -84,7 +84,7 @@ Renames are detected by the engine, not by the source, so every source behaves t
 
 - A file missing from head whose exact content appears at a path missing from base is a rename (matched by content hash)
 - A source may report more renames it knows about (git does, including files whose content changed slightly); those are added on top
-- Files that were renamed and changed, with a source that cannot tell, look like a removal and an addition. Similarity-based detection is a later improvement
+- Files that were renamed and changed, with a source that cannot tell, look like a removal and an addition. There is no similarity-based detection
 
 ## Determinism
 
@@ -96,8 +96,8 @@ Renames are detected by the engine, not by the source, so every source behaves t
 
 | Format | For | Content |
 |---|---|---|
-| `text` | People | Regressions grouped by rule, then new exceptions, then a one-line summary including how many existing findings were left untouched |
-| `json` | Agents and CI | A versioned schema: regressions (rule, fingerprint, file, line, message, why it matters, how to fix), new exceptions with reasons, summary counts |
+| `text` | People | Regressions sorted by rule, then reviews and new exceptions, then invariant candidates, then a one-line summary including how many existing findings were left untouched |
+| `json` | Agents and CI | A versioned schema: regressions and reviews (rule, file, line, message, why it matters, how to fix, value), new exceptions with reasons, invariant candidates, the count of existing findings, the exit code |
 
 The JSON schema has its own version number and changes only by adding fields.
 
@@ -106,7 +106,7 @@ The JSON schema has its own version number and changes only by adding fields.
 | `0` | No regressions |
 | `1` | At least one regression |
 | `2` | Configuration error or a rule failed to run |
-| `3` | No regressions, but something needs a person's review: a new exception, or more facts the adapters could not identify than in base |
+| `3` | No regressions, but something needs a person's review: a new exception, a change that loosens configuration, or something a rule sent for review (more unidentified facts than in base, and the like) |
 
 When several apply, the highest-priority one wins: `2`, then `1`, then `3`, then `0`.
 
@@ -240,7 +240,7 @@ classDiagram
 The engine loads the configuration of both versions before analysing anything. An invalid configuration in either version stops the check with exit code `2`.
 
 - Head is analysed and judged with head's configuration
-- Base is analysed with head's settings and tables but its own invariants (`config.ForBase`), so tightening a setting never fails a change on code that was already there, while a new invariant without a guarding test still does
+- Base is analysed with head's settings and tables but its own invariants and its own dependency diagram (`config.ForBase`), so tightening a setting never fails a change on code that was already there, while a new invariant without a guarding test still does
 - Changes that loosen the configuration are reported as `config/loosened` reviews (exit code `3`). This is the engine's own check, not a rule, so no exception marker can silence it
 
 ## Invariants
@@ -256,12 +256,6 @@ The engine loads the configuration of both versions before analysing anything. A
 
 - Language adapters and the contents of `facts.Analysis` (separate design)
 - The individual rules (separate designs per group)
-- Mutation-based scope (later)
-- Caching and parallel execution (add when measured to be needed)
+- Mutation-based scope (outside the engine)
+- Caching and parallel execution
 - Fixing findings automatically
-
-## Decisions
-
-1. Colliding fingerprints are matched by count: head may have as many as base without regressing
-2. New exceptions return exit code `3` (needs review), not a failure and not a silent pass. Only exceptions new in the change are reported; ones already in base never are
-3. External-command gates run once per version, so a gate author only analyses one tree

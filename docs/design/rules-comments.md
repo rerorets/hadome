@@ -62,7 +62,7 @@ rules:
 | Rule | Cases |
 |---|---|
 | `comments/todo-format` | a new bare TODO fails · a TODO with the form passes · a FIXME fails · an existing bare TODO that moved passes · "TODO" in the middle of a sentence passes · a product's own form is applied |
-| `comments/missing-doc` | a new exported function without a doc comment fails · an unexported one passes · a method on an unexported type passes · an exported type without one fails |
+| `comments/missing-doc` | a new exported function without a doc comment fails · an unexported one passes · a method on an unexported type passes · an exported type without one fails · a test file is not checked |
 | `comments/broken-reference` | a reference to a missing file fails · a reference to an existing file passes · a relative reference resolves from the file · deleting a document that a comment names fails · a directive is not a reference · a URL is not a reference |
 
 ## Invariants
