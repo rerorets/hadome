@@ -129,9 +129,9 @@ Test file conventions:
 | Go | `*_test.go` |
 | TypeScript | `*.test.ts(x)`, `*.spec.ts(x)`, files under `__tests__/` |
 | Python | `test_*.py`, `*_test.py` |
-| Rust | `#[cfg(test)]` modules in any file, and files under `tests/` |
-| Java | Files under `src/test/`, and classes with `@Test` methods |
-| Kotlin | Files under `src/test/`, and classes with `@Test` methods |
+| Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
+| Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
+| Kotlin | Same as Java |
 
 ### Units (for dependency rules)
 
@@ -154,9 +154,9 @@ Rules about how tests are written work on categories, not API names. Each adapte
 | Category | Go | Python | TypeScript | Java / Kotlin | Rust |
 |---|---|---|---|---|---|
 | `clock` | `time.Now`, `time.Since` | `datetime.now`, `time.time` | `Date.now`, `new Date()` | `Instant.now`, `LocalDateTime.now`, `System.currentTimeMillis` | `SystemTime::now`, `Instant::now` |
-| `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` used to wait | `Thread.sleep`, `delay` | `thread::sleep` |
+| `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` | `Thread.sleep`, `delay` | `thread::sleep` |
 | `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock` | `jest.mock`, `vi.mock`, `mock.module` | Mockito, MockK | `mockall` |
-| `always-true` | `if true`, comparing a value with itself | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
+| `always-true` | testify's `True(t, true)`, `Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
 Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a hazard category. They are extracted as `Skip`, with their reason and condition. `tests/skip-without-reason` fails only skips without a reason.
 

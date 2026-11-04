@@ -40,13 +40,13 @@ classDiagram
   }
   class findingGate {
     +ID() string
-    +Find(in Input) []Finding
+    +Find(in Input) ([]Finding, error)
     +SelfTest() error
   }
   class measureGate {
     +ID() string
-    +Measure(in Input) []Item
-    +RemovedLegitimately(it Item, head Input) bool
+    +Measure(in Input) ([]Item, error)
+    +RemovedLegitimately(it Item, head Input) (bool, error)
     +SelfTest() error
   }
   class gate {
@@ -99,5 +99,5 @@ classDiagram
 
 ## 意図して入れなかったもの
 
-- 門番の並列実行。1度に1つのコマンドにすると診断が読みやすい。約束事を変えずに後から足せる
+- 門番の並列実行。1度に1つのコマンドにすると診断が読みやすい。約束事は並列実行を妨げない
 - サンドボックス。門番はリポジトリ内のほかのスクリプトと同じ権限で動く（external-gates.md の「信頼」）

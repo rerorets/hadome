@@ -30,7 +30,7 @@ All are on by default and need no configuration.
 
 ## How tests are written
 
-These four rules work on the adapters' hazard categories. Each finding's anchor is the test's name plus the normalised offending line, so moving the test does not make it new.
+`no-clock`, `no-sleep` and `always-true` work on the adapters' hazard categories. Each finding's anchor is the test's name plus the normalised offending line (or, when the hazard is in a helper in another file, that file and the line). `skip-without-reason` works on the skip facts, and its anchor is the test's name. Neither holds a line number, so moving the test does not make it new.
 
 ### `tests/no-clock`
 
@@ -147,14 +147,14 @@ hadome finds which tests guard which invariant, so people and agents rarely need
 | `idempotent` | Calls the target two or more times |
 | `round-trip` | Calls the target (so a test calling both operations of the pair guards it) |
 | `isolated` | Calls the target with at least two distinct scopes (below) |
-| `durable`, `erasable`, `append-only`, `fail-closed` | Calls the target, and carries `guards: <type> <target>` (no reliable shape from syntax alone yet, so these still need a declaration) |
+| `durable`, `erasable`, `append-only`, `fail-closed` | Calls the target, and carries `guards: <type> <target>` (syntax alone gives no reliable shape, so these need a declaration) |
 
 Only active tests count: a test that is always skipped guards nothing; one that skips only in some cases still guards.
 
 The adapter reports, for each target a test calls, how many times and with how many distinct scopes:
 
 - **Times** counts call sites, including those in helpers the test calls. A call site inside a loop counts twice, because it runs more than once (table-driven tests)
-- The **scope** of a call is the argument passed to the target's scope parameter: the first parameter whose name contains `user`, `tenant`, `owner`, `account`, `org`, `team`, `workspace`, `customer` or `project` (case-insensitive), or else the first parameter that is not a request context. Distinct scopes are counted by the normalised source text of that argument
+- The **scope** of a call is the argument passed to the target's scope parameter: the first parameter whose name contains `user`, `tenant`, `owner`, `account`, `org`, `team`, `workspace`, `customer` or `project` (case-insensitive), or else the first parameter (in Go, not counting a request context `context.Context`). Distinct scopes are counted by the normalised source text of that argument
 
 A configured target names a symbol by its unit and name, the way code calls it (`store.Append`, `store.Store.Len`). It matches every symbol whose ID ends with it after a path separator, so `api.CreatePost` matches `example.com/app/api.CreatePost`. A target that matches no symbol is reported as unguarded, and the message says so.
 
@@ -191,17 +191,18 @@ Each rule ships with at least these cases.
 | Rule | Cases |
 |---|---|
 | `tests/no-clock` | a new clock read fails · an existing one moved within the file passes · a clock read inside a string passes |
-| `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business |
-| `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails |
+| `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business · calling a helper that sleeps once more is not a new sleep |
+| `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails · a conditional skip without a reason fails |
 | `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes |
 | `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes |
-| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes |
-| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test passes |
-| `tests/invariant-unguarded` | a new invariant without a test fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
+| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
+| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards |
+| `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes |
+| `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |
 | `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes · a skipped test passes · a test already in base is not reported |
-| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
-| `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` |
+| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name, comments and whitespace changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
+| `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · a helper called twice counts as two calls · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` · `durable` is not guarded without `guards:`, and is with it |
 
 ## Invariants
 

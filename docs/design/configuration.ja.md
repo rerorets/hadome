@@ -123,7 +123,7 @@ gates:                         # 任意。製品固有の門番
 
 両方の版のファイルは、比べられるようにそれぞれ全体を読んで検証する。
 
-ルールを base より緩くする変更（上限を上げる、ルールを切る、不変条件を取り除く）は `config/loosened` として報告し、終了コード `3` を返す。厳しくするのに人の確認は要らない。仕様の各設定がどちらの向きが緩いかを書いているので、ルールごとのコードは要らない。効き方を hadome が判断できない門番は、既存の項目を変えることも緩めることとして数える（`LooserWhenChanged`）。assert とみなす関数（`rules.tests.assertions`）は、項目を足すと緩くなる。項目を足すと、何も確かめない関数でもテストを通せるからだ（`LooserWhenAdded`）。
+ルールを base より緩くする変更（上限を上げる、表に足した項目を消す、不変条件を取り除く）は `config/loosened` として報告し、終了コード `3` を返す。厳しくするのに人の確認は要らない。仕様の各設定がどちらの向きが緩いかを書いているので、ルールごとのコードは要らない。効き方を hadome が判断できない門番は、既存の項目を変えることも緩めることとして数える（`LooserWhenChanged`）。assert とみなす関数（`rules.tests.assertions`）は、項目を足すと緩くなる。項目を足すと、何も確かめない関数でもテストを通せるからだ（`LooserWhenAdded`）。
 
 base の設定が不正なら、推測せずに `2` を返す。空として扱うと、取り除いた不変条件が隠れてしまう。hadome はこれまでに受け付けたすべての `schema:` の版を読むので、hadome を上げたことで正しい base が不正になることはない。
 
@@ -169,6 +169,7 @@ classDiagram
     +Gates []Gate
     +Hazards map~string,[]string~
     +IO []string
+    +Assertions []string
     +Size Limits
     +TodoForm string
     +Diagram *Diagram

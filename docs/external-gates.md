@@ -58,7 +58,7 @@ sequenceDiagram
 }
 ```
 
-`files` are relative to `root`, already filtered by `paths`, and sorted.
+`files` are relative to `root`, already filtered by `paths`, and sorted. `label` is a name for display: when reading from git it is the revision's name or `working tree`.
 
 ### Response for a finding gate
 

@@ -75,4 +75,4 @@ The npm and Python packages carry the binary itself, so installing them never to
 ## Deliberately left out
 
 - Self-update commands
-- System package managers other than Homebrew (they can be added when requested)
+- System package managers other than Homebrew

@@ -129,9 +129,9 @@ classDiagram
 | Go | `*_test.go` |
 | TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル |
 | Python | `test_*.py`、`*_test.py` |
-| Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/` の下のファイル |
-| Java | `src/test/` の下のファイル、`@Test` メソッドを持つクラス |
-| Kotlin | `src/test/` の下のファイル、`@Test` メソッドを持つクラス |
+| Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
+| Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
+| Kotlin | Java と同じ |
 
 ### ユニット（依存のルール向け）
 
@@ -154,9 +154,9 @@ classDiagram
 | 分類 | Go | Python | TypeScript | Java / Kotlin | Rust |
 |---|---|---|---|---|---|
 | `clock` | `time.Now`、`time.Since` | `datetime.now`、`time.time` | `Date.now`、`new Date()` | `Instant.now`、`LocalDateTime.now`、`System.currentTimeMillis` | `SystemTime::now`、`Instant::now` |
-| `sleep` | `time.Sleep` | `time.sleep`、`asyncio.sleep` | 待つために使う `setTimeout` | `Thread.sleep`、`delay` | `thread::sleep` |
+| `sleep` | `time.Sleep` | `time.sleep`、`asyncio.sleep` | `setTimeout` | `Thread.sleep`、`delay` | `thread::sleep` |
 | `mock` | モックのライブラリの import | `unittest.mock`、`pytest-mock` | `jest.mock`、`vi.mock`、`mock.module` | Mockito、MockK | `mockall` |
-| `always-true` | `if true`、値をそれ自身と比べること | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
+| `always-true` | testify の `True(t, true)`、`Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
 スキップ（`t.Skip`、`pytest.skip`、`@Disabled`、`#[ignore]` など）は危険の分類に入れず、`Skip` として理由と条件と一緒に取り出す。`tests/skip-without-reason` は、理由の無いスキップだけを落とす。
 
