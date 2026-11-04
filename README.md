@@ -19,39 +19,30 @@
   English · <a href="README.ja.md">日本語</a>
 </p>
 
----
-
-> [!NOTE]
-> Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues).
-
----
-
 ## Overview
 
-hadome (歯止め) is a ratchet for code quality. It checks the changes in a diff and fails only on what got worse.
+hadome (歯止め) compares a change with main and reports the violations the change adds and the tests it weakens. Violations already on main are not reported.
 
-Its center is the tests themselves: it checks the rules for how tests are written. It is meant for repositories where AI agents write most of the code.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/compare-dark.svg">
+    <img src="docs/assets/compare-light.svg" alt="An example where the three violations already on main are not reported, and only the three the change adds are, with exit code 1" width="760">
+  </picture>
+</p>
 
-| What the change contains | Result |
-|---|---|
-| A new violation | Blocked |
-| Anything that shrinks what the tests guard | Blocked |
-| A violation that was already there | Allowed (fixing it is up to the developers) |
+It looks at how code is written (dependency direction, size, comments) and how tests are written. Tests are compared not by their number but by the functions they call. When deleting a test narrows that scope, it is reported as a regression.
 
-## Languages
+It is meant for repositories where AI agents write most of the code. The result is also available as JSON, which agents read to fix what it reports.
 
-One binary. Language adapters find tests, read imports and measure size; the rules are shared.
-
-| | Go | TypeScript | Python | Rust | Java | Kotlin |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| `tests/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `deps/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `size/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `comments/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-✅ supported
+One binary reads Go, TypeScript, Python, Rust, Java and Kotlin.
 
 ## Quick start
+
+Run every command at the root of the repository.
+
+```sh
+cd path/to/your-repo
+```
 
 ### 1. Install
 
@@ -122,11 +113,16 @@ You can also install from an archive on the [releases](https://github.com/rerore
 
 ### 2. Tell your AI agents
 
+This writes a block on how to use hadome into the file your agents read. The path is relative to the current directory: run it anywhere but the root and you get a separate `CLAUDE.md` there.
+
 ```sh
 hadome agents --write CLAUDE.md
 ```
 
-Writes a block on how to use hadome into the file your agents read. Any other file, such as `AGENTS.md`, works too. The file is created if it is missing, and later runs update the block in place. Add `--lang ja` for a Japanese block. The full procedures are in [the guide for agents](docs/for-agents.md).
+- Any other file, such as `AGENTS.md`, works too.
+- The file is created if it is missing. Later runs update the same block.
+- Add `--lang ja` for a Japanese block.
+- The details are in [the guide for agents](docs/for-agents.md).
 
 To add it by hand, paste this block.
 
@@ -150,7 +146,7 @@ This repository uses hadome to stop regressions in code and tests.
 
 </details>
 
-## How it looks
+## Example output
 
 A change that deletes the only test of `store.Append`, adds a sleep to another test, and adds an import the dependency diagram does not draw:
 
@@ -171,56 +167,6 @@ $ hadome check --base main
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
 
-## Where it runs in your workflow
-
-hadome is one command. Call it where a change is about to move on, and it answers whether the change made anything worse. It compares the current change with main using the built-in rules, and violations already in main are the baseline. There is nothing to fix before you start.
-
-```mermaid
-flowchart LR
-  W["Agent or developer<br/>writes a change"] --> L["<b>hadome check</b><br/>locally / in the agent loop"]
-  L -- "regression" --> W
-  L -- "ok" --> P["Push / pull request"]
-  P --> C["<b>hadome check --base origin/main</b><br/>in CI"]
-  C -- "regression" --> W
-  C -- "ok" --> M["Merge"]
-```
-
-| Where | What you run | What you get back |
-|---|---|---|
-| In an agent's loop | `hadome check --format json` | Each regression with its rule, file and line, why it matters, and how to fix it |
-| Before you push | `hadome check` (as a pre-push hook) | A readable list; exit code `1` on any regression |
-| In CI, on every pull request | `hadome check --base origin/main` | An exit code and a summary you can post as a comment |
-
-hadome itself never talks to GitHub or any other service. To post the summary, post it from CI.
-
-## Configuration
-
-Settings go in `.hadome.yml`: limits, the dependency diagram, invariants and so on. hadome works without the file.
-
-Agents change the settings and propose invariants, reading the specification with `hadome explain <key>` ([the guide for agents](docs/for-agents.md)). People decide which proposals to accept and whether to allow a change that loosens the rules. Such a change stops with exit code `3` for a person's review.
-
-### Writing an exception
-
-Write it where it applies, with a reason. Without a reason it has no effect.
-
-```go
-// gate:allow tests/no-sleep reason: the OS file watcher offers no event to wait on
-time.Sleep(50 * time.Millisecond)
-```
-
-### Exit codes
-
-| Code | Meaning |
-|---|---|
-| `0` | No regressions |
-| `1` | One or more regressions |
-| `2` | Configuration error. The check cannot be trusted, so it does not pass |
-| `3` | No regressions, but something needs a person's review (a new exception, a configuration that loosens the rules, and so on) |
-
-### Your own gates
-
-Rules only your product knows, such as "never UPDATE the log store", are small programs in your own repository, in any language. hadome treats them like the built-in rules: only regressions fail, reasoned exceptions work, and the report has the same shape. See [product-specific gates](docs/external-gates.md).
-
 ## What it checks
 
 | Group | Rules |
@@ -232,66 +178,68 @@ Rules only your product knows, such as "never UPDATE the log store", are small p
 | `unknown/` | `unread` (review): a file hadome could not read |
 | `config/` | `loosened` (review): a change that loosens the rules judging it |
 
-Each finding says why it matters and how to fix it. The rules are specified in [docs/design](docs/design).
-
-## How it differs from a linter
-
-| | A typical linter | hadome |
-|---|---|---|
-| Compared with | The rules only; reports every violation | main; reports only new violations and regressions |
-| Looks at | How code is written | How code is written, and what the tests actually guard |
-| Deleting tests | Not its concern | Tells cleanup (the guarded scope is kept) from regression (it shrank) |
-| Languages | A different tool per language | One binary for six languages; the rules are shared and only the adapters differ |
-| Exceptions | Disabling comments, often without a reason | Only a marker with a reason, written where it applies |
+Every rule reports why it matters and how to fix it. The rules are specified in [docs/design](docs/design).
 
 ## Regression vs. cleanup
 
-The number of tests cannot tell cleanup from regression: both look like "−3 tests". hadome measures what the tests guard instead.
-
-For each test, hadome works out the functions and methods it calls (its targets). The targets reached by active tests are the guarded scope.
+When three tests disappear, their number alone cannot tell cleanup from regression. hadome works out the functions and methods each test calls (its targets), and compares the set of targets that active tests reach: the guarded scope.
 
 | What you did | Count | Guarded scope | Verdict |
 |---|---|---|---|
-| Merged three duplicate tests into one | ↓ | Same | Cleanup |
-| Deleted code together with its tests | ↓ | Gone with the targets | Cleanup |
-| Deleted or weakened an important test | ↓ or same | Narrower | Regression |
+| Merged three duplicate tests into one | Down | Unchanged | Cleanup |
+| Deleted code together with its tests | Down | Gone with the targets | Cleanup |
+| Deleted or weakened only the tests | Down or same | Narrower | Regression |
 
-To stop guarding a behaviour, change the specification and remove the behaviour itself.
+A behaviour you no longer need passes as cleanup when you delete the code along with its tests.
 
-## The model: three layers
+The background, thinking of tests in three layers (invariants, writing rules, gate), is in [the model](docs/model.md).
 
-People manage the rules for which tests can be trusted, not the test cases.
+## Where it runs and exit codes
 
-```mermaid
-flowchart TB
-  G["<b>3 · Gate</b><br/>Stops regressions with checks"]
-  R["<b>2 · Writing rules</b><br/>How a trustworthy test is written"]
-  I["<b>1 · Invariants</b><br/>What must not break (10 at most)"]
-  G --- R --- I
+| Where | What to run | What you get |
+|---|---|---|
+| Inside an agent's loop | `hadome check --format json` | For each regression: the rule, file and line, why it matters, how to fix it |
+| Before a push | `hadome check` (as a pre-push hook) | A readable list |
+| CI on every pull request | `hadome check --base origin/main` | An exit code and a summary to post as a comment |
+
+| Exit code | Meaning |
+|---|---|
+| `0` | No regressions |
+| `1` | One or more regressions |
+| `2` | Configuration error. The check cannot be trusted, so it does not pass |
+| `3` | No regressions, but something needs a person's review (a new exception, a configuration that loosens the rules, and so on) |
+
+hadome only reads the repository and talks to no service such as GitHub. To post the summary as a comment, do it from CI.
+
+## Configuration and exceptions
+
+Settings go in `.hadome.yml`: limits, the dependency diagram, invariants and so on. hadome works without the file.
+
+Changing the settings and proposing invariants is the agents' job. Agents read the specification with `hadome explain <key>` ([the guide for agents](docs/for-agents.md)). People decide which proposals to accept and whether to allow a change that loosens the rules. Such a change stops with exit code `3` for a person's review.
+
+### Writing an exception
+
+Write it where it applies, with a reason. Without a reason it has no effect.
+
+```go
+// gate:allow tests/no-sleep reason: the OS file watcher offers no event to wait on
+time.Sleep(50 * time.Millisecond)
 ```
 
-1. Invariants: a short list of what must not break. Each is tied to the tests that guard it; deleting or disabling them fails
-2. Writing rules: test observable behaviour only. Never copy expected values from the implementation. Never read the clock. Never wait with sleep. Never skip silently
-3. Gate: hadome. It enforces the rules with checks
+### Rules only your product needs
+
+A rule such as "never UPDATE the log store" is a small program in your own repository, in any language. hadome treats it like the built-in rules: it reports only regressions, and reasoned exceptions work for it too. How to write one is in [product-specific gates](docs/external-gates.md).
 
 ## The name
 
-歯止め (*hadome*) is the Japanese word for a pawl: the part that lets a ratchet wheel turn one way and stops it from slipping back.
+歯止め (*hadome*) is the Japanese word for a pawl: the part of a ratchet that lets the wheel turn one way and stops it from turning back. hadome likewise stops only changes that make things worse than main.
 
-## Status and roadmap
+## Not yet done
 
-- [x] Name, scope and model
-- [x] Design documents ([docs/design](docs/design): engine, language adapters, configuration, every rule group, gates, suggestions, distribution)
-- [x] Engine: compare with the base branch, renames, reasoned exceptions, self-tests
-- [x] Configuration: strict validation, JSON Schema, `explain`, shared layers, loosening needs review
-- [x] `tests/` rules — how tests are written, the guarded scope, invariants and purity
-- [x] `hadome agents`, `suggest` and `init`, and [a guide for agents](docs/for-agents.md)
-- [x] Product-specific gates ([protocol](docs/external-gates.md))
-- [x] `deps/`, `size/` and `comments/` rules
-- [x] TypeScript, Python, Rust, Java and Kotlin (with tree-sitter; the pure-Go build reads Go only and reports the rest as unread)
-- [x] Published to GitHub releases, PyPI, crates.io, Homebrew, the Gradle Plugin Portal and Go ([releasing](docs/releasing.md))
-- [ ] Published to npm and Maven Central
-- [ ] Mutation-based scope
+- Publishing to npm and Maven Central (in progress; the other ways to install are published, see [releasing](docs/releasing.md))
+- Measuring what tests guard with mutations
+
+While hadome is 0.x, behaviour may change between versions. Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues).
 
 ## License
 
