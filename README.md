@@ -38,6 +38,8 @@ One binary reads Go, TypeScript, Python, Rust, Java and Kotlin.
 
 ## Quick start
 
+Run every command at the root of the repository.
+
 ### 1. Install
 
 Pick the one for your language. Each pins the version ([distribution](docs/design/distribution.md)). Every way installs the same binary and reads the same `.hadome.yml`.
@@ -107,13 +109,13 @@ You can also install from an archive on the [releases](https://github.com/rerore
 
 ### 2. Tell your AI agents
 
+This writes a block on how to use hadome into the file your agents read. The path is relative to the current directory: run it anywhere but the root and you get a separate `CLAUDE.md` there.
+
 ```sh
 hadome agents --write CLAUDE.md
 ```
 
-Writes a block on how to use hadome into the file your agents read. Any other file, such as `AGENTS.md`, works too.
-
-- The path is relative to the current directory. Run it at the root of the repository.
+- Any other file, such as `AGENTS.md`, works too.
 - The file is created if it is missing. Later runs update the same block.
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
