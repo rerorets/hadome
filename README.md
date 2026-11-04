@@ -210,7 +210,7 @@ The background, thinking of tests in three layers (invariants, writing rules, ga
 | `2` | Configuration error. The check cannot be trusted, so it does not pass |
 | `3` | No regressions, but something needs a person's review (a new exception, a configuration that loosens the rules, and so on) |
 
-hadome only reads the repository and talks to no service such as GitHub. To post the summary as a comment, do it from CI.
+hadome only reads the repository and talks to no service such as GitHub. To post the summary as a comment, do it from CI. A GitHub Actions example is in [Using hadome in CI](docs/ci.md).
 
 ## Configuration and exceptions
 
