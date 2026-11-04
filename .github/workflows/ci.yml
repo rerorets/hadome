@@ -39,6 +39,9 @@ jobs:
   hadome:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write # the comment that lists what a person must review
     steps:
       - uses: actions/checkout@v5
         with:
@@ -47,6 +50,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Check hadome with hadome
+        id: check
         env:
           BASE: origin/${{ github.base_ref }}
         run: |
@@ -56,7 +60,8 @@ jobs:
           "$RUNNER_TEMP/hadome" check --base "$BASE" || true
           code=0
           "$RUNNER_TEMP/hadome" check --base "$BASE" --format json > "$report" || code=$?
-          if [ "$code" -ne 3 ]; then exit "$code"; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 3 ]; then exit 0; fi
           # A workflow command ends at a newline, so %, CR and LF in a message are escaped.
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
@@ -64,18 +69,47 @@ jobs:
             (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
           ' "$report"
           {
+            echo "<!-- hadome:review -->"
             echo "## hadome: a person must review"
             echo
-            echo "Nothing regressed. Whoever merges this pull request reviews the items below."
+            echo "Nothing regressed. Whoever merges this pull request reviews the items below; each is also marked on its line in Files changed."
             echo
             echo "| Rule | Where | What | Why |"
             echo "|---|---|---|---|"
             jq -r '
               def cell: tostring | gsub("\\|"; "\\|") | gsub("\n"; " ");
-              (.reviews[] | "| `\(.rule)` | `\(.file)` | \(.message | cell) | \(.why | cell) |"),
-              (.new_exceptions[] | "| new exception for `\(.rule)` | `\(.file):\(.line)` | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
+              def where: if .line > 0 then "\(.file):\(.line)" else .file end;
+              (.reviews[] | "| `\(.rule)` | `\(where)` | \(.message | cell) | \(.why | cell) |"),
+              (.new_exceptions[] | "| new exception for `\(.rule)` | `\(where)` | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
             ' "$report"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > "$RUNNER_TEMP/review.md"
+          cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
+      # One comment per pull request, edited in place on every run. A pull request from a fork gets a
+      # read-only token, so it has the annotations and the job summary but no comment.
+      - name: Comment what needs review
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.check.outputs.code }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            -q '.[] | select(.body | startswith("<!-- hadome:review -->")) | .id' | head -n 1)
+          case "$CODE" in
+            3) body="$RUNNER_TEMP/review.md" ;;
+            0) [ -n "$id" ] || exit 0
+               body="$RUNNER_TEMP/resolved.md"
+               printf '%s\n\n%s\n' "<!-- hadome:review -->" "## hadome: nothing needs a person's review now" > "$body" ;;
+            *) exit 0 ;;
+          esac
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@$body" > /dev/null
+          fi
+      - name: Fail on a regression or a check that could not run
+        if: steps.check.outputs.code != '0' && steps.check.outputs.code != '3'
+        run: exit ${{ steps.check.outputs.code }}
 
   packaging:
     runs-on: ubuntu-24.04
