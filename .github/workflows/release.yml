@@ -6,14 +6,16 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]*"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-dev' }}
+  # Only a version tag triggers a push run, so "push" means "publish"; a manual run never publishes,
+  # whatever ref it runs on.
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || 'v0.0.0-dev' }}
 
 jobs:
   build:
@@ -93,7 +95,7 @@ jobs:
           name: release
           path: dist/*
       - name: Publish the GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -103,8 +105,9 @@ jobs:
 
   npm:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_NPM == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_NPM == 'true'
     runs-on: ubuntu-24.04
+    environment: release # holds the publishing secrets; only tags v[0-9]* may deploy to it
     permissions:
       id-token: write # npm provenance
     steps:
@@ -133,7 +136,7 @@ jobs:
 
   pypi:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_PYPI == 'true'
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
@@ -151,8 +154,9 @@ jobs:
 
   crates:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_CRATES == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_CRATES == 'true'
     runs-on: ubuntu-24.04
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - name: Publish
@@ -166,8 +170,9 @@ jobs:
 
   gradle:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_GRADLE == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_GRADLE == 'true'
     runs-on: ubuntu-24.04
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -189,8 +194,9 @@ jobs:
 
   maven:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_MAVEN == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_MAVEN == 'true'
     runs-on: ubuntu-24.04
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -220,8 +226,9 @@ jobs:
 
   homebrew:
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_HOMEBREW == 'true'
+    if: github.event_name == 'push' && vars.PUBLISH_HOMEBREW == 'true'
     runs-on: ubuntu-24.04
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
