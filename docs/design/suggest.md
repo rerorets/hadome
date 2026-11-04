@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-People should not have to configure hadome, and agents should not have to discover it. This document covers the parts that make that true:
+This document covers the parts that spare people from configuring hadome and spare agents from discovering it on their own:
 
 - **Invariant candidates**: places in the code that usually carry an invariant nobody has written down yet (package `internal/suggest`)
 - **`hadome suggest`**: prints the candidates as entries ready to paste into `.hadome.yml`
@@ -33,7 +33,7 @@ A symbol already named by a configured invariant of the same type is not a candi
 
 | Where | Which candidates | Why |
 |---|---|---|
-| `hadome check` | Those that are **new in this change**: candidates in head that were not candidates in base | Like everything else in a check, it is about the change. A long-standing candidate is not repeated on every run |
+| `hadome check` | Those that are new in this change: candidates in head that were not candidates in base | Like everything else in a check, it is about the change. A long-standing candidate is not repeated on every run |
 | `hadome suggest` | All of them, for the working tree | A person or agent looking for invariants wants the whole list |
 
 Neither changes the exit code.

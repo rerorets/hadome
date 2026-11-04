@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a tag. Everything else is the `release` workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml)); [distribution.md](../design/distribution.md) explains the design.
+A release starts by pushing a version tag. The `release` workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml)) does everything after that. [distribution.md](../design/distribution.md) explains the design.
 
 ```sh
 git tag v1.2.0

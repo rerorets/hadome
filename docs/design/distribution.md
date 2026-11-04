@@ -2,9 +2,9 @@
 
 ## Goal
 
-Using hadome should feel like adding any other development dependency: **declare it with a pinned version in the file your project already has, then run it.** No manual download, no C compiler, no global install required.
+hadome installs the same way as any other development dependency. You write it with a pinned version in a file your project already has (`package.json`, `pyproject.toml`, `go.mod` and so on), and run it with that ecosystem's command. No manual download, C compiler or global install is needed.
 
-Pinning matters for a ratchet. If hadome upgraded itself, its rules could change underneath a project and stop changes that have nothing to do with the upgrade. Upgrading hadome is an ordinary, reviewable change in the project.
+The version is pinned because a new version of hadome changes its rules. If the version went up on its own, unrelated changes could fail under the new rules. To upgrade, raise the version as one change in the project, and check the differences in that change.
 
 ## How each ecosystem gets it
 
@@ -31,14 +31,14 @@ Configuration is the same `.hadome.yml` in every case. Package managers only dif
 | With cgo (any machine with a C compiler, and every prebuilt binary) | All six | Yes, at build time |
 | Without cgo (`CGO_ENABLED=0`, or no C compiler) | Go only | No |
 
-A Go project that also has TypeScript or Python files gets all six where a C compiler is installed, or uses a prebuilt binary. If the pure-Go build meets files of another language, it reports them as unread (`unknown/unread`, exit code `3`) rather than ignoring them, so the gap is visible.
+A Go project that also has TypeScript or Python files gets all six where a C compiler is installed, or uses a prebuilt binary. If the pure-Go build meets files of another language, it reports them as unread (`unknown/unread`, exit code `3`) rather than ignoring them. This report shows which files could not be read.
 
 ## Releases
 
 - One release produces binaries for each supported operating system and architecture (Linux, macOS and Windows; x86-64 and ARM64), each built natively with cgo on GitHub Actions, then publishes them to every ecosystem above
 - A release starts from a tag `vX.Y.Z`. The version is stamped into the binary (`hadome version`) and into every package
 - Every binary is published with a checksum in `SHA256SUMS`; installers that download binaries verify it before running anything
-- All ecosystems receive the same version number at the same time. An ecosystem whose credentials are not configured is skipped, and the release says so
+- All ecosystems receive the same version number at the same time. Which ecosystems it is published to is decided by the repository variables `PUBLISH_<ECOSYSTEM>` ([how to publish](../maintaining/releasing.md))
 
 ```mermaid
 flowchart LR

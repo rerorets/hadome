@@ -4,7 +4,7 @@
 
 The `tests/` rules keep the test suite trustworthy as agents change it. They check two things:
 
-- **How tests are written** — the habits that make a test pass without proving anything
+- **How tests are written** — ways of writing a test that let it pass without checking anything
 - **What the tests guard** — so that a change can never quietly shrink it
 
 They work on the facts from the language adapters ([adapters.md](adapters.md)) and never know a language.
@@ -18,7 +18,7 @@ They work on the facts from the language adapters ([adapters.md](adapters.md)) a
 | `tests/skip-without-reason` | finding | A test is skipped or disabled without a reason |
 | `tests/always-true` | finding | An assertion cannot fail |
 | `tests/no-mock` | finding | A test of a *pure* unit uses a mock |
-| `tests/purity-lost` | finding (review) | A unit that was pure in base is no longer pure in head — returns exit code `3`, never `1` |
+| `tests/purity-lost` | measure (review) | A unit that was pure in base is no longer pure in head — returns exit code `3`, never `1` |
 | `tests/scope-shrunk` | measure | Something guarded in base is guarded by no test in head |
 | `tests/target-unknown` | finding (review) | A new active test whose target could not be identified at all — returns exit code `3`, never `1` |
 | `tests/invariant-unguarded` | finding | An enabled invariant has no active guarding test |
@@ -40,7 +40,7 @@ These four rules work on the adapters' hazard categories. Each finding's anchor 
 
 - **Finds**: a `sleep` hazard inside a test
 - **Why**: a sleep is either too long (slow suite) or too short (flaky test); it never waits for the actual event
-- **Fix**: wait for the event itself (a channel, a callback, a condition with a deadline that fails loudly)
+- **Fix**: wait for the event itself (a channel, a callback, a condition with a deadline that fails the test when it passes)
 
 ### `tests/skip-without-reason`
 
@@ -48,7 +48,7 @@ These four rules work on the adapters' hazard categories. Each finding's anchor 
 - **Why**: a skipped test protects nothing, and without a reason nobody can decide when it should come back
 - **Fix**: write the reason in the skip itself: `t.Skip("…")`, `pytest.skip(reason="…")`, `@Disabled("…")`, `#[ignore = "…"]`, or a comment on or above `it.skip`. The message shows the example in the test file's language
 - Skips that happen only in some cases (`if runtime.GOOS == "windows"`) need a reason too
-- A skip **with** a reason is not a regression here, but the test stops counting towards the guarded scope (below)
+- A skip with a reason is not a regression here, but the test stops counting towards the guarded scope (below)
 
 ### `tests/always-true`
 
@@ -59,7 +59,7 @@ These four rules work on the adapters' hazard categories. Each finding's anchor 
 ### `tests/no-mock`
 
 - **Finds**: a `mock` hazard in a test whose targets are all in *pure* units
-- **Why**: a pure unit has no side effects; needing a mock means side effects have leaked into it, and the mock hides that
+- **Why**: a pure unit has no side effects. If it needs a mock, the unit has side effects in it. With a mock, the test no longer shows those side effects
 - **Fix**: move the side effect out of the unit, and test the unit with plain values
 - Which units are pure is decided by hadome on every check (below). Nothing to configure
 - A test that also calls a unit that is not pure (or whose purity is `unknown`) may need the mock for that one, so it is not reported
@@ -80,7 +80,7 @@ hadome decides purity from imports, on every check:
 
 - **Items**: the pure units of a version, a measure rule whose items need review when they disappear
 - **Finds**: a unit that was pure in base and is not pure in head
-- **Why**: side effects have entered code that used to be pure. Sometimes that is intended, often it is a design slip
+- **Why**: side effects have entered code that used to be pure. Sometimes that is intended, but often it is an unintended change in the design
 - **Treatment**: returns exit code `3` (a person reviews it), never `1`
 - **Legitimate removal**: the unit no longer exists in head
 - The `io` table comes from head's configuration for both versions, so adding an entry never asks for a review of units that were already importing it
@@ -101,11 +101,11 @@ A test counts only when it is active: skipped tests (with or without a reason) d
 - **Cleanup passes**: merging duplicate tests, deleting tests that guard nothing new, moving or renaming tests — the set of guarded targets is unchanged
 - **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable
 
-When mutation analysis arrives, the items become "breakages the tests catch", and this rule gets sharper without changing its name or its meaning.
+When mutation analysis arrives, the items become "breakages the tests catch", and this rule tells regressions apart more finely than now, without changing its name or its meaning.
 
 ### Which tests guard an invariant
 
-People and agents rarely need to say which test guards which invariant. hadome finds them.
+hadome finds which tests guard which invariant, so people and agents rarely need to write it.
 
 | Invariant | How its guarding tests are found |
 |---|---|
@@ -121,7 +121,7 @@ People and agents rarely need to say which test guards which invariant. hadome f
 
 Only active tests count: a test that is always skipped guards nothing; one that skips only in some cases still guards.
 
-The adapter reports, for each target a test calls, **how many times** and **with how many distinct scopes**:
+The adapter reports, for each target a test calls, how many times and with how many distinct scopes:
 
 - **Times** counts call sites, including those in helpers the test calls. A call site inside a loop counts twice, because it runs more than once (table-driven tests)
 - The **scope** of a call is the argument passed to the target's scope parameter: the first parameter whose name contains `user`, `tenant`, `owner`, `account`, `org`, `team`, `workspace`, `customer` or `project` (case-insensitive), or else the first parameter that is not a request context. Distinct scopes are counted by the normalised source text of that argument
@@ -130,7 +130,7 @@ A configured target names a symbol by its unit and name, the way code calls it (
 
 A declaration is one line of the test's doc comment, `guards: <invariant>`, where `<invariant>` is written the way `hadome explain` and the messages name it: the `id` of a product-specific invariant, or `<type> <target>` (`<type> <a>,<b>` for several targets).
 
-A test that only calls the target twice by coincidence is counted as a guard. That is the price of needing no declaration; mutation analysis later replaces shape with "does the test actually fail when the invariant is broken".
+A test that only calls the target twice by coincidence is counted as a guard. This miscount is accepted because no declaration is needed. Mutation analysis later replaces shape with "does the test actually fail when the invariant is broken".
 
 ### `tests/invariant-unguarded`
 
@@ -139,8 +139,8 @@ A test that only calls the target twice by coincidence is counted as a guard. Th
 - **Fix**: write a test that checks the invariant. For built-in types with a shape, that is all; for the others and for product-specific invariants, add `guards:` to its doc comment
 - The anchor is the invariant, so the finding is matched across versions however tests move
 - Because it is compared with base, enabling a new invariant without a test is a regression; an invariant that was already unguarded in base does not block
-- **Losing a guard is the same finding.** When the last guarding test is deleted, skipped, stops fitting the shape or loses its `guards:` line, the invariant becomes unguarded in head while it was guarded in base: a new finding, so a regression. Moving the guard to another test changes nothing, because the invariant stays guarded
-- **Removing the invariant itself** from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because dropping a promise is a decision for a person
+- Losing a guard gives the same finding. When the last guarding test is deleted, skipped, stops fitting the shape or loses its `guards:` line, the invariant becomes unguarded in head while it was guarded in base: a new finding, so a regression. Moving the guard to another test changes nothing, because the invariant stays guarded
+- Removing the invariant itself from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because whether to drop an invariant is for a person to decide
 
 A separate measure rule over (invariant, guarding test) pairs would fire in exactly the same situations, so there is none.
 
@@ -148,7 +148,7 @@ A separate measure rule over (invariant, guarding test) pairs would fire in exac
 
 `hadome check` lists the invariant candidates a change adds — places that usually carry an invariant (operations that create things → `idempotent`, export/import pairs → `round-trip`, deletes → `erasable`, reads scoped by user or tenant → `isolated`). They are information only: they never change the exit code. `hadome suggest` prints all of them. How candidates are found is in [suggest.md](suggest.md).
 
-The agent instruction block tells agents to propose a candidate to a person when it covers behaviour that matters, so candidates reach people without anyone running a command.
+The agent instruction block tells agents to propose a candidate to a person when it covers behaviour that matters, so people learn about candidates without anyone running a command.
 
 ## Messages
 
@@ -180,7 +180,7 @@ Each rule ships with at least these cases.
 ## Deliberately left out
 
 - Checking that a test is *correct*. Only mutation analysis gets close, and it comes later
-- `tests/no-network` (reserved): calling real external services from tests. Added when the adapters can identify such calls
+- `tests/no-network` (reserved): calling real external services from tests (decision 3)
 - Test speed (belongs to a separate rule group with its own design)
 
 ## Decisions

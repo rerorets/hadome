@@ -1,15 +1,15 @@
 # Product-specific gates (external commands)
 
-hadome's built-in rules are generic. Every product also has rules only it knows — "never write UPDATE in the log store", "every migration must be idempotent", "screens must not import the database layer". You write those as a small program in **your** repository, and hadome runs it for you.
+hadome's built-in rules are generic. Every product also has rules only it knows — "never write UPDATE in the log store", "every migration must be idempotent", "screens must not import the database layer". You write those as a small program in your repository, and hadome runs it for you.
 
-You get the same things as a built-in rule, for free:
+A gate gets the following, the same as a built-in rule:
 
 - Only regressions fail — existing violations never block
 - Reasoned exceptions (`gate:allow <your-gate-id> reason: …`)
 - The same report, JSON output and exit codes
 - Self-tests
 
-Your product's knowledge stays in your repository. hadome never needs to know it.
+Knowledge about your product can stay in your repository. hadome never needs to know it.
 
 ## Declare it
 
@@ -27,7 +27,7 @@ gates:
 
 ## How hadome calls it
 
-For one check, hadome calls your command **twice**: once for the base version, once for the head version. Your command only ever looks at **one tree** and reports what it sees there. Comparing the two is hadome's job.
+For one check, hadome calls your command twice: once for the base version, once for the head version. Your command only ever looks at one tree and reports what it sees there. Comparing the two is hadome's job.
 
 ```mermaid
 sequenceDiagram
@@ -82,7 +82,7 @@ sequenceDiagram
 
 ### Response for a measure gate
 
-A measure gate reports what is **guarded**, and a regression is something guarded in base that is gone in head.
+A measure gate reports what is guarded, and a regression is something guarded in base that is gone in head.
 
 ```json
 {

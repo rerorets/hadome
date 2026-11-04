@@ -61,7 +61,7 @@ classDiagram
   Input --> Version
 ```
 
-- The engine calls `ConfigRules` once per check with **head's** configuration, and runs the rules it returns on both versions next to the built-in ones. Gates come from head like every other setting ([configuration.md](configuration.md)), so a gate added in a change judges base too and reports only what the change adds
+- The engine calls `ConfigRules` once per check with head's configuration, and runs the rules it returns on both versions next to the built-in ones. Gates come from head like every other setting ([configuration.md](configuration.md)), so a gate added in a change judges base too and reports only what the change adds
 - `Input` carries the `Version`, so a rule that needs files on disk can reach them. Built-in rules never use it
 - `Version.Root` is the version's directory on disk when the version is one as it stands (a directory given with `--base-dir` or `--head-dir`). When it is empty — a revision from history, or the working tree, which a check copies into memory so that it sees one consistent snapshot — the gate package writes the version's files into a temporary directory once per check and removes it afterwards. Gates always see a real directory
 - The engine stays free of process and file handling: running commands is this package's business, and `cmd/hadome` connects the two. `Rules` returns a closer that removes the copies; `cmd/hadome` closes it when the check is over
@@ -88,7 +88,7 @@ classDiagram
 | `paths` | Globs of the files passed in. Omitted: every file |
 | `options` | Any value; passed to the command untouched |
 
-Gates are matched across versions by `id`. **Any change to an existing gate needs review**, not only removing it: a changed `run`, `paths` or `options` can make a gate more permissive in ways hadome cannot judge. The specification marks the list with `LooserWhenChanged` for this.
+Gates are matched across versions by `id`. Any change to an existing gate needs review, not only removing it: a changed `run`, `paths` or `options` can make a gate more permissive in ways hadome cannot judge. The specification marks the list with `LooserWhenChanged` for this.
 
 ## Invariants
 

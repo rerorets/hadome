@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Comments are read by the next person and the next agent as facts about the code. Three habits make them lie or go missing: notes to do something "later" that never say when, public code with no explanation, and pointers to documents that no longer exist. The `comments/` rules stop a change from adding any of them.
+Comments are read by the next person and the next agent as facts about the code. Three ways of writing make them disagree with the code or go missing: notes to do something "later" that never say when, public code with no explanation, and pointers to documents that no longer exist. The `comments/` rules stop a change from adding any of them.
 
 ## The rules
 
@@ -18,7 +18,7 @@ All are on by default. Generated files are never checked.
 
 - **Finds**: a comment line that begins (after the comment marker and spaces) with `TODO`, `FIXME` or `XXX`, and does not match `rules.comments.todo`
 - **Default form**: `TODO(<when or who>): <what>` — the regular expression `^TODO\([^)]+\): \S`. `FIXME` and `XXX` never match it, so they are always findings: one word for "later" is enough
-- **Why**: a TODO without a when is a wish nobody will grant; it stays in the code as noise and misleads readers about what is finished
+- **Why**: a TODO that does not say when tends to stay in the code with nobody working on it. A TODO left in the code misleads readers about what is finished
 - **Fix**: say when or by whom (`TODO(stage 2): …`), or do it now, or delete it
 - A product sets its own form, such as `^TODO\(stage[0-9]+\): \S`. Changing the form needs a person's review, because hadome cannot tell whether the new one is stricter
 - The anchor is the comment line's text, so moving the comment does not make it new
@@ -35,7 +35,7 @@ All are on by default. Generated files are never checked.
 
 - **Finds**: a word in a comment that ends in `.md` (optionally followed by `#section`) and names a file that does not exist in the version
 - **Resolution**: a reference starting with `./` or `../` is relative to the commented file; any other is relative to the repository root
-- **Why**: a pointer to a design document is a promise that the reasoning is written down; a broken one sends the reader nowhere
+- **Why**: when a comment refers to a design document, readers assume the reasoning is written there. If the document is missing, they cannot read it
 - **Fix**: point at the document's current path, or remove the reference
 - Only the file is checked, not the section after `#`
 - The anchor is the reference as written
@@ -55,7 +55,7 @@ rules:
 | Fact | Used for |
 |---|---|
 | `Comment` (path, line, text) and `File.Role` | `todo-format`, `broken-reference`. Comments marked `Directive` (`//go:embed`, `//line`) are instructions to a tool, not prose, and are skipped |
-| `Symbol.Exported`, `Symbol.Doc`, `Symbol.Kind` (now also `type`) | `missing-doc` |
+| `Symbol.Exported`, `Symbol.Doc`, `Symbol.Kind` (including `type`) | `missing-doc` |
 
 ## Self-test cases
 
@@ -72,6 +72,6 @@ rules:
 
 ## Deliberately left out
 
-- Checking that a doc comment is accurate. No rule can; reviews and agents' instructions can
+- Checking that a doc comment is accurate. A rule cannot check it, so it is left to reviews and agents' instructions
 - Checking `#section` anchors inside Markdown files
 - References in other forms (URLs, `see foo.go`). Only Markdown documents are the design record

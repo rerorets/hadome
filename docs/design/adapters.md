@@ -2,19 +2,20 @@
 
 ## Responsibility
 
-A language adapter turns the files of one version into **facts** that rules can use without knowing any language. Rules ask "which tests read the clock?"; the adapter knows that in Go that means `time.Now()`, in Python `datetime.now()`, and in Kotlin `Instant.now()`.
+A language adapter turns the files of one version into **facts** that rules can use without knowing any language. Rules ask "which tests read the clock?". The adapter knows that in Go this is `time.Now()`, in Python `datetime.now()`, and in Kotlin `Instant.now()`.
 
 It does:
 
 - Recognise which files belong to its language, and what role each file plays (source, test, generated)
 - Extract comments, symbols, imports and tests as language-neutral facts
-- Translate language-specific APIs into neutral **hazard categories** (clock, sleep, mock, skip, always-true assertion)
-- Say plainly when it **could not identify** something, instead of guessing
+- Translate language-specific APIs into neutral **hazard categories** (clock, sleep, mock, always-true assertion)
+- Extract test skips, with their reason and condition
+- Say when it could not identify something, instead of guessing
 
 It does not:
 
-- Judge anything. "This is a violation" is always a rule's decision
-- Run code, build the project, or call the language's toolchain (no `go`, `node`, `python`, `cargo`, `javac`, `kotlinc`). hadome stays one binary that works without them
+- Judge anything. Whether something is a violation is decided by the rules
+- Run code, build the project, or call the language's toolchain (no `go`, `node`, `python`, `cargo`, `javac`, `kotlinc`), so that hadome stays one binary that works without them
 - Parse exception markers. Adapters hand over comments; the engine finds `gate:allow` in them, with one implementation for every language
 
 ## The facts
@@ -22,19 +23,20 @@ It does not:
 ```mermaid
 classDiagram
   class Analysis {
-    <<interface>>
-    +Files() []File
-    +Comments(path) []Comment
-    +Symbols(path) []Symbol
-    +Imports(path) []Import
-    +Tests(path) []Test
+    +Files []File
+    +Comments []Comment
+    +Symbols []Symbol
+    +Imports []Import
+    +Tests []Test
   }
   class File {
     +Path string
-    +Language Language
+    +Language string
     +Role Role
     +Lines int
-    +Unit UnitID
+    +Unit string
+    +UnitPath string
+    +Unread bool
   }
   class Comment {
     +Path string
@@ -43,7 +45,7 @@ classDiagram
     +Directive bool
   }
   class Symbol {
-    +ID SymbolID
+    +ID string
     +Kind SymbolKind
     +Path string
     +Line int
@@ -58,31 +60,29 @@ classDiagram
   class Import {
     +Path string
     +Line int
-    +FromUnit UnitID
-    +ToUnit UnitID
+    +FromUnit string
+    +ToUnit string
     +Internal bool
     +IO bool
-    +Identified bool
-    +ReadBy ReadBy
   }
   class Test {
-    +ID SymbolID
+    +Name string
     +Path string
-    +Span LineRange
+    +Line int
     +Declared map~string,[]string~
     +Calls []Call
+    +Unresolved int
     +Hazards []Hazard
     +Skip Skip
-    +Identified bool
-    +ReadBy ReadBy
   }
   class Call {
-    +Target SymbolID
+    +Target string
     +Times int
     +Scopes int
   }
   class Hazard {
     +Category HazardCategory
+    +Path string
     +Line int
     +Evidence string
   }
@@ -92,11 +92,11 @@ classDiagram
     +Reason string
     +Line int
   }
-  class Adapter {
+  class Language {
     <<interface>>
-    +Language() Language
+    +Name() string
     +Claims(path) bool
-    +Analyze(path, src []byte) FileFacts
+    +Analyze(v Version, c Config, paths []string) Analysis
   }
   Analysis --> File
   Analysis --> Comment
@@ -106,7 +106,7 @@ classDiagram
   Test --> Call
   Test --> Hazard
   Test --> Skip
-  Adapter ..> Analysis : contributes FileFacts
+  Language ..> Analysis : returns the facts of the files it claimed
 ```
 
 ### Files and roles
@@ -152,10 +152,11 @@ Rules about how tests are written work on categories, not API names. Each adapte
 | `clock` | `time.Now`, `time.Since` | `datetime.now`, `time.time` | `Date.now`, `new Date()` | `Instant.now`, `LocalDateTime.now`, `System.currentTimeMillis` | `SystemTime::now`, `Instant::now` |
 | `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` used to wait | `Thread.sleep`, `delay` | `thread::sleep` |
 | `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock` | `jest.mock`, `vi.mock`, `mock.module` | Mockito, MockK | `mockall` |
-| `skip` | `t.Skip` | `pytest.skip`, `@skip` | `it.skip`, `describe.skip` | `@Disabled`, `@Ignore` | `#[ignore]` |
 | `always-true` | `if true`, comparing a value with itself | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
-These lists are examples, not the full tables. The full tables live in each adapter, and configuration can **add** entries (a product's own clock wrapper that tests must not bypass, a mocking library hadome does not know). Configuration cannot remove built-in entries.
+Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a hazard category. They are extracted as `Skip`, with their reason and condition. `tests/skip-without-reason` fails only skips without a reason.
+
+These lists are examples, not the full tables. The full tables live in each adapter, and configuration can add entries (a product's own clock wrapper that tests must not bypass, a mocking library hadome does not know). Configuration cannot remove built-in entries.
 
 ### What a test guards
 
@@ -163,29 +164,29 @@ People never classify tests. What a test guards is mostly worked out by machine,
 
 | Piece | Who provides it | How |
 |---|---|---|
-| Target (the entry point the test exercises) | **Inferred** by the adapter | The public functions and methods the test body calls in non-test code, each as a `Call` with how many times it is called and with how many distinct scopes (the argument where the user or tenant goes; [rules-tests.md](rules-tests.md) defines both). When the call target cannot be identified (a method on a value whose type is unknown), it is `unknown`. A declaration overrides the inference only when it is wrong |
+| Target (the entry point the test exercises) | Inferred by the adapter | The public functions and methods the test body calls in non-test code, each as a `Call` with how many times it is called and with how many distinct scopes (the argument where the user or tenant goes; [rules-tests.md](rules-tests.md) defines both). When the call target cannot be identified (a method on a value whose type is unknown), it is `unknown`. A declaration overrides the inference only when it is wrong |
 | Viewpoint | Not declared | Hard to infer and costly to write. The guarded scope is the set of inferred targets until mutation analysis replaces it |
-| Invariant link | Mostly **inferred** from the shape of the test's calls. **The test's author** writes one line only for product-specific invariants and for types without a shape | `guards: <invariant>` in the doc comment |
+| Invariant link | Mostly inferred from the shape of the test's calls. The test's author writes one line only for product-specific invariants and for types without a shape | `guards: <invariant>` in the doc comment |
 
 ```go
 // guards: durable store.Save
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-The adapter only collects `key: value` lines (a lower-case key, a colon, a value) from the doc comment into `Declared`, one entry per line, with whitespace normalised. It does not know which keys exist; the rules that read them do ([rules-tests.md](rules-tests.md) for `guards`).
+The adapter only collects `key: value` lines (a lower-case key, a colon, a value) from the doc comment into `Declared`, one entry per line, with whitespace normalised. The adapter does not know which keys exist. What a key means is decided by the rule that reads it ([rules-tests.md](rules-tests.md) for `guards`).
 
 ### Identified or not
 
-What decides whether a fact can block is **whether the adapter identified it**, not how it was read.
+What decides whether a fact can block is whether the adapter identified it, not how it was read.
 
 | State | Example | Treatment |
 |---|---|---|
 | **Identified** | `Thread.sleep(` in code (not in a string or comment) · `@Disabled` without a reason · a 450-line file | Can block, in every language |
 | **Unidentified** (`unknown`) | A dynamic import whose destination cannot be resolved · an unusual construct where a function's end cannot be found | Never passed silently. Reported as "could not identify" |
 
-The ratchet applies to `unknown` too: unknowns already in base pass; **a change that adds unknowns returns exit code `3`** (needs review). Nothing uncertain ever blocks, so a guess never fails a build; and nothing uncertain is ever hidden, so a growing blind spot reaches a person.
+`unknown` is compared with base too: unknowns already in base pass, and a change that adds unknowns returns exit code `3` (needs review). An unknown never fails the check, so a guess never fails a build. An unknown is never passed silently either, so when unidentified facts increase, a person checks them.
 
-Each fact also records **how** it was read, for diagnostics only. It never changes whether the fact blocks.
+Each fact also records how it was read. This is for diagnostics only and does not change whether the fact blocks.
 
 | Read by | Meaning |
 |---|---|
@@ -199,7 +200,7 @@ Each fact also records **how** it was read, for diagnostics only. It never chang
 | Go | The standard library's parser (`go/parser`, `go/ast`). No C dependency |
 | TypeScript, Python, Rust, Java, Kotlin | tree-sitter grammars |
 
-Full parsers are used for every language because what users get — accurate function spans, test boundaries, annotations and imports, and few `unknown` facts — matters more than how easy hadome is to build. The cost (a C dependency for tree-sitter, and builds per operating system and architecture) is carried by the release process, not by users. See [distribution.md](distribution.md).
+Full parsers are used for every language because what users get (accurate function spans, test boundaries, annotations and imports, and few `unknown` facts) was put ahead of how easy hadome is to build. The extra work this brings (a C dependency for tree-sitter, and builds per operating system and architecture) is taken on by the release process, not by users. See [distribution.md](distribution.md).
 
 `unknown` still exists: some things cannot be identified even with a parser (the contents of Rust macros, dynamic imports).
 
@@ -223,4 +224,4 @@ Full parsers are used for every language because what users get — accurate fun
 1. Whether a fact can block depends on whether it was identified, not on how it was read. Unidentified facts are reported; a change that adds them returns exit code `3`
 2. Go is read with the standard library's parser; the other five languages with tree-sitter. No shared tokenizer
 3. Targets are inferred, viewpoints are not declared, and only tests that guard a product-specific invariant or one of the types without a shape carry a declaration (`guards:`)
-4. Configuration can add hazard entries but never remove built-in ones. A place where a built-in entry truly does not apply gets a reasoned exception, which goes to a person for review (exit code `3`). Otherwise editing configuration could silently hollow out a rule
+4. Configuration can add hazard entries but never remove built-in ones. A place where a built-in entry truly does not apply gets a reasoned exception, which goes to a person for review (exit code `3`). If configuration could remove them, editing configuration alone could switch a rule off without any review by a person
