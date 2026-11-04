@@ -48,6 +48,7 @@ type lang struct {
 	name   string
 	r      reader
 	tables *tables // the built-in hazard and io tables
+	breaks *breaks // where hadome mutate breaks the language's code
 	// directive reports whether a comment is an instruction to a tool rather than prose.
 	directive func(text string) bool
 }

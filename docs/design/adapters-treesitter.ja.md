@@ -38,7 +38,6 @@ classDiagram
     +imports(f *file, t *tables) []facts.Import
     +symbols(f *file) []facts.Symbol
     +tests(f *file, t *tables) []facts.Test
-    +zero(f *file, fn *sitter.Node) string
   }
   Analyzer --> Language
   golang ..|> Language
@@ -115,7 +114,7 @@ classDiagram
 
 ## ミュータント
 
-`lang` は `Mutants` を持ち、`hadome mutate` の Mutator になる（[mutation.ja.md](mutation.ja.md)）。壊し方は Go と同じ5つで、どの言語でも、同じ汎用の読み手が木をたどってミュータントを作る。言語ごとに違うのは、演算子の綴り、ゼロの値、消した呼び出しの文の代わりに置くものの3つだけだ。これらは `lang` が持つ壊し方の表（`breaks`）と、読み手の `zero` に書く。
+`lang` は `Mutants` を持ち、`hadome mutate` の Mutator になる（[mutation.ja.md](mutation.ja.md)）。壊し方は Go と同じ5つで、どの言語でも、同じ汎用の読み手が木をたどってミュータントを作る。言語ごとに違うのは、演算子の綴り、ゼロの値、消した呼び出しの文の代わりに置くものの3つだけだ。これらは `lang` が持つ壊し方の表（`breaks`）に書く。
 
 | 壊し方 | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|

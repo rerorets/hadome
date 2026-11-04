@@ -38,7 +38,6 @@ classDiagram
     +imports(f *file, t *tables) []facts.Import
     +symbols(f *file) []facts.Symbol
     +tests(f *file, t *tables) []facts.Test
-    +zero(f *file, fn *sitter.Node) string
   }
   Analyzer --> Language
   golang ..|> Language
@@ -115,7 +114,7 @@ Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>
 
 ## Mutants
 
-A `lang` has `Mutants`, which makes it the Mutator of `hadome mutate` ([mutation.md](mutation.md)). The breaks are the same five as Go's, and in every language the same generic reader walks the tree to make the mutants. Only three things differ by language: how the operators are spelled, the zero values, and what takes the place of a removed call statement. These live in the `lang`'s table of breaks (`breaks`) and in the reader's `zero`.
+A `lang` has `Mutants`, which makes it the Mutator of `hadome mutate` ([mutation.md](mutation.md)). The breaks are the same five as Go's, and in every language the same generic reader walks the tree to make the mutants. Only three things differ by language: how the operators are spelled, the zero values, and what takes the place of a removed call statement. These live in the `lang`'s table of breaks (`breaks`).
 
 | Break | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
