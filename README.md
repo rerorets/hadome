@@ -40,6 +40,10 @@ One binary reads Go, TypeScript, Python, Rust, Java and Kotlin.
 
 Run every command at the root of the repository.
 
+```sh
+cd "$(git rev-parse --show-toplevel)"
+```
+
 ### 1. Install
 
 Pick the one for your language. Each pins the version ([distribution](docs/design/distribution.md)). Every way installs the same binary and reads the same `.hadome.yml`.

@@ -40,6 +40,10 @@ Go・TypeScript・Python・Rust・Java・Kotlinを、1つのバイナリで読�
 
 どのコマンドもリポジトリのルートで動かします。
 
+```sh
+cd "$(git rev-parse --show-toplevel)"
+```
+
 ### 1. 入れる
 
 使っている言語のものを選びます。どれも版を固定して入れます（[配布の設計](docs/design/distribution.ja.md)）。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。
@@ -109,7 +113,7 @@ hadome check
 
 ### 2. AIエージェントに覚えさせる
 
-エージェントが読むファイルに、hadomeの使い方のブロックを書き込みます。ファイルのパスは、今いるディレクトリから見たものです。ルート以外で動かすと、そこに別の`CLAUDE.md`ができます。
+エージェントが読むファイルに、hadomeの使い方のブロックを書き込みます。ファイルのパスは今いるディレクトリから見たものです。ルート以外で動かすと、そこに別の`CLAUDE.md`ができます。
 
 ```sh
 hadome agents --write CLAUDE.md
