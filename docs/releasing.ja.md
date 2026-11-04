@@ -15,7 +15,7 @@ git push origin v1.2.0
 
 各エコシステムは、リポジトリの変数が `true` のときだけ公開する（Settings → Secrets and variables → Actions → Variables）。資格情報はシークレットとして要る。
 
-シークレットはリポジトリ直下ではなく、環境 `release` に入れる（Settings → Environments → release）。環境 `release` と `pypi` は、どちらもデプロイできる参照をタグ `v*` だけにする。こうすると、ブランチで動くワークフローは資格情報を読めない。
+シークレットはリポジトリ直下ではなく、環境 `release` に入れる（Settings → Environments → release）。環境 `release` と `pypi` は、どちらもデプロイできる参照をタグ `v[0-9]*` だけにする。こうすると、ブランチで動くワークフローは資格情報を読めない。
 
 | エコシステム | 変数 | シークレット | 一度だけ用意するもの |
 |---|---|---|---|

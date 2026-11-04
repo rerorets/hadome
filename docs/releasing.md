@@ -15,7 +15,7 @@ If publishing fails part way, fix the cause and re-run only the failed jobs. The
 
 Each ecosystem publishes only when its repository variable is `true` (Settings → Secrets and variables → Actions → Variables), and needs its credentials as secrets.
 
-The secrets go in the `release` environment, not at the repository level (Settings → Environments → release). Both `release` and `pypi` allow deployments from tags `v*` only, so a workflow running on a branch cannot read the credentials.
+The secrets go in the `release` environment, not at the repository level (Settings → Environments → release). Both `release` and `pypi` allow deployments from tags `v[0-9]*` only, so a workflow running on a branch cannot read the credentials.
 
 | Ecosystem | Variable | Secrets | Set up once |
 |---|---|---|---|
