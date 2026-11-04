@@ -71,6 +71,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("check", flag.ContinueOnError)
 	fl.SetOutput(stderr)
 	base := fl.String("base", "", "base revision (default: origin/main, else main)")
+	head := fl.String("head", "", "head revision (default: the working tree)")
 	format := fl.String("format", "text", "output format: text or json")
 	baseDir := fl.String("base-dir", "", "compare two directories instead of git: base directory")
 	headDir := fl.String("head-dir", "", "compare two directories instead of git: head directory")
@@ -79,6 +80,9 @@ func check(args []string, stdout, stderr io.Writer) int {
 	}
 	var src engine.Source
 	switch {
+	case (*baseDir != "" || *headDir != "") && (*base != "" || *head != ""):
+		fmt.Fprintln(stderr, "hadome: compare either two revisions (--base, --head) or two directories (--base-dir, --head-dir), not both")
+		return engine.ExitConfig
 	case *baseDir != "" || *headDir != "":
 		src = source.Dirs{BaseDir: *baseDir, HeadDir: *headDir}
 	default:
@@ -86,7 +90,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 		if rev == "" {
 			rev = defaultBase()
 		}
-		src = source.Git{Root: ".", BaseRev: rev}
+		src = source.Git{Root: ".", BaseRev: rev, HeadRev: *head}
 	}
 	e := newEngine()
 	var copies []io.Closer

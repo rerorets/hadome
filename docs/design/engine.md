@@ -73,8 +73,10 @@ The engine never assumes git. A **source** provides the two versions.
 
 | Source | Base | Head |
 |---|---|---|
-| `git` (default) | A revision, e.g. `origin/main` | The working tree, or a revision |
-| `dir` | A directory | A directory |
+| `git` (default) | A revision (`--base`); `origin/main` when omitted, else `main` | A revision (`--head`); the working tree when omitted |
+| `dir` | A directory (`--base-dir`) | A directory (`--head-dir`) |
+
+Giving both revisions and directories leaves it undecided which to compare, so the check stops with exit code `2`.
 
 Each version is exposed as a read-only file system. Other version-control systems, or systems that are not git at all, plug in as further sources.
 

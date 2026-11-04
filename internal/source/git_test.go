@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rerorets/hadome/internal/source"
@@ -72,5 +73,46 @@ func TestGitSourceReadsBaseHeadAndRenames(t *testing.T) {
 	}
 	if renames["a/old.go"] != "a/new.go" {
 		t.Fatalf("want rename a/old.go -> a/new.go, got %v", renames)
+	}
+}
+
+// viewpoint: input and output
+// target: source.Git
+// With HeadRev, head is that revision and not the working tree: edits and untracked files are not
+// in it, and renames are those between the two revisions.
+func TestGitSourceComparesTwoRevisions(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	write(t, dir, "a/old.go", "package a\n\n// a long enough body for rename detection to recognise the file\nfunc F() {}\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-q", "-m", "base")
+	git(t, dir, "branch", "v1")
+	git(t, dir, "mv", "a/old.go", "a/new.go")
+	git(t, dir, "commit", "-q", "-m", "rename")
+	git(t, dir, "branch", "v2")
+	write(t, dir, "a/new.go", "package a\n\nfunc Edited() {}\n")
+	write(t, dir, "untracked.txt", "new\n")
+
+	src := source.Git{Root: dir, BaseRev: "v1", HeadRev: "v2"}
+	head, err := src.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.Label != "v2" {
+		t.Errorf("head is labelled by its revision, got %q", head.Label)
+	}
+	b, err := fs.ReadFile(head.FS, "a/new.go")
+	if err != nil || strings.Contains(string(b), "Edited") {
+		t.Errorf("head must hold a/new.go as committed in v2, not as edited: %q, %v", b, err)
+	}
+	if _, err := fs.Stat(head.FS, "untracked.txt"); err == nil {
+		t.Error("head must not contain files outside the revision")
+	}
+	renames, err := src.Renames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renames["a/old.go"] != "a/new.go" {
+		t.Fatalf("want rename a/old.go -> a/new.go between the revisions, got %v", renames)
 	}
 }
