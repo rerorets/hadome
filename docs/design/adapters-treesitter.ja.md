@@ -28,6 +28,8 @@ classDiagram
     +r reader
     +tables *tables
     +directive func(text string) bool
+    +breaks *breaks
+    +Mutants(v Version, funcs []facts.Symbol) ([]facts.Mutant, error)
   }
   class reader {
     <<interface>>
@@ -36,6 +38,7 @@ classDiagram
     +imports(f *file, t *tables) []facts.Import
     +symbols(f *file) []facts.Symbol
     +tests(f *file, t *tables) []facts.Test
+    +zero(f *file, fn *sitter.Node) string
   }
   Analyzer --> Language
   golang ..|> Language
@@ -110,6 +113,40 @@ classDiagram
 
 設定での項目の足し方は Go と同じだ。`rules.tests.hazards` は各言語の書き方での `<unit>.<name>` を取り、`rules.tests.io` はユニットを取る。
 
+## ミュータント
+
+`lang` は `Mutants` を持ち、`hadome mutate` の Mutator になる（[mutation.ja.md](mutation.ja.md)）。壊し方は Go と同じ5つで、どの言語でも、同じ汎用の読み手が木をたどってミュータントを作る。言語ごとに違うのは、演算子の綴り、ゼロの値、消した呼び出しの文の代わりに置くものの3つだけだ。これらは `lang` が持つ壊し方の表（`breaks`）と、読み手の `zero` に書く。
+
+| 壊し方 | TypeScript | Python | Rust | Java | Kotlin |
+|---|---|---|---|---|---|
+| 比較を逆にする | Go と同じ6つ、`===` ↔ `!==` | Go と同じ6つ | Go と同じ6つ | Go と同じ6つ | Go と同じ6つ、`===` ↔ `!==` |
+| 真偽を反転する | `!x` → `x`、`true` ↔ `false` | `not x` → `x`、`True` ↔ `False` | `!x` → `x`、`true` ↔ `false` | `!x` → `x`、`true` ↔ `false` | `!x` → `x`、`true` ↔ `false` |
+| 算術を入れ替える | `+` ↔ `-`、`*` ↔ `/`。片方が文字列のリテラルかテンプレート文字列なら作らない | `+` ↔ `-`、`*` ↔ `/`。片方が文字列のリテラル（f 文字列を含む）なら作らない | `+` ↔ `-`、`*` ↔ `/` | `+` ↔ `-`、`*` ↔ `/`。片方が文字列のリテラルなら作らない | `+` ↔ `-`、`*` ↔ `/`。片方が文字列のリテラルなら作らない |
+| ゼロの値を返す | 下の表 | 下の表 | 下の表 | 下の表 | 下の表 |
+| 呼び出しの文を消す | 文を `;` にする | 文を `pass` にする | `;` で終わる文を `;` にする | 文を `;` にする | 文を `Unit` にする |
+
+Go と同じ6つとは、`<` → `>=`、`>=` → `<`、`<=` → `>`、`>` → `<=`、`==` ↔ `!=` である。
+
+ゼロの値は宣言した戻り値の型から決める。
+
+| 言語 | 型とゼロの値 |
+|---|---|
+| TypeScript | `number` → `0`、`string` → `""`、`boolean` → `false`、`null` か `undefined` を含む union → その値 |
+| Python | `int` → `0`、`float` → `0.0`、`str` → `""`、`bool` → `False`、`None` を含む型（`Optional[…]`、`X \| None`）→ `None` |
+| Rust | 整数の型 → `0`、`f32` と `f64` → `0.0`、`bool` → `false`、`&str` → `""`、`String` → `String::new()`、`Option<…>` → `None`、`Vec<…>` → `Vec::new()` |
+| Java | 整数の型と `float`、`double` → `0`、`boolean` → `false`、`String` → `""`、ほかの参照の型 → `null` |
+| Kotlin | `Int`、`Short`、`Byte` → `0`、`Long` → `0L`、`Double` → `0.0`、`Float` → `0f`、`Boolean` → `false`、`String` → `""`、`?` の付いた型 → `null` |
+
+- 表に無い型の関数と、戻り値の型を書いていない関数（TypeScript で型を省いた関数、Python で注釈の無い関数、Kotlin の式の本体）では、この壊し方を作らない
+- 置き換えるのは `return` の値である。Rust では関数の本体の最後の式（`;` の無い式）も置き換える。Rust では `return` を書かずに値を返すのがふつうだからだ
+- Go と同じく、真偽のリテラルを返す文（真偽の反転が壊す）と、すでにゼロの値を返す文では作らない
+
+ほかの決まりも Go と同じだ。
+
+- アンカーは「関数 | 壊し方 | 行の字句 | 何番目か」でつくる。行の字句は、その行で始まる葉のノードの文字を、コメントを除いて空白1つでつないだものだ。行を整形し直しても、行にコメントを足しても、アンカーは変わらない
+- 入れ子の関数（アロー関数、ラムダ、関数の中の `def`、クロージャ、無名クラス）の中は壊さない。Go の関数リテラルと同じ扱いだ。ただし、`const f = () =>` のアロー関数はそれ自体がシンボルなので、その本体を壊す
+- 置き換えたあとのコードがコンパイルできるように、構文から分かる範囲で置き換えを選ぶ。それでもコンパイルできないミュータントは、テストのコマンドが失敗するので、捕まえたものとして扱われる。報告には出ない
+
 ## 文法
 
 文法は tree-sitter の言語 ABI 14 向けにビルドされた版に固定する。Go のバインディングが読める最新の ABI だ。文法はバインディングと一緒に上げ、単独では上げない。
@@ -130,3 +167,6 @@ classDiagram
 
 - 「コンストラクタで作った変数」を超える型の推定。それ以外のものへの呼び出しは未解決になる
 - 各モジュールの仕組みの隅の場合（動的な import、Python のパスの操作、Rust の `#[path]`、TypeScript の project references）。外部か未解決として扱う
+- 型を推定して決めるゼロの値（戻り値の型を書いていない関数や、利用者が定義した型）
+- Rust のマクロの呼び出し（`println!` など）を消すこと。マクロは、宣言や制御の流れを含むことがある
+- Python の `is` と `in` を反転すること
