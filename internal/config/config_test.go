@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -434,5 +435,34 @@ func TestAMalformedGlobIsAnError(t *testing.T) {
 	es := loadErrors(t, "schema: 1\nfiles:\n  generated: [\"gen/[a\"]\n", t.TempDir())
 	if len(es) != 1 || !strings.Contains(es[0].Problem, "not a valid glob") {
 		t.Fatalf("got %v", es)
+	}
+}
+
+// A change points at where it is in head, so a person reviewing it, or an annotation on a pull
+// request, lands on the line: the added list entry, a changed key, or the arrow in the diagram.
+func TestChangesSayWhereTheyAre(t *testing.T) {
+	base := mustLoadTree(t, fstest.MapFS{
+		".hadome.yml":  {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: docs/deps.md\n")},
+		"docs/deps.md": {Data: []byte("```mermaid\nflowchart TB\n  a[\"a\"] --> b[\"b\"]\n```\n")},
+	})
+	head := mustLoadTree(t, fstest.MapFS{
+		".hadome.yml":  {Data: []byte("schema: 1\nrules:\n  size:\n    params: 6\n  tests:\n    assertions:\n      - acme.Equal\n      - acme.Same\n  deps:\n    diagram: docs/deps.md\n")},
+		"docs/deps.md": {Data: []byte("```mermaid\nflowchart TB\n  a[\"a\"] --> b[\"b\"]\n  a --> c[\"c\"]\n```\n")},
+	})
+	var got []string
+	for _, c := range Diff(base, head) {
+		if c.Looser {
+			got = append(got, fmt.Sprintf("%s:%d %s +%s", c.File, c.Line, c.Key, c.Added))
+		}
+	}
+	sort.Strings(got)
+	want := strings.Join([]string{
+		".hadome.yml:4 rules.size.params +6",
+		".hadome.yml:7 rules.tests.assertions +acme.Equal",
+		".hadome.yml:8 rules.tests.assertions +acme.Same",
+		"docs/deps.md:4 rules.deps.diagram +a --> c",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
 }
