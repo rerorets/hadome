@@ -164,8 +164,20 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 		}
 	case "call_expression":
 		w.call(n)
+	case "identifier": // a name in a type is a type_identifier, never an identifier
+		if _, ok := w.tf.names[f.text(n)]; ok {
+			w.t.readName(n, tsUses)
+		} else if _, ok := w.tf.spaces[f.text(n)]; ok {
+			w.t.readName(n, tsUses)
+		}
 	}
 	return true
+}
+
+var tsUses = useGrammar{
+	members: map[string]string{"member_expression": "object"},
+	callees: map[string][]string{"call_expression": {"function"}, "new_expression": {"constructor"}},
+	types:   set("type_annotation", "type_arguments", "type_query"),
 }
 
 func (w *tsWalk) call(n *sitter.Node) {

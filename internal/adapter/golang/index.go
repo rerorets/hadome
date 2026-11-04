@@ -3,6 +3,7 @@ package golang
 import (
 	"github.com/rerorets/hadome/internal/facts"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"strings"
 )
@@ -17,13 +18,18 @@ type index struct {
 	funcs map[string]string
 	// types holds "<import path>.<Type>" for every exported type.
 	types map[string]bool
+	// values holds "<import path>.<Name>" for every package-level variable. Calling one runs code
+	// hadome cannot name, so the call counts as unresolved rather than as no call at all.
+	values map[string]bool
+	// consts holds "<import path>.<Name>" for every package-level constant.
+	consts map[string]bool
 	// scopes maps a function or method ID to the position of its scope parameter among the call's
 	// arguments, or -1 when it takes none (docs/design/rules-tests.md defines the scope).
 	scopes map[string]int
 }
 
 func buildIndex(files []parsedFile, modules map[string]string) *index {
-	idx := &index{funcs: map[string]string{}, types: map[string]bool{}, scopes: map[string]int{}}
+	idx := &index{funcs: map[string]string{}, types: map[string]bool{}, values: map[string]bool{}, consts: map[string]bool{}, scopes: map[string]int{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
@@ -42,14 +48,32 @@ func buildIndex(files []parsedFile, modules map[string]string) *index {
 				}
 			case *ast.GenDecl:
 				for _, s := range d.Specs {
-					if ts, ok := s.(*ast.TypeSpec); ok && ts.Name.IsExported() {
-						idx.types[pf.pkgPath+"."+ts.Name.Name] = true
+					switch s := s.(type) {
+					case *ast.TypeSpec:
+						if s.Name.IsExported() {
+							idx.types[pf.pkgPath+"."+s.Name.Name] = true
+						}
+					case *ast.ValueSpec:
+						for _, n := range s.Names {
+							if d.Tok == token.VAR {
+								idx.values[pf.pkgPath+"."+n.Name] = true
+							} else {
+								idx.consts[pf.pkgPath+"."+n.Name] = true
+							}
+						}
 					}
 				}
 			}
 		}
 	}
 	return idx
+}
+
+// value reports whether id names something a test can use as a value: a function, a variable or
+// a constant. Types are not values.
+func (idx *index) value(id string) bool {
+	_, fn := idx.funcs[id]
+	return fn || idx.values[id] || idx.consts[id]
 }
 
 // internal reports whether an import path belongs to the repository.

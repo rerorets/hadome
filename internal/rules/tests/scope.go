@@ -64,5 +64,5 @@ func (r targetUnknown) Find(in engine.Input) ([]engine.Finding, error) {
 
 // All returns the tests/ rules of this slice.
 func All() []engine.Rule {
-	return []engine.Rule{NoClock(), NoSleep(), AlwaysTrue(), skipWithoutReason{}, scopeShrunk{}, targetUnknown{}, invariantUnguarded{}, NoMock(), purityLost{}}
+	return []engine.Rule{NoClock(), NoSleep(), AlwaysTrue(), skipWithoutReason{}, scopeShrunk{}, targetUnknown{}, invariantUnguarded{}, NoMock(), purityLost{}, guardsNothing{}}
 }

@@ -139,8 +139,26 @@ func (w *rustWalk) visit(n *sitter.Node) bool {
 		w.macro(n)
 	case "call_expression":
 		w.call(n)
+	case "identifier", "crate", "super":
+		if w.product(f.text(n)) && n.Parent() != nil && n.Parent().Kind() != "token_tree" { // macroNames counts those
+			w.t.readName(n, rustUses)
+		}
 	}
 	return true
+}
+
+var rustUses = useGrammar{
+	members: map[string]string{"scoped_identifier": "path", "field_expression": "value"},
+	names:   map[string]string{"scoped_identifier": "name"},
+	callees: map[string][]string{"call_expression": {"function"}},
+	types:   set("type_arguments"),
+}
+
+// product reports whether a name in a test brings in product code.
+func (w *rustWalk) product(name string) bool {
+	_, named := w.sc.names[name]
+	_, space := w.sc.spaces[name]
+	return named || space || name == "crate" || name == "super"
 }
 
 // typeOf returns the type a value is built as: Store::new(...) or Store { .. } of a bound type.
@@ -170,12 +188,34 @@ func (w *rustWalk) macro(n *sitter.Node) {
 			args = strings.TrimSuffix(strings.TrimPrefix(f.text(c), "("), ")")
 		}
 	}
+	w.macroNames(n)
 	parts := strings.Split(args, ",")
 	switch {
 	case name == "assert!" && strings.TrimSpace(args) == "true",
 		(name == "assert_eq!" || name == "assert_ne!") && len(parts) == 2 && strings.TrimSpace(parts[0]) == strings.TrimSpace(parts[1]):
 		w.t.hazard(facts.HazardAlwaysTrue, n)
 	}
+}
+
+// macroNames reads the names inside a macro's arguments. The parser keeps them as tokens, not as
+// expressions, so a call cannot be told from a read: a product name counts as a read, and a helper
+// named there is walked.
+func (w *rustWalk) macroNames(n *sitter.Node) {
+	f := w.sc.f
+	walk(n, func(c *sitter.Node) bool {
+		if c.Kind() != "identifier" && c.Kind() != "crate" && c.Kind() != "super" || c.Parent() == nil || c.Parent().Kind() != "token_tree" {
+			return true
+		}
+		name := f.text(c)
+		if w.product(name) {
+			w.t.test.Reads++
+		} else if body, ok := w.sc.helpers[name]; ok && !w.walking[name] {
+			w.walking[name] = true
+			w.walk(body)
+			delete(w.walking, name)
+		}
+		return true
+	})
 }
 
 func (w *rustWalk) call(n *sitter.Node) {

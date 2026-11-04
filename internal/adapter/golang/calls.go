@@ -63,6 +63,8 @@ func (w *walker) call(c *ast.CallExpr) {
 	case *ast.Ident: // builtins and helpers declared in test files are neither targets nor unresolved
 		if id := w.qualify(fun, func(id string) bool { _, ok := w.idx.funcs[id]; return ok }); id != "" {
 			w.record(id, c)
+		} else if w.qualify(fun, func(id string) bool { return w.idx.values[id] }) != "" {
+			w.test.Unresolved++
 		} else {
 			w.followHelper(fun.Name, c)
 		}
@@ -140,6 +142,15 @@ func (w *walker) skip(c *ast.CallExpr) {
 	w.test.Skip = facts.Skip{Skipped: w.branches == 0, Conditional: w.branches > 0, Reason: firstString(c), Line: w.line(c)}
 }
 
+// readSelector counts pkg.Name as a read when it names a product value that is not being called.
+func (w *walker) readSelector(sel *ast.SelectorExpr) {
+	if x, ok := sel.X.(*ast.Ident); ok && !w.shadowed(x.Name) {
+		if p, ok := w.imports[x.Name]; ok && w.idx.internal(p) && w.idx.value(p+"."+sel.Sel.Name) {
+			w.test.Reads++
+		}
+	}
+}
+
 func (w *walker) shadowed(name string) bool { _, ok := w.vars[name]; return ok }
 
 func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
@@ -155,8 +166,12 @@ func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 			w.hazard(facts.HazardAlwaysTrue, c)
 		}
 	case w.idx.internal(p):
-		if _, ok := w.idx.funcs[p+"."+name]; ok {
+		switch _, fn := w.idx.funcs[p+"."+name]; {
+		case fn:
 			w.record(p+"."+name, c)
+		case w.idx.types[p+"."+name]: // a conversion runs no code of the package
+		default: // a function variable, or a package hadome did not read
+			w.test.Unresolved++
 		}
 	}
 }

@@ -103,6 +103,10 @@ type walker struct {
 	loops    int    // how many loops enclose the node being walked
 	branches int    // how many ifs, switches and selects enclose it
 	curPath  string // the file being walked: the test's, or a helper's
+	// callees holds the expressions in call position, and fields the identifiers after a dot, so
+	// that neither is taken for a read of a product value.
+	callees map[ast.Expr]bool
+	fields  map[*ast.Ident]bool
 }
 
 type callCount struct {
@@ -123,6 +127,7 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 			samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
 			tParams: map[string]bool{}, vars: map[string]string{}, calls: map[string]*callCount{},
 			helpers: helpers, walking: map[string]bool{}, curPath: pf.path,
+			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{},
 			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc)},
 		}
 		w.collectTParams(fn.Type, fn.Body)
@@ -194,7 +199,17 @@ func (w *walker) visit(n ast.Node) bool {
 	case *ast.AssignStmt:
 		w.recordVars(n)
 	case *ast.CallExpr:
+		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
+	case *ast.SelectorExpr:
+		w.fields[n.Sel] = true
+		if !w.callees[n] {
+			w.readSelector(n)
+		}
+	case *ast.Ident:
+		if !w.fields[n] && !w.callees[n] && w.qualify(n, w.idx.value) != "" {
+			w.test.Reads++
+		}
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)

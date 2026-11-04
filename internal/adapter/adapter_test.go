@@ -19,19 +19,20 @@ type project struct {
 	lang, product, productPath, testPath string
 	test                                 func(skip, body string) string
 	call, sleep, bareSkip, reasonedSkip  string
+	nothing                              string // a statement that calls and reads no product code
 }
 
 var projects = []project{
 	{lang: "go", productPath: "store/store.go", product: "package store\n\n// Append adds a row.\nfunc Append(row string) {}\n",
 		testPath: "store/store_test.go", call: `store.Append("a")`, sleep: "time.Sleep(time.Millisecond)",
-		bareSkip: "t.Skip()", reasonedSkip: `t.Skip("needs a database")`,
+		bareSkip: "t.Skip()", reasonedSkip: `t.Skip("needs a database")`, nothing: "_ = len(\"a\")",
 		test: func(skip, body string) string {
 			return "package store_test\n\nimport (\n\t\"testing\"\n\t\"time\"\n\n\t\"example.com/app/store\"\n)\n\nvar _ = time.Second\n\n" +
 				"func TestAppend(t *testing.T) {\n\t" + skip + "\n\t" + body + "\n}\n"
 		}},
 	{lang: "typescript", productPath: "src/store.ts", product: "/** Appends a row. */\nexport function append(row: string) {}\n",
 		testPath: "src/store.test.ts", call: `append("a")`, sleep: "setTimeout(() => {}, 10)",
-		bareSkip: "it.skip", reasonedSkip: "// needs a database\nit.skip",
+		bareSkip: "it.skip", reasonedSkip: "// needs a database\nit.skip", nothing: "const n = \"a\".length",
 		test: func(skip, body string) string {
 			if skip == "" {
 				skip = "it"
@@ -40,7 +41,7 @@ var projects = []project{
 		}},
 	{lang: "python", productPath: "app/store.py", product: "def append(row):\n    \"\"\"Append a row.\"\"\"\n",
 		testPath: "tests/test_store.py", call: `append("a")`, sleep: "time.sleep(1)",
-		bareSkip: "@pytest.mark.skip", reasonedSkip: `@pytest.mark.skip(reason="needs a database")`,
+		bareSkip: "@pytest.mark.skip", reasonedSkip: `@pytest.mark.skip(reason="needs a database")`, nothing: `n = len("a")`,
 		test: func(skip, body string) string {
 			body = strings.ReplaceAll(body, "\n", "\n    ") // Python's block is its indentation
 			return "import time\nimport pytest\nfrom app.store import append\n\n\n" + skip + "\ndef test_append():\n    " + body + "\n"
@@ -48,19 +49,19 @@ var projects = []project{
 	{lang: "java", productPath: "src/main/java/app/Store.java",
 		product:  "package app;\n\n/** Rows. */\npublic class Store {\n  /** Adds. */\n  public static void append(String row) {}\n}\n",
 		testPath: "src/test/java/app/StoreTest.java", call: `Store.append("a");`, sleep: "Thread.sleep(10);",
-		bareSkip: "@Disabled", reasonedSkip: `@Disabled("needs a database")`,
+		bareSkip: "@Disabled", reasonedSkip: `@Disabled("needs a database")`, nothing: `int n = "a".length();`,
 		test: func(skip, body string) string {
 			return "package app;\n\nimport org.junit.jupiter.api.Test;\n\nclass StoreTest {\n  " + skip + "\n  @Test\n  void appends() throws Exception {\n    " + body + "\n  }\n}\n"
 		}},
 	{lang: "kotlin", productPath: "src/main/kotlin/app/Store.kt", product: "package app\n\n/** Appends a row. */\nfun append(row: String) {}\n",
 		testPath: "src/test/kotlin/app/StoreTest.kt", call: `append("a")`, sleep: "Thread.sleep(10)",
-		bareSkip: "@Disabled", reasonedSkip: `@Disabled("needs a database")`,
+		bareSkip: "@Disabled", reasonedSkip: `@Disabled("needs a database")`, nothing: `val n = "a".length`,
 		test: func(skip, body string) string {
 			return "package app\n\nimport org.junit.jupiter.api.Test\n\nclass StoreTest {\n    " + skip + "\n    @Test\n    fun appends() {\n        " + body + "\n    }\n}\n"
 		}},
 	{lang: "rust", productPath: "src/store.rs", product: "/// Appends a row.\npub fn append(row: &str) {}\n",
 		testPath: "tests/store.rs", call: `append("a");`, sleep: "std::thread::sleep(d);",
-		bareSkip: "#[ignore]", reasonedSkip: `#[ignore = "needs a database"]`,
+		bareSkip: "#[ignore]", reasonedSkip: `#[ignore = "needs a database"]`, nothing: `let n = "a".len();`,
 		test: func(skip, body string) string {
 			return "use crate::store::append;\n\n#[test]\n" + skip + "\nfn appends() {\n    " + body + "\n}\n"
 		}},
@@ -100,6 +101,7 @@ func TestTheSameRegressionFailsInEveryLanguage(t *testing.T) {
 			{"skipping it without a reason", "tests/skip-without-reason", "", p.tree(p.test(p.bareSkip, p.call))},
 			{"skipping it with a reason", "tests/scope-shrunk", "tests/skip-without-reason", p.tree(p.test(p.reasonedSkip, p.call))},
 			{"sleeping in it", "tests/no-sleep", "", p.tree(p.test("", p.call+"\n"+p.sleep))},
+			{"making it call nothing of the product", "tests/guards-nothing", "", p.tree(p.test("", p.nothing))},
 			{"changing nothing", "", "", withTest},
 		}
 		for _, tc := range cases {

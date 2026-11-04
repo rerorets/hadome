@@ -37,6 +37,7 @@ func testFile(body string) map[string]string {
 	return map[string]string{"store/store_test.go": `package store_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 
 var _ = time.Second
 var _ = assert.True
+var _ = strings.ToUpper
 
 ` + body}
 }
@@ -132,4 +134,25 @@ func unknownCases() []engine.Case {
 		{Name: "a test reaching the API through a helper passes", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(plainTest + "\nfunc build() *store.Store { return store.New() }\n\nfunc TestHelper(t *testing.T) {\n\tif build().Len() != 0 {\n\t\tt.Fatal(\"want empty\")\n\t}\n}\n"))},
 	}
+}
+
+func guardsNothingCases() []engine.Case {
+	add := func(test string) engine.Case {
+		return engine.Case{Base: tree(testFile(plainTest)), Head: tree(testFile(plainTest + "\n" + test))}
+	}
+	stdlibOnly := add("func TestUpper(t *testing.T) {\n\tif strings.ToUpper(\"a\") != \"A\" {\n\t\tt.Fatal(\"want A\")\n\t}\n}\n")
+	stdlibOnly.Name, stdlibOnly.WantFail = "a new test that calls no code of the repository fails", []string{"tests/guards-nothing"}
+	helper := add("func build() *store.Store { return store.New() }\n\nfunc TestBuild(t *testing.T) {\n\tif build() == nil {\n\t\tt.Fatal(\"want a store\")\n\t}\n}\n")
+	helper.Name = "a test that reaches the code through a helper passes"
+	partly := add("func TestPartly(t *testing.T) {\n\tf := pick()\n\tf.Run()\n\t_ = strings.ToUpper(\"a\")\n}\n")
+	partly.Name = "a test with a call hadome cannot identify passes"
+	reads := add("func TestLimit(t *testing.T) {\n\tif store.Limit < 1 {\n\t\tt.Fatal(\"want a positive limit\")\n\t}\n}\n")
+	reads.Head.(fstest.MapFS)["store/limit.go"] = &fstest.MapFile{Data: []byte("package store\n\n// Limit caps the rows.\nconst Limit = 10\n")}
+	reads.Name = "a test that reads a product constant passes"
+	skipped := add("func TestLater(t *testing.T) {\n\tt.Skip(\"needs a running database\")\n\t_ = strings.ToUpper(\"a\")\n}\n")
+	skipped.Name = "a skipped test passes"
+	existing := engine.Case{Name: "a test already on the base branch is not reported",
+		Base: tree(testFile(plainTest + "\nfunc TestUpper(t *testing.T) {\n\t_ = strings.ToUpper(\"a\")\n}\n")),
+		Head: tree(testFile("\n" + plainTest + "\nfunc TestUpper(t *testing.T) {\n\t_ = strings.ToUpper(\"a\")\n}\n"))}
+	return []engine.Case{stdlibOnly, helper, partly, reads, skipped, existing}
 }
