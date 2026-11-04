@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,16 @@ func TestCheckThatCannotRunNeverPasses(t *testing.T) {
 func TestEveryBuiltInRuleHasPassingCases(t *testing.T) {
 	for _, f := range newEngine().SelfTest() {
 		t.Errorf("%s: %s: %s", f.Rule, f.Name, f.Err)
+	}
+}
+
+// viewpoint: failure handling
+// target: hadome check (command line)
+// Revisions and directories are two ways to name the versions; giving both is a mistake, not a choice.
+func TestCheckRefusesRevisionsAndDirectoriesTogether(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"check", "--head", "main", "--base-dir", t.TempDir(), "--head-dir", t.TempDir()}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "not both") {
+		t.Fatalf("got exit %d: %s", code, errOut.String())
 	}
 }

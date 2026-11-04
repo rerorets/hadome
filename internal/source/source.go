@@ -34,25 +34,32 @@ func (d Dirs) Head() (engine.Version, error) {
 // Renames is always empty for directories.
 func (d Dirs) Renames() (map[string]string, error) { return nil, nil }
 
-// Git compares a revision (base) with the working tree (head) of the repository at Root.
-// Head contains tracked files and untracked files that are not ignored.
-type Git struct{ Root, BaseRev string }
+// Git compares two versions of the repository at Root: the revision BaseRev, and the revision
+// HeadRev or, when HeadRev is empty, the working tree. The working tree holds tracked files and
+// untracked files that are not ignored.
+type Git struct{ Root, BaseRev, HeadRev string }
 
 // Base reads every file of the base revision.
-func (g Git) Base() (engine.Version, error) {
-	names, err := g.lines("ls-tree", "-r", "-z", "--name-only", g.BaseRev)
+func (g Git) Base() (engine.Version, error) { return g.revision(g.BaseRev) }
+
+func (g Git) revision(rev string) (engine.Version, error) {
+	names, err := g.lines("ls-tree", "-r", "-z", "--name-only", rev)
 	if err != nil {
 		return engine.Version{}, err
 	}
-	fsys, err := g.catFiles(names)
+	fsys, err := g.catFiles(rev, names)
 	if err != nil {
 		return engine.Version{}, err
 	}
-	return engine.Version{Label: g.BaseRev, FS: fsys}, nil
+	return engine.Version{Label: rev, FS: fsys}, nil
 }
 
-// Head reads the working tree. It is copied into memory so that the check sees one consistent snapshot.
+// Head reads the head revision, or the working tree. The working tree is copied into memory so
+// that the check sees one consistent snapshot.
 func (g Git) Head() (engine.Version, error) {
+	if g.HeadRev != "" {
+		return g.revision(g.HeadRev)
+	}
 	names, err := g.lines("ls-files", "-z", "-c", "-o", "--exclude-standard")
 	if err != nil {
 		return engine.Version{}, err
@@ -71,9 +78,13 @@ func (g Git) Head() (engine.Version, error) {
 	return engine.Version{Label: "working tree", FS: fsys}, nil
 }
 
-// Renames maps base paths to working-tree paths for files git detects as renamed.
+// Renames maps base paths to head paths for files git detects as renamed.
 func (g Git) Renames() (map[string]string, error) {
-	fields, err := g.lines("diff", "-z", "-M", "--name-status", "--no-color", g.BaseRev)
+	args := []string{"diff", "-z", "-M", "--name-status", "--no-color", g.BaseRev}
+	if g.HeadRev != "" {
+		args = append(args, g.HeadRev)
+	}
+	fields, err := g.lines(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +120,13 @@ func (g Git) lines(args ...string) ([]string, error) {
 	return res, nil
 }
 
-// catFiles reads many blobs of the base revision through one git process.
-func (g Git) catFiles(names []string) (fstest.MapFS, error) {
+// catFiles reads many blobs of a revision through one git process.
+func (g Git) catFiles(rev string, names []string) (fstest.MapFS, error) {
 	cmd := exec.Command("git", "cat-file", "--batch")
 	cmd.Dir = g.Root
 	var in bytes.Buffer
 	for _, n := range names {
-		fmt.Fprintf(&in, "%s:%s\n", g.BaseRev, n)
+		fmt.Fprintf(&in, "%s:%s\n", rev, n)
 	}
 	cmd.Stdin = &in
 	out, err := cmd.Output()

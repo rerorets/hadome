@@ -11,7 +11,9 @@ import (
 )
 
 const usage = `usage:
-  hadome check [--base REV] [--format text|json]   compare with the base branch; exit 0, 1, 2 or 3
+  hadome check [--base REV] [--head REV] [--format text|json]
+                                                    compare base (default: the base branch) with head
+                                                    (default: the working tree); exit 0, 1, 2 or 3
   hadome self-test                                  run every rule's self-test cases
   hadome config check                               validate .hadome.yml without running any rule
   hadome schema                                     print the JSON Schema of .hadome.yml
