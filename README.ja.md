@@ -236,10 +236,10 @@ time.Sleep(50 * time.Millisecond)
 
 ## まだのこと
 
-- npmとMaven Centralへの公開（準備中。ほかの入れ方は[公開の手順](docs/releasing.ja.md)のとおり公開済み）
+- npmとMaven Centralへの公開（準備中。ほかの入れ方は[公開の手順](docs/maintaining/releasing.ja.md)のとおり公開済み）
 - ミューテーションで、テストが守る範囲を測る
 
-0.xの間は、版の間で挙動が変わることがあります。不具合や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。
+0.xの間は、版の間で挙動が変わることがあります（[版の付け方](CONTRIBUTING.ja.md#版の付け方)）。不具合や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。
 
 ## ライセンス
 

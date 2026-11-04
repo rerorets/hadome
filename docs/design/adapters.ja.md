@@ -2,19 +2,20 @@
 
 ## 責務
 
-言語のアダプタは、1つの版のファイルを、ルールが言語を知らずに使える**事実**に変える。ルールは「どのテストが時刻を読んでいるか」を尋ねる。それが Go では `time.Now()`、Python では `datetime.now()`、Kotlin では `Instant.now()` だと知っているのはアダプタだ。
+言語のアダプタは1つの版のファイルを、ルールが言語を知らずに使える**事実**に変える。ルールは「どのテストが時刻を読んでいるか」を尋ねる。それが Go では `time.Now()`、Python では `datetime.now()`、Kotlin では `Instant.now()` であることは、アダプタが知っている。
 
 すること:
 
 - どのファイルが自分の言語のものか、各ファイルがどの役割（ソース、テスト、生成物）かを見分ける
 - コメント、シンボル、import、テストを、言語に依らない事実として取り出す
-- 言語ごとの API を、言語に依らない**危険の分類**（時刻、sleep、モック、スキップ、常に真の assert）に置き換える
-- 何かを**特定できなかった**ときは、推測せずにそう言う
+- 言語ごとの API を、言語に依らない**危険の分類**（時刻、sleep、モック、常に真の assert）に置き換える
+- テストのスキップを、理由と条件と一緒に取り出す
+- 何かを特定できなかったときは、推測せずにそう言う
 
 しないこと:
 
-- 判定すること。「これは違反だ」と決めるのは常にルールだ
-- コードを実行すること、プロジェクトをビルドすること、言語のツールチェーン（`go`、`node`、`python`、`cargo`、`javac`、`kotlinc`）を呼ぶこと。hadome はそれらが無くても動く1つのバイナリのままでいる
+- 判定すること。違反かどうかはルールが決める
+- コードを実行すること、プロジェクトをビルドすること、言語のツールチェーン（`go`、`node`、`python`、`cargo`、`javac`、`kotlinc`）を呼ぶこと。hadome を、それらが無くても動く1つのバイナリにしておくためだ
 - 例外の印を読み取ること。アダプタはコメントを渡すだけで、その中の `gate:allow` はエンジンが見つける。実装は全言語で1つだ
 
 ## 事実
@@ -22,19 +23,20 @@
 ```mermaid
 classDiagram
   class Analysis {
-    <<interface>>
-    +Files() []File
-    +Comments(path) []Comment
-    +Symbols(path) []Symbol
-    +Imports(path) []Import
-    +Tests(path) []Test
+    +Files []File
+    +Comments []Comment
+    +Symbols []Symbol
+    +Imports []Import
+    +Tests []Test
   }
   class File {
     +Path string
-    +Language Language
+    +Language string
     +Role Role
     +Lines int
-    +Unit UnitID
+    +Unit string
+    +UnitPath string
+    +Unread bool
   }
   class Comment {
     +Path string
@@ -43,7 +45,7 @@ classDiagram
     +Directive bool
   }
   class Symbol {
-    +ID SymbolID
+    +ID string
     +Kind SymbolKind
     +Path string
     +Line int
@@ -58,31 +60,29 @@ classDiagram
   class Import {
     +Path string
     +Line int
-    +FromUnit UnitID
-    +ToUnit UnitID
+    +FromUnit string
+    +ToUnit string
     +Internal bool
     +IO bool
-    +Identified bool
-    +ReadBy ReadBy
   }
   class Test {
-    +ID SymbolID
+    +Name string
     +Path string
-    +Span LineRange
+    +Line int
     +Declared map~string,[]string~
     +Calls []Call
+    +Unresolved int
     +Hazards []Hazard
     +Skip Skip
-    +Identified bool
-    +ReadBy ReadBy
   }
   class Call {
-    +Target SymbolID
+    +Target string
     +Times int
     +Scopes int
   }
   class Hazard {
     +Category HazardCategory
+    +Path string
     +Line int
     +Evidence string
   }
@@ -92,11 +92,11 @@ classDiagram
     +Reason string
     +Line int
   }
-  class Adapter {
+  class Language {
     <<interface>>
-    +Language() Language
+    +Name() string
     +Claims(path) bool
-    +Analyze(path, src []byte) FileFacts
+    +Analyze(v Version, c Config, paths []string) Analysis
   }
   Analysis --> File
   Analysis --> Comment
@@ -106,7 +106,7 @@ classDiagram
   Test --> Call
   Test --> Hazard
   Test --> Skip
-  Adapter ..> Analysis : FileFacts を渡す
+  Language ..> Analysis : 受け持ったファイルの事実を返す
 ```
 
 ### ファイルと役割
@@ -145,17 +145,18 @@ classDiagram
 
 ### 危険の分類
 
-テストの書き方のルールは、API の名前ではなく分類を扱う。各アダプタが、自分の言語の API を分類に対応させる。
+テストの書き方のルールは API の名前ではなく分類を扱う。各アダプタが自分の言語の API を分類に対応させる。
 
 | 分類 | Go | Python | TypeScript | Java / Kotlin | Rust |
 |---|---|---|---|---|---|
 | `clock` | `time.Now`、`time.Since` | `datetime.now`、`time.time` | `Date.now`、`new Date()` | `Instant.now`、`LocalDateTime.now`、`System.currentTimeMillis` | `SystemTime::now`、`Instant::now` |
 | `sleep` | `time.Sleep` | `time.sleep`、`asyncio.sleep` | 待つために使う `setTimeout` | `Thread.sleep`、`delay` | `thread::sleep` |
 | `mock` | モックのライブラリの import | `unittest.mock`、`pytest-mock` | `jest.mock`、`vi.mock`、`mock.module` | Mockito、MockK | `mockall` |
-| `skip` | `t.Skip` | `pytest.skip`、`@skip` | `it.skip`、`describe.skip` | `@Disabled`、`@Ignore` | `#[ignore]` |
 | `always-true` | `if true`、値をそれ自身と比べること | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
-これらは例で、表の全体ではない。全体の表は各アダプタにあり、設定で項目を**足せる**（テストが迂回してはいけない製品独自の時刻のラッパー、hadome が知らないモックのライブラリなど）。組み込みの項目を設定で消すことはできない。
+スキップ（`t.Skip`、`pytest.skip`、`@Disabled`、`#[ignore]` など）は危険の分類に入れず、`Skip` として理由と条件と一緒に取り出す。`tests/skip-without-reason` は、理由の無いスキップだけを落とす。
+
+これらは例で、表の全体ではない。全体の表は各アダプタにあり、設定で項目を足せる（テストが迂回してはいけない製品独自の時刻のラッパー、hadome が知らないモックのライブラリなど）。組み込みの項目を設定で消すことはできない。
 
 ### テストが守るもの
 
@@ -163,29 +164,29 @@ classDiagram
 
 | 部分 | 誰が与えるか | どうやって |
 |---|---|---|
-| 対象（テストが動かす入口） | アダプタが**推定**する | テストの本体がテストでないコードで呼んでいる公開の関数とメソッド。それぞれを `Call` として、何回呼ばれるか、いくつの異なるスコープ（利用者やテナントが入る引数。どちらも [rules-tests.ja.md](rules-tests.ja.md) で定義）で呼ばれるかと一緒に持つ。呼び出し先を特定できないとき（型の分からない値のメソッドなど）は `unknown` になる。宣言が推定を上書きするのは、推定が誤っているときだけだ |
+| 対象（テストが動かす入口） | アダプタが推定する | テストの本体がテストでないコードで呼んでいる公開の関数とメソッド。それぞれを `Call` として、何回呼ばれるか、いくつの異なるスコープ（利用者やテナントが入る引数。どちらも [rules-tests.ja.md](rules-tests.ja.md) で定義）で呼ばれるかと一緒に持つ。呼び出し先を特定できないとき（型の分からない値のメソッドなど）は `unknown` になる。宣言が推定を上書きするのは、推定が誤っているときだけだ |
 | 観点 | 宣言しない | 推定が難しく、書く手間も大きい。ミューテーションの分析に置き換わるまでは、推定した対象の集合が守る範囲になる |
-| 不変条件との紐付け | 大部分はテストの呼び出しの形から**推定**する。製品固有の不変条件と、形を持たない型についてだけ、**テストの作者**が1行書く | doc コメントの `guards: <invariant>` |
+| 不変条件との紐付け | 大部分はテストの呼び出しの形から推定する。製品固有の不変条件と、形を持たない型についてだけ、テストの作者が1行書く | doc コメントの `guards: <invariant>` |
 
 ```go
 // guards: durable store.Save
 func TestSavedRowsSurviveRestart(t *testing.T) {
 ```
 
-アダプタは doc コメントから `key: value` の行（小文字のキー、コロン、値）を集めて `Declared` に入れるだけだ。1行で1項目とし、空白は正規化する。どんなキーがあるかは知らない。それを知っているのは、キーを読むルールのほうだ（`guards` は [rules-tests.ja.md](rules-tests.ja.md)）。
+アダプタは doc コメントから `key: value` の行（小文字のキー、コロン、値）を集めて `Declared` に入れるだけだ。1行で1項目とし、空白は正規化する。アダプタはどんなキーがあるかを知らない。キーの意味は、そのキーを読むルールが決める（`guards` は [rules-tests.ja.md](rules-tests.ja.md)）。
 
 ### 特定できたかどうか
 
-事実が止められるかどうかを決めるのは、どう読んだかではなく、**アダプタがそれを特定できたかどうか**だ。
+事実が止められるかどうかを決めるのは、どう読んだかではなく、アダプタがそれを特定できたかどうかだ。
 
 | 状態 | 例 | 扱い |
 |---|---|---|
 | **特定できた** | コード中の（文字列やコメントの中でない）`Thread.sleep(` · 理由の無い `@Disabled` · 450行のファイル | どの言語でも止められる |
 | **特定できない**（`unknown`） | 行き先を解決できない動的な import · 関数の終わりが見つからない珍しい書き方 | 黙って通すことはない。「特定できなかった」と報告する |
 
-ラチェットは `unknown` にも効く。base に前からある unknown は通し、**unknown を増やす変更は終了コード `3`**（人の確認が要る）を返す。不確かなものが止めることは無いので、推測でビルドが落ちることは無い。不確かなものが隠れることも無いので、広がっていく死角は人に届く。
+`unknown` も base と比べる。base に前からある unknown は通し、unknown を増やす変更は終了コード `3`（人の確認が要る）を返す。unknown でチェックを落とすことは無いので、推測でビルドが落ちることは無い。unknown を黙って通すことも無いので、特定できないものが増えたときは人が確かめる。
 
-各事実は、**どう**読んだかも記録する。これは診断のためだけで、事実が止めるかどうかは変えない。
+各事実はどう読んだかも記録する。これは診断のためだけで、事実が止めるかどうかは変えない。
 
 | 読んだもの | 意味 |
 |---|---|
@@ -199,7 +200,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | Go | 標準ライブラリのパーサ（`go/parser`、`go/ast`）。C への依存は無い |
 | TypeScript、Python、Rust、Java、Kotlin | tree-sitter の文法 |
 
-全言語で完全なパーサを使うのは、利用者が得るもの（正確な関数の範囲、テストの境界、アノテーションと import、少ない `unknown`）のほうが、hadome のビルドのしやすさより大事だからだ。その代償（tree-sitter のための C への依存、OS とアーキテクチャごとのビルド）は、利用者ではなくリリースの手順が負う。[distribution.ja.md](distribution.ja.md) を参照。
+全言語で完全なパーサを使うのは、利用者が得るもの（正確な関数の範囲、テストの境界、アノテーションと import、少ない `unknown`）を、hadome のビルドのしやすさより優先したからだ。そのために増える手間（tree-sitter のための C への依存、OS とアーキテクチャごとのビルド）は、利用者ではなくリリースの手順で引き受ける。[distribution.ja.md](distribution.ja.md) を参照。
 
 それでも `unknown` は残る。パーサがあっても特定できないもの（Rust のマクロの中身、動的な import）があるからだ。
 
@@ -223,4 +224,4 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 1. 事実が止められるかどうかは、どう読んだかではなく、特定できたかどうかで決まる。特定できない事実は報告し、それを増やす変更は終了コード `3` を返す
 2. Go は標準ライブラリのパーサで読み、ほかの5言語は tree-sitter で読む。共有のトークナイザは持たない
 3. 対象は推定し、観点は宣言しない。宣言（`guards:`）を持つのは、製品固有の不変条件か、形を持たない型のどれかを守るテストだけだ
-4. 設定は危険の項目を足せるが、組み込みの項目は消せない。組み込みの項目が本当に当てはまらない場所には理由つきの例外を書き、それは人の確認に回る（終了コード `3`）。そうしないと、設定を書き換えるだけで黙ってルールを骨抜きにできてしまう
+4. 設定は危険の項目を足せるが、組み込みの項目は消せない。組み込みの項目が本当に当てはまらない場所には理由つきの例外を書き、それは人の確認に回る（終了コード `3`）。設定で消せると、設定を書き換えるだけで、人の確認を経ずにルールを効かなくできるからだ

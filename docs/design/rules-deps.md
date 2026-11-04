@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A dependency diagram is the cheapest architecture document there is, and the first to go stale: one convenient import at a time, the code stops matching it. The `deps/` rules make the diagram the source of truth. An import the diagram does not draw fails, and so does a diagram box that names nothing.
+A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing.
 
 ## The diagram
 
@@ -31,7 +31,7 @@ flowchart LR
 - A unit belongs to the most specific node that covers it: an exact directory before a `/...`, a longer `/...` before a shorter one
 - Imports within one node are always allowed
 
-The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and **head's arrows judge both versions**, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing one never does.
+The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing one never does.
 
 ## The rules
 
@@ -45,14 +45,14 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 ### `deps/not-in-diagram`
 
 - **Finds**: an import from unit A to unit B where the node of A has no arrow to the node of B, or where A or B is in no node
-- **Why**: the diagram is how people and agents know what may depend on what; an import it does not draw makes it wrong, and the next change builds on the wrong picture
+- **Why**: the diagram is how people and agents know what may depend on what; an import it does not draw makes it wrong, and the next change is written from the wrong diagram
 - **Fix**: depend on what the diagram allows (often through an interface the importing unit declares), or, if the design really changed, draw the arrow — a change a person reviews
 - The anchor is the pair of directories, so moving the import within a file, or to another file of the same unit, keeps it the same finding
 
 ### `deps/diagram-stale`
 
 - **Finds**: a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted)
-- **Why**: a box that names nothing makes the diagram look complete when it is not
+- **Why**: when a box names nothing, the diagram looks complete when it is not
 - **Fix**: correct the label, or remove the node
 - The anchor is the label
 

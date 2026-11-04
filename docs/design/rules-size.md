@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Code that grows past a size people and agents can hold in their heads gets changed by guesswork. The `size/` rules put an upper limit on files, functions and interfaces, and, like every rule, fail only what a change makes worse.
+Code that grows past what people and agents can read in one go tends to be changed without understanding all of it. The `size/` rules put an upper limit on files, functions and interfaces, and, like every rule, fail only what a change makes worse.
 
 ## The rules
 

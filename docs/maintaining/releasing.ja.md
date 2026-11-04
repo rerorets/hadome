@@ -1,6 +1,6 @@
 # リリース
 
-リリースはタグだ。それ以外はすべて `release` ワークフロー（[.github/workflows/release.yml](../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](design/distribution.ja.md) にある。
+リリースは版のタグを push して始める。それ以降の作業はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
 
 ```sh
 git tag v1.2.0
@@ -9,7 +9,7 @@ git push origin v1.2.0
 
 ワークフローは6つのバイナリをネイティブにビルドし、`SHA256SUMS` と一緒に GitHub のリリースを公開し、有効にしてある各エコシステムに公開する。ワークフローを手で動かす（Actions → release → Run workflow）と、公開せずにすべてをビルドして確かめる。
 
-公開が途中で落ちたら、原因を直してから落ちたジョブだけを再実行する。npm のジョブは、レジストリにすでにある版を飛ばす。
+公開が途中で落ちたら、原因を直してから落ちたジョブだけを再実行する。npm のジョブはレジストリにすでにある版を飛ばす。
 
 ## エコシステムを有効にする
 
@@ -26,13 +26,6 @@ git push origin v1.2.0
 | Maven Central | `PUBLISH_MAVEN` | `CENTRAL_USERNAME`、`CENTRAL_PASSWORD`、`MAVEN_GPG_PRIVATE_KEY`、`MAVEN_GPG_PASSPHRASE` | Central Portal のユーザートークン、検証済みの名前空間 `io.github.rerorets`、鍵サーバーに公開した GPG 鍵 |
 | Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | リポジトリ `rerorets/homebrew-tap`（コミットが1つ以上あること）と、そこだけに Contents の書き込みを許した fine-grained トークン |
 | Go | — | — | 無し。モジュールプロキシがタグを配る |
-
-### 初めて公開するときの注意
-
-- npm と crates.io の trusted publishing（トークンを使わない公開）は、パッケージが存在してからでないと設定できない。初回はトークンで公開する
-- npm は、似た名前の新しいパッケージを続けて作ると、スパム検出で 403 を返すことがある。npm のサポートに解除を頼む
-- Gradle Plugin Portal は、新しいプラグインの初回の公開を人が承認する。使えるようになるまで数日かかることがある
-- Maven Central は、公開する POM の版を見て置き場所と照合する。ワークフローは公開の直前に、POM の `${revision}` を版に書き換える
 
 ## リリースの前にパッケージを試す
 

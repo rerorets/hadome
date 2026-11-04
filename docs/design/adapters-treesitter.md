@@ -1,6 +1,6 @@
 # Adapters for TypeScript, Python, Rust, Java and Kotlin
 
-This document is the language-specific half of [adapters.md](adapters.md): how each of the five languages read with tree-sitter fills in the same facts the Go adapter does. Rules never see the difference.
+This document covers the language-specific part of [adapters.md](adapters.md). It describes how each of the five languages read with tree-sitter fills in the same facts the Go adapter does. Rules never see the difference.
 
 ## Shape
 

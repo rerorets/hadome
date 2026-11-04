@@ -1,6 +1,6 @@
 # A tag vX.Y.Z builds hadome natively on six platforms with cgo, publishes the archives and
 # SHA256SUMS as a GitHub release, then publishes to every ecosystem whose repository variable
-# PUBLISH_<ECOSYSTEM> is "true" (docs/design/distribution.md). Run it by hand to build without
+# PUBLISH_<ECOSYSTEM> is "true" (docs/maintaining/releasing.md). Run it by hand to build without
 # publishing anything.
 name: release
 
@@ -76,6 +76,7 @@ jobs:
         with:
           name: hadome-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
+          retention-days: 7 # only hands the binaries to the jobs below; the release keeps them
 
   release:
     needs: build
@@ -94,6 +95,7 @@ jobs:
         with:
           name: release
           path: dist/*
+          retention-days: 7
       - name: Publish the GitHub release
         if: github.event_name == 'push'
         env:

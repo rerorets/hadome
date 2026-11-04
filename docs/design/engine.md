@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-The engine answers one question for a change: **did anything get worse?** It runs rules against two versions of a repository — the *base* (usually the main branch) and the *head* (the change) — and reports only what got worse.
+The engine decides whether a change made anything worse. It runs rules against two versions of a repository — the *base* (usually the main branch) and the *head* (the change) — and reports only what got worse.
 
 It does:
 
@@ -45,7 +45,7 @@ A finding carries a **fingerprint**:
 
 Two findings with the same fingerprint are the same finding. When fingerprints collide within one file (the same violation written twice in one function), they are matched by count: head may have as many as base without regressing.
 
-A finding about an amount (lines, parameters) also carries the measured **value**. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not.
+A finding about an amount (lines, parameters) also carries the measured value. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not.
 
 Line numbers are kept for display only.
 
@@ -62,8 +62,8 @@ gate:allow <rule-id> reason: <text>
 - A marker naming an unknown rule is reported as a finding (`engine/marker-unknown-rule`)
 - A marker that suppresses nothing is reported as a finding (`engine/marker-unused`), so stale exceptions do not pile up
 - The prefix is `gate:`, never the tool's name, so renaming hadome never forces users to edit their code
-- An exception is **new** when it is in head and has no match in base, matched like findings (rule id, file after renames, anchor). An exception whose reason text changed counts as new, because the justification is what a person must review. Exceptions that were already in base are never reported again
-- New exceptions do not fail the check, but they make the result **needs review** (exit code `3`): no regressions, and at least one new exception for a person to look at. Who approves it is up to the workflow (a label, a reviewer, a decision queue)
+- An exception is new when it is in head and has no match in base, matched like findings (rule id, file after renames, anchor). An exception whose reason text changed counts as new, because the justification is what a person must review. Exceptions that were already in base are never reported again
+- New exceptions do not fail the check, but they make the result need review (exit code `3`): no regressions, and at least one new exception for a person to look at. Who approves it is up to the workflow (a label, a reviewer, a decision queue)
 
 How the marker is found inside a comment is the language adapter's job. The engine receives markers as data.
 
@@ -90,7 +90,7 @@ Renames are detected by the engine, not by the source, so every source behaves t
 
 - Same input, same output: findings and items are sorted; maps are never iterated for output
 - No clock, no network, no environment-dependent paths in the report
-- A rule that fails to run is a **configuration error** (exit code `2`), never a pass. A check that could not run cannot be trusted
+- A rule that fails to run is treated as a configuration error (exit code `2`), never a pass. A rule that did not run checked nothing
 
 ## Output
 
@@ -118,7 +118,7 @@ Every rule ships with cases: a small base tree, a small head tree, and the expec
 
 ## Product-specific gates
 
-A product adds its own gate as an **external command** declared in its configuration. The engine runs it **once per version** (base, then head) with a JSON request on standard input, reads findings or items as JSON on standard output, and compares them exactly like a built-in rule. The gate never compares versions itself; it only looks at one tree.
+A product adds its own gate as an **external command** declared in its configuration. The engine runs it once per version (base, then head) with a JSON request on standard input, reads findings or items as JSON on standard output, and compares them exactly like a built-in rule. The gate never compares versions itself; it only looks at one tree.
 
 The full protocol is in [external-gates.md](../external-gates.md). Any language can implement a gate this way, and the product's knowledge stays in the product's repository.
 

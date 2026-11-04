@@ -1,6 +1,6 @@
 # エージェント向けの hadome
 
-hadome を使うリポジトリで作業するエージェントのための、正確な手順。どの手順も、うまくいったことを示すコマンドで終わる。短い版は、あなたへの指示が書かれたファイルに置く。`hadome agents` がそれを出す。
+hadome を使うリポジトリで作業するエージェントのための、正確な手順。どの手順もうまくいったことを示すコマンドで終わる。短い版は、あなたへの指示が書かれたファイルに置く。`hadome agents` がそれを出す。
 
 ## 変更を終える前に
 
@@ -50,7 +50,7 @@ time.Sleep(d) // gate:allow tests/no-sleep reason: the OS file watcher offers no
        says: "Totals on the screen and in the API match"
    ```
 
-   対象は、ユニットのパスの最後の要素と名前で、コードから呼ぶときの書き方にする: `api.CreatePost`、`store.Store.Delete`。
+   対象はユニットのパスの最後の要素と名前で、コードから呼ぶときの書き方にする: `api.CreatePost`、`store.Store.Delete`。
 3. `hadome config check` を実行する
 4. それを守るテストがあることを確かめる（次の節）。守るテストの無い新しい不変条件は後退になる
 
@@ -73,7 +73,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 `guards:` の後の値は、メッセージが不変条件を呼ぶとおりに書く: `<type> <target>`、対象が複数なら `<type> <a>,<b>`、または `id`。スキップしたテストは何も守らない。
 
-テストファイルのヘルパー関数を通した呼び出しも数える。この形は必要条件であって証明ではない。不変条件が破れたら落ちるテストを書くこと。
+テストファイルのヘルパー関数を通した呼び出しも数える。この形を満たしていても、テストが不変条件を確かめているとは限らない。不変条件が破れたら落ちるテストを書くこと。
 
 確かめ方: `hadome check` がそれについて `tests/invariant-unguarded` を報告しない。
 

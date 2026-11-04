@@ -6,8 +6,8 @@ Configuration has two kinds of authors, and each gets a different promise.
 
 | Author | What they expect | Promise |
 |---|---|---|
-| **A person** | Not to configure anything. If a tool demands tuning, they stop using it | **It works with no configuration**, and when input is needed, hadome proposes it and the person only accepts |
-| **An agent** asked to "add our product's conditions" | An exact, unambiguous contract to write against | **The format is strictly specified, published and validated.** Anything not in the specification is an error, with a message that says how to fix it |
+| **A person** | Not to configure anything. If a tool demands tuning, they stop using it | It works with no configuration. When input is needed, hadome proposes it and the person only accepts |
+| **An agent** asked to "add our product's conditions" | An exact, unambiguous contract to write against | The format is strictly specified, published and validated. Anything not in the specification is an error, with a message that says how to fix it |
 
 ## For people: guided, not configured
 
@@ -27,7 +27,7 @@ A person never has to open the specification.
 - `hadome schema` prints the JSON Schema of `.hadome.yml` for the installed version
 - The same schema is published in this repository (`schema/hadome.schema.json`) and versioned with hadome
 - Editors pick it up for completion and validation
-- The reference documentation is **generated from the schema**, never written separately, so the two cannot drift
+- The reference documentation is generated from the schema, never written separately, so the two cannot drift
 
 ### Strict validation
 
@@ -41,7 +41,7 @@ A person never has to open the specification.
 
 ### Telling agents that hadome exists
 
-Agents only follow what their instructions mention. `hadome agents` prints a short block for the files agents read (`CLAUDE.md`, `AGENTS.md`, and similar). It never edits files unless asked: `hadome agents --write CLAUDE.md` inserts or updates the block between markers, so running it again replaces the block instead of duplicating it.
+Agents only follow what their instructions mention. `hadome agents` prints a short block for the files agents read (`CLAUDE.md`, `AGENTS.md`, and similar). It never edits files unless asked. The command's forms are in the "`hadome agents`" section of [suggest.md](suggest.md).
 
 The block tells the agent to run hadome before finishing, what each exit code means for it (exit code `3` means stop and ask a person, never "make it pass"), never to add an exception just to pass, to link invariant tests with `guards:`, and to read `hadome explain` before changing configuration. Its exact text is in the README's quick start. `--lang ja` prints a Japanese version; the English one is the default because agents read it equally well.
 
@@ -115,9 +115,9 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 
 | What | Read from | Why |
 |---|---|---|
-| Invariants | **Each version's own** | A new invariant without a guarding test must be a regression, so base keeps the invariants it had |
-| The dependency diagram's boxes, for `deps/diagram-stale` | **Each version's own** | A box added in the change that names nothing must be a regression |
-| Rule settings, added table entries, gates, the dependency diagram's arrows | **Head's, applied to both versions** | Head is what is being judged. Applying them to base too means tightening a setting reports only new code, never what was already there |
+| Invariants | Each version's own | A new invariant without a guarding test must be a regression, so base keeps the invariants it had |
+| The dependency diagram's boxes, for `deps/diagram-stale` | Each version's own | A box added in the change that names nothing must be a regression |
+| Rule settings, added table entries, gates, the dependency diagram's arrows | Head's, applied to both versions | Head is what is being judged. Applying them to base too means tightening a setting reports only new code, never what was already there |
 | Shared layers (`extends`) | The working tree, the same file for both sides | They live outside the repository, so base has no copy of its own |
 
 Both versions' files are still read and validated in full, so that the two can be compared.
@@ -140,7 +140,8 @@ classDiagram
     +Example string
     +Allowed []Value
     +Pattern string
-    +Default int
+    +Regexp bool
+    +Default any
     +Min int
     +MinItems int
     +Elem *Key
@@ -226,7 +227,7 @@ classDiagram
 
 - The YAML is parsed into a syntax tree (with positions) and walked against `Spec`, so every error carries the file, the line, the key, what is allowed and an example. Unknown keys, wrong types and unknown invariant types are errors
 - All errors of a file are reported together, not only the first
-- `schema/hadome.schema.json` in the repository is the output of `Spec.JSONSchema()`; a test fails when the two differ, so the published schema cannot drift
+- `schema/hadome.schema.json` in the repository is the output of `JSONSchema()`; a test fails when the two differ, so the published schema cannot drift
 - A misspelt key gets a suggestion (`did you mean invariants?`) when a known key is within two edits
 - Layers merge by the specification: mappings key by key; lists of objects by their identity (a later entry with the same identity replaces the earlier one); lists marked `OmittedIsWidest` (such as `languages`) as a whole; other lists are joined without duplicates
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration

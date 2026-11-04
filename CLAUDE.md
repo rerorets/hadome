@@ -21,9 +21,9 @@ hadome (歯止め) is a ratcheting checker: it compares a change against the mai
 | Product configuration | Thresholds, dependency diagram, invariant list, enabled rules | each user's repository |
 | Product-specific gates | Anything a single product needs | each user's repository, using the same interface |
 
-Distributed as a single Go binary, through six ecosystems (`packaging/`, [docs/releasing.md](docs/releasing.md)).
+Distributed as a single Go binary, through six ecosystems (`packaging/`, [docs/maintaining/releasing.md](docs/maintaining/releasing.md)).
 
-hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs/dependencies.md](docs/dependencies.md) is the diagram its imports must follow. A new package or import starts there.
+hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs/design/dependencies.md](docs/design/dependencies.md) is the diagram its imports must follow. A new package or import starts there.
 
 ## Writing
 
@@ -34,15 +34,7 @@ hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs
 
 ## Local setup
 
-Go with cgo builds all six languages; `CGO_ENABLED=0 go test ./...` checks the Go-only build. `packaging/smoke.sh <version>` builds and uses every package.
-
-Enable the repository hooks once:
-
-```sh
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit` blocks commits containing terms from a private denylist kept **outside** the repository (`$HADOME_DENYLIST` or `~/.config/hadome-dev/denylist.txt`). Never commit that list.
+Building, testing and enabling the hooks are in [CONTRIBUTING.md](CONTRIBUTING.md). The private denylist `.githooks/pre-commit` reads (`$HADOME_DENYLIST` or `~/.config/hadome-dev/denylist.txt`) stays outside the repository; never commit it.
 
 <!-- hadome:begin -->
 ## hadome

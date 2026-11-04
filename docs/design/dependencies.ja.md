@@ -1,6 +1,6 @@
 # 依存
 
-hadome のどのユニットがどれを import してよいか。この図が正であり、hadome は自分自身をこれと照らして検査する（[.hadome.yml](../.hadome.yml) の `rules.deps.diagram`）。図に描かれていない import は落ち、新しい矢印を描くには人の確認が要る。
+hadome のどのユニットがどれを import してよいか。この図が正であり、hadome は自分自身をこれと照らして検査する（[.hadome.yml](../../.hadome.yml) の `rules.deps.diagram`）。図に描かれていない import は落ち、新しい矢印を描くには人の確認が要る。
 
 ```mermaid
 flowchart TB

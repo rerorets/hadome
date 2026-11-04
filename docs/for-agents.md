@@ -73,7 +73,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 The value after `guards:` is written exactly as the messages name the invariant: `<type> <target>`, `<type> <a>,<b>` for several targets, or the `id`. A skipped test guards nothing.
 
-Calls made through helper functions in test files count. The shape is a necessary condition, not proof: write a test that would fail if the invariant were broken.
+Calls made through helper functions in test files count. A test that has this shape does not necessarily check the invariant. Write a test that would fail if the invariant were broken.
 
 Proved by: `hadome check` reports no `tests/invariant-unguarded` for it.
 

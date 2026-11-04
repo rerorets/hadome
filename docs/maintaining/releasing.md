@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a tag. Everything else is the `release` workflow ([.github/workflows/release.yml](../.github/workflows/release.yml)); [distribution.md](design/distribution.md) explains the design.
+A release starts by pushing a version tag. The `release` workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml)) does everything after that. [distribution.md](../design/distribution.md) explains the design.
 
 ```sh
 git tag v1.2.0
@@ -26,13 +26,6 @@ The secrets go in the `release` environment, not at the repository level (Settin
 | Maven Central | `PUBLISH_MAVEN` | `CENTRAL_USERNAME`, `CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`, `MAVEN_GPG_PASSPHRASE` | A Central Portal user token, the namespace `io.github.rerorets` verified, and a GPG key published to a keyserver |
 | Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | The repository `rerorets/homebrew-tap` (with at least one commit), and a fine-grained token allowed to write Contents there only |
 | Go | — | — | Nothing: the module proxy serves the tag |
-
-### The first publish
-
-- Trusted publishing (publishing without a token) can be set up on npm and crates.io only once the package exists. The first publish uses a token
-- npm may answer 403 from its spam detection when several new packages with similar names are created in a row. Ask npm support to lift it
-- The Gradle Plugin Portal approves a new plugin's first publish by hand; it can take days to become available
-- Maven Central matches the version in the published POM against the files' location. The workflow writes the version into the POM's `${revision}` just before publishing
 
 ## Trying the packages before a release
 
