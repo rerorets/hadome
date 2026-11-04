@@ -34,8 +34,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Use Zig as the C compiler on Windows ARM64, where no other is installed
@@ -72,7 +72,7 @@ jobs:
           else
             tar -C out -czf "dist/$name.tar.gz" hadome
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: hadome-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -84,14 +84,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
       - name: Checksums
         run: cd dist && sha256sum hadome_* > SHA256SUMS && cat SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: release
           path: dist/*
@@ -113,10 +113,10 @@ jobs:
     permissions:
       id-token: write # npm provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with: { name: release, path: dist }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
@@ -144,8 +144,8 @@ jobs:
     permissions:
       id-token: write # trusted publishing
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with: { name: release, path: dist }
       - run: |
           packaging/extract.sh dist bins
@@ -162,8 +162,8 @@ jobs:
     permissions:
       contents: write # attaches the signatures to the release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           name: release
           path: dist
@@ -200,12 +200,12 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with: { name: release, path: dist }
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "8.14.3"
       - name: Publish to the Gradle Plugin Portal
@@ -224,8 +224,8 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with: { name: release, path: dist }
       - uses: actions/setup-java@v5
         with:
@@ -256,10 +256,10 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with: { name: release, path: dist }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: rerorets/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
