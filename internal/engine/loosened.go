@@ -24,7 +24,7 @@ func loosened(base, head config.Config) []Finding {
 			msg = "configuration adds to " + c.Key + ": " + c.Added
 		}
 		out = append(out, Finding{
-			Rule: LoosenedID, File: config.FileName, Anchor: c.Key + "\x00" + c.Removed + "\x00" + c.Added, Review: true,
+			Rule: LoosenedID, File: c.File, Line: c.Line, Anchor: c.Key + "\x00" + c.Removed + "\x00" + c.Added, Review: true,
 			Message: msg,
 			Why:     "the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive",
 			Fix:     "if the removal is intended, a person approves it; otherwise restore the entry",

@@ -1,9 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // decode turns validated plain values into a Config. Validation has already guaranteed every type.
@@ -78,7 +80,11 @@ func textList(v any) []string {
 
 // Change is one difference between the configurations of base and head.
 type Change struct {
-	Key     string `json:"key"`
+	Key string `json:"key"`
+	// File and Line are where in head the change is: the key in .hadome.yml, or the arrow in the
+	// diagram. A removal points at what holds the removed entry; Line is 0 when nothing does.
+	File    string `json:"file"`
+	Line    int    `json:"line,omitempty"`
 	Removed string `json:"removed,omitempty"`
 	Added   string `json:"added,omitempty"`
 	// Looser means the change makes the rules more permissive than in base.
@@ -90,6 +96,9 @@ type Change struct {
 func Diff(base, head Config) []Change {
 	var out []Change
 	diffObject(&out, base.raw, head.raw, Spec, "")
+	for i := range out {
+		out[i].File, out[i].Line = FileName, head.lineOf(out[i])
+	}
 	out = append(out, diffArrows(base.Diagram, head.Diagram)...)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Key != out[j].Key {
@@ -175,27 +184,27 @@ func diffArrows(base, head *Diagram) []Change {
 	case base == nil:
 		return nil
 	case head == nil:
-		return []Change{{Key: "rules.deps.diagram", Removed: base.Path, Looser: true}}
+		return []Change{{Key: "rules.deps.diagram", File: FileName, Removed: base.Path, Looser: true}}
 	}
-	arrows := func(d *Diagram) map[string]bool {
-		m := map[string]bool{}
-		if d != nil {
-			for _, e := range d.Edges {
-				m[d.Label(e.From)+" --> "+d.Label(e.To)] = true
+	arrows := func(d *Diagram) map[string]int {
+		m := map[string]int{}
+		for _, e := range d.Edges {
+			if a := d.Label(e.From) + " --> " + d.Label(e.To); m[a] == 0 {
+				m[a] = e.Line
 			}
 		}
 		return m
 	}
 	b, h := arrows(base), arrows(head)
 	var out []Change
-	for a := range h {
-		if !b[a] {
-			out = append(out, Change{Key: "rules.deps.diagram", Added: a, Looser: true})
+	for a, line := range h {
+		if _, ok := b[a]; !ok {
+			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Line: line, Added: a, Looser: true})
 		}
 	}
 	for a := range b {
-		if !h[a] {
-			out = append(out, Change{Key: "rules.deps.diagram", Removed: a})
+		if _, ok := h[a]; !ok {
+			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Removed: a})
 		}
 	}
 	return out
@@ -206,4 +215,42 @@ func fmtValue(v any) string {
 		return ""
 	}
 	return identityOf(v, Key{}, nil)
+}
+
+// lineOf finds the line of a change in head's .hadome.yml: the added or changed list entry when
+// there is one, or else the key itself, or else the nearest enclosing key that head has.
+func (c Config) lineOf(ch Change) int {
+	if ch.Added != "" {
+		if k, ok := lookup(Spec, strings.Split(ch.Key, ".")); ok && k.Kind == KindList {
+			for i, v := range list(valueAt(c.raw, ch.Key)) {
+				if identityOf(v, *k.Elem, k.Identity) == ch.Added || fmtValue(v) == ch.Added {
+					if line := c.lines[fmt.Sprintf("%s[%d]", ch.Key, i)]; line > 0 {
+						return line
+					}
+				}
+			}
+		}
+	}
+	for p := ch.Key; p != ""; p = parentPath(p) {
+		if line := c.lines[p]; line > 0 {
+			return line
+		}
+	}
+	return 0
+}
+
+// valueAt returns the raw value at a dotted key path.
+func valueAt(raw map[string]any, path string) any {
+	var v any = raw
+	for _, name := range strings.Split(path, ".") {
+		v = object(v)[name]
+	}
+	return v
+}
+
+func parentPath(p string) string {
+	if i := strings.LastIndex(p, "."); i >= 0 {
+		return p[:i]
+	}
+	return ""
 }
