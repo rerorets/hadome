@@ -79,3 +79,13 @@ func TestCheckThatCannotRunNeverPasses(t *testing.T) {
 		t.Fatalf("want exit 2 when the base cannot be read, got %d", code)
 	}
 }
+
+// viewpoint: invariant
+// target: newEngine's rules
+// Engine invariant 6: every built-in rule has self-test cases, and they all pass. A check never
+// runs them, so this is where a rule without cases is stopped before it ships.
+func TestEveryBuiltInRuleHasPassingCases(t *testing.T) {
+	for _, f := range newEngine().SelfTest() {
+		t.Errorf("%s: %s: %s", f.Rule, f.Name, f.Err)
+	}
+}

@@ -115,7 +115,7 @@ Keys not listed as legitimate are regressions. A gate that does not support `mod
 
 ## Self-test
 
-Your command must answer `--self-test`: run its own cases and exit `0` only if all pass. `hadome self-test` runs it alongside the built-in rules. A gate without a working self-test is not loaded.
+Your command must answer `--self-test`: run its own cases and exit `0` only if all pass. `hadome self-test` runs it alongside the built-in rules. `hadome check` also runs `--self-test` once before using the gate; if it does not exit `0`, the check stops with exit code `2` without using the gate's results.
 
 ## Rules your gate must follow
 
