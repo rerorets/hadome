@@ -82,6 +82,9 @@ files:                         # optional; for layouts against the languages' co
   tests: ["checks/**"]         # read as test files (not applied to Go files); changing it needs review
   generated: ["gen/**"]        # treated as generated code; adding to it needs review
 
+mutation:                      # optional; hadome mutate (mutation.md)
+  test: [go, test, ./...]      # required; the test command, never guessed; changing it needs review
+
 gates:                         # optional; product-specific gates
   - id: acme/log-append-only
     kind: finding

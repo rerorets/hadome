@@ -8,12 +8,16 @@ import (
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/mutation"
 )
 
 const usage = `usage:
   hadome check [--base REV] [--head REV] [--format text|json]
                                                     compare base (default: the base branch) with head
                                                     (default: the working tree); exit 0, 1, 2 or 3
+  hadome mutate [--base REV] [--head REV] [--format text|json]
+                                                    break the functions the change touched and fail when no
+                                                    test notices (needs mutation.test); exit 0, 1, 2 or 3
   hadome self-test                                  run every rule's self-test cases
   hadome config check                               validate .hadome.yml without running any rule
   hadome schema                                     print the JSON Schema of .hadome.yml
@@ -63,7 +67,7 @@ func explain(args []string, stdout, stderr io.Writer) int {
 // explainRule describes a built-in rule: what it finds and why, how to resolve it, what tunes it,
 // and the self-test cases that pin its behaviour down.
 func explainRule(id string) (string, bool) {
-	for _, r := range newEngine().Rules {
+	for _, r := range append(newEngine().Rules, mutation.Rule()) {
 		d, ok := r.(engine.Describer)
 		if !ok || r.ID() != id {
 			continue

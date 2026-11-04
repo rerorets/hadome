@@ -29,6 +29,10 @@ func decode(raw map[string]any, layers []string) Config {
 	}
 	c.IO = textList(tests["io"])
 	c.Assertions = textList(tests["assertions"])
+	if m, ok := raw["mutation"].(map[string]any); ok {
+		c.Mutation = &Mutation{Test: textList(m["test"]), Timeout: str(m["timeout"]),
+			MaxMutants: intOr(m["max-mutants"], 100), TestsSeparator: str(orDefault(m["tests-separator"], "|"))}
+	}
 	files := object(raw["files"])
 	c.TestFiles = textList(files["tests"])
 	c.GeneratedFiles = textList(files["generated"])
@@ -117,7 +121,7 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 			bi, hi := intOr(b, def), intOr(h, def)
 			if bi != hi {
 				*out = append(*out, Change{Key: p, Removed: strconv.Itoa(bi), Added: strconv.Itoa(hi),
-					Looser: f.Looser == LooserWhenHigher && hi > bi})
+					Looser: f.Looser == LooserWhenHigher && hi > bi || f.Looser == LooserWhenLower && hi < bi})
 			}
 		case f.Default != nil:
 			if bs, hs := fmtValue(orDefault(b, f.Default)), fmtValue(orDefault(h, f.Default)); bs != hs {

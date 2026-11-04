@@ -41,6 +41,8 @@ const (
 	// LooserAlways means any change of the entries, adding or removing one, may loosen the rules:
 	// the entries move what the rules cover in both directions, such as which files are tests.
 	LooserAlways
+	// LooserWhenLower means a smaller number loosens the rules, such as how many mutants are tried.
+	LooserWhenLower
 )
 
 // Value is one allowed value of a key, with what it means.
@@ -269,6 +271,28 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 		rulesKey,
 		filesKey,
 		gateKey,
+		mutationKey,
+	}}
+
+// mutationKey configures hadome mutate. The test command is never guessed.
+var mutationKey = Key{Name: "mutation", Kind: KindObject,
+	Doc: "hadome mutate: breaks the functions a change touched, one small change at a time, and fails when no test notices. " +
+		"Removing it or weakening it needs review.",
+	Example: "mutation:\n  test: [go, test, ./...]",
+	Fields: []Key{
+		{Name: "test", Kind: KindList, Required: true, Looser: LooserAlways, Elem: &Key{Kind: KindString},
+			Doc: "The test command, run at the root of a copy of the version for every mutant. hadome never guesses it. " +
+				"An element holding {tests} gets the names of the tests that call the broken function; a survivor is then run " +
+				"again with all the tests. Any change needs review.",
+			Example: `test: [go, test, ./..., -run, "^({tests})$"]`},
+		{Name: "timeout", Kind: KindString, Default: "", Looser: LooserWhenChanged, Pattern: `^([0-9]+(ms|s|m|h))+$`,
+			Doc:     "The limit of one test run. Omitted: three times one run before anything is broken. A run that times out caught its mutant.",
+			Example: "timeout: 2m"},
+		{Name: "max-mutants", Kind: KindInt, Default: 100, Min: 1, Looser: LooserWhenLower,
+			Doc:     "How many mutants one run tries at most. Mutants beyond it are reported for review. Default 100.",
+			Example: "max-mutants: 100"},
+		{Name: "tests-separator", Kind: KindString, Default: "|", Looser: LooserWhenChanged,
+			Doc: "What joins the test names put into {tests}. Default |.", Example: `tests-separator: "|"`},
 	}}
 
 // filesKey gives files roles that the languages' conventions and headers do not.

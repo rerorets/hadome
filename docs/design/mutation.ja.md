@@ -83,27 +83,31 @@ hadome mutate --format json
 ```mermaid
 classDiagram
   class Mutant {
+    <<facts>>
     +Path string
     +Line int
     +Func string
     +Operator string
-    +Anchor string
+    +Original string
+    +Replacement string
     +Start int
     +End int
-    +Replacement string
+    +Anchor string
   }
   class Mutator {
     <<interface>>
-    +Mutants(v engine.Version, funcs []facts.Symbol) ([]Mutant, error)
+    +Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, error)
+    +Unmutated(funcs []facts.Symbol) []string
   }
-  class Plan {
-    +Funcs []facts.Symbol
-    +Mutants []Mutant
+  class Mutate {
+    +Analyzer engine.Analyzer
+    +Mutator Mutator
+    +Run(src engine.Source) (engine.Report, error)
   }
   class Runner {
     +Test []string
+    +Sep string
     +Timeout time.Duration
-    +Run(v engine.Version, m Mutant) (Outcome, error)
   }
   class Outcome {
     <<enumeration>>
@@ -111,13 +115,16 @@ classDiagram
     Survived
   }
   Mutator ..> Mutant : 作る
-  Plan --> Mutant
+  Mutate --> Mutator
+  Mutate --> Runner
   Runner ..> Outcome : 返す
 ```
 
-- `Mutator` はアダプタが実装する。構文木を読めるのはアダプタだけだからだ。ミュータントは「どこを、何に置き換えるか」という文字の範囲で、アダプタはコードを実行しない。アダプタの不変条件（コードを実行しない、プロセスを起動しない）はそのまま守られる
+- `Mutant` は言語に依らない事実なので `facts` に置く。アダプタが `internal/mutation` に依存せずに作れるからだ
+- `Mutator` はアダプタが実装する。構文木を読めるのはアダプタだけだからだ。まだ壊し方を持たない言語は `Unmutated` が挙げ、その言語で触った関数は試せなかったものとして人の確認に回る。ミュータントは「どこを、何に置き換えるか」という文字の範囲で、アダプタはコードを実行しない。アダプタの不変条件（コードを実行しない、プロセスを起動しない）はそのまま守られる
 - `Runner` はこのパッケージにある。版のツリーをディスク上に写し、ミュータントを当て、テストのコマンドを実行し、元に戻す。プロセスを起動するのは、門番（`internal/gate`）と同じく、エンジンの外である
-- 報告の形、例外の印、終了コードは、エンジンのものをそのまま使う
+- 報告の形、例外の印、終了コードは、エンジンのものをそのまま使う。`Mutate` はミュータントを試したあと、その結果を版ごとに返す1つのルール（`mutation/survived`）として `engine.Check` に渡す。下の「比べ方」の決まりは、エンジンの見つかったものの比べ方とちょうど同じになる
+- `hadome check` は `mutation/survived` を知らないので、その例外の印を知らないルールや使われない印として報告してしまう。そこで `engine.Engine.Elsewhere` で、ほかのコマンドが報告するルールを名指す。`check` は `mutation/survived` を、`mutate` はそれ以外のルールをほかに任せ、任せたルールの印には触らない
 
 依存の図には次の矢印を足す。
 
@@ -210,7 +217,7 @@ mutation:
 
 - 壊す前に、head でテストのコマンドを1回実行する。落ちたら、何も壊さずに終了コード `2` を返す。もともと落ちるテストでは、ミュータントを捕まえたかが分からないからだ
 - 時間切れは捕まえたものとして扱う。壊したことで止まらなくなったのを、テストが通ったとは言えないからだ
-- `mutation` を消す、`max-mutants` を下げる、`test` を変えるのは、緩める変更として人の確認を求める。`{tests}` を足す・外すのも `test` を変えることに入る
+- `mutation` を消す、`max-mutants` を下げる、`test` を変えるのは、緩める変更として人の確認を求める。`{tests}` を足す・外すのも `test` を変えることに入る。`timeout` と `tests-separator` を変えるのも同じだ。`max-mutants` には、小さいほうが緩い向き（`LooserWhenLower`）を使う
 
 ## 不変条件
 

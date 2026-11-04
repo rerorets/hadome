@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/rerorets/hadome/internal/config"
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // Engine runs rules on two versions and keeps only what got worse.
@@ -21,6 +22,10 @@ type Engine struct {
 	// ConfigRules, when set, builds more rules from head's configuration (product-specific gates).
 	// They run on both versions next to Rules.
 	ConfigRules func(c config.Config) ([]Rule, error)
+	// Elsewhere, when set, names rules that another command reports: hadome check leaves
+	// mutation/survived to hadome mutate, which leaves every other rule to hadome check. Markers
+	// for those rules are left alone, neither unknown nor unused.
+	Elsewhere func(rule string) bool
 }
 
 // side is everything computed for one version.
@@ -156,7 +161,7 @@ func (e *Engine) side(v Version, c config.Config, rules []Rule) (side, error) {
 			return side{}, fmt.Errorf("rule %s on %s: %w", rule.ID(), v.Label, err)
 		}
 	}
-	markers, bad := parseMarkers(a.Comments, known)
+	markers, bad := parseMarkers(e.ownComments(a.Comments), known)
 	kept, unused := suppress(raw, markers)
 	s.findings = append(append(kept, bad...), unused...)
 	s.markers = markers
@@ -302,4 +307,19 @@ func markerLess(a, b Marker) bool {
 		return a.Line < b.Line
 	}
 	return a.Rule < b.Rule
+}
+
+// ownComments leaves out the comments whose marker names a rule reported elsewhere.
+func (e *Engine) ownComments(cs []facts.Comment) []facts.Comment {
+	if e.Elsewhere == nil {
+		return cs
+	}
+	var out []facts.Comment
+	for _, c := range cs {
+		if m := markerPattern.FindStringSubmatch(c.Text); m != nil && e.Elsewhere(m[1]) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }

@@ -26,8 +26,10 @@ type Config struct {
 	// TestFiles and GeneratedFiles are globs that give files the test and generated roles.
 	TestFiles      []string
 	GeneratedFiles []string
-	Size           Limits // limits of the size/ rules, defaults filled in
-	TodoForm       string // the regular expression a TODO comment must match
+	// Mutation configures hadome mutate; nil when it is not configured.
+	Mutation *Mutation
+	Size     Limits // limits of the size/ rules, defaults filled in
+	TodoForm string // the regular expression a TODO comment must match
 	// Diagram is the dependency diagram that judges imports: head's, for both versions. Nil when none
 	// is configured.
 	Diagram *Diagram
@@ -265,4 +267,12 @@ func ForBase(base, head Config) Config {
 	c.Invariants = base.Invariants
 	c.OwnDiagram = base.OwnDiagram
 	return c
+}
+
+// Mutation is the mutation setting: how hadome mutate runs the tests.
+type Mutation struct {
+	Test           []string // the test command; an element may hold {tests}
+	Timeout        string   // a duration such as 2m; empty means three times a clean run
+	MaxMutants     int
+	TestsSeparator string
 }

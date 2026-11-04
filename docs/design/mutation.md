@@ -83,27 +83,31 @@ The short version `hadome agents` prints gains one line: "when `mutation` is con
 ```mermaid
 classDiagram
   class Mutant {
+    <<facts>>
     +Path string
     +Line int
     +Func string
     +Operator string
-    +Anchor string
+    +Original string
+    +Replacement string
     +Start int
     +End int
-    +Replacement string
+    +Anchor string
   }
   class Mutator {
     <<interface>>
-    +Mutants(v engine.Version, funcs []facts.Symbol) ([]Mutant, error)
+    +Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, error)
+    +Unmutated(funcs []facts.Symbol) []string
   }
-  class Plan {
-    +Funcs []facts.Symbol
-    +Mutants []Mutant
+  class Mutate {
+    +Analyzer engine.Analyzer
+    +Mutator Mutator
+    +Run(src engine.Source) (engine.Report, error)
   }
   class Runner {
     +Test []string
+    +Sep string
     +Timeout time.Duration
-    +Run(v engine.Version, m Mutant) (Outcome, error)
   }
   class Outcome {
     <<enumeration>>
@@ -111,13 +115,16 @@ classDiagram
     Survived
   }
   Mutator ..> Mutant : makes
-  Plan --> Mutant
+  Mutate --> Mutator
+  Mutate --> Runner
   Runner ..> Outcome : returns
 ```
 
-- The adapters implement `Mutator`, because only they read syntax trees. A mutant is a range of text and what replaces it; the adapters run no code, so their invariants (no code run, no process started) still hold
+- `Mutant` is a language-neutral fact, so it lives in `facts`. That lets the adapters make mutants without depending on `internal/mutation`
+- The adapters implement `Mutator`, because only they read syntax trees. `Unmutated` lists the languages that cannot be broken yet; functions touched in them go to a person's review as untried. A mutant is a range of text and what replaces it; the adapters run no code, so their invariants (no code run, no process started) still hold
 - `Runner` lives in this package. It copies the version's tree to disk, applies a mutant, runs the test command and restores the file. Like the gates (`internal/gate`), starting processes happens outside the engine
-- The report's shape, exception markers and exit codes are the engine's, used as they are
+- The report's shape, exception markers and exit codes are the engine's, used as they are. After trying the mutants, `Mutate` hands the results to `engine.Check` as one rule (`mutation/survived`) that returns them per version. The rules of "How to compare" below are exactly the engine's comparison of findings
+- `hadome check` does not know `mutation/survived`, so it would report that rule's exception markers as naming an unknown rule or as unused. `engine.Engine.Elsewhere` names the rules another command reports: `check` leaves `mutation/survived` to `mutate`, and `mutate` leaves every other rule to `check`. Markers of those rules are left alone
 
 The dependency diagram gains these arrows.
 
@@ -210,7 +217,7 @@ mutation:
 
 - Before breaking anything, the test command runs once in head. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
 - A timeout counts as caught: a mutant that made the tests stop finishing did not let them pass
-- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` is changing `test`
+- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
 
 ## Invariants
 

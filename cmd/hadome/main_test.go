@@ -101,3 +101,16 @@ func TestCheckRefusesRevisionsAndDirectoriesTogether(t *testing.T) {
 		t.Fatalf("got exit %d: %s", code, errOut.String())
 	}
 }
+
+// viewpoint: failure handling
+// target: hadome mutate (command line)
+// mutate never guesses a test command: without mutation.test it stops with exit code 2 and says
+// what to add.
+func TestMutateWithoutConfigurationSaysWhatToAdd(t *testing.T) {
+	base, head := writeTree(t, map[string]string{"a.txt": "a"}), writeTree(t, map[string]string{"a.txt": "a"})
+	var out, errOut bytes.Buffer
+	code := run([]string{"mutate", "--base-dir", base, "--head-dir", head}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "mutation.test") {
+		t.Fatalf("got exit %d: %s", code, errOut.String())
+	}
+}

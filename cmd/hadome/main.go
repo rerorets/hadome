@@ -13,6 +13,7 @@ import (
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/gate"
+	"github.com/rerorets/hadome/internal/mutation"
 	"github.com/rerorets/hadome/internal/rules/comments"
 	"github.com/rerorets/hadome/internal/rules/deps"
 	"github.com/rerorets/hadome/internal/rules/size"
@@ -32,7 +33,8 @@ func newEngine() *engine.Engine {
 	for _, group := range [][]engine.Rule{tests.All(), size.All(), comments.All(), deps.All(), unknown.All()} {
 		rules = append(rules, group...)
 	}
-	return &engine.Engine{Analyzer: adapter.New(), Rules: rules, Workdir: ".", Candidates: suggest.Candidates}
+	return &engine.Engine{Analyzer: adapter.New(), Rules: rules, Workdir: ".", Candidates: suggest.Candidates,
+		Elsewhere: func(rule string) bool { return rule == mutation.RuleID }}
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -43,6 +45,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return check(args[1:], stdout, stderr)
+	case "mutate":
+		return mutate(args[1:], stdout, stderr)
 	case "self-test":
 		return selfTest(stdout, stderr)
 	case "config":
@@ -78,19 +82,9 @@ func check(args []string, stdout, stderr io.Writer) int {
 	if err := fl.Parse(args); err != nil {
 		return engine.ExitConfig
 	}
-	var src engine.Source
-	switch {
-	case (*baseDir != "" || *headDir != "") && (*base != "" || *head != ""):
-		fmt.Fprintln(stderr, "hadome: compare either two revisions (--base, --head) or two directories (--base-dir, --head-dir), not both")
+	src, ok := pickSource(*base, *head, *baseDir, *headDir, stderr)
+	if !ok {
 		return engine.ExitConfig
-	case *baseDir != "" || *headDir != "":
-		src = source.Dirs{BaseDir: *baseDir, HeadDir: *headDir}
-	default:
-		rev := *base
-		if rev == "" {
-			rev = defaultBase()
-		}
-		src = source.Git{Root: ".", BaseRev: rev, HeadRev: *head}
 	}
 	e := newEngine()
 	var copies []io.Closer
@@ -119,6 +113,21 @@ func check(args []string, stdout, stderr io.Writer) int {
 		engine.WriteText(stdout, r)
 	}
 	return r.ExitCode()
+}
+
+// pickSource names the two versions: two revisions, or two directories, never both.
+func pickSource(base, head, baseDir, headDir string, stderr io.Writer) (engine.Source, bool) {
+	switch {
+	case (baseDir != "" || headDir != "") && (base != "" || head != ""):
+		fmt.Fprintln(stderr, "hadome: compare either two revisions (--base, --head) or two directories (--base-dir, --head-dir), not both")
+		return nil, false
+	case baseDir != "" || headDir != "":
+		return source.Dirs{BaseDir: baseDir, HeadDir: headDir}, true
+	}
+	if base == "" {
+		base = defaultBase()
+	}
+	return source.Git{Root: ".", BaseRev: base, HeadRev: head}, true
 }
 
 func defaultBase() string {

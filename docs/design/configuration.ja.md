@@ -82,6 +82,9 @@ files:                         # 任意。言語の慣習から外れた配置�
   tests: ["checks/**"]         # テストのファイルとして読む（Go のファイルには当てない）。変えるには人の確認が要る
   generated: ["gen/**"]        # 生成されたコードとして扱う。足すには人の確認が要る
 
+mutation:                      # 任意。hadome mutate（mutation.ja.md）
+  test: [go, test, ./...]      # 必須。テストのコマンド。推測はしない。変えるには人の確認が要る
+
 gates:                         # 任意。製品固有の門番
   - id: acme/log-append-only
     kind: finding

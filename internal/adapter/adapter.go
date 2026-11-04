@@ -71,6 +71,59 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 	return a, nil
 }
 
+// mutator is a language that makes mutants of its functions (hadome mutate).
+type mutator interface {
+	Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, error)
+}
+
+// Mutants gives each function to the language that claims its file, and returns every mutant in
+// the order of the languages, then of each language's own order. A function in a language that
+// makes no mutants is left out; Unmutated lists such languages.
+func (an Analyzer) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, error) {
+	var out []facts.Mutant
+	for _, l := range an.Languages {
+		m, ok := l.(mutator)
+		if !ok {
+			continue
+		}
+		var mine []facts.Symbol
+		for _, f := range funcs {
+			if l.Claims(f.Path) {
+				mine = append(mine, f)
+			}
+		}
+		if len(mine) == 0 {
+			continue
+		}
+		ms, err := m.Mutants(v, mine)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ms...)
+	}
+	return out, nil
+}
+
+// Unmutated returns the languages of the given functions that make no mutants yet.
+func (an Analyzer) Unmutated(funcs []facts.Symbol) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range funcs {
+		for _, l := range an.Languages {
+			if !l.Claims(f.Path) {
+				continue
+			}
+			if _, ok := l.(mutator); !ok && !seen[l.Name()] {
+				seen[l.Name()] = true
+				out = append(out, l.Name())
+			}
+			break
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func enabled(c config.Config, lang string) bool {
 	return len(c.Languages) == 0 || slices.Contains(c.Languages, lang)
 }
