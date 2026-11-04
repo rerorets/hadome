@@ -27,7 +27,43 @@ type callCount struct {
 
 func newTest(f *file, name string, at *sitter.Node) *testFacts {
 	return &testFacts{f: f, calls: map[string]*callCount{},
-		test: facts.Test{Name: name, Path: f.path, Line: line(at)}}
+		test: facts.Test{Name: name, Path: f.path, Line: line(at), Declared: declaredBefore(f, at)}}
+}
+
+// declaredBefore reads the "key: value" lines of the test's doc comment: the run of comments that
+// ends on the line right before the test, or before the attributes on it. The test is the node
+// itself, or the statement or decorated definition that holds it. extra adds lines the language
+// keeps elsewhere, such as a Python docstring.
+func declaredBefore(f *file, at *sitter.Node, extra ...string) map[string][]string {
+	n := at
+	for p := n.Parent(); p != nil && (p.Kind() == "expression_statement" || p.Kind() == "decorated_definition"); p = p.Parent() {
+		n = p
+	}
+	var lines []string
+	next := line(n)
+	for prev := n.PrevSibling(); prev != nil; prev = prev.PrevSibling() {
+		if prev.Kind() == "attribute_item" { // Rust's #[test] sits between the comment and the function
+			next = line(prev)
+			continue
+		}
+		if !strings.Contains(prev.Kind(), "comment") || endLine(prev) < next-1 {
+			break
+		}
+		lines = append(commentLines(f.text(prev)), lines...)
+		next = line(prev)
+	}
+	return facts.Declarations(append(lines, extra...))
+}
+
+// commentLines splits a comment into its lines without delimiters, including the leading * of
+// the lines of a block comment.
+func commentLines(text string) []string {
+	var out []string
+	for _, l := range strings.Split(text, "\n") {
+		l = stripDelimiters(l)
+		out = append(out, strings.TrimSpace(strings.TrimPrefix(l, "*")))
+	}
+	return out
 }
 
 // call records one call site of a target; scope is the argument where the user or tenant goes, or
