@@ -184,3 +184,20 @@ func TestSelfTestRunsTheGatesOwn(t *testing.T) {
 		t.Fatalf("a failing gate self-test must be reported: %+v", failed)
 	}
 }
+
+// viewpoint: failure handling
+// target: gate.Rules through engine.Engine.Check
+// A check runs each gate's own --self-test before using it. A gate that fails its self-test stops
+// the check, so a broken gate cannot report that nothing regressed.
+func TestACheckDoesNotUseAGateThatFailsItsSelfTest(t *testing.T) {
+	dir := script(t, "log", logGate)
+	src := trees{tree(logGateYML), tree(logGateYML, "log/append.go", "UPDATE")}
+	if r, _, err := checkWith(t, dir, src); err != nil || len(r.Regressions) != 1 {
+		t.Fatalf("a gate that passes its self-test is used: %v %+v", err, r.Regressions)
+	}
+	t.Setenv("SELF_TEST_EXIT", "1")
+	_, _, err := checkWith(t, dir, src)
+	if err == nil || !strings.Contains(err.Error(), "acme/log-append-only failed its own self-test") {
+		t.Fatalf("a gate that fails its self-test must stop the check: %v", err)
+	}
+}

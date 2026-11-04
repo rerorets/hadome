@@ -46,7 +46,8 @@ type Input struct {
 // Rule is anything the engine can run. Every rule is either a FindingRule or a MeasureRule.
 type Rule interface {
 	ID() string
-	// Cases are the rule's self-test cases. A rule without cases is not loaded.
+	// Cases are the rule's self-test cases. hadome self-test fails a rule without cases, unless the
+	// rule is a SelfTester.
 	Cases() []Case
 }
 

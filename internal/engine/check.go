@@ -51,6 +51,16 @@ func (e *Engine) Check(src Source) (Report, error) {
 		if err != nil {
 			return Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
 		}
+		// Built-in rules have their cases checked before hadome is released. Configured rules live
+		// only in the user's repository, so a check is the one place to test them before trusting
+		// what they report.
+		for _, r := range more {
+			if st, ok := r.(SelfTester); ok {
+				if err := st.SelfTest(); err != nil {
+					return Report{}, fmt.Errorf("%s failed its own self-test, so the check does not use it:\n%w", r.ID(), err)
+				}
+			}
+		}
 		rules = append(append([]Rule{}, rules...), more...)
 	}
 	base, err := e.side(bv, config.ForBase(baseCfg, headCfg), rules)

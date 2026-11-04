@@ -9,7 +9,7 @@ It does:
 - Build one rule per configured gate, with the gate's `id` as the rule ID, so markers, matching across versions and the report work unchanged
 - Run the command once per version, with the version's tree on disk as the working directory, and read its JSON answer
 - For measure gates, ask the command which missing items were removed legitimately, once per check
-- Run the command's `--self-test` for `hadome self-test`
+- Run the command's `--self-test` before `hadome check` uses the gate, and for `hadome self-test`
 
 It does not:
 

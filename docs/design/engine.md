@@ -114,7 +114,7 @@ Exit code `3` is raised once, by the change that introduces the thing to review.
 
 ## Self-tests
 
-Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates. A rule without cases is not loaded.
+Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates, and fails a rule without cases. The built-in rules' cases also run in hadome's own tests. Gates live only in the user's repository, so `hadome check` also runs a gate's self-test once before using it. If it fails, the check stops with exit code `2` without using the gate's results.
 
 ## Product-specific gates
 
@@ -250,7 +250,7 @@ The engine loads the configuration of both versions before analysing anything. A
 3. A marker without a reason never suppresses anything
 4. A rule that cannot run makes the check fail with exit code `2`, never pass
 5. The engine never writes to the repository and never opens a network connection
-6. Every loaded rule has at least one self-test case, and all cases pass in a release
+6. Every built-in rule has at least one self-test case, and all cases pass in a release. A gate is used by `check` only when its self-test passes
 
 ## Deliberately left out
 
