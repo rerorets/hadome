@@ -21,6 +21,22 @@ Only regressions fail. A finding that was already on the base branch is counted 
 
 Proved by: `hadome check` exits `0`.
 
+## Asking a person to review
+
+On `3`, a person judges what was listed. Give them what they need to judge, not the conclusion.
+
+| Write | Example |
+|---|---|
+| What hadome listed: the rule, the file, the `why` | `config/loosened`: `rules.size.params` goes from 5 to 6 |
+| Why you made that change | it reads better than grouping `judge`'s parameters into a type |
+| The other way you would take if it is not accepted, and what it costs | group the two versions and their facts into one type; two places change, `judge` and its caller |
+
+- Do not decide for the person, as in "this is fine" or "this was approved"
+- Do not go on with the work that depends on it before they answer
+- Write at least one other way you can actually take. If you see none, say so
+
+Proved by: on the person's answer, you go on if it is accepted; if not, you make the other change you wrote and `hadome check` runs again.
+
 ## Writing an exception
 
 Only when a rule truly does not apply to that line. Never to make a check pass.

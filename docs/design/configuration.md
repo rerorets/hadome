@@ -43,7 +43,7 @@ A person never has to open the specification.
 
 Agents only follow what their instructions mention. `hadome agents` prints a short block for the files agents read (`CLAUDE.md`, `AGENTS.md`, and similar). It never edits files unless asked. The command's forms are in the "`hadome agents`" section of [suggest.md](suggest.md).
 
-The block tells the agent to run hadome before finishing, what each exit code means for it (exit code `3` means stop and ask a person, never "make it pass"), never to add an exception just to pass, to link invariant tests with `guards:`, and to read `hadome explain` before changing configuration. Its exact text is in the README's quick start. `--lang ja` prints a Japanese version; the English one is the default because agents read it equally well.
+The block tells the agent to run hadome before finishing, what each exit code means for it (exit code `3` means stop and ask a person, never "make it pass"), what to write when asking on `3` (what was listed, why the change was made, and the other way if it is not accepted, but no conclusion), never to add an exception just to pass, to link invariant tests with `guards:`, and to read `hadome explain` before changing configuration. Its exact text is in the README's quick start. `--lang ja` prints a Japanese version; the English one is the default because agents read it equally well.
 
 ### A guide written for agents
 
