@@ -27,13 +27,6 @@ git push origin v1.2.0
 | Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | リポジトリ `rerorets/homebrew-tap`（コミットが1つ以上あること）と、そこだけに Contents の書き込みを許した fine-grained トークン |
 | Go | — | — | 無し。モジュールプロキシがタグを配る |
 
-### 初めて公開するときの注意
-
-- npm と crates.io の trusted publishing（トークンを使わない公開）は、パッケージが存在してからでないと設定できない。初回はトークンで公開する
-- npm は、似た名前の新しいパッケージを続けて作ると、スパム検出で 403 を返すことがある。npm のサポートに解除を頼む
-- Gradle Plugin Portal は、新しいプラグインの初回の公開を人が承認する。使えるようになるまで数日かかることがある
-- Maven Central は、公開する POM の版を見て置き場所と照合する。ワークフローは公開の直前に、POM の `${revision}` を版に書き換える
-
 ## リリースの前にパッケージを試す
 
 ```sh
