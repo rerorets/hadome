@@ -122,7 +122,7 @@ JSON のスキーマは独自の版番号を持ち、フィールドを足す形
 
 プロトコルの全体は [external-gates.ja.md](../external-gates.ja.md) にある。どの言語でもこの形で門番を書け、製品の知識は製品のリポジトリに留まる。
 
-エンジン自身はプロセスを起動しない。`Engine.ConfigRules` が head の設定から追加のルールを組み立てる。`cmd/hadome` はそこに門番のパッケージの組み立て関数を入れる（[gates.ja.md](gates.ja.md)）。エラーを返したルールは走らなかったものとして、チェックは終了コード `2` で止まる。`SelfTester` を実装したルールは事例を出す代わりに自分で自分をテストする。
+エンジン自身はプロセスを起動しない。`Engine.ConfigRules` が head の設定から追加のルールを組み立てる。`cmd/hadome` はそこに門番のパッケージの組み立て関数を入れる（[gates.ja.md](gates.ja.md)）。エラーを返したルールは走らなかったものとして、チェックは終了コード `2` で止まる。`SelfTester` を実装したルールは事例を出す代わりに自分で自分をテストする。組み込みのルールはどれも `Describer` を実装し、何を見つけるか、なぜ困るか、直し方、調整する設定のキーを `About` で返す。`hadome explain <ルールの ID>` はそれと自己テストの事例の名前を出す。見つかったものの `why` と `fix` は、見つけた中身によらない部分では `About` と同じ文を使うので、説明と出力が食い違わない。
 
 ## 型とインターフェース
 
@@ -160,6 +160,17 @@ classDiagram
   class SelfTester {
     <<interface>>
     +SelfTest() error
+  }
+  class Describer {
+    <<interface>>
+    +About() About
+  }
+  class About {
+    +Finds string
+    +Why string
+    +Fix string
+    +Keys []string
+    +Review bool
   }
   class Rule {
     <<interface>>

@@ -57,6 +57,12 @@ type notInDiagram struct{}
 
 func (notInDiagram) ID() string           { return "deps/not-in-diagram" }
 func (notInDiagram) Cases() []engine.Case { return importCases() }
+func (notInDiagram) About() engine.About {
+	return engine.About{Finds: "an import between the repository's own units that the dependency diagram does not draw",
+		Why:  "the diagram is how people and agents know what may depend on what; an import it does not draw makes it wrong",
+		Fix:  "depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews",
+		Keys: []string{"rules.deps.diagram"}}
+}
 
 // Find reports imports between the repository's units that the diagram does not draw.
 func (r notInDiagram) Find(in engine.Input) ([]engine.Finding, error) {
@@ -83,7 +89,7 @@ func (r notInDiagram) Find(in engine.Input) ([]engine.Finding, error) {
 			Rule: r.ID(), File: im.Path, Line: im.Line, Anchor: from + " -> " + to,
 			Message: "import not in the diagram: " + from + " → " + to + describe(d, a, b),
 			Why:     "the diagram (" + d.Path + ") is how people and agents know what may depend on what; an import it does not draw makes it wrong",
-			Fix:     "depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews",
+			Fix:     r.About().Fix,
 		})
 	}
 	return out, nil
@@ -104,6 +110,12 @@ type diagramStale struct{}
 
 func (diagramStale) ID() string           { return "deps/diagram-stale" }
 func (diagramStale) Cases() []engine.Case { return staleCases() }
+func (diagramStale) About() engine.About {
+	return engine.About{Finds: "a node of the dependency diagram whose label names no unit of the version",
+		Why:  "a box that names nothing makes the diagram look complete when it is not",
+		Fix:  "correct the label to the unit's directory, or remove the node",
+		Keys: []string{"rules.deps.diagram"}}
+}
 
 // Find reports nodes of the version's own diagram whose label names no unit of the version.
 func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
@@ -120,8 +132,8 @@ func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: n.Label,
 			Message: "the diagram's node " + n.ID + " names " + n.Label + ", which holds no unit",
-			Why:     "a box that names nothing makes the diagram look complete when it is not",
-			Fix:     "correct the label to the unit's directory, or remove the node",
+			Why:     r.About().Why,
+			Fix:     r.About().Fix,
 		})
 	}
 	return out, nil

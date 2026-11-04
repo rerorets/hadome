@@ -15,6 +15,11 @@ type guardsNothing struct{}
 
 func (guardsNothing) ID() string           { return "tests/guards-nothing" }
 func (guardsNothing) Cases() []engine.Case { return guardsNothingCases() }
+func (guardsNothing) About() engine.About {
+	return engine.About{Finds: "a new test that calls no code of the repository and reads none of its values",
+		Why: "the code can change in any way without this test noticing",
+		Fix: "call the code the test means to check, or delete the test if it is not needed"}
+}
 
 func (r guardsNothing) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -24,8 +29,8 @@ func (r guardsNothing) Find(in engine.Input) ([]engine.Finding, error) {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name,
 				Message: t.Name + " calls no code of this repository and reads none of its values",
-				Why:     "the code can change in any way without this test noticing",
-				Fix:     "call the code the test means to check, or delete the test if it is not needed",
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
 			})
 		}
 	}
@@ -38,6 +43,13 @@ type noAssertion struct{}
 
 func (noAssertion) ID() string           { return "tests/no-assertion" }
 func (noAssertion) Cases() []engine.Case { return noAssertionCases() }
+func (noAssertion) About() engine.About {
+	return engine.About{Finds: "a new test with no assertion, in its body or in the helpers of its test files",
+		Why: "the test passes whatever the code returns, and fails only if something panics or throws",
+		Fix: "assert on the behaviour the test means to check; if the function is an assertion hadome does not know, " +
+			"add it to rules.tests.assertions; if the test only checks that nothing throws, add an exception with the reason",
+		Keys: []string{"rules.tests.assertions"}}
+}
 
 func (r noAssertion) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -46,9 +58,8 @@ func (r noAssertion) Find(in engine.Input) ([]engine.Finding, error) {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name,
 				Message: t.Name + " checks nothing: it has no assertion",
-				Why:     "the test passes whatever the code returns, and fails only if something panics or throws",
-				Fix: "assert on the behaviour the test means to check; if the function is an assertion hadome does not know, " +
-					"add it to rules.tests.assertions; if the test only checks that nothing throws, add an exception with the reason",
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
 			})
 		}
 	}
@@ -62,6 +73,11 @@ type duplicate struct{}
 
 func (duplicate) ID() string           { return "tests/duplicate" }
 func (duplicate) Cases() []engine.Case { return duplicateCases() }
+func (duplicate) About() engine.About {
+	return engine.About{Finds: "tests with the same body, ignoring names, comments and whitespace; a new copy is a regression",
+		Why: "checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy",
+		Fix: "delete all but one, or change the input if they were meant to check different cases"}
+}
 
 func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
 	same := map[string][]facts.Test{}
@@ -88,8 +104,8 @@ func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: ts[0].Path, Line: ts[0].Line, Anchor: body, Value: len(ts),
 			Message: fmt.Sprintf("%d tests have the same body: %s", len(ts), strings.Join(where, ", ")),
-			Why:     "checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy",
-			Fix:     "delete all but one, or change the input if they were meant to check different cases",
+			Why:     r.About().Why,
+			Fix:     r.About().Fix,
 		})
 	}
 	return out, nil

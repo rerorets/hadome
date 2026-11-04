@@ -89,6 +89,8 @@ func NoMock() engine.Rule {
 	return hazardRule{
 		id: "tests/no-mock", category: facts.HazardMock, applies: testsPureUnitsOnly,
 		message: "test of pure code uses a mock",
+		finds:   "a mock in a test whose targets are all in pure units (units that touch no input or output)",
+		keys:    []string{"rules.tests.hazards.mock", "rules.tests.io"},
 		why:     "the code under test touches nothing outside; needing a mock means side effects leaked into it, and the mock hides that",
 		fix:     "move the side effect out of the unit, and test the unit with plain values",
 		cases:   noMockCases(),
@@ -101,6 +103,12 @@ type purityLost struct{}
 
 func (purityLost) ID() string           { return "tests/purity-lost" }
 func (purityLost) Cases() []engine.Case { return purityCases() }
+func (purityLost) About() engine.About {
+	return engine.About{Finds: "a unit that was pure in base and reaches input or output in head, through its imports",
+		Why:  "side effects entered code that used to take values and return values; sometimes intended, often a design slip",
+		Fix:  "if intended, a person approves it; otherwise move the side effect to a unit that is not pure and pass its results in",
+		Keys: []string{"rules.tests.io"}, Review: true}
+}
 
 func (r purityLost) Measure(in engine.Input) ([]engine.Item, error) {
 	var out []engine.Item
@@ -108,8 +116,8 @@ func (r purityLost) Measure(in engine.Input) ([]engine.Item, error) {
 		out = append(out, engine.Item{
 			Rule: r.ID(), Key: u, File: fileOf(in.Facts, u), Review: true,
 			Detail: u + " is no longer pure: it now reaches input or output through its imports",
-			Why:    "side effects entered code that used to take values and return values; sometimes intended, often a design slip",
-			Fix:    "if intended, a person approves it; otherwise move the side effect to a unit that is not pure and pass its results in",
+			Why:    r.About().Why,
+			Fix:    r.About().Fix,
 		})
 	}
 	return out, nil
