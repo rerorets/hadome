@@ -378,3 +378,54 @@ func TestGoRolesFromConfiguration(t *testing.T) {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// The five kinds of break, made only in the functions asked for, with anchors that hold no line
+// number: the same function one line lower gives the same anchors.
+func TestGoMutants(t *testing.T) {
+	const body = `func Add(a, b int) int {
+	if a < 0 && !ok() {
+		log()
+		return a + b
+	}
+	return 0
+}
+
+func ok() bool { return true }
+
+func log() {}
+
+func Name() string { return "x" + "y" }
+`
+	mutants := func(src string, line int) []facts.Mutant {
+		tree := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}, "calc/calc.go": {Data: []byte(src)}}
+		funcs := []facts.Symbol{{ID: "example.com/app/calc.Add", Kind: facts.SymbolFunction, Path: "calc/calc.go", Line: line}}
+		ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ms
+	}
+	ms := mutants("package calc\n\n"+body, 3)
+	var got []string
+	for _, m := range ms {
+		got = append(got, fmt.Sprintf("%d %s: %s -> %s", m.Line, m.Operator, m.Original, m.Replacement))
+	}
+	want := strings.Join([]string{
+		"4 flip a comparison: < -> >=",
+		"4 negate a boolean: ! -> ",
+		"5 remove a call statement: log() -> _ = 0",
+		"6 return the zero value: a + b -> 0",
+		"6 swap arithmetic: + -> -",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+	moved := mutants("package calc\n\n// Add adds.\n"+body, 4)
+	for i := range ms {
+		if i >= len(moved) || moved[i].Anchor != ms[i].Anchor {
+			t.Fatalf("moving the function changed an anchor: %v vs %v", ms, moved)
+		}
+	}
+}

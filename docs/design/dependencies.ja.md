@@ -6,6 +6,7 @@ hadome のどのユニットがどれを import してよいか。この図が�
 flowchart TB
   cmd["cmd/hadome"] --> adapter["internal/adapter"] & gate["internal/gate"] & rules["internal/rules/..."]
   cmd --> suggest["internal/suggest"] & source["internal/source"] & engine["internal/engine"] & config["internal/config"]
+  cmd --> mutation["internal/mutation"]
   adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"]
   adapter & golang & treesitter --> walk["internal/adapter/walk"]
   adapter & golang & treesitter --> engine & config & facts["internal/facts"]
@@ -14,6 +15,7 @@ flowchart TB
   rules --> engine & config & facts
   suggest --> engine & config & facts
   source --> engine
+  mutation --> engine & config & facts
   packaging["packaging/..."]
 ```
 

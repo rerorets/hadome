@@ -233,3 +233,18 @@ func Declarations(lines []string) map[string][]string {
 }
 
 var declLine = regexp.MustCompile(`^([a-z][a-z-]*):\s+(\S.*)$`)
+
+// Mutant is one small, deliberate break of a function: the bytes Start..End of the file at Path are
+// replaced by Replacement. Adapters make mutants from syntax trees and never run them.
+type Mutant struct {
+	Path        string
+	Line        int
+	Func        string // the symbol ID of the function broken
+	Operator    string // the kind of break, such as "flip a comparison"
+	Original    string // the text that is replaced
+	Replacement string
+	Start, End  int // byte offsets in the file
+	// Anchor names the mutant without a line number: the function, the kind of break, the
+	// normalised line and which of the same breaks on that line it is. Moving the function keeps it.
+	Anchor string
+}

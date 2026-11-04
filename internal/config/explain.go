@@ -209,6 +209,8 @@ func explainKey(name string, k Key) string {
 		b.WriteString("\nRaising it above the base branch's value needs a person's review (exit code 3).\n")
 	case LooserWhenAdded:
 		b.WriteString("\nAdding an entry that the base branch does not have needs a person's review (exit code 3).\n")
+	case LooserWhenLower:
+		b.WriteString("\nLowering it below the base branch's value needs a person's review (exit code 3).\n")
 	case LooserAlways:
 		b.WriteString("\nAny change, adding or removing an entry, needs a person's review (exit code 3).\n")
 	}
