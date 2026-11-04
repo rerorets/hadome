@@ -70,6 +70,7 @@ invariants:
 rules:                         # optional; only what differs from the defaults
   tests:
     io: [example.com/acme/db]  # adds to the built-in table; entries are never removed from it
+    assertions: [acme.MustEqual] # adds functions that count as assertions (tests/no-assertion); built-in ones are never removed
   size:
     file-lines: 300            # limits; raising one needs a person's review
   comments:

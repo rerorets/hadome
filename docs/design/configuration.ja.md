@@ -70,6 +70,7 @@ invariants:
 rules:                         # 任意。既定と違うものだけ
   tests:
     io: [example.com/acme/db]  # 組み込みの表に足す。表から項目を取り除くことはない
+    assertions: [acme.MustEqual] # assert とみなす関数を足す（tests/no-assertion）。組み込みの項目は消せない
   size:
     file-lines: 300            # 上限。上げるには人の確認が要る
   comments:

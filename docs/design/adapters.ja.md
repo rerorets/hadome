@@ -72,6 +72,9 @@ classDiagram
     +Declared map~string,[]string~
     +Calls []Call
     +Unresolved int
+    +Asserts int
+    +AssertsUnknown bool
+    +Body string
     +Hazards []Hazard
     +Skip Skip
   }
@@ -158,6 +161,26 @@ classDiagram
 
 これらは例で、表の全体ではない。全体の表は各アダプタにあり、設定で項目を足せる（テストが迂回してはいけない製品独自の時刻のラッパー、hadome が知らないモックのライブラリなど）。組み込みの項目を設定で消すことはできない。
 
+### 確かめる呼び出し
+
+`tests/no-assertion`（[rules-tests.ja.md](rules-tests.ja.md)）のために、アダプタはテストごとに確かめる呼び出し（assert）を数えて `Test.Asserts` に入れる。テストのファイルの中のヘルパーを通したものも数える。
+
+| 言語 | assert とみなすもの（例） |
+|---|---|
+| Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require` |
+| Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
+| TypeScript | `expect(…)`、`assert` と `assert.…` |
+| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…` |
+| Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
+
+危険の分類と同じく、これは例で、全体の表は各アダプタにある。設定の `rules.tests.assertions` で項目を足せるが、組み込みの項目は消せない。
+
+テストの道具（Go の `*testing.T`、Python の `self` など）を、アダプタが中を読めない関数に渡したときは、その中で確かめているかもしれないので `Test.AssertsUnknown` を真にする。
+
+### 本体の指紋
+
+`tests/duplicate` のために、アダプタはテストの本体の字句の並びから指紋を作り、`Test.Body` に入れる。テストの名前、コメント、空白は指紋に入れない。リテラルは値ごと入れるので、入力が1つでも違うテストは指紋も違う。
+
 ### テストが守るもの
 
 人がテストを分類することはない。テストが守るものは大部分を機械が割り出し、宣言する少しの部分はテストを書く者（たいていはエージェント）が書く。
@@ -211,6 +234,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 3. 文字列リテラルやコメントの中の文字は、コードとして報告しない（そこから危険、import、シンボルは生まれない）
 4. どのアダプタも受け持たないファイルも、役割 `other` で一覧に載る
 5. 設定は危険の項目を足せるが、組み込みの項目は消せない
+6. テストの本体の指紋は、名前、コメント、空白を変えても変わらない。リテラルを1つでも変えると変わる
 
 ## 意図して入れなかったもの
 
