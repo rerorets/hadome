@@ -49,6 +49,35 @@ hadome cannot change a user's CI settings or branch protection. Whether it is re
 3. To show how to add it to CI, `docs/` gets a GitHub Actions example with `check` and `mutate` as separate jobs
 4. To make starting easy, `hadome init` writes a `mutation` setting with a test command for the languages it found, as a comment. It never turns a guessed command on
 
+### Steps for agents
+
+`docs/for-agents.md` gains the section below. It is added in the change that implements `hadome mutate`, and not before, so that the steps never name a command that does not exist.
+
+````markdown
+## Trying mutations
+
+Only when `.hadome.yml` has `mutation`. Run it once before finishing a change, after `hadome check` exits `0`.
+
+```sh
+hadome mutate --format json
+```
+
+| Exit code | Meaning | What to do |
+|---|---|---|
+| `0` | Every way of breaking the code the change touched failed a test | Finish |
+| `1` | Some way of breaking it goes unnoticed by the tests | Add tests as each entry's `fix` in `regressions` says, and run it again |
+| `2` | The tests failed with nothing broken, or the configuration is invalid | Fix the tests first. Do not remove the `mutation` setting |
+| `3` | A person must review something (mutants beyond the limit went untried, and the like) | Stop. Tell the person what was listed |
+
+- Do not change the code to make the tests pass. `1` says the tests are not enough
+- Write `gate:allow mutation/survived reason: <reason>` only after confirming the replacement does not change behaviour (an equivalent mutant). The reason says why the result stays the same
+- Do not remove or weaken the `mutation` setting for being slow. Such a change gives `3`
+
+How to confirm: `hadome mutate` exits `0`.
+````
+
+The short version `hadome agents` prints gains one line: "when `mutation` is configured, run `hadome mutate` before finishing a change" (item 2 above).
+
 ## Shape
 
 ```mermaid
@@ -123,12 +152,27 @@ A mutant's anchor is the function's name, the kind, and the normalised original 
 
 Like the other rules, only what the change added is a regression.
 
-1. In head, run every mutant in the places to break. A caught one is done
+1. In head, run every mutant in the places to break. A caught one is done. When the configuration has `{tests}`, narrow the tests run (see "Narrowing the tests run" below)
 2. For each surviving mutant, look for a mutant with the same anchor in base
 3. If base has none (a new or rewritten line), it is a regression: no test guards the new code
 4. If base has one, run it in base too. If base caught it, it is a regression (the tests got weaker). If it survived in base as well, it is an old gap and is not reported
 
 Base runs only what survived in head, so most of the time is one run of head.
+
+### Narrowing the tests run
+
+The number of mutants depends on the size of the change, not on the number of tests. But trying each mutant runs the whole test command, so in a repository with many tests each run is long. For example, if the whole suite takes 5 minutes, 15 mutants take 75 minutes.
+
+So hadome can run only the tests that call the broken function. Which test calls which function is known from the `Test.Calls` the adapters read.
+
+1. Configuration writes `{tests}` into `test` (for example `[go, test, ./..., -run, "{tests}"]`). How test names are passed differs between languages, so hadome does not guess it
+2. For each mutant, the names of the tests that call the broken function go into `{tests}`. The names go in as they are, joined by `tests-separator` (default `|`)
+3. A mutant that survives the narrowed run is run again with `{tests}` taken out (all the tests). Only one that survives that too counts as survived
+4. A mutant with no test found calling the broken function runs with all the tests from the start
+
+Step 3 is there because `Test.Calls` can miss calls. If a test that calls the function indirectly is left out, the run with all the tests catches it, so no false survivor reaches the report. Only survivors run with all the tests, so most of the time is in the narrowed runs. With no `{tests}` in the configuration, every run uses all the tests.
+
+The command with `{tests}` taken out drops the element holding `{tests}`, and the element before it when that one is a flag (starts with `-`). In the example above it becomes `[go, test, ./...]`.
 
 A regression is reported as `mutation/survived`.
 
@@ -154,9 +198,17 @@ mutation:
   max-mutants: 100          # optional; how many mutants one run tries at most. Default: 100
 ```
 
+An example that narrows the tests:
+
+```yaml
+mutation:
+  test: [go, test, ./..., -run, "^({tests})$"]   # {tests} gets the names of the tests that call the broken function
+  tests-separator: "|"                          # optional; what joins the names. Default: "|"
+```
+
 - Before breaking anything, the test command runs once in head. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
 - A timeout counts as caught: a mutant that made the tests stop finishing did not let them pass
-- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review
+- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` is changing `test`
 
 ## Invariants
 
@@ -165,6 +217,7 @@ mutation:
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
 5. Mutants that could not be tried (beyond the limit) are reported, never passed silently
+6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
 
 ## Deliberately left out
 
@@ -172,6 +225,8 @@ mutation:
 - Caching results. A different pair of versions gives different results, so it starts without one
 - A mode that breaks the whole repository. Add it when nightly CI or the like wants one
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
+- Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
+- Agent hooks (settings that run `hadome mutate` when an agent finishes its work). They would depend on a particular agent product. Agents are told through the `hadome agents` block, and CI makes it required
 
 ## To decide
 
