@@ -15,7 +15,7 @@ const usage = `usage:
   hadome self-test                                  run every rule's self-test cases
   hadome config check                               validate .hadome.yml without running any rule
   hadome schema                                     print the JSON Schema of .hadome.yml
-  hadome explain <key or value>                     describe one configuration key or value
+  hadome explain <rule, key or value>               describe one rule, configuration key or value
   hadome suggest                                    print invariant candidates as configuration to paste
   hadome agents [--lang en|ja] [--write FILE...]    print, or write into each FILE, the block that tells agents about hadome
   hadome init                                       write a minimal .hadome.yml (never overwrites)
