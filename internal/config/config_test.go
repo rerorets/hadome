@@ -368,3 +368,39 @@ func TestTheTodoFormIsARegularExpressionAndChangingItNeedsReview(t *testing.T) {
 		t.Errorf("an invalid regular expression is an error: %v", es)
 	}
 }
+
+// An error names how to write what is wrong, so every key in the specification carries an example.
+func TestEveryKeyHasAnExample(t *testing.T) {
+	var walk func(k Key, path string)
+	walk = func(k Key, path string) {
+		if exampleOf(k) == "" {
+			t.Errorf("%s has no example", displayPath(path))
+		}
+		if k.Kind == KindList && k.Elem != nil {
+			k = *k.Elem
+		}
+		fields := k.Fields
+		for _, v := range k.Variants {
+			fields = append(fields, v.Fields...)
+		}
+		for _, f := range fields {
+			walk(f, joinPath(path, f.Name))
+		}
+	}
+	walk(Spec, "")
+}
+
+// A misspelt key shows the example of the key it most likely meant; an unrelated one shows how the
+// enclosing mapping is written.
+func TestAMisspeltKeyShowsTheExampleOfTheKeyItMeant(t *testing.T) {
+	es := loadErrors(t, "schema: 1\ninvariant: []\nzzz: 1\n", t.TempDir())
+	if len(es) != 2 {
+		t.Fatalf("want two errors, got %v", es)
+	}
+	if !strings.HasPrefix(es[0].Example, "invariants:") {
+		t.Errorf("a near miss shows how invariants is written: %q", es[0].Example)
+	}
+	if !strings.HasPrefix(es[1].Example, "schema: 1") {
+		t.Errorf("an unrelated key shows how the file is written: %q", es[1].Example)
+	}
+}

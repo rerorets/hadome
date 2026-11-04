@@ -245,15 +245,16 @@ var sizeKey = Key{
 }
 
 // Spec is the specification of `.hadome.yml`.
-var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml` at the repository root.", Fields: []Key{
-	{Name: "schema", Kind: KindInt, Required: true, Allowed: SchemaVersions,
-		Doc: "The configuration format version.", Example: "schema: 1"},
-	stringList("extends", "Local files whose settings this file builds on, relative to this file. Later layers add to or "+
-		"override earlier ones. Never a URL.", "extends: [../shared/hadome.yml]", LooserNever),
-	{Name: "languages", Kind: KindList, Looser: LooserWhenRemoved, OmittedIsWidest: true,
-		Elem: &Key{Kind: KindString, Allowed: Languages},
-		Doc:  "Languages to check. Detected when omitted.", Example: "languages: [go, typescript]"},
-	invariantKey,
-	rulesKey,
-	gateKey,
-}}
+var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml` at the repository root.",
+	Example: "schema: 1\nlanguages: [go]", Fields: []Key{
+		{Name: "schema", Kind: KindInt, Required: true, Allowed: SchemaVersions,
+			Doc: "The configuration format version.", Example: "schema: 1"},
+		stringList("extends", "Local files whose settings this file builds on, relative to this file. Later layers add to or "+
+			"override earlier ones. Never a URL.", "extends: [../shared/hadome.yml]", LooserNever),
+		{Name: "languages", Kind: KindList, Looser: LooserWhenRemoved, OmittedIsWidest: true,
+			Elem: &Key{Kind: KindString, Allowed: Languages},
+			Doc:  "Languages to check. Detected when omitted.", Example: "languages: [go, typescript]"},
+		invariantKey,
+		rulesKey,
+		gateKey,
+	}}
