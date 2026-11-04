@@ -256,12 +256,6 @@ The engine loads the configuration of both versions before analysing anything. A
 
 - Language adapters and the contents of `facts.Analysis` (separate design)
 - The individual rules (separate designs per group)
-- Mutation-based scope (later)
-- Caching and parallel execution (add when measured to be needed)
+- Mutation-based scope (a separate command, outside the engine)
+- Caching and parallel execution
 - Fixing findings automatically
-
-## Decisions
-
-1. Colliding fingerprints are matched by count: head may have as many as base without regressing
-2. New exceptions return exit code `3` (needs review), not a failure and not a silent pass. Only exceptions new in the change are reported; ones already in base never are
-3. External-command gates run once per version, so a gate author only analyses one tree

@@ -90,7 +90,7 @@ hadome decides purity from imports, on every check:
 
 ## Tests that are not needed
 
-Adding tests does not always widen what they guard. These three rules stop tests that check nothing and tests that copy another. Like every rule, they report only what a change adds, never what the base already has. Skipped tests are left out.
+Adding tests does not always widen what they guard. These three rules stop tests that check nothing and tests that copy another. Like every rule, they report only what a change adds, never what the base already has. Skipped tests are left out. Only what is certain becomes a regression: a call that cannot be identified, a read of a product value, or a testing handle passed to a function that cannot be read means the test is not reported.
 
 ### `tests/guards-nothing`
 
@@ -133,8 +133,6 @@ A test counts only when it is active: skipped tests (with or without a reason) d
 - **Cleanup passes**: merging duplicate tests, deleting tests that guard nothing new, moving or renaming tests — the set of guarded targets is unchanged
 - **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable
 
-When mutation analysis arrives, the items become "breakages the tests catch", and this rule tells regressions apart more finely than now, without changing its name or its meaning.
-
 ### Which tests guard an invariant
 
 hadome finds which tests guard which invariant, so people and agents rarely need to write it.
@@ -162,7 +160,7 @@ A configured target names a symbol by its unit and name, the way code calls it (
 
 A declaration is one line of the test's doc comment, `guards: <invariant>`, where `<invariant>` is written the way `hadome explain` and the messages name it: the `id` of a product-specific invariant, or `<type> <target>` (`<type> <a>,<b>` for several targets).
 
-A test that only calls the target twice by coincidence is counted as a guard. This miscount is accepted because no declaration is needed. Mutation analysis later replaces shape with "does the test actually fail when the invariant is broken".
+A test that only calls the target twice by coincidence is counted as a guard. This miscount is accepted in exchange for needing no declaration.
 
 ### `tests/invariant-unguarded`
 
@@ -172,7 +170,7 @@ A test that only calls the target twice by coincidence is counted as a guard. Th
 - The anchor is the invariant, so the finding is matched across versions however tests move
 - Because it is compared with base, enabling a new invariant without a test is a regression; an invariant that was already unguarded in base does not block
 - Losing a guard gives the same finding. When the last guarding test is deleted, skipped, stops fitting the shape or loses its `guards:` line, the invariant becomes unguarded in head while it was guarded in base: a new finding, so a regression. Moving the guard to another test changes nothing, because the invariant stays guarded
-- Removing the invariant itself from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because whether to drop an invariant is for a person to decide
+- Removing the invariant itself from configuration is not this rule's business: it is `config/loosened` and returns exit code `3`, because whether to drop an invariant is for a person to decide. Only the change that removes it returns `3`: once that change is on the base branch, the invariant is simply absent and later changes return `0`
 
 A separate measure rule over (invariant, guarding test) pairs would fire in exactly the same situations, so there is none.
 
@@ -214,16 +212,8 @@ Each rule ships with at least these cases.
 
 ## Deliberately left out
 
-- Checking that a test is *correct*. Only mutation analysis gets close, and it comes later
-- `tests/no-network` (reserved): calling real external services from tests (decision 3)
+- Checking that a test is *correct*. Only mutation analysis gets close, and it sits outside the `tests/` rules
+- A rule that stops tests from calling real external services (`tests/no-network`). The adapters cannot identify such calls, so it cannot be stopped in a way that is certain
 - Test speed (belongs to a separate rule group with its own design)
-- Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect. Once mutation analysis arrives, such a test is one that catches no new breakage
+- Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect.
 - Treating tests that call the same way (the same targets, times and scopes) as duplicates. Legitimate tests that differ only in input, such as `TestAddPositive` and `TestAddNegative`, would be caught
-
-## Decisions
-
-1. Purity is decided by hadome from imports on every check; `tests/no-mock` needs no configuration. A unit that stops being pure returns exit code `3`. Invariant candidates appear in `hadome check` output as information
-2. Guarding tests of built-in invariant types with a shape are found automatically; `guards:` is needed only for product-specific invariants and for types without a shape. There is no separate `tests/guard-shape` rule
-3. `tests/no-network` is reserved: tests must not talk to real external services. It is added when adapters can identify such calls
-4. Removing an invariant from configuration returns exit code `3`, once, in the change that removes it. After that change reaches the base branch, the invariant is simply absent and later changes return `0`. The same holds for every exit-code-`3` situation
-5. Only what can be said for certain makes an unneeded test a regression: it calls no product code, it has no assertion, or its body is the same as another's. A call that cannot be identified, a product value the test reads, or a testing handle passed to a function that cannot be read, means no report

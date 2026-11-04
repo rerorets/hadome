@@ -160,7 +160,7 @@ Rules about how tests are written work on categories, not API names. Each adapte
 
 Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a hazard category. They are extracted as `Skip`, with their reason and condition. `tests/skip-without-reason` fails only skips without a reason.
 
-These lists are examples, not the full tables. The full tables live in each adapter, and configuration can add entries (a product's own clock wrapper that tests must not bypass, a mocking library hadome does not know). Configuration cannot remove built-in entries.
+These lists are examples, not the full tables. The full tables live in each adapter, and configuration can add entries (a product's own clock wrapper that tests must not bypass, a mocking library hadome does not know). Configuration cannot remove built-in entries. If it could, editing configuration alone could switch a rule off without any review by a person. A place where a built-in entry truly does not apply gets a reasoned exception, which goes to a person for review (exit code `3`).
 
 ### Assertions
 
@@ -218,7 +218,7 @@ People never classify tests. What a test guards is mostly worked out by machine,
 | Piece | Who provides it | How |
 |---|---|---|
 | Target (the entry point the test exercises) | Inferred by the adapter | The public functions and methods the test body calls in non-test code, each as a `Call` with how many times it is called and with how many distinct scopes (the argument where the user or tenant goes; [rules-tests.md](rules-tests.md) defines both). When the call target cannot be identified (a method on a value whose type is unknown, a variable holding a function, a function of a package that could not be read), it is `unknown`. A declaration overrides the inference only when it is wrong |
-| Viewpoint | Not declared | Hard to infer and costly to write. The guarded scope is the set of inferred targets until mutation analysis replaces it |
+| Viewpoint | Not declared | Hard to infer and costly to write. The guarded scope is the set of inferred targets |
 | Invariant link | Mostly inferred from the shape of the test's calls. The test's author writes one line only for product-specific invariants and for types without a shape | `guards: <invariant>` in the doc comment |
 
 ```go
@@ -253,7 +253,9 @@ Each fact also records how it was read. This is for diagnostics only and does no
 | Go | The standard library's parser (`go/parser`, `go/ast`). No C dependency |
 | TypeScript, Python, Rust, Java, Kotlin | tree-sitter grammars |
 
-Full parsers are used for every language because what users get (accurate function spans, test boundaries, annotations and imports, and few `unknown` facts) was put ahead of how easy hadome is to build. The extra work this brings (a C dependency for tree-sitter, and builds per operating system and architecture) is taken on by the release process, not by users. See [distribution.md](distribution.md).
+There is no tokenizer shared across languages. Each language is read with its own parser.
+
+Full parsers are used for every language because what users get (accurate function spans, test boundaries, annotations and imports, and few `unknown` facts) comes ahead of how easy hadome is to build. The extra work this brings (a C dependency for tree-sitter, and builds per operating system and architecture) is taken on by the release process, not by users. See [distribution.md](distribution.md).
 
 `unknown` still exists: some things cannot be identified even with a parser (the contents of Rust macros, dynamic imports).
 
@@ -272,10 +274,3 @@ Full parsers are used for every language because what users get (accurate functi
 - Type information (what a call resolves to across files). Rules work on syntax only
 - Mutation analysis
 - Languages beyond the six
-
-## Decisions
-
-1. Whether a fact can block depends on whether it was identified, not on how it was read. Unidentified facts are reported; a change that adds them returns exit code `3`
-2. Go is read with the standard library's parser; the other five languages with tree-sitter. No shared tokenizer
-3. Targets are inferred, viewpoints are not declared, and only tests that guard a product-specific invariant or one of the types without a shape carry a declaration (`guards:`)
-4. Configuration can add hazard entries but never remove built-in ones. A place where a built-in entry truly does not apply gets a reasoned exception, which goes to a person for review (exit code `3`). If configuration could remove them, editing configuration alone could switch a rule off without any review by a person

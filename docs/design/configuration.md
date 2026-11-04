@@ -27,7 +27,7 @@ A person never has to open the specification.
 - `hadome schema` prints the JSON Schema of `.hadome.yml` for the installed version
 - The same schema is published in this repository (`schema/hadome.schema.json`) and versioned with hadome
 - Editors pick it up for completion and validation
-- The reference documentation is generated from the schema, never written separately, so the two cannot drift
+- The key descriptions `hadome explain` prints come from the same table of keys as the schema (`config.Spec`). They are never written separately, so the two cannot drift
 
 ### Strict validation
 
@@ -129,7 +129,7 @@ If base's configuration is invalid, the check returns `2` rather than guessing: 
 
 ## Package shape
 
-One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions, a description and an example. Everything else is generated from it, which is how the schema, the reference documentation, `explain` and the validation messages stay in agreement.
+One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions, a description and an example. Everything else is generated from it, which is how the schema, `explain` and the validation messages stay in agreement.
 
 ```mermaid
 classDiagram
@@ -234,16 +234,11 @@ classDiagram
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration
 - `Diff(base, head)` lists changed entries; the engine turns the looser ones into `config/loosened` reviews. Omitting a key marked `OmittedIsWidest` never counts as loosening, because omitting it covers everything
 
-## Decisions
-
-1. People are guided, never required to configure: `hadome check` works with no file, `hadome init` is an optional shortcut, `hadome suggest` proposes invariants to accept
-2. Agents get a strict contract: a published, versioned JSON Schema, generated reference docs, `hadome explain`, strict validation with fix-oriented errors, and a guide written for agents
-
 ## Invariants
 
 1. With no configuration file, hadome runs and its result is meaningful
 2. A configuration that does not match the schema never runs a check (exit code `2`)
-3. The schema, the reference documentation and `hadome explain` always agree, because the latter two are generated from the first
+3. The schema and the key descriptions of `hadome explain` always agree, because both come from the same table of keys
 4. hadome never reads configuration from the network
 5. A change cannot loosen the rules that judge it without a person's review (exit code `3`)
 
