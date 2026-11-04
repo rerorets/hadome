@@ -261,6 +261,16 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 	case "method_invocation":
 		w.invoke(n, f.field(n, "object"), f.field(n, "name"), named(n.ChildByFieldName("arguments")),
 			func(body *sitter.Node) { w.walk(body, javaLoops, w.javaVisit) })
+	case "identifier": // a name in a type is a type_identifier, never an identifier
+		if _, ok := w.jf.names[f.text(n)]; ok {
+			w.t.readName(n, javaUses)
+		}
 	}
 	return true
+}
+
+var javaUses = useGrammar{
+	members: map[string]string{"field_access": "object"},
+	names:   map[string]string{"field_access": "field"},
+	callees: map[string][]string{"method_invocation": {"object", "name"}},
 }

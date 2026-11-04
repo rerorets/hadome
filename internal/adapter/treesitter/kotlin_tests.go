@@ -18,6 +18,9 @@ func (k *kotlin) tests(f *file, t *tables) []facts.Test {
 	for _, fn := range k.functions[f.unit] {
 		jf.names[fn] = f.unit + "." + fn
 	}
+	for _, v := range k.values[f.unit] {
+		jf.names[v] = f.unit + "." + v
+	}
 	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
 	var out []facts.Test
 	for _, n := range named(f.root) {
@@ -120,8 +123,19 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 		w.ktProperty(n)
 	case "call_expression":
 		w.ktCall(n)
+	case "identifier":
+		if _, ok := w.jf.names[w.jf.f.text(n)]; ok {
+			w.t.readName(n, ktUses)
+		}
 	}
 	return true
+}
+
+var ktUses = useGrammar{
+	members: map[string]string{"navigation_expression": ""},
+	names:   map[string]string{"navigation_expression": "-"},
+	callees: map[string][]string{"call_expression": {""}},
+	types:   set("user_type", "type_arguments"),
 }
 
 // ktProperty records a local variable, typed when a constructor of a known class builds it.

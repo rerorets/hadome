@@ -35,7 +35,7 @@ func (r *rust) items(f *file, body *sitter.Node, prefix string) []facts.Symbol {
 		name := f.field(c, "name")
 		typ := facts.Symbol{ID: prefix + "." + name, Kind: facts.SymbolType, Path: f.path, Line: line(c), EndLine: endLine(c),
 			Exported: rustPub(f, c), Doc: rustDoc(f, c)}
-		if prefix == f.unit && (c.Kind() == "function_item" || rustTypes[c.Kind()] || c.Kind() == "trait_item") {
+		if prefix == f.unit && (c.Kind() == "function_item" || rustTypes[c.Kind()] || c.Kind() == "trait_item" || c.Kind() == "const_item" || c.Kind() == "static_item") {
 			r.defs[prefix] = append(r.defs[prefix], name)
 		}
 		switch {

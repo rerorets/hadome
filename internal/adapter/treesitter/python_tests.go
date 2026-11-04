@@ -25,6 +25,7 @@ var (
 	pySkips = set("pytest.mark.skip", "pytest.mark.skipif", "unittest.skip", "unittest.skipIf", "unittest.skipUnless",
 		"skip", "skipIf", "skipUnless", "pytest.skip")
 	pyLoops      = set("for_statement", "while_statement")
+	pyUses       = useGrammar{members: map[string]string{"attribute": "object"}, names: map[string]string{"attribute": "attribute"}, callees: map[string][]string{"call": {"function"}}, types: set("type")}
 	pyConditions = set("if_statement", "elif_clause", "else_clause", "try_statement", "except_clause", "match_statement")
 )
 
@@ -181,6 +182,12 @@ func (w *pyWalk) visit(n *sitter.Node) bool {
 		}
 	case "call":
 		w.call(n)
+	case "identifier":
+		if _, ok := w.pf.names[f.text(n)]; ok {
+			w.t.readName(n, pyUses)
+		} else if _, ok := w.pf.spaces[f.text(n)]; ok {
+			w.t.readName(n, pyUses)
+		}
 	}
 	return true
 }

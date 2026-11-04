@@ -100,3 +100,56 @@ func (t *testFacts) body(n *sitter.Node, isLoop func(*sitter.Node) bool, visit f
 		return visit(c)
 	})
 }
+
+// useGrammar says how a language writes the use of a name, so that a read can be told from a call
+// and from a type.
+type useGrammar struct {
+	members map[string]string   // kind of a member access -> field holding its object ("" = first named child)
+	names   map[string]string   // kind of a member access -> field holding the member's name ("-" = last named child)
+	callees map[string][]string // kind of a call -> fields holding what it calls ("" = first named child)
+	types   map[string]bool     // kinds that hold a type; names inside them are never read
+}
+
+// readName counts n, an identifier naming product code, as a read unless it is being called or it
+// sits in a type. A.b.c is one use: it is a call only when the whole of it is called.
+func (t *testFacts) readName(n *sitter.Node, g useGrammar) {
+	if p := n.Parent(); p != nil {
+		if field, ok := g.names[p.Kind()]; ok && isField(p, field, n) {
+			return // the member side of a.b: a decides what b is
+		}
+	}
+	use := n
+	for p := use.Parent(); p != nil; p = p.Parent() {
+		field, ok := g.members[p.Kind()]
+		if !ok || !isField(p, field, use) {
+			break
+		}
+		use = p
+	}
+	if p := use.Parent(); p != nil {
+		for _, field := range g.callees[p.Kind()] {
+			if isField(p, field, use) {
+				return
+			}
+		}
+	}
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if g.types[p.Kind()] {
+			return
+		}
+	}
+	t.test.Reads++
+}
+
+func isField(p *sitter.Node, field string, c *sitter.Node) bool {
+	var got *sitter.Node
+	switch {
+	case field == "" && p.NamedChildCount() > 0:
+		got = p.NamedChild(0)
+	case field == "-" && p.NamedChildCount() > 0:
+		got = p.NamedChild(p.NamedChildCount() - 1)
+	case field != "" && field != "-":
+		got = p.ChildByFieldName(field)
+	}
+	return got != nil && got.Id() == c.Id()
+}

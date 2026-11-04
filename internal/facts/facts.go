@@ -134,6 +134,9 @@ type Test struct {
 	Calls []Call
 	// Unresolved counts calls whose target could not be identified.
 	Unresolved int
+	// Reads counts uses of product values that are not calls: a constant, a variable, or a function
+	// passed as a value. Names in type positions are not values.
+	Reads int
 	// Declared holds the "key: value" lines of the test's doc comment, values by key, in order.
 	Declared map[string][]string
 }

@@ -17,6 +17,7 @@ import (
 type kotlin struct {
 	jvm
 	functions map[string][]string // package -> top-level functions of product code
+	values    map[string][]string // package -> top-level properties of product code
 }
 
 func (*kotlin) grammar() *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
@@ -36,9 +37,10 @@ var ktTypes = set("class_declaration", "object_declaration")
 func (k *kotlin) index(_ engine.Version, files []*file) {
 	k.reset()
 	k.functions = map[string][]string{}
+	k.values = map[string][]string{}
 	for _, f := range files {
 		pkg := ""
-		var classes, functions []string
+		var classes, functions, values []string
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_header" && n.NamedChildCount() > 0:
@@ -47,11 +49,18 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 				classes = append(classes, f.field(n, "name"))
 			case n.Kind() == "function_declaration":
 				functions = append(functions, f.field(n, "name"))
+			case n.Kind() == "property_declaration":
+				for _, c := range named(n) {
+					if c.Kind() == "variable_declaration" && c.NamedChildCount() > 0 {
+						values = append(values, f.text(c.NamedChild(0)))
+					}
+				}
 			}
 		}
 		k.place(f, pkg, classes)
 		if !f.test {
 			k.functions[f.unit] = append(k.functions[f.unit], functions...)
+			k.values[f.unit] = append(k.values[f.unit], values...)
 		}
 	}
 }
