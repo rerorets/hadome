@@ -113,6 +113,7 @@ hadome agents --write CLAUDE.md
 
 Writes a block on how to use hadome into the file your agents read. Any other file, such as `AGENTS.md`, works too.
 
+- The path is relative to the current directory. Run it at the root of the repository.
 - The file is created if it is missing. Later runs update the same block.
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
