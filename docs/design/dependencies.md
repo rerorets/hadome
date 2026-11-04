@@ -1,6 +1,6 @@
 # Dependencies
 
-Which of hadome's units may import which. This diagram is the source of truth: hadome checks itself against it (`rules.deps.diagram` in [.hadome.yml](../.hadome.yml)), so an import it does not draw fails, and drawing a new arrow needs review.
+Which of hadome's units may import which. This diagram is the source of truth: hadome checks itself against it (`rules.deps.diagram` in [.hadome.yml](../../.hadome.yml)), so an import it does not draw fails, and drawing a new arrow needs review.
 
 ```mermaid
 flowchart TB

@@ -3,7 +3,7 @@ schema: 1
 
 rules:
   deps:
-    diagram: docs/dependencies.md
+    diagram: docs/design/dependencies.md
 
 # The promises hadome keeps. Each is guarded by a test whose doc comment says `guards: <id>`.
 invariants:

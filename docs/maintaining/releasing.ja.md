@@ -1,6 +1,6 @@
 # リリース
 
-リリースはタグだ。それ以外はすべて `release` ワークフロー（[.github/workflows/release.yml](../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](design/distribution.ja.md) にある。
+リリースはタグだ。それ以外はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
 
 ```sh
 git tag v1.2.0

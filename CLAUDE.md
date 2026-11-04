@@ -21,9 +21,9 @@ hadome (歯止め) is a ratcheting checker: it compares a change against the mai
 | Product configuration | Thresholds, dependency diagram, invariant list, enabled rules | each user's repository |
 | Product-specific gates | Anything a single product needs | each user's repository, using the same interface |
 
-Distributed as a single Go binary, through six ecosystems (`packaging/`, [docs/releasing.md](docs/releasing.md)).
+Distributed as a single Go binary, through six ecosystems (`packaging/`, [docs/maintaining/releasing.md](docs/maintaining/releasing.md)).
 
-hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs/dependencies.md](docs/dependencies.md) is the diagram its imports must follow. A new package or import starts there.
+hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs/design/dependencies.md](docs/design/dependencies.md) is the diagram its imports must follow. A new package or import starts there.
 
 ## Writing
 

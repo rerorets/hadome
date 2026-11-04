@@ -21,9 +21,9 @@ hadome（歯止め）はラチェット式のチェッカー。変更を main �
 | 製品の設定 | 上限、依存の図、不変条件の一覧、有効にするルール | 利用者のリポジトリ |
 | 製品固有の門番 | 1つの製品だけが必要とするもの | 利用者のリポジトリ。同じインターフェースで書く |
 
-1つの Go バイナリとして、6つのエコシステムから配る（`packaging/`、[docs/releasing.ja.md](docs/releasing.ja.md)）。
+1つの Go バイナリとして、6つのエコシステムから配る（`packaging/`、[docs/maintaining/releasing.ja.md](docs/maintaining/releasing.ja.md)）。
 
-hadome は自分自身も検査する。[.hadome.yml](.hadome.yml) に不変条件があり、[docs/dependencies.ja.md](docs/dependencies.ja.md) が import の従う図。新しいパッケージや import はそこから始める。
+hadome は自分自身も検査する。[.hadome.yml](.hadome.yml) に不変条件があり、[docs/design/dependencies.ja.md](docs/design/dependencies.ja.md) が import の従う図。新しいパッケージや import はそこから始める。
 
 ## 書き方
 
