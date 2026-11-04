@@ -27,7 +27,7 @@ func (j *jvm) reset() {
 
 // place sets a file's unit from its package declaration, and records the package and its classes.
 func (j *jvm) place(f *file, pkg string, classes []string) {
-	f.test = jvmTestDir.MatchString(f.path)
+	f.test = jvmTestDir.MatchString(f.path) || f.testGlob
 	f.unitPath = path.Dir(f.path)
 	f.unit = pkg
 	if pkg == "" {

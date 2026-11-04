@@ -38,6 +38,9 @@ const (
 	// LooserWhenAdded means adding an entry loosens the rules: the entries excuse something, such as
 	// functions that count as assertions.
 	LooserWhenAdded
+	// LooserAlways means any change of the entries, adding or removing one, may loosen the rules:
+	// the entries move what the rules cover in both directions, such as which files are tests.
+	LooserAlways
 )
 
 // Value is one allowed value of a key, with what it means.
@@ -65,6 +68,7 @@ type Key struct {
 	Allowed  []Value // for strings and ints; empty means any
 	Pattern  string  // for strings; a regular expression the whole value must match
 	Regexp   bool    // for strings: the value is itself a regular expression and must compile
+	Glob     bool    // for strings: the value is a path glob (MatchesAny) and must be well formed
 	Default  any     // for ints and strings: the value when the key is omitted
 	Min      int     // for ints: the smallest value accepted
 	MinItems int     // for lists
@@ -109,9 +113,16 @@ var Languages = []Value{
 	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"},
 }
 
-func stringList(name, doc, example string, looser Direction) Key {
-	return Key{Name: name, Kind: KindList, Doc: doc, Example: example, Looser: looser, Elem: &Key{Kind: KindString}}
+func stringList(name, doc, example string, looser Direction, elem ...Key) Key {
+	e := Key{Kind: KindString}
+	if len(elem) > 0 {
+		e = elem[0]
+	}
+	return Key{Name: name, Kind: KindList, Doc: doc, Example: example, Looser: looser, Elem: &e}
 }
+
+// globs is the entry of a list of path globs.
+var globs = Key{Kind: KindString, Glob: true}
 
 // addedEntries is a list that adds entries to a built-in table. Removing one later loosens the check.
 func addedEntries(name, what, example string) Key {
@@ -167,7 +178,7 @@ var gateKey = Key{
 			Doc: "The command and its arguments. A command containing / is a path from the repository root; " +
 				"otherwise it is looked up on PATH. It runs in the root of the version being checked.",
 			Example: "run: [scripts/gates/log-append-only]"},
-		{Name: "paths", Kind: KindList, Elem: &Key{Kind: KindString},
+		{Name: "paths", Kind: KindList, Elem: &globs,
 			Doc: "Globs of the files passed to the gate; * stays within one path element, ** spans any number. " +
 				"Omitted: every file.", Example: `paths: ["internal/store/log/**"]`},
 		{Name: "timeout", Kind: KindString, Pattern: `^[0-9]+(ms|s|m)$`,
@@ -256,5 +267,19 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 			Doc:  "Languages to check. Detected when omitted.", Example: "languages: [go, typescript]"},
 		invariantKey,
 		rulesKey,
+		filesKey,
 		gateKey,
+	}}
+
+// filesKey gives files roles that the languages' conventions and headers do not.
+var filesKey = Key{Name: "files", Kind: KindObject,
+	Doc:     "Roles for files laid out against the languages' conventions. Globs only add a role; `**` is directories at any depth.",
+	Example: "files:\n  tests: [\"checks/**\"]\n  generated: [\"gen/**\"]",
+	Fields: []Key{
+		stringList("tests", "Globs of files read as test files, in every language but Go: the Go compiler decides what a Go test is (_test.go). "+
+			"Which files are tests moves what the rules cover both ways, so any change needs review.",
+			`tests: ["checks/**"]`, LooserAlways, globs),
+		stringList("generated", "Globs of files treated as generated code, which the size and comment rules skip. A file matching "+
+			"both lists is generated. Adding an entry takes files out of those rules, so it needs review.",
+			`generated: ["gen/**"]`, LooserWhenAdded, globs),
 	}}

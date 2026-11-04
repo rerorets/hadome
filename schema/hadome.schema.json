@@ -11,6 +11,27 @@
       },
       "type": "array"
     },
+    "files": {
+      "additionalProperties": false,
+      "description": "Roles for files laid out against the languages' conventions. Globs only add a role; `**` is directories at any depth.",
+      "properties": {
+        "generated": {
+          "description": "Globs of files treated as generated code, which the size and comment rules skip. A file matching both lists is generated. Adding an entry takes files out of those rules, so it needs review.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tests": {
+          "description": "Globs of files read as test files, in every language but Go: the Go compiler decides what a Go test is (_test.go). Which files are tests moves what the rules cover both ways, so any change needs review.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "gates": {
       "description": "Product-specific gates: external commands that look at one version and report findings or items as JSON. Removing or changing one needs a person's review.",
       "items": {

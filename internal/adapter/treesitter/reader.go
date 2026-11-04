@@ -16,12 +16,14 @@ import (
 
 // file is one parsed file.
 type file struct {
-	path     string
-	src      []byte
-	root     *sitter.Node
-	test     bool   // a test file: every function in it is test code
-	unit     string // the unit's ID, as imports name it
-	unitPath string // the unit's location, as diagrams name it
+	path string
+	src  []byte
+	root *sitter.Node
+	test bool // a test file: every function in it is test code
+	// testGlob and generatedGlob are set from configuration before the language indexes the file.
+	testGlob, generatedGlob bool
+	unit                    string // the unit's ID, as imports name it
+	unitPath                string // the unit's location, as diagrams name it
 }
 
 func (f *file) text(n *sitter.Node) string { return n.Utf8Text(f.src) }
@@ -71,7 +73,9 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		}
 		tree := parser.Parse(src, nil)
 		defer tree.Close()
-		files = append(files, &file{path: p, src: src, root: tree.RootNode()})
+		gen := config.MatchesAny(c.GeneratedFiles, p)
+		files = append(files, &file{path: p, src: src, root: tree.RootNode(),
+			testGlob: !gen && config.MatchesAny(c.TestFiles, p), generatedGlob: gen})
 	}
 	l.r.index(v, files)
 	t := l.tables.with(c)
@@ -83,7 +87,7 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		switch {
 		case f.test:
 			role = facts.RoleTest
-		case generated(cs):
+		case f.generatedGlob || generated(cs):
 			role = facts.RoleGenerated
 		}
 		a.Files = append(a.Files, facts.File{Path: f.path, Language: l.name, Role: role,

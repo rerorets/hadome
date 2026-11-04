@@ -404,3 +404,35 @@ func TestAMisspeltKeyShowsTheExampleOfTheKeyItMeant(t *testing.T) {
 		t.Errorf("an unrelated key shows how the file is written: %q", es[1].Example)
 	}
 }
+
+// Which files are tests moves what the rules cover both ways, so adding and removing a glob both
+// need review; a generated glob takes files out of rules, so only adding one does.
+func TestFileRolesLoosen(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	tests := mustLoad(t, "schema: 1\nfiles:\n  tests: [\"checks/**\"]\n", dir)
+	gen := mustLoad(t, "schema: 1\nfiles:\n  generated: [\"gen/**\"]\n", dir)
+	if got := looser(Diff(none, tests)); len(got) != 1 {
+		t.Errorf("adding a test glob: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(tests, none)); len(got) != 1 {
+		t.Errorf("removing a test glob: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(none, gen)); len(got) != 1 {
+		t.Errorf("adding a generated glob: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(gen, none)); len(got) != 0 {
+		t.Errorf("removing a generated glob: want none, got %v", got)
+	}
+	if !MatchesAny(tests.TestFiles, "checks/a/b.py") || MatchesAny(tests.TestFiles, "src/checks.py") {
+		t.Errorf("checks/** matches everything under checks/ and nothing else: %v", tests.TestFiles)
+	}
+}
+
+// A glob path.Match cannot read would match nothing without a word, so it is a configuration error.
+func TestAMalformedGlobIsAnError(t *testing.T) {
+	es := loadErrors(t, "schema: 1\nfiles:\n  generated: [\"gen/[a\"]\n", t.TempDir())
+	if len(es) != 1 || !strings.Contains(es[0].Problem, "not a valid glob") {
+		t.Fatalf("got %v", es)
+	}
+}

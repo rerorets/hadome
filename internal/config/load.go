@@ -23,8 +23,11 @@ type Config struct {
 	Hazards    map[string][]string // hazard category -> entries added to the built-in table
 	IO         []string            // import paths added to the built-in io table
 	Assertions []string            // functions added to the built-in table of assertions
-	Size       Limits              // limits of the size/ rules, defaults filled in
-	TodoForm   string              // the regular expression a TODO comment must match
+	// TestFiles and GeneratedFiles are globs that give files the test and generated roles.
+	TestFiles      []string
+	GeneratedFiles []string
+	Size           Limits // limits of the size/ rules, defaults filled in
+	TodoForm       string // the regular expression a TODO comment must match
 	// Diagram is the dependency diagram that judges imports: head's, for both versions. Nil when none
 	// is configured.
 	Diagram *Diagram

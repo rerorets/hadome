@@ -60,7 +60,7 @@ func (r *rust) index(v engine.Version, files []*file) {
 		}
 	}
 	for _, f := range files {
-		f.test = rustTestDir.MatchString(f.path)
+		f.test = rustTestDir.MatchString(f.path) || f.testGlob
 		f.unit = rustModule(f.path)
 		f.unitPath = f.unit
 		r.modules[f.unit] = true
