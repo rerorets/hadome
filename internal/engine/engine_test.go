@@ -27,9 +27,9 @@ func (s treeSource) Renames() (map[string]string, error) { return s.renames, nil
 func module(test string) fstest.MapFS {
 	return fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
-		"store/store.go": {Data: []byte("package store\n\n// Append adds a row.\nfunc Append(row string) {}\n")},
+		"store/store.go": {Data: []byte("package store\n\n// Append adds a row.\nfunc Append(row string) error { return nil }\n")},
 		"store/store_test.go": {Data: []byte("package store_test\n\nimport (\n\t\"testing\"\n\t\"time\"\n\n\t\"example.com/app/store\"\n)\n\n" +
-			"func TestAppend(t *testing.T) {\n\tstore.Append(\"a\")\n" + test + "}\n")},
+			"func TestAppend(t *testing.T) {\n\tif err := store.Append(\"a\"); err != nil {\n\t\tt.Fatal(err)\n\t}\n" + test + "}\n")},
 	}
 }
 

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"io/fs"
 	"strings"
 	"testing/fstest"
 
@@ -37,6 +38,7 @@ func testFile(body string) map[string]string {
 	return map[string]string{"store/store_test.go": `package store_test
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 	"time"
@@ -175,3 +177,43 @@ func duplicateCases() []engine.Case {
 		Base: tree(testFile(pair)), Head: tree(testFile(pair + "\n" + copyOf("TestAppendThird")))}
 	return []engine.Case{added, disguised, literal, removed, renamed, third}
 }
+
+func noAssertionCases() []engine.Case {
+	add := func(test string) engine.Case {
+		return engine.Case{Base: tree(testFile(plainTest)), Head: tree(testFile(plainTest + "\n" + test))}
+	}
+	none := add("func TestAppendOnly(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n}\n")
+	none.Name, none.WantFail = "a new test with no assertion fails", []string{"tests/no-assertion"}
+	helper := add("func wantLen(t *testing.T, s *store.Store, n int) {\n\tif s.Len() != n {\n\t\tt.Errorf(\"want %d rows\", n)\n\t}\n}\n\n" +
+		"func TestAppendOne(t *testing.T) {\n\ts := store.New()\n\tstore.Append(s, \"a\")\n\twantLen(t, s, 1)\n}\n")
+	helper.Name = "a test that asserts in a helper passes"
+	handed := add("func TestAppendChecked(t *testing.T) {\n\ts := store.New()\n\tstore.Append(s, \"a\")\n\tcheck.Rows(t, s)\n}\n")
+	handed.Name = "a test that hands t to a function hadome cannot read passes"
+	configured := add("func TestAppendEqual(t *testing.T) {\n\ts := store.New()\n\tstore.Append(s, \"a\")\n\tcheck.Equal(s.Len(), 1)\n}\n")
+	configured.Name = "a test that calls a configured assertion passes"
+	for _, c := range []*engine.Case{&handed, &configured} {
+		for _, side := range []fs.FS{c.Base, c.Head} {
+			side.(fstest.MapFS)["check/check.go"] = &fstest.MapFile{Data: []byte(checkSrc)}
+			side.(fstest.MapFS)[".hadome.yml"] = &fstest.MapFile{Data: []byte("schema: 1\nrules:\n  tests:\n    assertions: [example.com/app/check.Equal]\n")}
+		}
+		c.Head.(fstest.MapFS)["store/store_test.go"].Data = []byte(strings.Replace(string(c.Head.(fstest.MapFS)["store/store_test.go"].Data),
+			"\"example.com/app/store\"", "\"example.com/app/check\"\n\t\"example.com/app/store\"", 1))
+	}
+	skipped := add("func TestAppendLater(t *testing.T) {\n\tt.Skip(\"needs a running database\")\n\tstore.Append(store.New(), \"a\")\n}\n")
+	skipped.Name = "a skipped test passes"
+	existing := engine.Case{Name: "a test already on the base branch is not reported",
+		Base: tree(testFile(plainTest + "\nfunc TestAppendOnly(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n}\n")),
+		Head: tree(testFile("\n" + plainTest + "\nfunc TestAppendOnly(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n}\n"))}
+	return []engine.Case{none, helper, handed, configured, skipped, existing}
+}
+
+const checkSrc = `package check
+
+import "testing"
+
+// Rows checks the rows of a store.
+func Rows(t *testing.T, s any) {}
+
+// Equal panics unless a equals b.
+func Equal(a, b any) {}
+`

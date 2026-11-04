@@ -186,6 +186,7 @@ func (w *tsWalk) call(n *sitter.Node) {
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
 	args := named(n.ChildByFieldName("arguments"))
+	w.t.assertion(callee, w.tf.t.asserts)
 	if cat, ok := w.tf.t.calls[callee]; ok {
 		w.t.hazard(cat, n)
 		return

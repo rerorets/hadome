@@ -32,6 +32,29 @@ func (r guardsNothing) Find(in engine.Input) ([]engine.Finding, error) {
 	return out, nil
 }
 
+// noAssertion is tests/no-assertion: a test with no call that checks anything. It fails only when
+// something panics, so the code can return any wrong value without the test noticing.
+type noAssertion struct{}
+
+func (noAssertion) ID() string           { return "tests/no-assertion" }
+func (noAssertion) Cases() []engine.Case { return noAssertionCases() }
+
+func (r noAssertion) Find(in engine.Input) ([]engine.Finding, error) {
+	var out []engine.Finding
+	for _, t := range in.Facts.Tests {
+		if t.Asserts == 0 && !t.AssertsUnknown && !t.Skip.Skipped {
+			out = append(out, engine.Finding{
+				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name,
+				Message: t.Name + " checks nothing: it has no assertion",
+				Why:     "the test passes whatever the code returns, and fails only if something panics or throws",
+				Fix: "assert on the behaviour the test means to check; if the function is an assertion hadome does not know, " +
+					"add it to rules.tests.assertions; if the test only checks that nothing throws, add an exception with the reason",
+			})
+		}
+	}
+	return out, nil
+}
+
 // duplicate is tests/duplicate: tests with the same body. Like a size limit, there is one finding per
 // body and its Value is how many tests share it, so a third copy is a regression and renaming a copy
 // is not. The finding sits at the first test by file and line.

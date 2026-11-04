@@ -20,6 +20,8 @@ type tables struct {
 	calls map[string]facts.HazardCategory // "<import path>.<Name>" -> category
 	mocks map[string]bool                 // import paths of mocking libraries
 	io    ioTable
+	// asserts are the functions configuration adds to the assertions, "<import path>.<Name>".
+	asserts map[string]bool
 }
 
 func newTables(c config.Config) *tables {
@@ -34,7 +36,11 @@ func newTables(c config.Config) *tables {
 			"github.com/stretchr/testify/mock":   true,
 			"github.com/vektra/mockery/v2/mocks": true,
 		},
-		io: newIOTable(c.IO),
+		io:      newIOTable(c.IO),
+		asserts: map[string]bool{},
+	}
+	for _, e := range c.Assertions {
+		t.asserts[e] = true
 	}
 	for _, e := range c.Hazards["clock"] {
 		t.calls[e] = facts.HazardClock
@@ -47,6 +53,9 @@ func newTables(c config.Config) *tables {
 	}
 	return t
 }
+
+// failing are the methods of the testing tool that fail the test.
+var failing = map[string]bool{"Error": true, "Errorf": true, "Fatal": true, "Fatalf": true, "Fail": true, "FailNow": true}
 
 var assertImports = map[string]bool{
 	"github.com/stretchr/testify/assert":  true,
@@ -186,22 +195,28 @@ func takesT(ft *ast.FuncType, imports map[string]string) bool {
 
 func isTestingT(e ast.Expr, imports map[string]string) bool {
 	star, ok := e.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := star.X.(*ast.SelectorExpr)
+	return ok && isTesting(star.X, "T", imports)
+}
+
+// isTool reports whether e is the testing tool's type as a helper takes it: *testing.T or testing.TB.
+func isTool(e ast.Expr, imports map[string]string) bool {
+	return isTestingT(e, imports) || isTesting(e, "TB", imports)
+}
+
+func isTesting(e ast.Expr, name string, imports map[string]string) bool {
+	sel, ok := e.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	return ok && imports[pkg.Name] == "testing" && sel.Sel.Name == "T"
+	return ok && imports[pkg.Name] == "testing" && sel.Sel.Name == name
 }
 
 // collectTParams records every name bound to *testing.T, including subtest closures.
 func (w *walker) collectTParams(ft *ast.FuncType, body *ast.BlockStmt) {
 	add := func(ft *ast.FuncType) {
 		for _, f := range ft.Params.List {
-			if isTestingT(f.Type, w.imports) {
+			if isTool(f.Type, w.imports) {
 				for _, n := range f.Names {
 					w.tParams[n.Name] = true
 				}

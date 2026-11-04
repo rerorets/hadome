@@ -102,6 +102,37 @@ func (t *testFacts) body(n *sitter.Node, isLoop func(*sitter.Node) bool, visit f
 	})
 }
 
+// assertPrefixes start the names of the functions that check something in the common test
+// libraries: assertEquals, assert_called_once, expect, verify. A helper of another file named so
+// counts too, since the adapter cannot read it and its name says it checks.
+var assertPrefixes = []string{"assert", "expect", "verify"}
+
+// assertion counts a call to callee, as written, when it checks something: a configured entry, a
+// name in extra, or a name whose first or last part starts with one of the prefixes.
+func (t *testFacts) assertion(callee string, configured map[string]bool, extra ...string) bool {
+	parts := strings.FieldsFunc(callee, func(r rune) bool { return r == '.' || r == ':' })
+	if len(parts) == 0 {
+		return false
+	}
+	// The first part counts only as a plain name (assert.equal), so that expect(x).toBe(3), whose
+	// expect(x) is a call of its own, counts once.
+	names := []string{parts[len(parts)-1]}
+	if !strings.ContainsAny(parts[0], "()") {
+		names = append(names, parts[0])
+	}
+	ok := configured[callee] || callee == "fail"
+	for _, name := range names {
+		name = strings.ToLower(strings.TrimSuffix(name, "!"))
+		for _, p := range append(assertPrefixes, extra...) {
+			ok = ok || strings.HasPrefix(name, p)
+		}
+	}
+	if ok {
+		t.test.Asserts++
+	}
+	return ok
+}
+
 // useGrammar says how a language writes the use of a name, so that a read can be told from a call
 // and from a type.
 type useGrammar struct {

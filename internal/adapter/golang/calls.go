@@ -57,6 +57,9 @@ func (w *walker) qualify(e ast.Expr, known func(string) bool) string {
 }
 
 func (w *walker) call(c *ast.CallExpr) {
+	if w.passesTool(c) && !w.readable(c) {
+		w.test.AssertsUnknown = true
+	}
 	switch fun := c.Fun.(type) {
 	case *ast.SelectorExpr:
 		w.selectorCall(c, fun)
@@ -91,8 +94,13 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 		return
 	}
 	if w.tParams[x.Name] {
-		if name == "Skip" || name == "SkipNow" || name == "Skipf" {
+		switch {
+		case name == "Skip" || name == "SkipNow" || name == "Skipf":
 			w.skip(c)
+		case failing[name]:
+			w.test.Asserts++
+		case name == "Run" && len(c.Args) == 2:
+			w.subtest(c.Args[1])
 		}
 		return
 	}
@@ -151,9 +159,60 @@ func (w *walker) readSelector(sel *ast.SelectorExpr) {
 	}
 }
 
+// passesTool reports whether the call hands the testing tool to the function it calls.
+func (w *walker) passesTool(c *ast.CallExpr) bool {
+	for _, a := range c.Args {
+		if id, ok := a.(*ast.Ident); ok && w.tParams[id.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+// readable reports whether the adapter sees what a call that is given the testing tool does with
+// it: a helper of the test files, the tool's own methods, an assertion library or a configured one.
+func (w *walker) readable(c *ast.CallExpr) bool {
+	switch fun := c.Fun.(type) {
+	case *ast.Ident:
+		_, ok := w.helpers[fun.Name]
+		return ok
+	case *ast.SelectorExpr:
+		if x, ok := fun.X.(*ast.Ident); ok {
+			p, imported := w.imports[x.Name]
+			return w.tParams[x.Name] || imported && (assertImports[p] || w.tables.asserts[p+"."+fun.Sel.Name])
+		}
+	}
+	return false
+}
+
+// subtest handles the function given to t.Run. A literal is walked with the test; a helper is
+// followed; anything else may check something the adapter cannot see.
+func (w *walker) subtest(fn ast.Expr) {
+	switch fn := fn.(type) {
+	case *ast.FuncLit:
+	case *ast.Ident:
+		if h, ok := w.helpers[fn.Name]; ok && !w.walking[fn.Name] {
+			w.walking[fn.Name] = true
+			w.collectTParams(h.decl.Type, h.decl.Body)
+			prev := w.curPath
+			w.curPath = h.path
+			ast.Inspect(h.decl.Body, w.visit)
+			w.curPath = prev
+			delete(w.walking, fn.Name)
+			return
+		}
+		w.test.AssertsUnknown = true
+	default:
+		w.test.AssertsUnknown = true
+	}
+}
+
 func (w *walker) shadowed(name string) bool { _, ok := w.vars[name]; return ok }
 
 func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
+	if assertImports[p] || w.tables.asserts[p+"."+name] {
+		w.test.Asserts++
+	}
 	if cat, ok := w.tables.calls[p+"."+name]; ok {
 		w.hazard(cat, c)
 		return

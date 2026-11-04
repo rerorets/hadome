@@ -14,7 +14,8 @@ func (k *kotlin) tests(f *file, t *tables) []facts.Test {
 	if !f.test {
 		return nil
 	}
-	jf := &jvmFile{f: f, j: &k.jvm, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{}}
+	// kotest's matchers: x.shouldBe(3), and x shouldBe 3 as an infix call.
+	jf := &jvmFile{f: f, j: &k.jvm, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{}, assertPrefixes: []string{"should"}}
 	for _, fn := range k.functions[f.unit] {
 		jf.names[fn] = f.unit + "." + fn
 	}
@@ -124,6 +125,10 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 		w.ktProperty(n)
 	case "call_expression":
 		w.ktCall(n)
+	case "infix_expression":
+		if ops := named(n); len(ops) == 3 {
+			w.t.assertion(w.jf.f.text(ops[1]), w.jf.t.asserts, w.jf.assertPrefixes...)
+		}
 	case "identifier":
 		if _, ok := w.jf.names[w.jf.f.text(n)]; ok {
 			w.t.readName(n, ktUses)

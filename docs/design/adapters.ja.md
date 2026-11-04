@@ -174,9 +174,14 @@ classDiagram
 | Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…` |
 | Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
 
-危険の分類と同じく、これは例で、全体の表は各アダプタにある。設定の `rules.tests.assertions` で項目を足せるが、組み込みの項目は消せない。
+危険の分類と同じく、これは例で、全体の表は各アダプタにある。Go 以外の言語では、名前が `assert`・`expect`・`verify` で始まる関数も assert とみなす（`assertEquals`、`assert_called_once`、`expectValid`）。ほかのファイルにある確かめるためのヘルパーは、アダプタが中を読めないが、名前から確かめていると分かるからだ。
 
-テストの道具（Go の `*testing.T`、Python の `self` など）を、アダプタが中を読めない関数に渡したときは、その中で確かめているかもしれないので `Test.AssertsUnknown` を真にする。
+設定の `rules.tests.assertions` で項目を足せるが、組み込みの項目は消せない。項目は、テストが呼ぶとおりに書く（`acme.MustEqual`）。Go では `<import path>.<Name>` と書く。
+
+テストの道具（Go の `*testing.T`、Python の `self` など）を、アダプタが中を読めない関数に渡したときは、その中で確かめているかもしれないので `Test.AssertsUnknown` を真にする。次のときも同じにする。
+
+- Go: `t.Run` に、関数リテラルでもテストのファイルのヘルパーでもない関数を渡す
+- Python: テストのクラス自身のメソッド（`self.check(…)`）を呼ぶ
 
 ### 本体の値を読む
 
