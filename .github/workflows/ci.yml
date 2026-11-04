@@ -50,10 +50,12 @@ jobs:
         env:
           BASE: origin/${{ github.base_ref }}
         run: |
+          # go run reports any non-zero exit of the program as 1, so the binary is built and run.
+          go build -o "$RUNNER_TEMP/hadome" ./cmd/hadome
           report="$RUNNER_TEMP/hadome.json"
-          go run ./cmd/hadome check --base "$BASE" || true
+          "$RUNNER_TEMP/hadome" check --base "$BASE" || true
           code=0
-          go run ./cmd/hadome check --base "$BASE" --format json > "$report" || code=$?
+          "$RUNNER_TEMP/hadome" check --base "$BASE" --format json > "$report" || code=$?
           if [ "$code" -ne 3 ]; then exit "$code"; fi
           # A workflow command ends at a newline, so %, CR and LF in a message are escaped.
           jq -r '
