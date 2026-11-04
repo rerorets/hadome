@@ -229,7 +229,7 @@ classDiagram
 - The YAML is parsed into a syntax tree (with positions) and walked against `Spec`, so every error carries the file, the line, the key, what is allowed and an example. Unknown keys, wrong types and unknown invariant types are errors
 - All errors of a file are reported together, not only the first
 - `schema/hadome.schema.json` in the repository is the output of `JSONSchema()`; a test fails when the two differ, so the published schema cannot drift
-- A misspelt key gets a suggestion (`did you mean invariants?`) when a known key is within two edits
+- A misspelt key gets a suggestion (`did you mean invariants?`) when a known key is within two edits, and the example shows how that key is written. Without a suggestion, the example shows how the enclosing level is written. A test checks that every key in the specification has an example
 - Layers merge by the specification: mappings key by key; lists of objects by their identity (a later entry with the same identity replaces the earlier one); lists marked `OmittedIsWidest` (such as `languages`) as a whole; other lists are joined without duplicates
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration
 - `Diff(base, head)` lists changed entries; the engine turns the looser ones into `config/loosened` reviews. Omitting a key marked `OmittedIsWidest` never counts as loosening, because omitting it covers everything

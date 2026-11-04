@@ -219,7 +219,12 @@ func (v *validator) object(n ast.Node, path string, k Key) any {
 		sub := joinPath(path, name)
 		switch {
 		case !known:
-			v.fail(p.Key, sub, "unknown key"+didYouMean(name, fields), Key{Allowed: fieldNames(fields), Example: k.Example})
+			hint, near := didYouMean(name, fields)
+			example := k.Example
+			if near != nil && exampleOf(*near) != "" {
+				example = exampleOf(*near) // the key the author most likely meant shows how to write it
+			}
+			v.fail(p.Key, sub, "unknown key"+hint, Key{Allowed: fieldNames(fields), Example: example})
 		case seen[name]:
 			v.fail(p.Key, sub, "appears twice", f)
 		default:
@@ -337,18 +342,28 @@ func describe(n ast.Node) string {
 	return "a " + n.Type().String()
 }
 
-// didYouMean suggests the known key closest to a misspelt one, when one is close enough to be a typo.
-func didYouMean(name string, fields []Key) string {
-	best, bestDist := "", 3
-	for _, f := range fields {
+// didYouMean suggests the known key closest to a misspelt one, when one is close enough to be a
+// typo, and returns that key.
+func didYouMean(name string, fields []Key) (string, *Key) {
+	var best *Key
+	bestDist := 3
+	for i, f := range fields {
 		if d := distance(name, f.Name); d < bestDist {
-			best, bestDist = f.Name, d
+			best, bestDist = &fields[i], d
 		}
 	}
-	if best == "" {
-		return ""
+	if best == nil {
+		return "", nil
 	}
-	return "; did you mean " + best + "?"
+	return "; did you mean " + best.Name + "?", best
+}
+
+// exampleOf returns a key's example, or for a list, its entries' example.
+func exampleOf(k Key) string {
+	if k.Example == "" && k.Kind == KindList && k.Elem != nil {
+		return k.Elem.Example
+	}
+	return k.Example
 }
 
 // distance is the Levenshtein distance between two short strings.
