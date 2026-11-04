@@ -21,7 +21,7 @@ The secrets go in the `release` environment, not at the repository level (Settin
 |---|---|---|---|
 | npm | `PUBLISH_NPM` | `NPM_TOKEN` | A granular access token of an account that may publish `hadome` and `hadome-<os>-<arch>` (read and write, all packages, bypassing 2FA; a token with write access expires after 90 days at most) |
 | PyPI | `PUBLISH_PYPI` | none | A trusted publisher on PyPI for project `hadome`: this repository, workflow `release.yml`, environment `pypi` |
-| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN` | A crates.io token that may publish `hadome` (publish-new and publish-update) |
+| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN`, `MINISIGN_SECRET_KEY` | A crates.io token that may publish `hadome` (publish-new and publish-update). A minisign key pair that signs the archives (`minisign -G -W`; no password, because the workflow cannot type one). The secret key file's contents go into the secret, and the public key into `pubkey` in `packaging/cargo/Cargo.toml` |
 | Gradle Plugin Portal | `PUBLISH_GRADLE` | `GRADLE_PUBLISH_KEY`, `GRADLE_PUBLISH_SECRET` | A Plugin Portal account; the namespace `io.github.rerorets` is verified through GitHub |
 | Maven Central | `PUBLISH_MAVEN` | `CENTRAL_USERNAME`, `CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`, `MAVEN_GPG_PASSPHRASE` | A Central Portal user token, the namespace `io.github.rerorets` verified, and a GPG key published to a keyserver |
 | Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | The repository `rerorets/homebrew-tap` (with at least one commit), and a fine-grained token allowed to write Contents there only |

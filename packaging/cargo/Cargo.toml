@@ -20,6 +20,12 @@ pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_{ target }
 bin-dir = "hadome{ binary-ext }"
 pkg-fmt = "tgz"
 
+# Every archive has a minisign signature next to it, made with the release environment's
+# MINISIGN_SECRET_KEY; cargo binstall refuses an archive whose signature does not match this key.
+[package.metadata.binstall.signing]
+algorithm = "minisign"
+pubkey = "RWTZfLALDTssaBMAM+N6uHjFkmViiaos4CxoYgUsv4wciFNQjjebObGN"
+
 [package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
 pkg-url = "{ repo }/releases/download/v{ version }/hadome_{ version }_linux_amd64.tar.gz"
 [package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
