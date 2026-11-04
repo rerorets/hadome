@@ -1,6 +1,6 @@
 # TypeScript、Python、Rust、Java、Kotlin のアダプタ
 
-この文書は [adapters.ja.md](adapters.ja.md) の言語ごとの半分だ。tree-sitter で読む5言語のそれぞれが、Go のアダプタと同じ事実をどう埋めるかを書く。ルールからその違いは見えない。
+この文書は [adapters.ja.md](adapters.ja.md) のうち、言語ごとの部分を書く。tree-sitter で読む5言語のそれぞれが、Go のアダプタと同じ事実をどう埋めるかを書く。ルールからその違いは見えない。
 
 ## 形
 
@@ -38,8 +38,8 @@ classDiagram
 
 - パッケージ `internal/adapter` は、エンジンが使う解析器だ。版を1回たどり、各ファイルを最初に受け持つと言った言語に渡し、言語たちの報告をまとめ、どの言語も受け持たないファイルを役割 `other` で一覧に載せる（[adapters.ja.md](adapters.ja.md) の不変条件4）
 - 設定の `languages:` で、ファイルを受け持つ言語を絞れる。省くと全言語が受け持つ
-- パッケージ `internal/adapter/treesitter` は cgo があるときだけビルドされる（`//go:build cgo`）。無いときの `Languages()` は、5言語のファイルを受け持って `Unread` と印を付ける読み手を返す。こうして純粋な Go のビルド（[distribution.ja.md](distribution.ja.md)）がそれらを黙って無視することは無い
-- tree-sitter の木をたどる汎用の読み手は1つだけだ。各言語は、ノードの種類と少しの関数（パスをユニットにどう対応させるか、import をどう解決するか、何でシンボルが公開になるか、どの呼び出しが危険か）からなる `spec` で表す
+- パッケージ `internal/adapter/treesitter` は cgo があるときだけビルドされる（`//go:build cgo`）。無いときの `Languages()` は5言語のファイルを受け持って `Unread` と印を付ける読み手を返す。こうして純粋な Go のビルド（[distribution.ja.md](distribution.ja.md)）がそれらを黙って無視することは無い
+- tree-sitter の木をたどる汎用の読み手は1つだけだ。各言語はノードの種類と少しの関数（パスをユニットにどう対応させるか、import をどう解決するか、何でシンボルが公開になるか、どの呼び出しが危険か）からなる `spec` で表す
 
 ## ユニット
 
@@ -53,7 +53,7 @@ classDiagram
 | Rust | モジュール | その場所 | `src/a/b.rs` や `src/a/b/mod.rs` なら `src/a/b`。`lib.rs` と `main.rs` なら `src` | `<location>.<name>` |
 | Java、Kotlin | パッケージ | `package` の宣言 | ディレクトリ | `<package>.<Class>.<member>`。Kotlin のトップレベルの関数は `<package>.<name>` |
 
-どのシンボルの ID も、ユニットのパスの最後の要素と名前で終わる。だから `store.append` のように設定した対象は、どの言語でもそれを名指せる（[rules-tests.ja.md](rules-tests.ja.md)）。
+どのシンボルの ID もユニットのパスの最後の要素と名前で終わる。だから `store.append` のように設定した対象は、どの言語でもそれを名指せる（[rules-tests.ja.md](rules-tests.ja.md)）。
 
 ## import
 
@@ -76,7 +76,7 @@ classDiagram
 | Java | メソッドとコンストラクタ | クラス、インターフェース、enum、record | `public` | 直前の `/** */` コメント |
 | Kotlin | トップレベルとクラスの中の `fun` | クラス、インターフェース、object | `private`、`internal`、`protected` でない | 直前の `/** */` コメント |
 
-テストだけの領域（Rust の `#[cfg(test)]` モジュール）の中のコードは、製品のコードではなくテストのコードだ。循環的複雑度は、各言語の `if`、ループ、`case` や match の腕（既定の腕は除く）、`catch`、`&&`、`||`、三項演算子を数える。
+テストだけの領域（Rust の `#[cfg(test)]` モジュール）の中のコードは、製品のコードではなくテストのコードだ。循環的複雑度は各言語の `if`、ループ、`case` や match の腕（既定の腕は除く）、`catch`、`&&`、`||`、三項演算子を数える。
 
 ## テスト
 
@@ -104,7 +104,7 @@ classDiagram
 
 ## 文法
 
-文法は、tree-sitter の言語 ABI 14 向けにビルドされた版に固定する。Go のバインディングが読める最新の ABI だ。文法はバインディングと一緒に上げ、単独では上げない。
+文法は tree-sitter の言語 ABI 14 向けにビルドされた版に固定する。Go のバインディングが読める最新の ABI だ。文法はバインディングと一緒に上げ、単独では上げない。
 
 ## 読めなかったファイル
 

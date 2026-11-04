@@ -1,6 +1,6 @@
 # リリース
 
-リリースはタグだ。それ以外はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
+リリースは版のタグを push して始める。それ以降の作業はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
 
 ```sh
 git tag v1.2.0
@@ -9,7 +9,7 @@ git push origin v1.2.0
 
 ワークフローは6つのバイナリをネイティブにビルドし、`SHA256SUMS` と一緒に GitHub のリリースを公開し、有効にしてある各エコシステムに公開する。ワークフローを手で動かす（Actions → release → Run workflow）と、公開せずにすべてをビルドして確かめる。
 
-公開が途中で落ちたら、原因を直してから落ちたジョブだけを再実行する。npm のジョブは、レジストリにすでにある版を飛ばす。
+公開が途中で落ちたら、原因を直してから落ちたジョブだけを再実行する。npm のジョブはレジストリにすでにある版を飛ばす。
 
 ## エコシステムを有効にする
 
