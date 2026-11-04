@@ -90,8 +90,10 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		case f.generatedGlob || generated(cs):
 			role = facts.RoleGenerated
 		}
+		// A tree with an error node still holds what parsed; its facts are kept, and the file is
+		// unread too, so that what the error hid goes to a person instead of to no rule.
 		a.Files = append(a.Files, facts.File{Path: f.path, Language: l.name, Role: role,
-			Lines: strings.Count(string(f.src), "\n") + 1, Unit: f.unit, UnitPath: f.unitPath})
+			Lines: strings.Count(string(f.src), "\n") + 1, Unit: f.unit, UnitPath: f.unitPath, Unread: f.root.HasError()})
 		a.Comments = append(a.Comments, cs...)
 		if !f.test {
 			a.Imports = append(a.Imports, l.r.imports(f, t)...)

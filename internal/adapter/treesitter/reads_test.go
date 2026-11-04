@@ -157,3 +157,32 @@ tests::passed reads=1 calls=0
 tests::type_only reads=0 calls=0`)
 	})
 }
+
+// viewpoint: failure
+// target: lang.Analyze
+// Adapter invariant 2: a file that does not fully parse is not read silently in part. Every
+// language marks it unread, and still reports what did parse (here its import).
+func TestAFileThatDoesNotParseIsUnreadButKeepsWhatParsed(t *testing.T) {
+	cases := []struct{ lang, path, src string }{
+		{"typescript", "src/a.ts", "import { x } from \"./b\";\nexport function f( {\n"},
+		{"python", "src/a.py", "import os\n\ndef f(:\n"},
+		{"rust", "src/lib.rs", "use std::fs;\nfn f( {\n"},
+		{"java", "src/main/java/a/A.java", "package a;\nimport java.io.File;\nclass A { void f( }\n"},
+		{"kotlin", "src/main/kotlin/a/A.kt", "package a\nimport java.io.File\nfun f( {\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.lang, func(t *testing.T) {
+			a := analyze(t, c.lang, tree(c.path, c.src))
+			if len(a.Files) != 1 || !a.Files[0].Unread {
+				t.Fatalf("the file is not unread: %+v", a.Files)
+			}
+			if len(a.Imports) == 0 {
+				t.Errorf("the import that parsed was dropped")
+			}
+			ok := analyze(t, c.lang, tree(c.path, strings.SplitN(c.src, "\n", 2)[0]+"\n"))
+			if ok.Files[0].Unread {
+				t.Errorf("a file that parses is unread")
+			}
+		})
+	}
+}

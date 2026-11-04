@@ -118,7 +118,9 @@ The grammars are pinned to versions built for tree-sitter's language ABI 14, the
 
 | Rule | Kind | Regression when |
 |---|---|---|
-| `unknown/unread` | finding (review) | A file of a supported language that this build of hadome cannot read (the pure-Go build meeting TypeScript, say) is new in head — exit code `3` |
+| `unknown/unread` | finding (review) | A file of a supported language that this build of hadome cannot read (the pure-Go build meeting TypeScript, say), or that has a syntax error, is new in head — exit code `3` |
+
+A syntax error shows as an ERROR or MISSING node the grammar put in the tree. tree-sitter returns a tree even with errors, so the imports, symbols and tests outside an error are read. In a file with an error, the facts of what parsed are used as they are, and the file is also marked `Unread`. What was inside the error is seen by no rule, so that part goes to a person. The Go adapter reads nothing from a file that does not parse.
 
 ## Invariants
 
