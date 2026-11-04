@@ -96,6 +96,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 	f := pf.f
 	def := definition(n)
 	t := newTest(f, name, def)
+	t.fingerprint([]*sitter.Node{n}, def.ChildByFieldName("name"))
 	for _, d := range []*sitter.Node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
 			pf.decorators(t, d)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // viewpoint: behaviour
@@ -209,4 +210,64 @@ func TestIn(t *testing.T) {
 	if g := strings.Join(got, "\n"); g != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// Tests whose bodies differ only in names, comments and whitespace share a fingerprint. A test
+// with one different literal does not.
+func TestGoBodies(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("package store\n\nfunc Add(a, b int) int { return a + b }\n")},
+		"store/store_test.go": {Data: []byte(`package store
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(1, 2) != 3 {
+		t.Fatal("want 3")
+	}
+}
+
+// TestAddAgain is a copy.
+func TestAddAgain(t *testing.T) {
+	// the same check
+	if Add(1,2)!=3 { t.Fatal("want 3") }
+}
+
+func TestAddOther(t *testing.T) {
+	if Add(1, 3) != 4 {
+		t.Fatal("want 3")
+	}
+}
+`)},
+	}
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go", "store/store_test.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, want := sameBodies(a.Tests), "TestAdd TestAddAgain\nTestAddOther"; g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// sameBodies renders the tests grouped by Body, one sorted line per group. A test without a Body
+// is shown as unknown.
+func sameBodies(tests []facts.Test) string {
+	groups := map[string][]string{}
+	for _, ts := range tests {
+		if ts.Body == "" {
+			groups["?"+ts.Name] = []string{ts.Name + "=unknown"}
+			continue
+		}
+		groups[ts.Body] = append(groups[ts.Body], ts.Name)
+	}
+	var lines []string
+	for _, names := range groups {
+		sort.Strings(names)
+		lines = append(lines, strings.Join(names, " "))
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
 }

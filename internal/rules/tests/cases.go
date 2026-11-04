@@ -156,3 +156,22 @@ func guardsNothingCases() []engine.Case {
 		Head: tree(testFile("\n" + plainTest + "\nfunc TestUpper(t *testing.T) {\n\t_ = strings.ToUpper(\"a\")\n}\n"))}
 	return []engine.Case{stdlibOnly, helper, partly, reads, skipped, existing}
 }
+
+func duplicateCases() []engine.Case {
+	copyOf := func(name string) string { return strings.Replace(plainTest, "TestAppend", name, 1) }
+	pair := plainTest + "\n" + copyOf("TestAppendAgain")
+	added := engine.Case{Name: "adding a copy of an existing test fails", WantFail: []string{"tests/duplicate"},
+		Base: tree(testFile(plainTest)), Head: tree(testFile(pair))}
+	disguised := engine.Case{Name: "a copy with only its name, comments and layout changed fails", WantFail: []string{"tests/duplicate"},
+		Base: tree(testFile(plainTest)),
+		Head: tree(testFile(plainTest + "\n// TestOneRow checks one row.\nfunc TestOneRow(t *testing.T) {\n\ts := store.New() // empty\n\tstore.Append(s, \"a\")\n\tif s.Len() != 1 { t.Fatal(\"want one row\") }\n}\n"))}
+	literal := engine.Case{Name: "a test with one literal changed passes",
+		Base: tree(testFile(plainTest)), Head: tree(testFile(plainTest + "\n" + strings.Replace(copyOf("TestAppendB"), `"a"`, `"b"`, 1)))}
+	removed := engine.Case{Name: "deleting one of a pair of copies passes",
+		Base: tree(testFile(pair)), Head: tree(testFile(plainTest))}
+	renamed := engine.Case{Name: "renaming a copy does not make it new",
+		Base: tree(testFile(pair)), Head: tree(testFile(plainTest + "\n" + copyOf("TestAppendTwice")))}
+	third := engine.Case{Name: "a third copy of a pair already on the base branch fails", WantFail: []string{"tests/duplicate"},
+		Base: tree(testFile(pair)), Head: tree(testFile(pair + "\n" + copyOf("TestAppendThird")))}
+	return []engine.Case{added, disguised, literal, removed, renamed, third}
+}

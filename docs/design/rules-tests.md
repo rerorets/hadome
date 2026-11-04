@@ -110,7 +110,7 @@ Adding tests does not always widen what they guard. These three rules stop tests
 
 ### `tests/duplicate`
 
-- **Finds**: a group of tests with the same body, compared as the sequence of tokens without the name, comments and whitespace (`Test.Body`)
+- **Finds**: a group of tests with the same body, compared as the sequence of tokens without the name, comments and whitespace (`Test.Body`). The inputs of a parameterised test (its decorators or annotations) count as part of the body
 - **Why it matters**: checking the same thing twice does not widen what is guarded, and changing the behaviour means making the same fix in two places
 - **Fix**: delete one. If it was meant to check another input, change the input
 - Tests that differ in even one literal are different tests
@@ -201,7 +201,7 @@ Each rule ships with at least these cases.
 | `tests/invariant-unguarded` | a new invariant without a test fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |
 | `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes |
-| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new |
+| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
 | `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` |
 
 ## Invariants
