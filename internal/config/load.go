@@ -37,6 +37,8 @@ type Config struct {
 	Layers []string
 
 	raw map[string]any
+	// lines are the lines of .hadome.yml by key path (rules.size.params, rules.tests.io[0]).
+	lines map[string]int
 }
 
 // Limits are the size/ rules' limits by key name ("file-lines", "params", …).
@@ -96,6 +98,7 @@ func Load(product fs.FS, workdir string) (Config, error) {
 		return Config{}, err
 	}
 	c := decode(raw, l.layers)
+	c.lines = l.lines
 	if path, ok := object(object(raw["rules"])["deps"])["diagram"].(string); ok {
 		if c.Diagram, err = loadDiagram(product, path); err != nil {
 			return Config{}, err
@@ -125,10 +128,14 @@ func loadDiagram(product fs.FS, path string) (*Diagram, error) {
 type loader struct {
 	layers   []string
 	visiting map[string]bool
+	lines    map[string]int // of the first layer read: .hadome.yml itself
 }
 
 func (l *loader) layer(name string, data []byte, dir string) (map[string]any, error) {
 	v := &validator{file: name, lines: map[string]int{}}
+	if l.lines == nil {
+		l.lines = v.lines
+	}
 	f, err := parser.ParseBytes(data, 0)
 	if err != nil {
 		return nil, Errors{{File: name, Line: 1, Key: "(file)", Problem: "is not valid YAML: " + firstLine(err.Error())}}
