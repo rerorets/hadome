@@ -239,13 +239,6 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 `unknown` も base と比べる。base に前からある unknown は通し、unknown を増やす変更は終了コード `3`（人の確認が要る）を返す。unknown でチェックを落とすことは無いので、推測でビルドが落ちることは無い。unknown を黙って通すことも無いので、特定できないものが増えたときは人が確かめる。
 
-各事実はどう読んだかも記録する。これは診断のためだけで、事実が止めるかどうかは変えない。
-
-| 読んだもの | 意味 |
-|---|---|
-| `go/parser` | Go の標準ライブラリのパーサ |
-| `tree-sitter` | tree-sitter の文法 |
-
 ## 各言語の読み方
 
 | 言語 | 読み方 |

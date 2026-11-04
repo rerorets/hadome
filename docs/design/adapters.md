@@ -239,13 +239,6 @@ What decides whether a fact can block is whether the adapter identified it, not 
 
 `unknown` is compared with base too: unknowns already in base pass, and a change that adds unknowns returns exit code `3` (needs review). An unknown never fails the check, so a guess never fails a build. An unknown is never passed silently either, so when unidentified facts increase, a person checks them.
 
-Each fact also records how it was read. This is for diagnostics only and does not change whether the fact blocks.
-
-| Read by | Meaning |
-|---|---|
-| `go/parser` | The Go standard library's parser |
-| `tree-sitter` | A tree-sitter grammar |
-
 ## How each language is read
 
 | Language | How it is read |
