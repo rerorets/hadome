@@ -51,7 +51,7 @@ hadome cannot change a user's CI settings or branch protection. Whether it is re
 
 ### Steps for agents
 
-`docs/for-agents.md` gains the section below. It is added in the change that implements `hadome mutate`, and not before, so that the steps never name a command that does not exist.
+`docs/for-agents.md` holds the section below.
 
 ````markdown
 ## Trying mutations
@@ -154,7 +154,7 @@ Like the other rules, only what the change added is a regression.
 
 1. In head, run every mutant in the places to break. A caught one is done. When the configuration has `{tests}`, narrow the tests run (see "Narrowing the tests run" below)
 2. For each surviving mutant, look for a mutant with the same anchor in base
-3. If base has none (a new or rewritten line), it is a regression: no test guards the new code
+3. If base has none (a new function, a new line or a rewritten line), it is a regression: adding code means adding a test that guards it
 4. If base has one, run it in base too. If base caught it, it is a regression (the tests got weaker). If it survived in base as well, it is an old gap and is not reported
 
 Base runs only what survived in head, so most of the time is one run of head.
@@ -198,6 +198,8 @@ mutation:
   max-mutants: 100          # optional; how many mutants one run tries at most. Default: 100
 ```
 
+The default `max-mutants` of 100 is about 17 minutes at most with a 10-second test run.
+
 An example that narrows the tests:
 
 ```yaml
@@ -216,20 +218,14 @@ mutation:
 2. The repository's working tree is never changed. Only a version copied to a temporary directory is broken
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
-5. Mutants that could not be tried (beyond the limit) are reported, never passed silently, with exit code `3` (a person's review)
+5. Mutants that could not be tried (beyond the limit) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
 
 ## Deliberately left out
 
-- Running mutants in parallel. One at a time keeps tests from flaking over what the test command shares (ports, temporary files). Add it when measurements call for it
-- Caching results. A different pair of versions gives different results, so it starts without one
-- A mode that breaks the whole repository. Add it when nightly CI or the like wants one
+- Running mutants in parallel. One at a time keeps tests from flaking over what the test command shares (ports, temporary files)
+- Caching results. A different pair of versions gives different results, so results can rarely be reused
+- A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
 - Agent hooks (settings that run `hadome mutate` when an agent finishes its work). They would depend on a particular agent product. Agents are told through the `hadome agents` block, and CI makes it required
-
-## Decided
-
-1. Mutants that could not be tried because of the limit are reported with exit code `3` (a person's review). This matches never passing silently (invariant 5)
-2. A mutant surviving in a new function is a regression, so that adding code means adding a test that guards it
-3. The default of `max-mutants` is 100. With a 10-second test run, that is about 17 minutes at most. Narrowing the tests makes each run shorter still
