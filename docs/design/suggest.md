@@ -74,9 +74,29 @@ Analyses the working tree with its configuration and prints the candidates as `i
 |---|---|
 | `hadome agents` | Prints the block |
 | `hadome agents --lang ja` | Prints it in Japanese |
-| `hadome agents --write <file>` | Puts the block into the file: replaces what is between `<!-- hadome:begin -->` and `<!-- hadome:end -->`, or appends the block when the markers are absent, or creates the file |
+| `hadome agents --write <file>...` | Puts the block into each of the files listed |
 
 The English block is the one in the README's quick start; a test fails when the two differ.
+
+### Writing into files
+
+A person or an agent always names the files. The files agents read have different names in each tool, and the names keep being added and changed (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` and so on). If hadome kept a list of them, it would have to be fixed each time a name changed. So hadome does not search for where to write.
+
+```sh
+hadome agents --write AGENTS.md CLAUDE.md
+```
+
+| State of the file | What happens |
+|---|---|
+| It has the markers (`<!-- hadome:begin -->` and `<!-- hadome:end -->`) | What is between them is replaced |
+| It has no markers | The block is appended to the end of the file |
+| It does not exist | The file is created with only the block |
+| Its directory does not exist | A failure, so that a typo (`.githbu/`) does not create a directory |
+| It has only one of the markers | A failure, because where hadome's block ends is unknown |
+
+- A path may be relative or absolute. A relative path is taken from the directory the command runs in
+- Every file listed is checked before any is written. If any of them is a failure, no file is changed, every problem is reported, and the exit code is `2`. This leaves no half-written state
+- When all are written, each file written is printed on its own line, and the exit code is `0`
 
 ## `hadome init`
 
@@ -86,9 +106,12 @@ Writes `.hadome.yml` with `schema: 1`, the detected languages as a comment, and 
 
 1. Candidates never change an exit code
 2. `hadome agents --write` run twice leaves the file as it was after the first run
-3. `hadome init` never overwrites a file
+3. When `hadome agents --write` fails, no file has changed
+4. `hadome init` never overwrites a file
 
 ## Deliberately left out
 
 - Candidates from how code behaves (what it writes, which tables it touches). Names and parameters are all the facts hold today
 - An interactive mode for accepting candidates. The output is valid configuration; accepting is pasting
+- Searching for where `hadome agents` writes. The reason is in "Writing into files"
+- Asking where `hadome agents` writes, interactively. Agents run `hadome agents` most, and an agent cannot answer a question. It would also stop CI

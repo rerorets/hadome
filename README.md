@@ -119,7 +119,7 @@ This writes a block on how to use hadome into the file your agents read. The pat
 hadome agents --write CLAUDE.md
 ```
 
-- Any other file, such as `AGENTS.md`, works too.
+- Any other file, such as `AGENTS.md`, works too. List several, as in `hadome agents --write AGENTS.md CLAUDE.md`, to write into each.
 - The file is created if it is missing. Later runs update the same block.
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).

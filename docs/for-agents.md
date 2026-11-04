@@ -142,7 +142,7 @@ Proved by: `hadome self-test` lists the gate's `id`, and `hadome check` runs it.
 ## Telling other agents
 
 ```sh
-hadome agents --write AGENTS.md   # or CLAUDE.md; running it again updates the block in place
+hadome agents --write AGENTS.md CLAUDE.md   # list the files to put it in; running it again updates the block in place
 ```
 
 Proved by: running it twice leaves the file unchanged the second time.

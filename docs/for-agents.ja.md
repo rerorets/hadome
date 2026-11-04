@@ -142,7 +142,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 ## ほかのエージェントに伝える
 
 ```sh
-hadome agents --write AGENTS.md   # または CLAUDE.md。もう1度実行するとブロックをその場で更新する
+hadome agents --write AGENTS.md CLAUDE.md   # 読ませたいファイルを並べる。もう1度実行するとブロックをその場で更新する
 ```
 
 確かめ方: 2回実行すると、2回目ではファイルが変わらない。

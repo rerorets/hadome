@@ -81,6 +81,45 @@ func TestAHalfBlockIsNotGuessedAt(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: hadome agents --write
+// Every file listed gets the block, whether named by a relative or an absolute path.
+func TestTheAgentBlockGoesIntoEveryFileListed(t *testing.T) {
+	dir := writeTree(t, map[string]string{"CLAUDE.md": "# Notes\n", ".github/keep": ""})
+	t.Chdir(dir)
+	abs := filepath.Join(dir, ".github", "copilot-instructions.md")
+	if code, out := runIn(t, "agents", "--write", "AGENTS.md", "CLAUDE.md", abs); code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	for _, p := range []string{"AGENTS.md", "CLAUDE.md", abs} {
+		if data, _ := os.ReadFile(p); !strings.Contains(string(data), agentBlock) {
+			t.Errorf("%s has no block:\n%s", p, data)
+		}
+	}
+}
+
+// viewpoint: state integrity
+// target: hadome agents --write
+// Suggest invariant 3: when one file listed cannot take the block, no file changes, and every
+// problem is reported.
+func TestAFailedWriteChangesNoFile(t *testing.T) {
+	half := beginMarker + "\nno end\n"
+	t.Chdir(writeTree(t, map[string]string{"CLAUDE.md": "# Notes\n", "HALF.md": half}))
+	code, out := runIn(t, "agents", "--write", "CLAUDE.md", "AGENTS.md", ".githbu/copilot.md", "HALF.md")
+	if code != 2 || !strings.Contains(out, ".githbu") || !strings.Contains(out, "by hand") {
+		t.Fatalf("want exit 2 naming both problems; got exit %d: %s", code, out)
+	}
+	if data, _ := os.ReadFile("CLAUDE.md"); string(data) != "# Notes\n" {
+		t.Errorf("CLAUDE.md changed:\n%s", data)
+	}
+	if _, err := os.Stat("AGENTS.md"); err == nil {
+		t.Error("AGENTS.md was created")
+	}
+	if _, err := os.Stat(".githbu"); err == nil {
+		t.Error("the mistyped directory was created")
+	}
+}
+
 // viewpoint: state integrity
 // target: hadome init
 // Suggest invariant 3: init never overwrites a file, and what it writes is valid configuration.
