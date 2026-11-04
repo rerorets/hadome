@@ -216,7 +216,7 @@ mutation:
 2. The repository's working tree is never changed. Only a version copied to a temporary directory is broken
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
-5. Mutants that could not be tried (beyond the limit) are reported, never passed silently
+5. Mutants that could not be tried (beyond the limit) are reported, never passed silently, with exit code `3` (a person's review)
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
 
 ## Deliberately left out
@@ -228,8 +228,8 @@ mutation:
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
 - Agent hooks (settings that run `hadome mutate` when an agent finishes its work). They would depend on a particular agent product. Agents are told through the `hadome agents` block, and CI makes it required
 
-## To decide
+## Decided
 
-1. Whether mutants that could not be tried because of the limit are reported with exit code `3` (a person's review) or as information only. Recommended: `3`, which matches never passing silently (invariant 5)
-2. Whether a mutant surviving in a new function is a regression. Recommended: yes, so that adding code means adding a test that guards it
-3. Whether the default of `max-mutants` is 100. With a 10-second test run, that is about 17 minutes at most
+1. Mutants that could not be tried because of the limit are reported with exit code `3` (a person's review). This matches never passing silently (invariant 5)
+2. A mutant surviving in a new function is a regression, so that adding code means adding a test that guards it
+3. The default of `max-mutants` is 100. With a 10-second test run, that is about 17 minutes at most. Narrowing the tests makes each run shorter still
