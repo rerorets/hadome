@@ -46,7 +46,7 @@ git config core.hooksPath .githooks
 
 ## Review
 
-- The maintainer (rerorets) reviews and merges pull requests.
+- The maintainer reviews and merges pull requests.
 - Only a pull request whose four CI checks pass (the tests on three operating systems and the packaging check) can be merged.
 - There is one maintainer, so an answer may take a few days.
 
