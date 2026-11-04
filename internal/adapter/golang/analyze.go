@@ -26,6 +26,7 @@ type parsedFile struct {
 	path    string
 	pkgPath string
 	file    *ast.File
+	src     []byte
 	test    bool
 }
 
@@ -50,7 +51,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		if err != nil {
 			return nil, err
 		}
-		pf := parsedFile{path: p, pkgPath: importPath(modules, path.Dir(p)), test: strings.HasSuffix(p, "_test.go")}
+		pf := parsedFile{path: p, src: src, pkgPath: importPath(modules, path.Dir(p)), test: strings.HasSuffix(p, "_test.go")}
 		lines := strings.Count(string(src), "\n") + 1
 		f, perr := parser.ParseFile(fset, p, src, parser.ParseComments)
 		if perr != nil {

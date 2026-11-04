@@ -196,6 +196,16 @@ Names in type positions (type annotations, TypeScript's `import type`, generic t
 
 For `tests/duplicate`, the adapter makes a fingerprint of the sequence of tokens in each test's body and stores it in `Test.Body`. The test's name, comments and whitespace are not part of it. Literals are, with their values, so tests that differ in even one input have different fingerprints.
 
+A parameterised test writes its inputs outside its body. So the parameters, and the decorators or annotations on the test, are part of the fingerprint too.
+
+| Language | What the fingerprint covers |
+|---|---|
+| Go | From the parameters to the closing brace. The semicolons Go's scanner adds at line ends are left out, because they depend on where the lines break |
+| Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body |
+| TypeScript | The `it("name", …)` call, without the name's string |
+| Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body |
+| Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
+
 ### What a test guards
 
 People never classify tests. What a test guards is mostly worked out by machine, and the little that is declared is written by whoever writes the test (usually an agent).

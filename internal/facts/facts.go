@@ -2,7 +2,11 @@
 // of a repository, and that rules consume. Nothing here knows any language.
 package facts
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
 
 // Role is what a file is for.
 type Role string
@@ -137,6 +141,9 @@ type Test struct {
 	// Reads counts uses of product values that are not calls: a constant, a variable, or a function
 	// passed as a value. Names in type positions are not values.
 	Reads int
+	// Body is a fingerprint of the test's tokens without its name, comments and whitespace (see
+	// Fingerprint). Literals are kept, so tests with different inputs differ. Empty when unknown.
+	Body string
 	// Declared holds the "key: value" lines of the test's doc comment, values by key, in order.
 	Declared map[string][]string
 }
@@ -184,4 +191,15 @@ func (a *Analysis) HasSymbol(id string) bool {
 		}
 	}
 	return false
+}
+
+// Fingerprint is the Body of a test made of these tokens. Every adapter uses it, so that the same
+// tokens give the same fingerprint in every language.
+func Fingerprint(tokens []string) string {
+	h := sha256.New()
+	for _, t := range tokens {
+		h.Write([]byte(t))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }

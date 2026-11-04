@@ -98,6 +98,12 @@ func (sc *rustScope) bind(u useLeaf, inline bool) {
 
 func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
 	t := newTest(sc.f, name, fn)
+	// The attributes sit before the function, and they hold the inputs of a parameterised test.
+	nodes := []*sitter.Node{fn}
+	for p := fn.PrevSibling(); p != nil && (p.Kind() == "attribute_item" || strings.Contains(p.Kind(), "comment")); p = p.PrevSibling() {
+		nodes = append([]*sitter.Node{p}, nodes...)
+	}
+	t.fingerprint(nodes, fn.ChildByFieldName("name"))
 	for _, a := range attributes(sc.f, fn) {
 		if a == "ignore" || strings.HasPrefix(a, "ignore ") || strings.HasPrefix(a, "ignore=") {
 			_, reason, _ := strings.Cut(a, "=")

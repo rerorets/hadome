@@ -4,6 +4,7 @@ package treesitter
 
 import (
 	"sort"
+	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -152,4 +153,39 @@ func isField(p *sitter.Node, field string, c *sitter.Node) bool {
 		got = p.ChildByFieldName(field)
 	}
 	return got != nil && got.Id() == c.Id()
+}
+
+// fingerprint sets the test's Body from the tokens of nodes, leaving out the node naming the test,
+// comments and whitespace. Text between children that is not whitespace, such as the content of a
+// string some grammars keep outside any node, is a token too.
+func (t *testFacts) fingerprint(nodes []*sitter.Node, name *sitter.Node) {
+	var toks []string
+	var add func(n *sitter.Node)
+	add = func(n *sitter.Node) {
+		if (name != nil && n.Id() == name.Id()) || strings.Contains(n.Kind(), "comment") {
+			return
+		}
+		if n.ChildCount() == 0 {
+			toks = append(toks, t.f.text(n))
+			return
+		}
+		at := n.StartByte()
+		for i := uint(0); i < n.ChildCount(); i++ {
+			c := n.Child(i)
+			if gap := string(t.f.src[at:c.StartByte()]); strings.TrimSpace(gap) != "" {
+				toks = append(toks, gap)
+			}
+			add(c)
+			at = c.EndByte()
+		}
+		if gap := string(t.f.src[at:n.EndByte()]); strings.TrimSpace(gap) != "" {
+			toks = append(toks, gap)
+		}
+	}
+	for _, n := range nodes {
+		if n != nil {
+			add(n)
+		}
+	}
+	t.test.Body = facts.Fingerprint(toks)
 }

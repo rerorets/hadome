@@ -171,7 +171,7 @@ $ hadome check --base main
 
 | Group | Rules |
 |---|---|
-| `tests/` | `scope-shrunk` (what tests guard shrank) · `invariant-unguarded` · `no-clock` · `no-sleep` · `always-true` · `skip-without-reason` · `no-mock` (mocks in tests of pure code) · `guards-nothing` (tests that call no product code) · `purity-lost` and `target-unknown` (review) |
+| `tests/` | `scope-shrunk` (what tests guard shrank) · `invariant-unguarded` · `no-clock` · `no-sleep` · `always-true` · `skip-without-reason` · `no-mock` (mocks in tests of pure code) · `guards-nothing` (tests that call no product code) · `duplicate` (tests with the same body) · `purity-lost` and `target-unknown` (review) |
 | `deps/` | `not-in-diagram` (imports your dependency diagram does not draw) · `diagram-stale` (boxes that name nothing) |
 | `size/` | `file-lines` · `function-lines` · `params` · `complexity` · `interface-methods` |
 | `comments/` | `todo-format` (TODOs without a when) · `missing-doc` · `broken-reference` (comments pointing at missing documents) |

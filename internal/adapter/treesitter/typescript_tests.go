@@ -117,6 +117,7 @@ func (tf *tsFile) suite(n *sitter.Node, prefix string, skipped bool, out *[]fact
 
 func (tf *tsFile) test(name string, at, fn *sitter.Node, skipped bool) facts.Test {
 	t := newTest(tf.f, name, at)
+	t.fingerprint([]*sitter.Node{at}, named(at.ChildByFieldName("arguments"))[0])
 	if skipped {
 		reason := tf.comments[line(at)]
 		if reason == "" {

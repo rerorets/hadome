@@ -152,6 +152,7 @@ func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
 
 func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node) facts.Test {
 	t := newTest(jf.f, name, m)
+	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
 	skip := classSkip
 	for k := range jvmSkipAnnotations {
 		if a, ok := anns[k]; ok {

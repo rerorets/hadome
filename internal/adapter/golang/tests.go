@@ -2,6 +2,7 @@ package golang
 
 import (
 	"go/ast"
+	"go/scanner"
 	"go/token"
 	"go/types"
 	"path"
@@ -128,7 +129,8 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 			tParams: map[string]bool{}, vars: map[string]string{}, calls: map[string]*callCount{},
 			helpers: helpers, walking: map[string]bool{}, curPath: pf.path,
 			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{},
-			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc)},
+			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
+				Body: body(fset, pf.src, fn)},
 		}
 		w.collectTParams(fn.Type, fn.Body)
 		ast.Inspect(fn.Body, w.visit)
@@ -136,6 +138,27 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 		out = append(out, w.test)
 	}
 	return out
+}
+
+// body fingerprints the test from its parameters to its closing brace, so the name is left out.
+// The scanner drops comments and whitespace.
+func body(fset *token.FileSet, src []byte, fn *ast.FuncDecl) string {
+	from, to := fset.Position(fn.Type.Params.Pos()).Offset, fset.Position(fn.End()).Offset
+	var s scanner.Scanner
+	s.Init(token.NewFileSet().AddFile("", -1, to-from), src[from:to], nil, 0)
+	var toks []string
+	for {
+		_, tok, lit := s.Scan()
+		switch {
+		case tok == token.EOF:
+			return facts.Fingerprint(toks)
+		case tok == token.SEMICOLON: // the scanner inserts them at some line ends, so they depend on layout
+		case lit != "":
+			toks = append(toks, lit)
+		default:
+			toks = append(toks, tok.String())
+		}
+	}
 }
 
 func fileImports(f *ast.File) map[string]string {
