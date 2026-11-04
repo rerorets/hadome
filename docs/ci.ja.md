@@ -94,6 +94,43 @@ jobs:
         run: exit ${{ steps.check.outputs.code }}
 ```
 
+## ミューテーションも試す
+
+`.hadome.yml` に `mutation` を書いたら、`hadome mutate` を `check` とは別のジョブにする。`mutate` はミュータントごとにテストを実行するので、`check` よりずっと長くかかる。別のジョブにすれば、`check` の結果を先に見られる。上の例の `jobs:` に、次のジョブを足す。
+
+```yaml
+  mutate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6 # and whatever else the test command needs
+        with:
+          go-version-file: go.mod
+      - name: Try mutations with hadome
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          report="$RUNNER_TEMP/mutate.json"
+          code=0
+          go tool hadome mutate --base "$BASE" --format json > "$report" || code=$?
+          jq -r '
+            def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            (.regressions[] | "::error file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .fix) | esc)"),
+            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+          ' "$report" 2>/dev/null || true
+          case "$code" in 0|3) exit 0 ;; *) exit "$code" ;; esac
+```
+
+- 終了コードの扱いは `check` と同じである。`1` と `2` でジョブを落とし、`3` では通す
+- 生き残ったミュータントは、壊した行へのエラーの注釈として出る。人の確認が要るもの（上限を超えて試せなかった分など）は、警告の注釈として出る
+- テストのコマンド（`mutation.test`）が要るものは、ジョブの手順で用意する。例では Go だけを入れている
+- `mutate` の結果は PR のコメントに書かない。コメントは `check` のジョブが書く1つだけにして、書き換えがぶつからないようにする
+
 ## 例が前提にしていること
 
 - `fetch-depth: 0` で履歴をすべて取る。hadome は base のブランチを git から読む

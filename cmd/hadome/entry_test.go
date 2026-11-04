@@ -132,6 +132,22 @@ func TestInitWritesValidConfigurationAndNeverOverwrites(t *testing.T) {
 	if code, out := runIn(t, "config", "check"); code != 0 {
 		t.Fatalf("init wrote an invalid file: %s", out)
 	}
+	written, err := os.ReadFile(config.FileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(written), "#   test: [go, test, ./...]  # go\n#   test: [npm, test]  # typescript\n") {
+		t.Fatalf("init did not offer a commented test command per language:\n%s", written)
+	}
+	// Uncommenting the setting with one of the commands is valid configuration too.
+	uncommented := strings.Replace(strings.Replace(string(written), "# mutation:", "mutation:", 1),
+		"#   test: [go, test, ./...]", "  test: [go, test, ./...]", 1)
+	if err := os.WriteFile(config.FileName, []byte(uncommented), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := runIn(t, "config", "check"); code != 0 {
+		t.Fatalf("the uncommented mutation setting is invalid: %s\n%s", out, uncommented)
+	}
 	if err := os.WriteFile(config.FileName, []byte("schema: 1\n# mine\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
