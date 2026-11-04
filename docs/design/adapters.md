@@ -65,6 +65,7 @@ classDiagram
     +Internal bool
     +IO bool
     +Unknown bool
+    +Text string
   }
   class Test {
     +Name string

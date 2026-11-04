@@ -82,6 +82,15 @@ func (k *kotlin) imports(f *file, t *tables) []facts.Import {
 		out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: pkg,
 			Internal: internal, IO: !internal && t.isIO(name)})
 	})
+	for _, c := range dynamicCalls(f, set("call_expression"), jvmDynamic, ktTemplate.MatchString) {
+		if c.spec == "" {
+			out = append(out, unknownImport(f, c.at))
+			continue
+		}
+		pkg, _, internal := k.resolve(c.spec, false)
+		out = append(out, facts.Import{Path: f.path, Line: line(c.at), FromUnit: f.unit, ToUnit: pkg,
+			Internal: internal, IO: !internal && t.isIO(c.spec)})
+	}
 	return out
 }
 
@@ -183,3 +192,7 @@ func ktParams(f *file, n *sitter.Node) []string {
 	}
 	return out
 }
+
+// ktTemplate finds a value substituted into a Kotlin string ($name or ${…}); this grammar keeps it
+// in the string's text. An escaped \$ is a dollar sign.
+var ktTemplate = regexp.MustCompile(`(^|[^\\])\$[A-Za-z_{]`)

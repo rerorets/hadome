@@ -89,3 +89,6 @@ func jvmTables(extraIO, extraMocks []string, extraCalls map[string]string) *tabl
 	}
 	return t
 }
+
+// jvmDynamic are the calls that load the class their argument names.
+var jvmDynamic = set("Class.forName", "java.lang.Class.forName")

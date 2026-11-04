@@ -169,8 +169,24 @@ func (r *python) imports(f *file, t *tables) []facts.Import {
 		out = append(out, facts.Import{Path: f.path, Line: line(im.at), FromUnit: f.unit, ToUnit: to,
 			Internal: im.internal, IO: !im.internal && t.isIO(im.dotted)})
 	}
+	for _, c := range dynamicCalls(f, set("call"), pyDynamic, nil) {
+		if c.spec == "" {
+			out = append(out, unknownImport(f, c.at))
+			continue
+		}
+		_, unit, internal := r.resolve(c.spec)
+		to := c.spec
+		if internal {
+			to = unit
+		}
+		out = append(out, facts.Import{Path: f.path, Line: line(c.at), FromUnit: f.unit, ToUnit: to,
+			Internal: internal, IO: !internal && t.isIO(c.spec)})
+	}
 	return out
 }
+
+// pyDynamic are the calls that import the module their argument names.
+var pyDynamic = set("importlib.import_module", "import_module", "__import__")
 
 func (r *python) symbols(f *file) []facts.Symbol {
 	mod := module(f.path)
