@@ -41,7 +41,7 @@ One binary reads Go, TypeScript, Python, Rust, Java and Kotlin.
 Run every command at the root of the repository.
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"
+cd path/to/your-repo
 ```
 
 ### 1. Install

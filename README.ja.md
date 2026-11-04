@@ -41,7 +41,7 @@ Go・TypeScript・Python・Rust・Java・Kotlinを、1つのバイナリで読�
 どのコマンドもリポジトリのルートで動かします。
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"
+cd path/to/your-repo
 ```
 
 ### 1. 入れる
