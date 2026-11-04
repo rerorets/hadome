@@ -119,7 +119,7 @@ hadome check
 hadome agents --write CLAUDE.md
 ```
 
-- `AGENTS.md`など別のファイルも指定できます。
+- `AGENTS.md`など別のファイルも指定できます。`hadome agents --write AGENTS.md CLAUDE.md`のように並べると、それぞれに書きます。
 - ファイルが無ければ作ります。2回目からは同じブロックを書き換えます。
 - 日本語のブロックにするときは`--lang ja`を付けます。
 - 詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
