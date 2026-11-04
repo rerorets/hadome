@@ -34,15 +34,7 @@ hadome checks itself: [.hadome.yml](.hadome.yml) lists its invariants, and [docs
 
 ## Local setup
 
-Go with cgo builds all six languages; `CGO_ENABLED=0 go test ./...` checks the Go-only build. `packaging/smoke.sh <version>` builds and uses every package.
-
-Enable the repository hooks once:
-
-```sh
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit` blocks commits containing terms from a private denylist kept **outside** the repository (`$HADOME_DENYLIST` or `~/.config/hadome-dev/denylist.txt`). Never commit that list.
+Building, testing and enabling the hooks are in [CONTRIBUTING.md](CONTRIBUTING.md). The private denylist `.githooks/pre-commit` reads (`$HADOME_DENYLIST` or `~/.config/hadome-dev/denylist.txt`) stays outside the repository; never commit it.
 
 <!-- hadome:begin -->
 ## hadome

@@ -34,15 +34,7 @@ hadome は自分自身も検査する。[.hadome.yml](.hadome.yml) に不変条�
 
 ## 手元の準備
 
-cgo のある Go なら6言語すべてを読むビルドになる。`CGO_ENABLED=0 go test ./...` で Go だけのビルドを確かめる。`packaging/smoke.sh <version>` で全パッケージを作って使ってみる。
-
-リポジトリのフックを一度だけ有効にする。
-
-```sh
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit` は、リポジトリの**外**に置いた非公開の禁止語リスト（`$HADOME_DENYLIST` か `~/.config/hadome-dev/denylist.txt`）の語を含むコミットを止める。このリストはコミットしない。
+ビルド・テスト・フックの有効化は [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) のとおり。`.githooks/pre-commit` が使う非公開の禁止語リスト（`$HADOME_DENYLIST` か `~/.config/hadome-dev/denylist.txt`）は、リポジトリの外に置き、コミットしない。
 
 <!-- hadome:begin -->
 ## hadome
