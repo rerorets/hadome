@@ -124,8 +124,13 @@ func (r *typescript) imports(f *file, t *tables) []facts.Import {
 			spec = unquote(f.field(n, "source"))
 		case "call_expression":
 			if fn := f.field(n, "function"); fn == "require" || fn == "import" {
-				if args := named(n.ChildByFieldName("arguments")); len(args) == 1 && args[0].Kind() == "string" {
+				args := named(n.ChildByFieldName("arguments"))
+				switch {
+				case len(args) == 1 && literal(args[0]):
 					spec = unquote(f.text(args[0]))
+				case len(args) > 0:
+					out = append(out, unknownImport(f, n))
+					return false
 				}
 			}
 		}

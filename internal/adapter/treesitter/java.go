@@ -68,6 +68,15 @@ func (j *java) imports(f *file, t *tables) []facts.Import {
 		out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: pkg,
 			Internal: internal, IO: !internal && t.isIO(name)})
 	})
+	for _, c := range dynamicCalls(f, set("method_invocation"), jvmDynamic, nil) {
+		if c.spec == "" {
+			out = append(out, unknownImport(f, c.at))
+			continue
+		}
+		pkg, _, internal := j.resolve(c.spec, false)
+		out = append(out, facts.Import{Path: f.path, Line: line(c.at), FromUnit: f.unit, ToUnit: pkg,
+			Internal: internal, IO: !internal && t.isIO(c.spec)})
+	}
 	return out
 }
 

@@ -7,7 +7,8 @@ import (
 
 // pureUnits returns the units of the repository's non-test code that are pure: they import nothing
 // that performs input or output, and only pure units of the repository. A unit imported but not
-// found among the files is unknown, and unknown is never pure.
+// found among the files is unknown, and so is a unit with an import whose destination is unknown;
+// unknown is never pure.
 func pureUnits(a *facts.Analysis) map[string]bool {
 	units := map[string]bool{}
 	for _, f := range a.Files {
@@ -35,7 +36,7 @@ func pureUnits(a *facts.Analysis) map[string]bool {
 		visiting[u] = true
 		ok := true
 		for _, im := range deps[u] {
-			if im.IO || (im.Internal && !pure(im.ToUnit)) {
+			if reachesOut(im, pure) {
 				ok = false
 				break
 			}
@@ -51,6 +52,12 @@ func pureUnits(a *facts.Analysis) map[string]bool {
 		}
 	}
 	return out
+}
+
+// reachesOut reports an import that makes its unit impure: one that performs input or output,
+// one whose destination is unknown, or one of a unit of the repository that is not pure.
+func reachesOut(im facts.Import, pure func(string) bool) bool {
+	return im.IO || im.Unknown || (im.Internal && !pure(im.ToUnit))
 }
 
 // unitOf returns the unit holding the symbol with this ID, or "" when there is none.

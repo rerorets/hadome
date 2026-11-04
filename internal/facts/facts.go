@@ -58,6 +58,10 @@ type Import struct {
 	Internal bool
 	// IO is true when ToUnit performs input or output, by the adapter's io table and configuration.
 	IO bool
+	// Unknown is true when the destination is decided only at run time, such as import(name) with a
+	// name that is not a string literal. ToUnit is then empty and Text holds the import as written.
+	Unknown bool
+	Text    string
 }
 
 // Comment is one comment, line or block. Text excludes the comment delimiters.
