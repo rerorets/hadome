@@ -48,7 +48,7 @@ func (r *typescript) index(v engine.Version, files []*file) {
 	r.exists, r.aliases, r.scopes = map[string]bool{}, tsAliases(v.FS), map[string]int{}
 	for _, f := range files {
 		r.exists[f.path] = true
-		f.test = tsTestFile.MatchString(f.path)
+		f.test = tsTestFile.MatchString(f.path) || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}
 }

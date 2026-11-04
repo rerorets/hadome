@@ -3,10 +3,9 @@ package gate
 import (
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 
+	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 )
 
@@ -71,39 +70,10 @@ func selectFiles(v engine.Version, globs []string) ([]string, error) {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		if len(globs) == 0 || matchesAny(globs, p) {
+		if len(globs) == 0 || config.MatchesAny(globs, p) {
 			out = append(out, p)
 		}
 		return nil
 	})
 	return out, err
-}
-
-func matchesAny(globs []string, p string) bool {
-	for _, g := range globs {
-		if match(strings.Split(g, "/"), strings.Split(p, "/")) {
-			return true
-		}
-	}
-	return false
-}
-
-// match matches path elements against glob elements, where "**" matches any number of elements.
-func match(glob, elems []string) bool {
-	if len(glob) == 0 {
-		return len(elems) == 0
-	}
-	if glob[0] == "**" {
-		for i := 0; i <= len(elems); i++ {
-			if match(glob[1:], elems[i:]) {
-				return true
-			}
-		}
-		return false
-	}
-	if len(elems) == 0 {
-		return false
-	}
-	ok, err := path.Match(glob[0], elems[0])
-	return err == nil && ok && match(glob[1:], elems[1:])
 }

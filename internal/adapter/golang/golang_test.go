@@ -348,3 +348,33 @@ TestUnreadable asserts=0 unknown=true`
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze with files.tests and files.generated
+// files.generated makes a Go file generated without its header; files.tests never applies to Go,
+// whose tests the compiler decides by name.
+func TestGoRolesFromConfiguration(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"gen/client.go":  {Data: []byte("package gen\n\nfunc Call() {}\n")},
+		"checks/a.go":    {Data: []byte("package checks\n\nfunc A() {}\n")},
+		"store/store.go": {Data: []byte("package store\n\nfunc Save() {}\n")},
+	}
+	c := config.Config{GeneratedFiles: []string{"gen/**"}, TestFiles: []string{"checks/**"}}
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, []string{"checks/a.go", "gen/client.go", "store/store.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range a.Files {
+		got = append(got, fmt.Sprintf("%s %s", f.Path, f.Role))
+	}
+	for _, s := range a.Symbols {
+		got = append(got, "symbol "+s.ID)
+	}
+	sort.Strings(got)
+	want := "checks/a.go source\ngen/client.go generated\nstore/store.go source\nsymbol example.com/app/checks.A\nsymbol example.com/app/store.Save"
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}

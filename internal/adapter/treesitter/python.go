@@ -53,7 +53,7 @@ func (r *python) index(_ engine.Version, files []*file) {
 		for d := path.Dir(f.path); d != "." && !r.dirs[d]; d = path.Dir(d) {
 			r.dirs[d] = true
 		}
-		f.test = pyTestFile.MatchString(f.path)
+		f.test = pyTestFile.MatchString(f.path) || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}
 }

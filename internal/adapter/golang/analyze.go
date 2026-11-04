@@ -28,6 +28,9 @@ type parsedFile struct {
 	file    *ast.File
 	src     []byte
 	test    bool
+	// generated is true for a file with the standard header, or one matching files.generated.
+	// files.tests never applies to Go: the compiler decides what a test is.
+	generated bool
 }
 
 // Name is the language's name in configuration.
@@ -51,7 +54,8 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		if err != nil {
 			return nil, err
 		}
-		pf := parsedFile{path: p, src: src, pkgPath: importPath(modules, path.Dir(p)), test: strings.HasSuffix(p, "_test.go")}
+		pf := parsedFile{path: p, src: src, pkgPath: importPath(modules, path.Dir(p)), test: strings.HasSuffix(p, "_test.go"),
+			generated: config.MatchesAny(c.GeneratedFiles, p)}
 		lines := strings.Count(string(src), "\n") + 1
 		f, perr := parser.ParseFile(fset, p, src, parser.ParseComments)
 		if perr != nil {
@@ -59,6 +63,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 			continue
 		}
 		pf.file = f
+		pf.generated = pf.generated || ast.IsGenerated(f)
 		files = append(files, pf)
 		a.Files = append(a.Files, facts.File{Path: p, Language: "go", Role: role(pf), Lines: lines,
 			Unit: pf.pkgPath, UnitPath: path.Dir(p)})
@@ -73,7 +78,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 			continue
 		}
 		a.Imports = append(a.Imports, importsOf(fset, pf, idx, tb.io)...)
-		if !ast.IsGenerated(pf.file) {
+		if !pf.generated {
 			a.Symbols = append(a.Symbols, symbolsOf(fset, pf)...)
 		}
 	}
@@ -84,7 +89,7 @@ func role(pf parsedFile) facts.Role {
 	switch {
 	case pf.test:
 		return facts.RoleTest
-	case ast.IsGenerated(pf.file):
+	case pf.generated:
 		return facts.RoleGenerated
 	default:
 		return facts.RoleSource

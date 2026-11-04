@@ -110,6 +110,8 @@ func (v *validator) str(n ast.Node, path string, k Key) any {
 		v.fail(n, path, fmt.Sprintf("%q does not match %s", s, k.Pattern), k)
 	} else if _, err := regexp.Compile(s); k.Regexp && err != nil {
 		v.fail(n, path, "is not a valid regular expression: "+err.Error(), k)
+	} else if k.Glob && !validGlob(s) {
+		v.fail(n, path, fmt.Sprintf("%q is not a valid glob", s), k)
 	}
 	return s
 }
