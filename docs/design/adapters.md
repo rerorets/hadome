@@ -64,6 +64,7 @@ classDiagram
     +ToUnit string
     +Internal bool
     +IO bool
+    +Unknown bool
   }
   class Test {
     +Name string
@@ -118,8 +119,8 @@ classDiagram
 | Role | Meaning | How it is decided |
 |---|---|---|
 | `source` | Product code | Default |
-| `test` | Test code | The language's conventions (below), then configuration overrides |
-| `generated` | Generated code; size and comment rules skip it | Standard headers (e.g. Go's `Code generated … DO NOT EDIT.`), then configuration globs |
+| `test` | Test code | The language's conventions (below), or a `files.tests` glob in configuration |
+| `generated` | Generated code; size and comment rules skip it | Standard headers (e.g. Go's `Code generated … DO NOT EDIT.`), or a `files.generated` glob in configuration |
 | `other` | A language hadome does not know, or not code | Still listed, so file-level rules can see it |
 
 Test file conventions:
@@ -132,6 +133,15 @@ Test file conventions:
 | Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
 | Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
 | Kotlin | Same as Java |
+
+For repositories laid out against the conventions, configuration can add roles.
+
+- A file matching a `files.tests` glob is read as a test file even when the language's conventions say otherwise. Go files are left out: whether a Go file is a test is decided by the compiler (`_test.go`), and hadome changing it would disagree with the real build
+- A file matching a `files.generated` glob is treated as generated code even without a header
+- A file matching both is generated code
+- Globs are written as in a gate's `paths` (`**` is directories at any depth)
+- Globs only add roles; they never take away a role the conventions or a header gave
+- The role is decided before the language reads the file, because whether a file is a test changes which facts are read from it (tests, or symbols)
 
 ### Units (for dependency rules)
 
@@ -146,6 +156,27 @@ A **unit** is what a dependency diagram draws a box for. Each language has its n
 | Java / Kotlin | Package |
 
 `Internal` is true when the import points inside the repository. `IO` is true when the imported unit performs input or output, according to the adapter's `io` table and the entries configuration adds (`rules.tests.io`). Only imports of non-test files are listed: they are what the unit itself depends on.
+
+### Imports whose destination is unknown
+
+Some imports do not have a destination until the code runs. Such an import is listed with `Unknown` true and an empty `ToUnit`. Treating it as external and dropping it without a word would hide it from the dependency rules and from the judgement of purity.
+
+| Language | Imports whose destination is unknown |
+|---|---|
+| TypeScript | `import(…)`, `require(…)` whose argument is not a string |
+| Python | `importlib.import_module(…)`, `__import__(…)` whose argument is not a string |
+| Java / Kotlin | `Class.forName(…)` whose argument is not a string |
+| Go, Rust | None. Imports are always written as strings |
+
+When the argument is a string, the destination is resolved like any other import.
+
+`unknown/import` sends imports whose destination is unknown, added by a change, to a person's review (exit code `3`). It does not fail the check, because a check never fails on what cannot be confirmed. The anchor is the file and the normalised call text, so moving the import does not make it new.
+
+| Rule | Cases |
+|---|---|
+| `unknown/import` | a new import whose destination is unknown returns `3` · one already in base does not · a dynamic import with a string argument is an ordinary import · one inside a test file does not |
+
+A unit with an import whose destination is unknown has `unknown` purity, and `unknown` is never pure ("Pure units" in [rules-tests.md](rules-tests.md)).
 
 ### Hazard categories
 

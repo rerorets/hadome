@@ -78,6 +78,10 @@ rules:                         # optional; only what differs from the defaults
   deps:
     diagram: docs/conventions/dependencies.md  # a Mermaid flowchart; adding an arrow needs review
 
+files:                         # optional; for layouts against the languages' conventions
+  tests: ["checks/**"]         # read as test files (not applied to Go files); changing it needs review
+  generated: ["gen/**"]        # treated as generated code; adding to it needs review
+
 gates:                         # optional; product-specific gates
   - id: acme/log-append-only
     kind: finding
@@ -123,7 +127,7 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 
 Both versions' files are still read and validated in full, so that the two can be compared.
 
-A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`).
+A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`). `files.generated` loosens when an entry is added too, because the files it matches leave the size and comment rules (`LooserWhenAdded`). Any change to `files.tests` counts as loosening (`LooserWhenChanged`): which files are tests moves what the rules cover in either direction, and hadome cannot tell which is stricter.
 
 If base's configuration is invalid, the check returns `2` rather than guessing: treating it as empty would hide removed invariants. hadome reads every `schema:` version it has ever accepted, so a valid base never becomes invalid by upgrading hadome.
 
@@ -170,6 +174,8 @@ classDiagram
     +Hazards map~string,[]string~
     +IO []string
     +Assertions []string
+    +TestFiles []string
+    +GeneratedFiles []string
     +Size Limits
     +TodoForm string
     +Diagram *Diagram
