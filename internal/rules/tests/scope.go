@@ -10,6 +10,11 @@ type scopeShrunk struct{}
 
 func (scopeShrunk) ID() string           { return "tests/scope-shrunk" }
 func (scopeShrunk) Cases() []engine.Case { return scopeCases() }
+func (scopeShrunk) About() engine.About {
+	return engine.About{Finds: "code that an active test called in base and no active test calls in head, while the code is still there",
+		Why: "the behaviour of that code can now change without any test noticing",
+		Fix: "keep or restore a test that calls it, or remove the code itself if it is no longer needed"}
+}
 
 func (r scopeShrunk) Measure(in engine.Input) ([]engine.Item, error) {
 	seen := map[string]bool{}
@@ -46,6 +51,12 @@ type targetUnknown struct{}
 
 func (targetUnknown) ID() string           { return "tests/target-unknown" }
 func (targetUnknown) Cases() []engine.Case { return unknownCases() }
+func (targetUnknown) About() engine.About {
+	return engine.About{Finds: "a new test none of whose calls hadome can identify",
+		Why:    "hadome cannot tell whether removing this test would shrink what the suite guards",
+		Fix:    "call the code under test through its package-level API (a function, or a method on a value built by a constructor)",
+		Review: true}
+}
 
 func (r targetUnknown) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -54,8 +65,8 @@ func (r targetUnknown) Find(in engine.Input) ([]engine.Finding, error) {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name, Review: true,
 				Message: "could not identify what " + t.Name + " tests",
-				Why:     "hadome cannot tell whether removing this test would shrink what the suite guards",
-				Fix:     "call the code under test through its package-level API (a function, or a method on a value built by a constructor)",
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
 			})
 		}
 	}

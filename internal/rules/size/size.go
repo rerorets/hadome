@@ -29,6 +29,12 @@ type limitRule struct {
 
 func (r limitRule) ID() string           { return "size/" + r.key }
 func (r limitRule) Cases() []engine.Case { return r.cases() }
+func (r limitRule) About() engine.About {
+	return engine.About{Finds: "product code over the " + r.key + " limit (" + r.what + "); an existing one that grows is a regression too",
+		Why:  "past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it",
+		Fix:  r.fix + "; raising the limit (rules.size." + r.key + ") is a change a person reviews",
+		Keys: []string{"rules.size." + r.key}}
+}
 
 func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 	limit := in.Config.Size[r.key]
@@ -40,8 +46,8 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: m.file, Line: m.line, Anchor: m.name, Value: m.size,
 			Message: fmt.Sprintf("%s: %s %d, limit %d", display(m), r.what, m.size, limit),
-			Why:     "past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it",
-			Fix:     r.fix + "; raising the limit (rules.size." + r.key + ") is a change a person reviews",
+			Why:     r.About().Why,
+			Fix:     r.About().Fix,
 		})
 	}
 	return out, nil

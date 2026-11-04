@@ -15,6 +15,13 @@ type unread struct{}
 
 func (unread) ID() string { return "unknown/unread" }
 
+func (unread) About() engine.About {
+	return engine.About{Finds: "a new file of a supported language that hadome could not read",
+		Why:    "no rule saw what the file does, so nothing it adds was checked",
+		Fix:    "make it parse, or use a build of hadome that reads its language (every prebuilt binary does)",
+		Review: true}
+}
+
 func (unread) Cases() []engine.Case {
 	mod := func(files ...string) fstest.MapFS {
 		t := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}}

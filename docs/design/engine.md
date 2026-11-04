@@ -122,7 +122,7 @@ A product adds its own gate as an **external command** declared in its configura
 
 The full protocol is in [external-gates.md](../external-gates.md). Any language can implement a gate this way, and the product's knowledge stays in the product's repository.
 
-The engine itself never starts a process. `Engine.ConfigRules` builds extra rules from head's configuration; `cmd/hadome` sets it to the gate package's builder ([gates.md](gates.md)). A rule that returns an error could not run, and the check stops with exit code `2`. A rule that implements `SelfTester` tests itself instead of providing cases.
+The engine itself never starts a process. `Engine.ConfigRules` builds extra rules from head's configuration; `cmd/hadome` sets it to the gate package's builder ([gates.md](gates.md)). A rule that returns an error could not run, and the check stops with exit code `2`. A rule that implements `SelfTester` tests itself instead of providing cases. Every built-in rule implements `Describer`: `About` returns what it finds, why that matters, how to fix it, and the configuration keys that tune it. `hadome explain <rule id>` prints that with the names of the rule's self-test cases. A finding's `why` and `fix` use the same text as `About` wherever they do not depend on what was found, so the explanation and the output never disagree.
 
 ## Types and interfaces
 
@@ -160,6 +160,17 @@ classDiagram
   class SelfTester {
     <<interface>>
     +SelfTest() error
+  }
+  class Describer {
+    <<interface>>
+    +About() About
+  }
+  class About {
+    +Finds string
+    +Why string
+    +Fix string
+    +Keys []string
+    +Review bool
   }
   class Rule {
     <<interface>>

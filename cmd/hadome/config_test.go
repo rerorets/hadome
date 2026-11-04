@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/rerorets/hadome/internal/config"
+	"github.com/rerorets/hadome/internal/engine"
 )
 
 // viewpoint: external contract
@@ -21,6 +24,7 @@ func TestConfigCheckAndExplainExitCodes(t *testing.T) {
 		{"valid file", "schema: 1\nlanguages: [go]\n", []string{"config", "check"}, 0, "is valid"},
 		{"invalid file", "schema: 1\nlanguage: [go]\n", []string{"config", "check"}, 2, ".hadome.yml:2: language"},
 		{"known value", "", []string{"explain", "round-trip"}, 0, "Writing out and reading back"},
+		{"a rule", "", []string{"explain", "tests/no-sleep"}, 0, "Self-test cases:\n  - a new sleep fails"},
 		{"unknown name", "", []string{"explain", "nonsense"}, 2, "nothing called"},
 	}
 	for _, tc := range cases {
@@ -38,5 +42,30 @@ func TestConfigCheckAndExplainExitCodes(t *testing.T) {
 				t.Errorf("output does not mention %q:\n%s%s", tc.out, out.String(), errOut.String())
 			}
 		})
+	}
+}
+
+// viewpoint: invariant
+// target: hadome explain <rule>
+// Every built-in rule explains itself: what it finds, why, how to fix it, and keys that exist.
+func TestEveryBuiltInRuleExplainsItself(t *testing.T) {
+	for _, r := range newEngine().Rules {
+		d, ok := r.(engine.Describer)
+		if !ok {
+			t.Errorf("%s does not explain itself", r.ID())
+			continue
+		}
+		a := d.About()
+		if a.Finds == "" || a.Why == "" || a.Fix == "" {
+			t.Errorf("%s: Finds, Why and Fix must all be written: %+v", r.ID(), a)
+		}
+		for _, k := range a.Keys {
+			if _, ok := config.Explain(k); !ok {
+				t.Errorf("%s names %s, which is not a configuration key", r.ID(), k)
+			}
+		}
+		if _, ok := explainRule(r.ID()); !ok {
+			t.Errorf("hadome explain %s finds nothing", r.ID())
+		}
 	}
 }

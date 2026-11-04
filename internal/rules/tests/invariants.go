@@ -15,6 +15,12 @@ type invariantUnguarded struct{}
 
 func (invariantUnguarded) ID() string           { return "tests/invariant-unguarded" }
 func (invariantUnguarded) Cases() []engine.Case { return invariantCases() }
+func (invariantUnguarded) About() engine.About {
+	return engine.About{Finds: "an invariant in configuration that no active test guards",
+		Why:  "the invariant is written down, but nothing fails when it is broken",
+		Fix:  "write a test that checks it; built-in types are recognised from the test's calls, others need guards: in the test's doc comment",
+		Keys: []string{"invariants"}}
+}
 
 func (r invariantUnguarded) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -30,7 +36,7 @@ func (r invariantUnguarded) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: config.FileName, Anchor: inv.Key(), Message: msg,
-			Why: "the invariant is written down, but nothing fails when it is broken",
+			Why: r.About().Why,
 			Fix: fix(inv),
 		})
 	}

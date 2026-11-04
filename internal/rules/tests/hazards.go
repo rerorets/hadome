@@ -16,8 +16,10 @@ type hazardRule struct {
 	id       string
 	category facts.HazardCategory
 	message  string
+	finds    string
 	why      string
 	fix      string
+	keys     []string
 	cases    []engine.Case
 	// applies, when set, returns which tests of a version the rule looks at.
 	applies func(in engine.Input) func(facts.Test) bool
@@ -25,6 +27,9 @@ type hazardRule struct {
 
 func (r hazardRule) ID() string           { return r.id }
 func (r hazardRule) Cases() []engine.Case { return r.cases }
+func (r hazardRule) About() engine.About {
+	return engine.About{Finds: r.finds, Why: r.why, Fix: r.fix, Keys: r.keys}
+}
 
 func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -66,6 +71,8 @@ func NoClock() engine.Rule {
 	return hazardRule{
 		id: "tests/no-clock", category: facts.HazardClock,
 		message: "test reads the clock",
+		finds:   "a test that reads the current time directly",
+		keys:    []string{"rules.tests.hazards.clock"},
 		why:     "the result depends on when the test runs; it passes today and fails at midnight, at month end, or in another time zone",
 		fix:     "pass the time in as a value, or inject a clock",
 		cases:   clockCases(),
@@ -77,6 +84,8 @@ func NoSleep() engine.Rule {
 	return hazardRule{
 		id: "tests/no-sleep", category: facts.HazardSleep,
 		message: "test waits by sleeping",
+		finds:   "a test that waits by sleeping",
+		keys:    []string{"rules.tests.hazards.sleep"},
 		why:     "a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event",
 		fix:     "wait for the event itself: a channel, a callback, or a condition with a deadline that fails loudly",
 		cases:   sleepCases(),
@@ -88,6 +97,7 @@ func AlwaysTrue() engine.Rule {
 	return hazardRule{
 		id: "tests/always-true", category: facts.HazardAlwaysTrue,
 		message: "assertion cannot fail",
+		finds:   "an assertion that cannot fail, such as assertTrue(true) or comparing a value with itself",
 		why:     "the test reports success no matter what the code does",
 		fix:     "assert on the behaviour under test",
 		cases:   alwaysTrueCases(),
@@ -99,6 +109,11 @@ type skipWithoutReason struct{}
 
 func (skipWithoutReason) ID() string           { return "tests/skip-without-reason" }
 func (skipWithoutReason) Cases() []engine.Case { return skipCases() }
+func (skipWithoutReason) About() engine.About {
+	return engine.About{Finds: "a test that is skipped or disabled without a reason",
+		Why: "a skipped test protects nothing, and without a reason nobody can decide when it should come back",
+		Fix: "write the reason in the skip itself"}
+}
 
 func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
@@ -107,8 +122,8 @@ func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Skip.Line, Anchor: t.Name,
 				Message: t.Name + " is skipped without a reason",
-				Why:     "a skipped test protects nothing, and without a reason nobody can decide when it should come back",
-				Fix:     "write the reason in the skip itself, for example " + skipExample(t.Path),
+				Why:     r.About().Why,
+				Fix:     r.About().Fix + ", for example " + skipExample(t.Path),
 			})
 		}
 	}

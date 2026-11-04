@@ -46,6 +46,12 @@ type todoFormat struct{}
 
 func (todoFormat) ID() string           { return "comments/todo-format" }
 func (todoFormat) Cases() []engine.Case { return todoCases() }
+func (todoFormat) About() engine.About {
+	return engine.About{Finds: "a new TODO, FIXME or XXX comment that does not match the configured form",
+		Why:  "a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished",
+		Fix:  "write it in the configured form (for example TODO(stage 2): …), do it now, or delete it",
+		Keys: []string{"rules.comments.todo"}}
+}
 
 var todoWord = regexp.MustCompile(`^(TODO|FIXME|XXX)\b`)
 
@@ -63,7 +69,7 @@ func (r todoFormat) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: l.path, Line: l.n, Anchor: strings.Join(strings.Fields(l.text), " "),
 			Message: "TODO without the required form: " + l.text,
-			Why:     "a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished",
+			Why:     r.About().Why,
 			Fix:     "write it in the form " + in.Config.TodoForm + " (for example TODO(stage 2): …), do it now, or delete it",
 		})
 	}
@@ -75,6 +81,11 @@ type missingDoc struct{}
 
 func (missingDoc) ID() string           { return "comments/missing-doc" }
 func (missingDoc) Cases() []engine.Case { return docCases() }
+func (missingDoc) About() engine.About {
+	return engine.About{Finds: "a new exported function, method or type of product code without a doc comment",
+		Why: "callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses",
+		Fix: "write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong"}
+}
 
 // Find reports exported symbols of product code without a doc comment.
 func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
@@ -87,8 +98,8 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
 			Message: "exported " + string(s.Kind) + " " + name + " has no doc comment",
-			Why:     "callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses",
-			Fix:     "write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong",
+			Why:     r.About().Why,
+			Fix:     r.About().Fix,
 		})
 	}
 	return out, nil
@@ -99,6 +110,11 @@ type brokenReference struct{}
 
 func (brokenReference) ID() string           { return "comments/broken-reference" }
 func (brokenReference) Cases() []engine.Case { return referenceCases() }
+func (brokenReference) About() engine.About {
+	return engine.About{Finds: "a comment that names a Markdown file the version does not have",
+		Why: "a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere",
+		Fix: "point at the document's current path, or remove the reference"}
+}
 
 // reference is a word ending in .md, optionally followed by a section.
 var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'])((?:\\.{1,2}/)*[A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.md)(?:#[A-Za-z0-9_-]*)?")
@@ -119,8 +135,8 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: l.path, Line: l.n, Anchor: ref,
 				Message: "comment refers to " + ref + ", which does not exist",
-				Why:     "a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere",
-				Fix:     "point at the document's current path, or remove the reference",
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
 			})
 		}
 	}

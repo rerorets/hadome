@@ -57,6 +57,23 @@ type SelfTester interface {
 	SelfTest() error
 }
 
+// About is what a rule says about itself when a person or an agent asks (hadome explain <rule>).
+// Findings carry the same Why and Fix wherever they do not depend on what was found.
+type About struct {
+	Finds string   // what the rule reports
+	Why   string   // why that matters
+	Fix   string   // the usual way to resolve it
+	Keys  []string // configuration keys that tune the rule
+	// Review is true when what the rule reports asks for a person's review (exit code 3) instead
+	// of failing the check.
+	Review bool
+}
+
+// Describer is a rule that explains itself. Every built-in rule is one.
+type Describer interface {
+	About() About
+}
+
 // FindingRule finds violations in one version. A finding in head with no match in base is a regression.
 // An error means the rule could not run, and a check that could not run never passes.
 type FindingRule interface {
