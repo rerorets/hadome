@@ -141,6 +141,11 @@ type Test struct {
 	// Reads counts uses of product values that are not calls: a constant, a variable, or a function
 	// passed as a value. Names in type positions are not values.
 	Reads int
+	// Asserts counts the calls that check something: assertions, and calls that fail the test.
+	Asserts int
+	// AssertsUnknown is true when the test hands its testing tool (Go's t, Python's self) to code the
+	// adapter cannot read, which may check something there.
+	AssertsUnknown bool
 	// Body is a fingerprint of the test's tokens without its name, comments and whitespace (see
 	// Fingerprint). Literals are kept, so tests with different inputs differ. Empty when unknown.
 	Body string

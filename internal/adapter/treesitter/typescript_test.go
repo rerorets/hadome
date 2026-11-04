@@ -18,6 +18,12 @@ import (
 // analyze runs one language over a tree and returns its facts.
 func analyze(t *testing.T, name string, tree fstest.MapFS) *facts.Analysis {
 	t.Helper()
+	return analyzeWith(t, name, tree, config.Config{})
+}
+
+// analyzeWith runs one language over a tree with a configuration.
+func analyzeWith(t *testing.T, name string, tree fstest.MapFS, c config.Config) *facts.Analysis {
+	t.Helper()
 	var l *lang
 	for _, c := range Languages() {
 		if c.name == name {
@@ -31,7 +37,7 @@ func analyze(t *testing.T, name string, tree fstest.MapFS) *facts.Analysis {
 		}
 	}
 	sort.Strings(paths)
-	a, err := l.Analyze(engine.Version{Label: "head", FS: tree}, config.Config{}, paths)
+	a, err := l.Analyze(engine.Version{Label: "head", FS: tree}, c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,6 +23,8 @@ type jvmFile struct {
 	names   map[string]string // simple name -> target: a class ("a.b.Store") or a static import ("a.b.Store.create")
 	helpers map[string]*sitter.Node
 	mocks   []*sitter.Node
+	// assertPrefixes are what start the names of assertions in this language beyond the common ones.
+	assertPrefixes []string
 }
 
 // bindClasses binds the classes of the file's own package and of what it imports.
@@ -191,6 +193,7 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	if obj != "" {
 		key = obj + "." + name
 	}
+	w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...)
 	if cat, ok := w.jf.t.calls[key]; ok {
 		w.t.hazard(cat, n)
 		return

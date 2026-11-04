@@ -174,9 +174,14 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 | Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…` |
 | Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
 
-As with hazard categories, these are examples; each adapter holds the full table. Configuration can add entries under `rules.tests.assertions`, but never remove built-in ones.
+As with hazard categories, these are examples; each adapter holds the full table. In languages other than Go, a function whose name starts with `assert`, `expect` or `verify` counts too (`assertEquals`, `assert_called_once`, `expectValid`). A checking helper in another file cannot be read by the adapter, but its name says that it checks.
 
-When a test passes its testing handle (Go's `*testing.T`, Python's `self` and so on) to a function the adapter cannot read, it may check there, so the adapter sets `Test.AssertsUnknown`.
+Configuration can add entries under `rules.tests.assertions`, but never remove built-in ones. An entry is written as the test calls it (`acme.MustEqual`). In Go, it is written as `<import path>.<Name>`.
+
+When a test passes its testing handle (Go's `*testing.T`, Python's `self` and so on) to a function the adapter cannot read, it may check there, so the adapter sets `Test.AssertsUnknown`. It does the same in these cases:
+
+- Go: `t.Run` is given a function that is neither a function literal nor a helper in the test files
+- Python: the test calls a method of its own class (`self.check(…)`)
 
 ### Reading product values
 

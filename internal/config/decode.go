@@ -28,6 +28,7 @@ func decode(raw map[string]any, layers []string) Config {
 		c.Hazards[category] = textList(v)
 	}
 	c.IO = textList(tests["io"])
+	c.Assertions = textList(tests["assertions"])
 	size := object(object(raw["rules"])["size"])
 	c.Size = Limits{}
 	for _, k := range sizeKey.Fields {
@@ -136,7 +137,7 @@ func diffList(out *[]Change, base, head []any, k Key, path string) {
 	b, h := ids(base), ids(head)
 	for id := range b {
 		if !h[id] {
-			*out = append(*out, Change{Key: path, Removed: id, Looser: k.Looser != LooserNever})
+			*out = append(*out, Change{Key: path, Removed: id, Looser: k.Looser != LooserNever && k.Looser != LooserWhenAdded})
 		}
 	}
 	if k.Looser == LooserWhenChanged {
@@ -144,7 +145,7 @@ func diffList(out *[]Change, base, head []any, k Key, path string) {
 	}
 	for id := range h {
 		if !b[id] {
-			*out = append(*out, Change{Key: path, Added: id})
+			*out = append(*out, Change{Key: path, Added: id, Looser: k.Looser == LooserWhenAdded})
 		}
 	}
 }

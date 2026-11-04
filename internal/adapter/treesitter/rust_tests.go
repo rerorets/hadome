@@ -109,6 +109,9 @@ func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
 			_, reason, _ := strings.Cut(a, "=")
 			t.skip(unquote(strings.TrimSpace(reason)), fn)
 		}
+		if a == "should_panic" || strings.HasPrefix(a, "should_panic(") {
+			t.test.Asserts++ // the test fails unless it panics
+		}
 	}
 	for _, m := range sc.mocks {
 		t.hazard(facts.HazardMock, m)
@@ -184,6 +187,7 @@ func (w *rustWalk) typeOf(v *sitter.Node) string {
 func (w *rustWalk) macro(n *sitter.Node) {
 	f := w.sc.f
 	name := f.field(n, "macro") + "!"
+	w.t.assertion(name, w.sc.t.asserts, "panic")
 	if cat, ok := w.sc.t.calls[name]; ok {
 		w.t.hazard(cat, n)
 		return
@@ -228,6 +232,7 @@ func (w *rustWalk) call(n *sitter.Node) {
 	f := w.sc.f
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
+	w.t.assertion(callee, w.sc.t.asserts)
 	if cat, ok := w.sc.t.calls[callee]; ok {
 		w.t.hazard(cat, n)
 		return

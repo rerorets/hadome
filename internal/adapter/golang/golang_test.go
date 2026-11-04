@@ -271,3 +271,80 @@ func sameBodies(tests []facts.Test) string {
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// Failing the test through t, testify and configured assertions count as asserts, in the test and
+// in its helpers. Handing t to code the adapter cannot read makes the count unknown.
+func TestGoAsserts(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("package store\n\nfunc Add(a, b int) int { return a + b }\n")},
+		"check/check.go": {Data: []byte("package check\n\nimport \"testing\"\n\nfunc Equal(t *testing.T, a, b int) {}\n\nfunc Same(t *testing.T, a, b int) {}\n")},
+		"store/store_test.go": {Data: []byte(`package store
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"example.com/app/check"
+)
+
+func TestNone(t *testing.T) { Add(1, 2) }
+
+func TestFatal(t *testing.T) {
+	if Add(1, 2) != 3 {
+		t.Fatalf("want 3")
+	}
+}
+
+func TestTestify(t *testing.T) { require.Equal(t, 3, Add(1, 2)) }
+
+func TestHelper(t *testing.T) { equal(t, Add(1, 2), 3) }
+
+func TestSubtest(t *testing.T) {
+	t.Run("one", func(t *testing.T) {
+		if Add(1, 0) != 1 {
+			t.Error("want 1")
+		}
+	})
+}
+
+func TestConfigured(t *testing.T) { check.Equal(t, Add(1, 2), 3) }
+
+func TestUnreadable(t *testing.T) { check.Same(t, Add(1, 2), 3) }
+
+func TestNamedSubtest(t *testing.T) { t.Run("one", runOne) }
+
+func equal(tb testing.TB, a, b int) {
+	if a != b {
+		tb.Errorf("%d != %d", a, b)
+	}
+}
+`)},
+		"store/sub_test.go": {Data: []byte("package store\n\nimport \"testing\"\n\nvar runOne = func(t *testing.T) {}\n")},
+	}
+	c := config.Config{Assertions: []string{"example.com/app/check.Equal"}}
+	paths := []string{"check/check.go", "store/store.go", "store/store_test.go", "store/sub_test.go"}
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, ts := range a.Tests {
+		got = append(got, fmt.Sprintf("%s asserts=%d unknown=%v", ts.Name, ts.Asserts, ts.AssertsUnknown))
+	}
+	sort.Strings(got)
+	want := `TestConfigured asserts=1 unknown=false
+TestFatal asserts=1 unknown=false
+TestHelper asserts=1 unknown=false
+TestNamedSubtest asserts=0 unknown=true
+TestNone asserts=0 unknown=false
+TestSubtest asserts=1 unknown=false
+TestTestify asserts=1 unknown=false
+TestUnreadable asserts=0 unknown=true`
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}

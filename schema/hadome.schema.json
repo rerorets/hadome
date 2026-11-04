@@ -223,6 +223,13 @@
           "additionalProperties": false,
           "description": "Settings of the tests/ rules.",
           "properties": {
+            "assertions": {
+              "description": "Functions that count as assertions for tests/no-assertion, in addition to the built-in ones. Write an entry as the test calls it (acme.MustEqual), or in Go as \u003cimport path\u003e.\u003cName\u003e. Entries can be added, never removed from the built-in table.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "hazards": {
               "additionalProperties": false,
               "description": "Calls that count as hazards in tests, in addition to the built-in ones.",

@@ -107,6 +107,7 @@ Adding tests does not always widen what they guard. These three rules stop tests
 - **Fix**: assert the behaviour. For a test that only checks that nothing throws, write a reasoned exception marker
 - A test that passes its testing handle (Go's `t`, Python's `self` and so on) to a function the adapter cannot read (`Test.AssertsUnknown`) may check there, so it is not reported
 - What counts as an assertion is in each language's table ([adapters.md](adapters.md)). Configuration can add assertion functions under `rules.tests.assertions`, but never remove the built-in ones
+- Adding an entry loosens the rule, because a function that checks nothing would let a test pass too. So a change that adds one asks for a person's review as `config/loosened`
 
 ### `tests/duplicate`
 
@@ -200,7 +201,7 @@ Each rule ships with at least these cases.
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test passes |
 | `tests/invariant-unguarded` | a new invariant without a test fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |
-| `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes |
+| `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes · a skipped test passes · a test already in base is not reported |
 | `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name and comments changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
 | `tests/invariant-unguarded` (shape) | an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` |
 

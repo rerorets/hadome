@@ -178,6 +178,7 @@ func (w *pyWalk) visit(n *sitter.Node) bool {
 			}
 		}
 	case "assert_statement":
+		w.t.test.Asserts++
 		if alwaysTruePy(f, n) {
 			w.t.hazard(facts.HazardAlwaysTrue, n)
 		}
@@ -218,6 +219,7 @@ func (w *pyWalk) call(n *sitter.Node) {
 		}
 		return
 	}
+	w.checks(callee, args)
 	if cat, ok := w.pf.t.calls[callee]; ok {
 		w.t.hazard(cat, n)
 		return
@@ -272,4 +274,32 @@ func scopeArg(scopes map[string]int, target string, args []*sitter.Node) *sitter
 		return args[pos]
 	}
 	return nil
+}
+
+// checks counts a call that checks something. A method of the test's own class, or self handed on,
+// may check something the adapter does not read.
+func (w *pyWalk) checks(callee string, args *sitter.Node) {
+	switch {
+	case pytestChecks[callee]:
+		w.t.test.Asserts++
+	case w.t.assertion(callee, w.pf.t.asserts):
+	case strings.HasPrefix(callee, "self.") && strings.Count(callee, ".") == 1, passes(w.pf.f, args, "self"):
+		w.t.test.AssertsUnknown = true
+	}
+}
+
+// pytestChecks fail the test unless something happens.
+var pytestChecks = set("pytest.raises", "pytest.fail", "pytest.warns")
+
+// passes reports whether one of the arguments is the name itself.
+func passes(f *file, args *sitter.Node, name string) bool {
+	if args == nil {
+		return false
+	}
+	for _, a := range named(args) {
+		if f.text(a) == name {
+			return true
+		}
+	}
+	return false
 }

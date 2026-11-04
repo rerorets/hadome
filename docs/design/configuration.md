@@ -123,7 +123,7 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 
 Both versions' files are still read and validated in full, so that the two can be compared.
 
-A change that makes a rule more permissive than base — a higher limit, a rule turned off, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`).
+A change that makes a rule more permissive than base — a higher limit, a rule turned off, an invariant removed — is reported as `config/loosened` and returns exit code `3`. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`).
 
 If base's configuration is invalid, the check returns `2` rather than guessing: treating it as empty would hide removed invariants. hadome reads every `schema:` version it has ever accepted, so a valid base never becomes invalid by upgrading hadome.
 

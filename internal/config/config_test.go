@@ -248,6 +248,7 @@ func TestDiffMarksLooseningOnly(t *testing.T) {
 		{"removing an invariant", strings.Replace(full, "  - id: billing-1\n    says: \"Totals match\"\n", "", 1), 1},
 		{"removing a gate", full[:strings.Index(full, "gates:")], 1},
 		{"removing an io entry", strings.Replace(full, "io: [example.com/acme/db]", "io: []", 1), 1},
+		{"adding an assertion", strings.Replace(full, "io: [example.com/acme/db]", "io: [example.com/acme/db]\n    assertions: [acme.MustEqual]", 1), 1},
 		{"narrowing languages", strings.Replace(full, "[go, typescript]", "[go]", 1), 1},
 		{"changing a gate's options", strings.Replace(full, "limit: 3", "limit: 4", 1), 1},
 		{"changing a gate's command", strings.Replace(full, "run: [scripts/gates/log-append-only]", "run: [\"true\"]", 1), 1},
@@ -329,6 +330,21 @@ func TestLimitsDefaultAndLoosenUpward(t *testing.T) {
 	}
 	if es := loadErrors(t, "schema: 1\nrules:\n  size:\n    params: 0\n", dir); es[0].Key != "rules.size.params" {
 		t.Errorf("a limit below 1 is an error: %v", es)
+	}
+}
+
+// viewpoint: behaviour
+// target: config.Diff
+// An assertion entry excuses tests, so adding one loosens the rules and removing one does not.
+func TestAddingAnAssertionLoosens(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	one := mustLoad(t, "schema: 1\nrules:\n  tests:\n    assertions: [acme.MustEqual]\n", dir)
+	if got := looser(Diff(none, one)); len(got) != 1 {
+		t.Errorf("adding: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(one, none)); len(got) != 0 {
+		t.Errorf("removing: want no looser change, got %v", got)
 	}
 }
 

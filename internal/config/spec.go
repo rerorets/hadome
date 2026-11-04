@@ -35,6 +35,9 @@ const (
 	LooserWhenChanged
 	// LooserWhenHigher means a larger number loosens the rules, such as a size limit.
 	LooserWhenHigher
+	// LooserWhenAdded means adding an entry loosens the rules: the entries excuse something, such as
+	// functions that count as assertions.
+	LooserWhenAdded
 )
 
 // Value is one allowed value of a key, with what it means.
@@ -190,6 +193,10 @@ var rulesKey = Key{
 				}},
 			addedEntries("io", "units that perform input or output, which make every unit importing them not pure; "+
 				"end an entry with /... to include everything under it", "io: [example.com/acme/db, example.com/acme/clients/...]"),
+			stringList("assertions", "Functions that count as assertions for tests/no-assertion, in addition to the built-in ones. "+
+				"Write an entry as the test calls it (acme.MustEqual), or in Go as <import path>.<Name>. "+
+				"Entries can be added, never removed from the built-in table.",
+				"assertions: [acme.MustEqual]", LooserWhenAdded),
 		},
 	}, sizeKey, commentsKey, depsKey},
 }
