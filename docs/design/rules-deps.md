@@ -26,6 +26,7 @@ flowchart LR
 
 - Every `mermaid` block of the file that is a `flowchart` or `graph` is read
 - A **node's label** names a directory of the repository, from its root. `dir/...` covers the directory and everything under it. A node without a label is named by its ID
+- A label may describe its directory after a line break (`<br/>`). Only the first line names the directory, so rewording the description changes nothing the arrows allow (`core["internal/core<br/>holds the rules"]`)
 - An **arrow** `a --> b` (also `-.->` and `==>`, with or without a `|label|`, in chains and with `&`) allows the units of `a` to import the units of `b`. Lines without arrows (`---`) allow nothing
 - Subgraphs, styles and comments (`%%`) are ignored
 - A unit belongs to the most specific node that covers it: an exact directory before a `/...`, a longer `/...` before a shorter one
