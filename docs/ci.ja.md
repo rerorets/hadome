@@ -96,7 +96,7 @@ jobs:
 
 ## ミューテーションも試す
 
-`.hadome.yml` に `mutation` を書いたら、`hadome mutate` を `check` とは別のジョブにする。`mutate` はミュータントごとにテストを実行するので、`check` よりずっと長くかかる。別のジョブにすれば、`check` の結果を先に見られる。上の例の `jobs:` に、次のジョブを足す。hadome 自身の CI の `mutate` のジョブも同じ形で動いている。
+`.hadome.yml` に `mutation` を書いたら、`hadome mutate` を `check` とは別のジョブにする。`mutate` はミュータントごとにテストを実行するので、`check` よりずっと長くかかる。別のジョブにすれば、`check` の結果を先に見られる。上の例の `jobs:` に、次のジョブを足す。
 
 ```yaml
   mutate:

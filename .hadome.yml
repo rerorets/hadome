@@ -20,7 +20,7 @@ invariants:
   - id: no-network
     says: "hadome never reads configuration from the network"
 
-# hadome mutate breaks the Go functions a pull request touched; CI fails when no test notices.
+# `go run ./cmd/hadome mutate` breaks the functions a change touched and fails when no test
+# notices. It runs locally, not in CI: each mutant runs the tests once.
 mutation:
   test: [go, test, ./..., -run, "^({tests})$"]
-  max-mutants: 30

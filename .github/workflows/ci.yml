@@ -111,35 +111,6 @@ jobs:
         if: steps.check.outputs.code != '0' && steps.check.outputs.code != '3'
         run: exit ${{ steps.check.outputs.code }}
 
-  # hadome breaks the Go functions a pull request touched and fails when no test notices. It tries
-  # at most mutation.max-mutants of them; the rest are listed for review, which does not fail.
-  mutate:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - name: Try mutations with hadome
-        env:
-          BASE: origin/${{ github.base_ref }}
-        run: |
-          go build -o "$RUNNER_TEMP/hadome" ./cmd/hadome
-          report="$RUNNER_TEMP/mutate.json"
-          code=0
-          "$RUNNER_TEMP/hadome" mutate --base "$BASE" --format json > "$report" || code=$?
-          jq -r '
-            def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.regressions[] | "::error file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .fix) | esc)"),
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
-          ' "$report" 2>/dev/null || true
-          case "$code" in 0|3) exit 0 ;; *) exit "$code" ;; esac
-
   packaging:
     runs-on: ubuntu-24.04
     steps:
