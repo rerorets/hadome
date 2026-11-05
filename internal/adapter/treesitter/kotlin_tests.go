@@ -167,8 +167,10 @@ func (w *jvmWalk) ktCall(n *sitter.Node) {
 	var args []*sitter.Node
 	for _, c := range named(n) {
 		if c.Kind() == "value_arguments" {
-			for _, a := range named(c) {
-				args = append(args, a.NamedChild(0))
+			for _, a := range arguments(c) {
+				if v := ktArgumentValue(a); v != nil {
+					args = append(args, v)
+				}
 			}
 		}
 	}
@@ -186,4 +188,13 @@ func (w *jvmWalk) ktCall(n *sitter.Node) {
 // packageOf returns the package of a class target ("a.b.Store" -> "a.b").
 func packageOf(class string) string {
 	return class[:len(class)-len(lastElem(class))-1]
+}
+
+// ktArgumentValue is the expression of a value_argument: its last named child, since a named
+// argument (expected = 1) starts with the name. Nil when it holds none.
+func ktArgumentValue(a *sitter.Node) *sitter.Node {
+	if a.NamedChildCount() == 0 {
+		return nil
+	}
+	return a.NamedChild(a.NamedChildCount() - 1)
 }

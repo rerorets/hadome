@@ -174,6 +174,21 @@ func named(n *sitter.Node) []*sitter.Node {
 	return out
 }
 
+// arguments returns the named children of an argument list without its comments, which the
+// grammars keep as named children: a comment between arguments is not one.
+func arguments(list *sitter.Node) []*sitter.Node {
+	if list == nil {
+		return nil
+	}
+	var out []*sitter.Node
+	for _, c := range named(list) {
+		if !strings.Contains(c.Kind(), "comment") {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // field returns the text of a field of n, or "".
 func (f *file) field(n *sitter.Node, name string) string {
 	if c := n.ChildByFieldName(name); c != nil {
