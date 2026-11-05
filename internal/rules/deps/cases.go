@@ -65,5 +65,13 @@ func staleCases() []engine.Case {
 				return t
 			}(),
 			WantFail: []string{"deps/diagram-stale"}},
+		{Name: "a planned box naming a missing directory passes", Base: app(drawn), Head: app(drawn + "\n  util[\"utils\"]:::planned")},
+		{Name: "a box a class statement marks planned passes too", Base: app(drawn),
+			Head: app(drawn + "\n  class util planned\n  util[\"utils\"]")},
+		{Name: "a planned box naming a unit fails", Base: app(drawn + "\n  jobs[\"jobs\"]:::planned"),
+			Head:     app(drawn+"\n  jobs[\"jobs\"]:::planned", "jobs/jobs.go", "package jobs\n"),
+			WantFail: []string{"deps/diagram-stale"}},
+		{Name: "marking an existing box planned needs review", Base: app(drawn + "\n  util[\"utils\"]"),
+			Head: app(drawn + "\n  util[\"utils\"]:::planned"), WantReview: []string{engine.LoosenedID}},
 	}
 }

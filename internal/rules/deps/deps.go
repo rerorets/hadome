@@ -111,9 +111,9 @@ type diagramStale struct{}
 func (diagramStale) ID() string           { return "deps/diagram-stale" }
 func (diagramStale) Cases() []engine.Case { return staleCases() }
 func (diagramStale) About() engine.About {
-	return engine.About{Finds: engine.T("a node of the dependency diagram whose label names no unit of the version"),
+	return engine.About{Finds: engine.T("a node of the dependency diagram whose label names no unit of the version, or a planned node whose directory already holds one"),
 		Why:  engine.T("a box that names nothing makes the diagram look complete when it is not"),
-		Fix:  engine.T("correct the label to the unit's directory, or remove the node"),
+		Fix:  engine.T("correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned"),
 		Keys: []string{"rules.deps.diagram"}}
 }
 
@@ -126,15 +126,23 @@ func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
 	unitDir := dirs(in.Facts)
 	var out []engine.Finding
 	for _, n := range d.Nodes {
-		if namesAUnit(n.Label, unitDir) {
-			continue
+		names := namesAUnit(n.Label, unitDir)
+		switch {
+		case n.Planned && names:
+			out = append(out, engine.Finding{
+				Rule: r.ID(), File: d.Path, Line: n.PlannedLine, Anchor: n.Label + "\x00" + config.PlannedClass,
+				Message: engine.T("the diagram's node %s is planned, but %s already holds a unit", n.ID, n.Label),
+				Why:     engine.T("a planned box whose package exists tells readers it is still to be written"),
+				Fix:     engine.T("remove the class planned from node %s", n.ID),
+			})
+		case !n.Planned && !names:
+			out = append(out, engine.Finding{
+				Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: n.Label,
+				Message: engine.T("the diagram's node %s names %s, which holds no unit", n.ID, n.Label),
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
+			})
 		}
-		out = append(out, engine.Finding{
-			Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: n.Label,
-			Message: engine.T("the diagram's node %s names %s, which holds no unit", n.ID, n.Label),
-			Why:     r.About().Why,
-			Fix:     r.About().Fix,
-		})
 	}
 	return out, nil
 }

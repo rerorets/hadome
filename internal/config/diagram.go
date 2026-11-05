@@ -20,7 +20,14 @@ type Node struct {
 	ID    string
 	Label string
 	Line  int
+	// Planned marks a box drawn before its directory is created: it has the class planned.
+	// PlannedLine is where the class is given, on the node or in a class statement.
+	Planned     bool
+	PlannedLine int
 }
+
+// PlannedClass is the Mermaid class that marks a planned box.
+const PlannedClass = "planned"
 
 // Edge is one arrow: the units of From may import the units of To. Both are node IDs.
 type Edge struct {
@@ -53,7 +60,10 @@ var (
 	}
 	// lineBreak starts a label's description: the first line names the directory, the rest is prose.
 	lineBreak = regexp.MustCompile(`(?i)<br\s*/?>`)
-	ignored   = regexp.MustCompile(`^(%%|subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|direction\b)`)
+	// classSuffix is a node's ":::class"; classStmt is "class id1,id2 class".
+	classSuffix = regexp.MustCompile(`^:::([A-Za-z0-9_-]+)`)
+	classStmt   = regexp.MustCompile(`^class\s+([A-Za-z0-9_.,-]+)\s+([A-Za-z0-9_-]+)\s*$`)
+	ignored     = regexp.MustCompile(`^(%%|subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|direction\b)`)
 )
 
 // parseDiagram reads the flowcharts of a Markdown file. Errors carry the line they are on.
@@ -81,6 +91,7 @@ func parseDiagram(path string, data []byte) (*Diagram, Errors) {
 			}
 		}
 	}
+	p.markPlanned()
 	if len(p.errs) == 0 && len(p.d.Nodes) == 0 {
 		p.fail(1, "holds no Mermaid flowchart; put the diagram in a ```mermaid block starting with flowchart")
 	}
@@ -91,7 +102,29 @@ type diagramParser struct {
 	d        *Diagram
 	index    map[string]int  // node ID -> position in d.Nodes
 	explicit map[string]bool // whether the node's label was written, not taken from its ID
-	errs     Errors
+	// planned are the IDs a class statement marks planned, by line. Mermaid lets the statement come
+	// before or after the node, so they are applied once every node is known.
+	planned []classUse
+	errs    Errors
+}
+
+type classUse struct {
+	id   string
+	line int
+}
+
+// markPlanned applies the class statements that mark nodes planned.
+func (p *diagramParser) markPlanned() {
+	for _, u := range p.planned {
+		i, ok := p.index[u.id]
+		if !ok {
+			p.fail(u.line, fmt.Sprintf("class %s %s names node %s, which the diagram does not draw", u.id, PlannedClass, u.id))
+			continue
+		}
+		if !p.d.Nodes[i].Planned {
+			p.d.Nodes[i].Planned, p.d.Nodes[i].PlannedLine = true, u.line
+		}
+	}
 }
 
 func (p *diagramParser) fail(line int, problem string) {
@@ -101,6 +134,14 @@ func (p *diagramParser) fail(line int, problem string) {
 
 // statement reads "group (arrow group)*", where a group is "node (& node)*".
 func (p *diagramParser) statement(s string, line int) {
+	if m := classStmt.FindStringSubmatch(s); m != nil {
+		if m[2] == PlannedClass {
+			for _, id := range strings.Split(m[1], ",") {
+				p.planned = append(p.planned, classUse{id: id, line: line})
+			}
+		}
+		return
+	}
 	if s == "" || ignored.MatchString(s) {
 		return
 	}
@@ -167,6 +208,12 @@ func (p *diagramParser) node(s string, line int) (string, string, bool) {
 		}
 	}
 	p.define(id, label, line)
+	if m := classSuffix.FindStringSubmatch(rest); m != nil {
+		rest = rest[len(m[0]):]
+		if m[1] == PlannedClass {
+			p.planned = append(p.planned, classUse{id: id, line: line})
+		}
+	}
 	return id, rest, true
 }
 

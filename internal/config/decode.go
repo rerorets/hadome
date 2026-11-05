@@ -230,6 +230,24 @@ func diffArrows(base, head *Diagram) []Change {
 			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Removed: a})
 		}
 	}
+	return append(out, diffPlanned(base, head)...)
+}
+
+// diffPlanned lists boxes base draws unplanned and head marks planned. That is looser: one mark
+// would take a box that stopped naming anything out of deps/diagram-stale. A new box drawn planned
+// is the intended use, and removing the mark tightens, so neither is listed.
+func diffPlanned(base, head *Diagram) []Change {
+	was := map[string]bool{}
+	for _, n := range base.Nodes {
+		was[n.ID] = n.Planned
+	}
+	var out []Change
+	for _, n := range head.Nodes {
+		if planned, ok := was[n.ID]; ok && !planned && n.Planned {
+			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Line: n.PlannedLine,
+				Added: n.ID + " " + PlannedClass, Looser: true})
+		}
+	}
 	return out
 }
 
