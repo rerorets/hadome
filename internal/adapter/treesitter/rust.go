@@ -27,7 +27,7 @@ type rust struct {
 	automocks map[string]bool
 }
 
-func (*rust) grammar() *sitter.Language { return sitter.NewLanguage(rustgrammar.Language()) }
+func (*rust) grammar(string) *sitter.Language { return sitter.NewLanguage(rustgrammar.Language()) }
 
 var rustBranches = branches{
 	kinds: set("if_expression", "while_expression", "loop_expression", "for_expression", "match_arm"),

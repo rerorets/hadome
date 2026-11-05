@@ -150,6 +150,23 @@ The other rules are Go's too.
 
 The grammars are pinned to versions built for tree-sitter's language ABI 14, the newest the Go binding loads. A grammar is upgraded together with the binding, never alone.
 
+TypeScript picks the grammar by extension, because neither grammar reads all of the other's files.
+
+| Extensions | Grammar | What the other grammar cannot read |
+|---|---|---|
+| `.ts`, `.mts`, `.cts` | TypeScript | The `<string>x` type assertion (TSX cannot tell it from a JSX element) |
+| `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` | TSX | JSX elements |
+
+A grammar cannot read some correct code. tree-sitter does not stop there: it puts in an error node and reads on. Most facts of the file survive, but a function or test next to the error may be missed. These turned up in local code:
+
+| Language | What the grammar cannot read |
+|---|---|
+| TypeScript | A tagged template with type arguments (styled-components' ``styled.div<{ open: boolean }>`…` ``), and a bare `&` in a JSX string or text |
+| Rust | A reference to a variable named `raw` (`&raw`), taken for the `&raw const` syntax |
+| Kotlin | An array literal in an annotation argument (`[]`) |
+
+Such files count as read and are not listed under `unknown/unread` (see "Deliberately left out"). Upgrading the grammars makes them fewer.
+
 ## Unread files
 
 | Rule | Kind | Regression when |
@@ -169,3 +186,4 @@ The grammars are pinned to versions built for tree-sitter's language ABI 14, the
 - Zero values that need type inference (functions without a written result type, and user-defined types)
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`
+- Reporting a file with a syntax error as unread. Almost every such error comes from a grammar failing on correct code, so it would ask for a review that changing the code cannot clear

@@ -33,7 +33,8 @@ func endLine(n *sitter.Node) int { return int(n.EndPosition().Row) + 1 }
 
 // reader is what one language adds to the shared walk.
 type reader interface {
-	grammar() *sitter.Language
+	// grammar is the grammar a file at path is parsed with.
+	grammar(path string) *sitter.Language
 	// index learns what the language needs about the whole version (packages, modules, aliases)
 	// before any file is read. It sets each file's test, unit and unitPath.
 	index(v engine.Version, files []*file)
@@ -63,16 +64,16 @@ func (l *lang) Claims(p string) bool { return claims(l.name, p) }
 func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
 	parser := sitter.NewParser()
 	defer parser.Close()
-	if err := parser.SetLanguage(l.r.grammar()); err != nil {
-		return nil, err
-	}
 	var files []*file
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {
 			return nil, err
 		}
-		tree := parser.Parse(src, nil)
+		tree, err := l.parse(parser, p, src)
+		if err != nil {
+			return nil, err
+		}
 		defer tree.Close()
 		gen := config.MatchesAny(c.GeneratedFiles, p)
 		files = append(files, &file{path: p, src: src, root: tree.RootNode(),
@@ -105,6 +106,14 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		a.Tests = append(a.Tests, l.r.tests(f, t)...)
 	}
 	return a, nil
+}
+
+// parse parses one file with the grammar its path calls for.
+func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (*sitter.Tree, error) {
+	if err := parser.SetLanguage(l.r.grammar(p)); err != nil {
+		return nil, err
+	}
+	return parser.Parse(src, nil), nil
 }
 
 var generatedMark = regexp.MustCompile(`(?i)(@generated|code generated .* do not edit|auto-generated)`)

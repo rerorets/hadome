@@ -16,7 +16,7 @@ import (
 // java reads Java.
 type java struct{ jvm }
 
-func (*java) grammar() *sitter.Language { return sitter.NewLanguage(javagrammar.Language()) }
+func (*java) grammar(string) *sitter.Language { return sitter.NewLanguage(javagrammar.Language()) }
 
 var javaBranches = branches{
 	kinds: set("if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement",

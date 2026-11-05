@@ -20,7 +20,7 @@ type kotlin struct {
 	values    map[string][]string // package -> top-level properties of product code
 }
 
-func (*kotlin) grammar() *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
+func (*kotlin) grammar(string) *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
 
 var ktBranches = branches{
 	kinds: set("if_expression", "for_statement", "while_statement", "do_while_statement", "catch_block", "when_entry"),
