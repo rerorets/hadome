@@ -150,7 +150,7 @@ This repository uses hadome to stop regressions in code and tests.
 
 ## 出力の例
 
-`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存の図に無いimportをした変更の結果です（出力は英語です）。
+`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存の図に無いimportをした変更の結果です。
 
 ```console
 $ hadome check --base main
@@ -168,6 +168,8 @@ $ hadome check --base main
   fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
+
+出力は既定で英語です。`--lang ja`を付けるか、`.hadome.yml`に`messages: ja`と書くと、日本語で出ます。日本語になるのは、見つけたものの文言（`message`・`why`・`fix`）、`hadome explain <ルール>`の説明、最後のまとめの行です。JSONの鍵、ルールのID、終了コードは変わりません。
 
 ## 検査するもの
 

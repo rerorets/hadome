@@ -176,6 +176,15 @@
       },
       "type": "array"
     },
+    "messages": {
+      "default": "en",
+      "description": "The language of what hadome writes for people and agents: the message, why and fix of findings, hadome explain \u003crule\u003e and the summary line. A command's --lang overrides it. JSON keys, rule IDs and exit codes stay the same in every language. Default en.",
+      "enum": [
+        "en",
+        "ja"
+      ],
+      "type": "string"
+    },
     "mutation": {
       "additionalProperties": false,
       "description": "hadome mutate: breaks the functions a change touched, one small change at a time, and fails when no test notices. Removing it or weakening it needs review.",

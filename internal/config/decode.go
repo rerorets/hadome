@@ -13,6 +13,7 @@ func decode(raw map[string]any, layers []string) Config {
 	c := Config{raw: raw, Layers: layers, Hazards: map[string][]string{}}
 	c.Schema, _ = raw["schema"].(int)
 	c.Languages = textList(raw["languages"])
+	c.Messages = str(orDefault(raw["messages"], "en"))
 	for _, v := range list(raw["invariants"]) {
 		m := v.(map[string]any)
 		c.Invariants = append(c.Invariants, Invariant{

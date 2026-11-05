@@ -25,10 +25,10 @@ func (survived) ID() string { return RuleID }
 func (survived) Cases() []engine.Case { return nil }
 
 func (survived) About() engine.About {
-	return engine.About{Finds: "a break of a function the change touched that no test notices",
-		Why: "the code can do something else than it does now, and the tests still pass",
-		Fix: "add or strengthen a test that checks what the broken line decides; if the break cannot change behaviour, " +
-			"add an exception with the reason"}
+	return engine.About{Finds: engine.T("a break of a function the change touched that no test notices"),
+		Why: engine.T("the code can do something else than it does now, and the tests still pass"),
+		Fix: engine.T("add or strengthen a test that checks what the broken line decides; if the break cannot change behaviour, " +
+			"add an exception with the reason")}
 }
 
 func (r survived) Find(in engine.Input) ([]engine.Finding, error) {

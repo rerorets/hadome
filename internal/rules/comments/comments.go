@@ -47,9 +47,9 @@ type todoFormat struct{}
 func (todoFormat) ID() string           { return "comments/todo-format" }
 func (todoFormat) Cases() []engine.Case { return todoCases() }
 func (todoFormat) About() engine.About {
-	return engine.About{Finds: "a new TODO, FIXME or XXX comment that does not match the configured form",
-		Why:  "a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished",
-		Fix:  "write it in the configured form (for example TODO(stage 2): …), do it now, or delete it",
+	return engine.About{Finds: engine.T("a new TODO, FIXME or XXX comment that does not match the configured form"),
+		Why:  engine.T("a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished"),
+		Fix:  engine.T("write it in the configured form (for example TODO(stage 2): …), do it now, or delete it"),
 		Keys: []string{"rules.comments.todo"}}
 }
 
@@ -68,9 +68,9 @@ func (r todoFormat) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: l.path, Line: l.n, Anchor: strings.Join(strings.Fields(l.text), " "),
-			Message: "TODO without the required form: " + l.text,
+			Message: engine.T("TODO without the required form: %s", l.text),
 			Why:     r.About().Why,
-			Fix:     "write it in the form " + in.Config.TodoForm + " (for example TODO(stage 2): …), do it now, or delete it",
+			Fix:     engine.T("write it in the form %s (for example TODO(stage 2): …), do it now, or delete it", in.Config.TodoForm),
 		})
 	}
 	return out, nil
@@ -82,10 +82,10 @@ type missingDoc struct{}
 func (missingDoc) ID() string           { return "comments/missing-doc" }
 func (missingDoc) Cases() []engine.Case { return docCases() }
 func (missingDoc) About() engine.About {
-	return engine.About{Finds: "a new exported function, method or type of product code without a doc comment, " +
-		"or a new Terraform variable or output without a description",
-		Why: "callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses",
-		Fix: "write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong"}
+	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment, " +
+		"or a new Terraform variable or output without a description"),
+		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
+		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong")}
 }
 
 // Find reports exported symbols of product code without a doc comment.
@@ -96,9 +96,9 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 			continue
 		}
 		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
-		msg := "exported " + string(s.Kind) + " " + name + " has no doc comment"
+		msg := engine.T("exported %s %s has no doc comment", string(s.Kind), name)
 		if s.Kind == facts.SymbolValue { // a Terraform variable or output: its description is its doc
-			msg = "value " + name + " has no description"
+			msg = engine.T("value %s has no description", name)
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
@@ -116,9 +116,9 @@ type brokenReference struct{}
 func (brokenReference) ID() string           { return "comments/broken-reference" }
 func (brokenReference) Cases() []engine.Case { return referenceCases() }
 func (brokenReference) About() engine.About {
-	return engine.About{Finds: "a comment that names a Markdown file the version does not have",
-		Why: "a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere",
-		Fix: "point at the document's current path, or remove the reference"}
+	return engine.About{Finds: engine.T("a comment that names a Markdown file the version does not have"),
+		Why: engine.T("a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere"),
+		Fix: engine.T("point at the document's current path, or remove the reference")}
 }
 
 // reference is a word ending in .md, optionally followed by a section.
@@ -139,7 +139,7 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 			}
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: l.path, Line: l.n, Anchor: ref,
-				Message: "comment refers to " + ref + ", which does not exist",
+				Message: engine.T("comment refers to %s, which does not exist", ref),
 				Why:     r.About().Why,
 				Fix:     r.About().Fix,
 			})

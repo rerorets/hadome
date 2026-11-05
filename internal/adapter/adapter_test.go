@@ -140,8 +140,8 @@ func TestTheSkipFixShowsTheTestsOwnLanguage(t *testing.T) {
 			skip := strings.TrimRight(p.bareSkip, "()]")
 			for _, f := range r.Regressions {
 				if f.Rule == "tests/skip-without-reason" {
-					if !strings.Contains(f.Fix, skip) {
-						t.Errorf("fix %q does not show %q", f.Fix, skip)
+					if !strings.Contains(f.Fix.In("en"), skip) {
+						t.Errorf("fix %q does not show %q", f.Fix.In("en"), skip)
 					}
 					return
 				}

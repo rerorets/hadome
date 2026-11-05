@@ -36,7 +36,7 @@ func (g *findingGate) Find(in engine.Input) ([]engine.Finding, error) {
 			return nil, fmt.Errorf("gate %s on %s: every finding needs a file and an anchor", g.id(), in.Version.Label)
 		}
 		out = append(out, engine.Finding{Rule: g.id(), File: f.File, Line: f.Line, Anchor: f.Anchor,
-			Message: f.Message, Why: f.Why, Fix: f.Fix})
+			Message: engine.Verbatim(f.Message), Why: engine.Verbatim(f.Why), Fix: engine.Verbatim(f.Fix)})
 	}
 	return out, nil
 }
@@ -81,9 +81,9 @@ func (g *measureGate) Measure(in engine.Input) ([]engine.Item, error) {
 			return nil, fmt.Errorf("gate %s on %s: every item needs a key", g.id(), in.Version.Label)
 		}
 		out = append(out, engine.Item{Rule: g.id(), Key: it.Key, File: it.File, Line: it.Line,
-			Detail: g.id() + ": " + it.Key + " is no longer guarded (was: " + it.Detail + ")",
-			Why:    "the product's own gate " + g.id() + " reported it in the base version",
-			Fix:    "restore it, or, if it was removed on purpose, make the gate answer it as legitimate"})
+			Detail: engine.T("%s: %s is no longer guarded (was: %s)", g.id(), it.Key, it.Detail),
+			Why:    engine.T("the product's own gate %s reported it in the base version", g.id()),
+			Fix:    engine.T("restore it, or, if it was removed on purpose, make the gate answer it as legitimate")})
 	}
 	g.items[in.Version.Label] = out
 	return out, nil

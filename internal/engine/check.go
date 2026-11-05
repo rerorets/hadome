@@ -76,7 +76,7 @@ func (e *Engine) Check(src Source) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	var r Report
+	r := Report{Messages: headCfg.Messages}
 	r.Untouched = compareFindings(&r, base.findings, head.findings, renames)
 	r.NewExceptions = newMarkers(base.markers, head.markers, renames)
 	r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
