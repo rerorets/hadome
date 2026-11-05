@@ -102,6 +102,8 @@ hadome agents --write AGENTS.md CLAUDE.md
 
 `schema: 1`、見つけた言語のコメント、`hadome suggest` と `hadome explain` を指すコメントを入れた `.hadome.yml` を書く。既存のファイルは上書きしない。
 
+言語はファイルの拡張子で見つける。Ansible の YAML は拡張子では見分けられないので、Ansible のアダプタが受け持つ配置（`roles/…`、`playbooks/…`、ルートの `site.yml` と `playbook.yml`）にファイルがあれば、Ansible を見つけたとする。受け持つかどうかはアダプタの決め方をそのまま使って判断する。
+
 `mutation` の設定もコメントにして書く（[mutation.ja.md](mutation.ja.md)）。見つけた言語ごとに、よく使うテストのコマンドを1行ずつ並べる。利用者は1つを残し、そのコメントを外して使う。推測したコマンドなので、有効にはしない。
 
 | 言語 | テストのコマンド |
@@ -111,7 +113,7 @@ hadome agents --write AGENTS.md CLAUDE.md
 | Python | `[python, -m, pytest]` |
 | Rust | `[cargo, test]` |
 | Java、Kotlin | `[./gradlew, test]` |
-| Terraform | 書かない。壊す関数が無い |
+| Terraform、Ansible | 書かない。壊す関数が無い |
 
 hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
 

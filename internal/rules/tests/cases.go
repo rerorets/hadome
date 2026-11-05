@@ -125,7 +125,22 @@ func scopeCases() []engine.Case {
 		{Name: "renaming a test file passes", Base: tree(testFile(plainTest)), Head: tree(renamed)},
 		{Name: "a test that skips only on one platform still guards", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(strings.Replace(plainTest, "\ts := store.New()", "\tif runtime.GOOS == \"plan9\" {\n\t\tt.Skip(\"no plan9 support\")\n\t}\n\ts := store.New()", 1)))},
+		{Name: "deleting the only Molecule scenario of an Ansible role fails", Base: ansibleRole(true), Head: ansibleRole(false),
+			WantFail: []string{"tests/scope-shrunk"}},
+		{Name: "deleting the role with its scenario passes", Base: ansibleRole(true), Head: fstest.MapFS{}},
 	}
+}
+
+// ansibleRole is the Ansible role web, with a Molecule scenario that applies it and checks the result
+// when scenario is true.
+func ansibleRole(scenario bool) fstest.MapFS {
+	t := fstest.MapFS{"roles/web/tasks/main.yml": {Data: []byte("- name: Install the server\n  ansible.builtin.package:\n    name: nginx\n")}}
+	if scenario {
+		t["roles/web/molecule/default/converge.yml"] = &fstest.MapFile{Data: []byte("- hosts: all\n  roles:\n    - web\n")}
+		t["roles/web/molecule/default/verify.yml"] = &fstest.MapFile{Data: []byte(
+			"- hosts: all\n  tasks:\n    - ansible.builtin.assert:\n        that: ansible_facts.packages.nginx is defined\n")}
+	}
+	return t
 }
 
 func unknownCases() []engine.Case {

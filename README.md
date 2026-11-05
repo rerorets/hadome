@@ -12,7 +12,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
-  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin%20%7C%20Terraform-555.svg">
+  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin%20%7C%20Terraform%20%7C%20Ansible-555.svg">
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@ It looks at how code is written (dependency direction, size, comments) and how t
 
 It is meant for repositories where AI agents write most of the code. The result is also available as JSON, which agents read to fix what it reports.
 
-One binary reads Go, TypeScript, Python, Rust, Java, Kotlin and Terraform.
+One binary reads Go, TypeScript, Python, Rust, Java, Kotlin, Terraform and Ansible.
 
 ## Quick start
 
@@ -71,7 +71,7 @@ go get -tool github.com/rerorets/hadome/cmd/hadome
 go tool hadome check
 ```
 
-Built from source. With a C compiler it reads all seven languages; without one, Go and Terraform only.
+Built from source. With a C compiler it reads all eight languages; without one, Go, Terraform and Ansible only.
 
 #### Java / Kotlin (Gradle)
 

@@ -39,6 +39,7 @@ func decode(raw map[string]any, layers []string) Config {
 	files := object(raw["files"])
 	c.TestFiles = textList(files["tests"])
 	c.GeneratedFiles = textList(files["generated"])
+	c.AnsibleFiles = textList(files["ansible"])
 	size := object(object(raw["rules"])["size"])
 	c.Size = Limits{}
 	for _, k := range sizeKey.Fields {

@@ -129,7 +129,7 @@ A test counts only when it is active: skipped tests (with or without a reason) d
 
 - **Items**: one per guarded target, keyed by the target's unit and name
 - **Regression**: a target guarded in base is not guarded in head
-- **Legitimate removal**: the target itself no longer exists in head (the code was removed or renamed). hadome verifies this; nobody needs to declare it
+- **Legitimate removal**: the target itself no longer exists in head (the code was removed or renamed). When the target is a unit itself (an Ansible role), that unit no longer exists in head. hadome verifies this; nobody needs to declare it
 - **Cleanup passes**: merging duplicate tests, deleting tests that guard nothing new, moving or renaming tests — the set of guarded targets is unchanged
 - **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable
 
@@ -196,7 +196,7 @@ Each rule ships with at least these cases.
 | `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes |
 | `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes |
 | `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
-| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards |
+| `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards · deleting the only Molecule scenario of an Ansible role fails · deleting the role with its scenario passes |
 | `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes |
 | `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |

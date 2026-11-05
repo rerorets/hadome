@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/rerorets/hadome/internal/adapter/ansible"
 	"github.com/rerorets/hadome/internal/adapter/golang"
 	"github.com/rerorets/hadome/internal/adapter/terraform"
 	"github.com/rerorets/hadome/internal/adapter/treesitter"
@@ -27,6 +28,20 @@ type Language interface {
 	Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error)
 }
 
+// configuredClaimer is a language that also claims files the configuration names, such as the
+// playbooks of files.ansible.
+type configuredClaimer interface {
+	ClaimsConfigured(c config.Config, path string) bool
+}
+
+// claims reports whether the language claims the file under this configuration.
+func claims(l Language, c config.Config, p string) bool {
+	if cc, ok := l.(configuredClaimer); ok {
+		return cc.ClaimsConfigured(c, p)
+	}
+	return l.Claims(p)
+}
+
 // Analyzer reads a version with every language it has.
 type Analyzer struct {
 	Languages []Language
@@ -38,7 +53,7 @@ func New() Analyzer {
 	for _, l := range treesitter.Languages() { // a different type with and without cgo
 		langs = append(langs, l)
 	}
-	langs = append(langs, terraform.Adapter{})
+	langs = append(langs, terraform.Adapter{}, ansible.Adapter{})
 	return Analyzer{Languages: langs}
 }
 
@@ -52,7 +67,7 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 	byLang := map[int][]string{}
 	a := &facts.Analysis{}
 	for _, p := range paths {
-		i := slices.IndexFunc(an.Languages, func(l Language) bool { return enabled(c, l.Name()) && l.Claims(p) })
+		i := slices.IndexFunc(an.Languages, func(l Language) bool { return enabled(c, l.Name()) && claims(l, c, p) })
 		if i < 0 {
 			a.Files = append(a.Files, facts.File{Path: p, Role: facts.RoleOther})
 			continue

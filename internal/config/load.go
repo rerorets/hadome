@@ -26,6 +26,8 @@ type Config struct {
 	// TestFiles and GeneratedFiles are globs that give files the test and generated roles.
 	TestFiles      []string
 	GeneratedFiles []string
+	// AnsibleFiles are globs of playbooks the Ansible adapter reads outside its layout.
+	AnsibleFiles []string
 	// Mutation configures hadome mutate; nil when it is not configured.
 	Mutation *Mutation
 	Size     Limits // limits of the size/ rules, defaults filled in

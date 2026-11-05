@@ -36,7 +36,8 @@ classDiagram
 - Terraform は、Terraform 自身が使う HCL のパーサー（`hashicorp/hcl/v2` の `hclsyntax`）で読む。tree-sitter の HCL の文法は使わない。Go のバインディングを持つ版が ABI 15 で、hadome が使う Go のバインディング（ABI 14 まで）では読めないからだ
 - `hashicorp/hcl/v2` のライセンスは MPL-2.0 である。MPL はファイル単位で効くので、hadome のコードは MIT のままでよい。配る実行ファイルには MPL-2.0 の本文と、`hashicorp/hcl/v2` のソースの在りかを書いた文書を添える
 - Ansible は設定を読むのに使っている `goccy/go-yaml` で読む。依存は増えない
-- 依存の図には `internal/adapter --> internal/adapter/terraform` と、`internal/adapter/terraform` から `engine`、`config`、`facts` への矢印を足す。Ansible の矢印は、Ansible のアダプタを足すときに、使うものの分だけ足す
+- 依存の図には `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible` と、2つから `engine`、`config`、`facts` への矢印を足す
+- `Claims(path)` はパスしか受け取らないので、設定の `files.ansible` を見られない。そこで Ansible のアダプタは `ClaimsConfigured(c, path)` も持つ。`internal/adapter` はこれを持つ言語に、`ClaimsConfigured` で受け持つかを尋ねる
 
 ## ファイルと役割
 
@@ -45,7 +46,9 @@ classDiagram
 | Terraform | `*.tf` | `*.tftest.hcl` | `*.tfvars`（値だけで、読むものが無い） |
 | Ansible | `roles/<ロール>/` の下の `tasks/`、`handlers/`、`defaults/`、`vars/`、`meta/` の `*.yml` と `*.yaml`。`playbooks/` の下と、ルートの `site.yml`、`playbook.yml` | `molecule/<シナリオ>/` の下の `*.yml`（ロールの下にあるものも含む） | なし |
 
-`files.tests` は Terraform のファイルに当てない。Go と同じく、テストかどうかは Terraform 自身が `*.tftest.hcl` という名前で決めるからだ。
+`roles/`、`playbooks/`、`molecule/` はどの深さにあってもよい。大きなリポジトリの中の Ansible（`ansible/roles/web`）も読むためだ。`site.yml` と `playbook.yml` はルートのものだけを受け持つ。
+
+`files.tests` は Terraform と Ansible のファイルに当てない。Go と同じく、テストかどうかは Terraform 自身が `*.tftest.hcl` という名前で決め、Ansible では Molecule のシナリオの配置で決まるからだ。
 
 Ansible が YAML のファイルをすべて受け持たないのは、YAML が CI の設定や `.hadome.yml` のように、Ansible でないものにも使われるからだ。受け持つかどうかはほかの言語と同じくパスだけで決める。
 
@@ -77,6 +80,7 @@ Terraform のシンボルの ID には、モジュールの中での呼び方（
 
 - Ansible のロールの名前に `{{ }}` を使ったものは、行き先が実行するまで決まらない import（`Import.Unknown`）として `unknown/import` に回す
 - Terraform の `source` には式を書けないので、行き先が決まらない import は無い
+- Ansible の外部のロールとコレクションの import が入出力になるのは、`rules.tests.io` に挙げたときだけである
 - `required_providers` の import は入出力（`IO`）とする。モジュールはプロバイダを通して外に触れるからだ。`module` の import が入出力になるのは、`rules.tests.io` に挙げたときだけである
 - `resource` か `data` のブロックがあるファイルは、そのプロバイダの import を持つものとし、入出力とする。`required_providers` に書いていなくても、プロバイダに触れるからだ。プロバイダは、`provider` の引数か型の名前の最初の語（`aws_vpc` なら `aws`）を、同じモジュールの `required_providers` で引いて決める。そこに無ければ、Terraform と同じく `hashicorp/<名前>` とする
 - `variable`、`output`、`locals` だけのモジュールは、外に触れないので純粋なままである
@@ -98,9 +102,12 @@ Terraform の `variable` と `output` はモジュールの入口と出口であ
 | 言語 | テストとは | assert とみなすもの | 呼ぶもの（`Calls`） | 危険 |
 |---|---|---|---|---|
 | Terraform | `*.tftest.hcl` の各 `run` ブロック。名前は `run` のラベル | `assert` ブロック、`expect_failures` | `variables` で値を渡す `variable`、`assert` の `condition` が読む `output`。対象は、`run` の中の `module { source }` があればそのモジュール、無ければテストのファイルのモジュール（`tests/` の下なら1つ上のディレクトリ） | `mock_provider`、`override_resource`、`override_data`、`override_module` を `mock` とする |
-| Ansible | Molecule の各シナリオの `verify.yml` | `assert`（`ansible.builtin.assert`）のタスク、`failed_when` を付けたタスク | 同じシナリオの `converge.yml` が使うロール | `pause`（`ansible.builtin.pause`）を `sleep` とする |
+| Ansible | Molecule の各シナリオの `verify.yml`。名前はシナリオの名前 | `assert`（`ansible.builtin.assert`）のタスク、`failed_when` を付けたタスク | 同じシナリオの `converge.yml` が使う、リポジトリのロール | `pause`（`ansible.builtin.pause`）を `sleep` とする |
 
 - どちらにもスキップの書き方は無い
+- Ansible のテストが呼ぶものはロール、つまりユニットそのものである。そこで `Call.Target` にはロールの名前（ユニットの ID）を入れる。ロールが head に残っていれば、`tests/scope-shrunk` はそのロールを消されたものとみなさない
+- `converge.yml` が `{{ }}` で名指すロールは、特定できなかった呼び出し（`Unresolved`）として数える
+- ただし、`roles/<ロール>/molecule/<シナリオ>/` のシナリオが `{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}` で名指すロールは、そのシナリオを含むロールとする。Molecule はこの環境変数にロールのディレクトリを入れるので、推測ではない。空白の違い、引用符の種類、`ansible.builtin.env` の書き方は問わない。ロールの外のシナリオでは、ほかの `{{ }}` と同じく特定できない
 - Terraform で `run` の外に書いた `variables` と `mock_provider` などは、そのファイルのすべての `run` に効くものとして読む
 - テストの本体の指紋（`Test.Body`）はブロックかタスクの字句から、ほかの言語と同じ決まりで作る
 
@@ -120,7 +127,7 @@ Terraform の `variable` と `output` はモジュールの入口と出口であ
 | `deps/` | モジュールの依存。プロバイダを使ってよいモジュールを絞れる | ロールの依存 |
 | `comments/` | `description` の無い `variable` と `output` | `argument_specs` に説明の無い変数 |
 | `size/` | ファイルの行数 | ファイルの行数 |
-| `tests/` | `run` の数と assert。`mock_provider` の使いすぎ | assert の無い `verify.yml` |
+| `tests/` | `run` の数と assert。`mock_provider` の使いすぎ | assert の無い `verify.yml`。唯一のシナリオを失ったロール。リポジトリのロールを使わないシナリオ。`pause` |
 | `unknown/` | 読めなかったファイル | 読めなかったファイル。行き先の決まらないロール |
 | `hadome mutate` | 関数が無いので壊さない | 同じ |
 

@@ -159,6 +159,29 @@ func TestInitWritesValidConfigurationAndNeverOverwrites(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: hadome init
+// Ansible's YAML has no extension of its own, so init finds it by the layout the Ansible adapter
+// claims, and not in YAML outside that layout.
+func TestInitDetectsAnsibleByLayout(t *testing.T) {
+	for _, tc := range []struct {
+		file, want string
+	}{
+		{"roles/web/tasks/main.yml", "detected: ansible"},
+		{"playbooks/web.yml", "detected: ansible"},
+		{"site.yml", "detected: ansible"},
+		{"ci/build.yml", "detected: none yet"},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			t.Chdir(writeTree(t, map[string]string{tc.file: "- hosts: all\n"}))
+			code, out := runIn(t, "init")
+			if code != 0 || !strings.Contains(out, tc.want) {
+				t.Errorf("exit %d, want %q: %s", code, tc.want, out)
+			}
+		})
+	}
+}
+
 // viewpoint: external contract
 // target: hadome suggest
 // Accepting a candidate is pasting it: the output must be valid configuration as it stands.

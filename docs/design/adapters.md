@@ -135,10 +135,11 @@ Test file conventions:
 | Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
 | Kotlin | Same as Java |
 | Terraform | `*.tftest.hcl` ([adapters-iac.md](adapters-iac.md)) |
+| Ansible | Files under `molecule/<scenario>/` ([adapters-iac.md](adapters-iac.md)) |
 
 For repositories laid out against the conventions, configuration can add roles.
 
-- A file matching a `files.tests` glob is read as a test file even when the language's conventions say otherwise. Go files are left out: whether a Go file is a test is decided by the compiler (`_test.go`), and hadome changing it would disagree with the real build
+- A file matching a `files.tests` glob is read as a test file even when the language's conventions say otherwise. Go files are left out: whether a Go file is a test is decided by the compiler (`_test.go`), and hadome changing it would disagree with the real build. Terraform and Ansible files are left out too ([adapters-iac.md](adapters-iac.md))
 - A file matching a `files.generated` glob is treated as generated code even without a header
 - A file matching both is generated code
 - Globs are written as in a gate's `paths` (`**` is directories at any depth)
@@ -157,6 +158,7 @@ A **unit** is what a dependency diagram draws a box for. Each language has its n
 | Rust | Module path within a crate |
 | Java / Kotlin | Package |
 | Terraform | Module (a directory) |
+| Ansible | Role; a playbook's is its directory |
 
 `Internal` is true when the import points inside the repository. `IO` is true when the imported unit performs input or output, according to the adapter's `io` table and the entries configuration adds (`rules.tests.io`). Only imports of non-test files are listed: they are what the unit itself depends on.
 
@@ -177,7 +179,7 @@ When the argument is a string, the destination is resolved like any other import
 
 | Rule | Cases |
 |---|---|
-| `unknown/import` | a new import whose destination is unknown returns `3` · one already in base does not · a dynamic import with a string argument is an ordinary import · one inside a test file does not |
+| `unknown/import` | a new import whose destination is unknown returns `3` · one already in base does not · a dynamic import with a string argument is an ordinary import · one inside a test file does not · an Ansible role named with `{{ }}` returns `3` · a role named outright does not |
 
 A unit with an import whose destination is unknown has `unknown` purity, and `unknown` is never pure ("Pure units" in [rules-tests.md](rules-tests.md)).
 
@@ -280,6 +282,7 @@ What decides whether a fact can block is whether the adapter identified it, not 
 | Go | The standard library's parser (`go/parser`, `go/ast`). No C dependency |
 | TypeScript, Python, Rust, Java, Kotlin | tree-sitter grammars |
 | Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
+| Ansible | The YAML parser that reads the configuration (`goccy/go-yaml`). No dependency on C |
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
 
