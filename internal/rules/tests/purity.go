@@ -60,7 +60,8 @@ func reachesOut(im facts.Import, pure func(string) bool) bool {
 	return im.IO || im.Unknown || (im.Internal && !pure(im.ToUnit))
 }
 
-// unitOf returns the unit holding the symbol with this ID, or "" when there is none.
+// unitOf returns the unit holding the symbol with this ID, the unit itself when the ID names one, or
+// "" when there is neither.
 func unitOf(a *facts.Analysis, id string) string {
 	path := ""
 	for _, s := range a.Symbols {
@@ -73,6 +74,9 @@ func unitOf(a *facts.Analysis, id string) string {
 		if path != "" && f.Path == path {
 			return f.Unit
 		}
+	}
+	if path == "" && a.HasTarget(id) {
+		return id
 	}
 	return ""
 }

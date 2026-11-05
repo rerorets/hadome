@@ -51,6 +51,19 @@ func docCases() []engine.Case {
 			WantFail: []string{"comments/missing-doc"}},
 		{Name: "a new Terraform output with a description passes", Base: tf(""),
 			Head: tf("output \"id\" {\n  description = \"The network's ID.\"\n  value       = 1\n}\n")},
+		{Name: "a new Ansible default that argument_specs does not describe fails", Base: role(""), Head: role("web_user: www\n"),
+			WantFail: []string{"comments/missing-doc"}},
+		{Name: "a new Ansible default it describes passes", Base: role(""), Head: role("web_port: 80\n")},
+		{Name: "a new Ansible default kept to the role passes", Base: role(""), Head: role("_web_cache: /tmp\n")},
+	}
+}
+
+// role is an Ansible role whose argument_specs describes web_port, with these defaults.
+func role(defaults string) fstest.MapFS {
+	return fstest.MapFS{
+		"roles/web/defaults/main.yml": {Data: []byte("---\n" + defaults)},
+		"roles/web/meta/argument_specs.yml": {Data: []byte(
+			"argument_specs:\n  main:\n    options:\n      web_port:\n        type: int\n        description: The port the server listens on.\n")},
 	}
 }
 

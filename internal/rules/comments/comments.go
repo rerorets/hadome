@@ -83,10 +83,17 @@ func (missingDoc) ID() string           { return "comments/missing-doc" }
 func (missingDoc) Cases() []engine.Case { return docCases() }
 func (missingDoc) About() engine.About {
 	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment, " +
-		"or a new Terraform variable or output without a description"),
+		"or a new Terraform variable or output or Ansible role default without a description"),
 		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
 		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong")}
 }
+
+var (
+	valueWhy = engine.T("whoever sets or reads the value reads its description instead of the code that uses it; " +
+		"without one, each of them reads that code and guesses what the value is for")
+	valueFix = engine.T("add a description that says what the value is for and what a caller would otherwise get wrong: " +
+		"Terraform's description argument, or the variable's description in the role's meta/argument_specs.yml")
+)
 
 // Find reports exported symbols of product code without a doc comment.
 func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
@@ -96,16 +103,12 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 			continue
 		}
 		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
-		msg := engine.T("exported %s %s has no doc comment", string(s.Kind), name)
-		if s.Kind == facts.SymbolValue { // a Terraform variable or output: its description is its doc
-			msg = engine.T("value %s has no description", name)
+		f := engine.Finding{Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
+			Message: engine.T("exported %s %s has no doc comment", string(s.Kind), name), Why: r.About().Why, Fix: r.About().Fix}
+		if s.Kind == facts.SymbolValue { // a Terraform variable or output, an Ansible default: a description is its doc
+			f.Message, f.Why, f.Fix = engine.T("value %s has no description", name), valueWhy, valueFix
 		}
-		out = append(out, engine.Finding{
-			Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
-			Message: msg,
-			Why:     r.About().Why,
-			Fix:     r.About().Fix,
-		})
+		out = append(out, f)
 	}
 	return out, nil
 }

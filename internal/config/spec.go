@@ -121,7 +121,7 @@ var MessageLanguages = []Value{
 // Languages are the languages hadome has adapters for.
 var Languages = []Value{
 	{"go", "Go"}, {"typescript", "TypeScript and JavaScript"}, {"python", "Python"},
-	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"}, {"terraform", "Terraform"},
+	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"}, {"terraform", "Terraform"}, {"ansible", "Ansible"},
 }
 
 func stringList(name, doc, example string, looser Direction, elem ...Key) Key {
@@ -311,13 +311,18 @@ var mutationKey = Key{Name: "mutation", Kind: KindObject, OmittedIsOff: true,
 
 // filesKey gives files roles that the languages' conventions and headers do not.
 var filesKey = Key{Name: "files", Kind: KindObject,
-	Doc:     "Roles for files laid out against the languages' conventions. Globs only add a role; `**` is directories at any depth.",
-	Example: "files:\n  tests: [\"checks/**\"]\n  generated: [\"gen/**\"]",
+	Doc: "Roles for files laid out against the languages' conventions, and Ansible playbooks outside Ansible's layout. " +
+		"Globs only add a role or a file; `**` is directories at any depth.",
+	Example: "files:\n  tests: [\"checks/**\"]\n  generated: [\"gen/**\"]\n  ansible: [\"deploy/*.yml\"]",
 	Fields: []Key{
-		stringList("tests", "Globs of files read as test files, in every language but Go: the Go compiler decides what a Go test is (_test.go). "+
+		stringList("tests", "Globs of files read as test files, in every language but Go, Terraform and Ansible, whose own tools decide "+
+			"what a test is (_test.go, .tftest.hcl, Molecule's scenarios). "+
 			"Which files are tests moves what the rules cover both ways, so any change needs review.",
 			`tests: ["checks/**"]`, LooserAlways, globs),
 		stringList("generated", "Globs of files treated as generated code, which the size and comment rules skip. A file matching "+
 			"both lists is generated. Adding an entry takes files out of those rules, so it needs review.",
 			`generated: ["gen/**"]`, LooserWhenAdded, globs),
+		stringList("ansible", "Globs of extra Ansible playbooks laid out outside roles/, playbooks/, site.yml and playbook.yml. "+
+			"They are read as playbooks. Removing an entry takes files out of every rule, so it needs review.",
+			`ansible: ["deploy/*.yml"]`, LooserWhenRemoved, globs),
 	}}

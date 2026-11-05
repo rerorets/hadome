@@ -72,7 +72,7 @@ schema: 1
 
 // testCommands are the usual test commands of each language, offered by init for hadome mutate. They
 // are guesses, so init writes them as comments and never turns one on. A language without functions
-// to break (Terraform) has none.
+// to break (Terraform, Ansible) has none.
 var testCommands = map[string]string{
 	"go": "[go, test, ./...]", "typescript": "[npm, test]", "python": "[python, -m, pytest]",
 	"rust": "[cargo, test]", "java": "[./gradlew, test]", "kotlin": "[./gradlew, test]",

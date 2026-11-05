@@ -42,7 +42,7 @@ func (r scopeShrunk) Measure(in engine.Input) ([]engine.Item, error) {
 
 // RemovedLegitimately is true when the target no longer exists in head: the code was removed or renamed.
 func (scopeShrunk) RemovedLegitimately(it engine.Item, head engine.Input) (bool, error) {
-	return !head.Facts.HasSymbol(it.Key), nil
+	return !head.Facts.HasTarget(it.Key), nil
 }
 
 // targetUnknown is tests/target-unknown: a test whose target hadome could not identify at all.

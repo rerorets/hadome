@@ -84,7 +84,8 @@ const (
 	SymbolInterface SymbolKind = "interface"
 	SymbolType      SymbolKind = "type" // a named type that is not an interface
 	// SymbolValue is a value a unit takes in or gives out, in a language without functions: a
-	// Terraform variable or output. Rules that measure functions do not count it.
+	// Terraform variable or output, an Ansible role's default. Rules that measure functions do not
+	// count it.
 	SymbolValue SymbolKind = "value"
 )
 
@@ -163,7 +164,8 @@ type Test struct {
 
 // Call is one symbol a test calls.
 type Call struct {
-	// Target is the symbol's ID.
+	// Target is the symbol's ID, or a unit's ID when the test exercises the unit as a whole, as a
+	// Molecule scenario applies an Ansible role.
 	Target string
 	// Times counts call sites; one inside a loop counts twice, because it runs more than once.
 	Times int
@@ -200,6 +202,20 @@ type Analysis struct {
 func (a *Analysis) HasSymbol(id string) bool {
 	for _, s := range a.Symbols {
 		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// HasTarget reports whether a test's call target exists in the version: a symbol, or a unit (see
+// Call.Target).
+func (a *Analysis) HasTarget(id string) bool {
+	if a.HasSymbol(id) {
+		return true
+	}
+	for _, f := range a.Files {
+		if f.Unit == id {
 			return true
 		}
 	}

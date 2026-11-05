@@ -88,6 +88,10 @@ func goImportCases() []engine.Case {
 	return []engine.Case{
 		{Name: "a Go import is always named, so it is never unknown", Base: mod("a/a.go", "package a\n"),
 			Head: mod("a/a.go", "package a\n\nimport \"example.com/app/b\"\n\nvar _ = b.X\n", "b/b.go", "package b\n\nvar X = 1\n")},
+		{Name: "an Ansible role named by a template needs review", Base: mod("site.yml", "- hosts: all\n  roles:\n    - web\n"),
+			Head: mod("site.yml", "- hosts: all\n  roles:\n    - web\n    - \"{{ extra_role }}\"\n"), WantReview: []string{"unknown/import"}},
+		{Name: "an Ansible role named outright passes", Base: mod("site.yml", "- hosts: all\n  roles:\n    - web\n"),
+			Head: mod("site.yml", "- hosts: all\n  roles:\n    - web\n    - community.general.ufw\n")},
 	}
 }
 

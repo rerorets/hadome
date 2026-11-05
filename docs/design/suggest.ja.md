@@ -111,7 +111,7 @@ hadome agents --write AGENTS.md CLAUDE.md
 | Python | `[python, -m, pytest]` |
 | Rust | `[cargo, test]` |
 | Java、Kotlin | `[./gradlew, test]` |
-| Terraform | 書かない。壊す関数が無い |
+| Terraform、Ansible | 書かない。壊す関数が無い |
 
 hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
 

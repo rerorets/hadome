@@ -135,10 +135,11 @@ classDiagram
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
 | Kotlin | Java と同じ |
 | Terraform | `*.tftest.hcl`（[adapters-iac.ja.md](adapters-iac.ja.md)） |
+| Ansible | `molecule/<シナリオ>/` の下のファイル（[adapters-iac.ja.md](adapters-iac.ja.md)） |
 
 慣習から外れた配置のリポジトリのために、設定で役割を足せる。
 
-- `files.tests` の glob に合うファイルは、言語の慣習に合わなくてもテストのファイルとして読む。Go のファイルには当てない。Go のテストかどうかはコンパイラが `_test.go` で決めるので、hadome が変えると実際のビルドと食い違う
+- `files.tests` の glob に合うファイルは、言語の慣習に合わなくてもテストのファイルとして読む。Go のファイルには当てない。Go のテストかどうかはコンパイラが `_test.go` で決めるので、hadome が変えると実際のビルドと食い違う。Terraform と Ansible のファイルにも当てない（[adapters-iac.ja.md](adapters-iac.ja.md)）
 - `files.generated` の glob に合うファイルは、ヘッダが無くても生成されたコードとして扱う
 - 両方に合うファイルは生成されたコードになる
 - glob の書き方は門番の `paths` と同じ（`**` は任意の深さのディレクトリ）
@@ -157,6 +158,7 @@ classDiagram
 | Rust | クレート内のモジュールのパス |
 | Java / Kotlin | パッケージ |
 | Terraform | モジュール（ディレクトリ） |
+| Ansible | ロール。プレイブックはそのディレクトリ |
 
 `Internal` は、import がリポジトリの中を指すときに真になる。`IO` は、import したユニットが入出力を行うときに真になる。判断はアダプタの `io` の表と、設定が足す項目（`rules.tests.io`）による。一覧に載るのはテストでないファイルの import だけだ。それがユニット自身の依存だからだ。
 
@@ -177,7 +179,7 @@ classDiagram
 
 | ルール | 事例 |
 |---|---|
-| `unknown/import` | 新しい行き先の分からない import は `3` を返す · base にあるものは返さない · 引数が文字列の動的な import はふつうの import になる · テストのファイルの中のものは返さない |
+| `unknown/import` | 新しい行き先の分からない import は `3` を返す · base にあるものは返さない · 引数が文字列の動的な import はふつうの import になる · テストのファイルの中のものは返さない · `{{ }}` で名指す Ansible のロールは `3` を返す · 名前で書いたロールは返さない |
 
 base にある行き先の分からない import を持つユニットは、純粋さが `unknown` になる。`unknown` は純粋ではない（[rules-tests.ja.md](rules-tests.ja.md) の「純粋なユニット」）。
 
@@ -280,6 +282,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | Go | 標準ライブラリのパーサ（`go/parser`、`go/ast`）。C への依存は無い |
 | TypeScript、Python、Rust、Java、Kotlin | tree-sitter の文法 |
 | Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
+| Ansible | 設定を読むのと同じ YAML のパーサ（`goccy/go-yaml`）。C への依存は無い |
 
 言語をまたいで共有するトークナイザは持たない。どの言語も、その言語のパーサで読む。
 
