@@ -34,6 +34,7 @@ classDiagram
 
 - パッケージ `internal/adapter/terraform` と `internal/adapter/ansible` を足す。どちらも Go のアダプタと同じく純粋な Go で書くので、cgo の無いビルドでも読める
 - Terraform は、Terraform 自身が使う HCL のパーサー（`hashicorp/hcl/v2` の `hclsyntax`）で読む。tree-sitter の HCL の文法は使わない。Go のバインディングを持つ版が ABI 15 で、hadome が使う Go のバインディング（ABI 14 まで）では読めないからだ
+- `hashicorp/hcl/v2` のライセンスは MPL-2.0 である。MPL はファイル単位で効くので、hadome のコードは MIT のままでよい。配る実行ファイルには MPL-2.0 の本文と、`hashicorp/hcl/v2` のソースの在りかを書いた文書を添える
 - Ansible は設定を読むのに使っている `goccy/go-yaml` で読む。依存は増えない
 - 依存の図には `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible` と、2つから `internal/adapter/walk`、`engine`、`config`、`facts` への矢印を足す
 
@@ -45,6 +46,16 @@ classDiagram
 | Ansible | `roles/<ロール>/` の下の `tasks/`、`handlers/`、`defaults/`、`vars/`、`meta/` の `*.yml` と `*.yaml`。`playbooks/` の下と、ルートの `site.yml`、`playbook.yml` | `molecule/<シナリオ>/` の下の `*.yml`（ロールの下にあるものも含む） | なし |
 
 Ansible が YAML のファイルをすべて受け持たないのは、YAML が CI の設定や `.hadome.yml` のように、Ansible でないものにも使われるからだ。受け持つかどうかはほかの言語と同じくパスだけで決める。
+
+この配置から外れたプレイブック（ルートの `deploy.yml` など）は、`.hadome.yml` の `files.ansible` に glob で足す。
+
+```yaml
+files:
+  ansible: ["deploy/*.yml", "ops/site-*.yml"]
+```
+
+- 足したファイルはプレイブックとして読む
+- 項目を消すと、読むファイルが減るので緩める変更になる（`LooserWhenRemoved`）。足すのは緩めない
 
 ## ユニット
 
@@ -113,7 +124,7 @@ HCL のパーサーが誤りを返した `*.tf`、または YAML として読め
 
 1. どちらのアダプタもコードを実行せず、`terraform` も `ansible` も呼ばない。読むのはファイルの字句と構文だけである
 2. 受け持つファイルは読むか、読めなかったと報告するかのどちらかで、無視されることは無い
-3. 受け持つかどうかはパスだけで決まる
+3. 受け持つかどうかはパスと `files.ansible` だけで決まる。ファイルの中身は見ない
 
 ## 意図して入れなかったもの
 

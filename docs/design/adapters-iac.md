@@ -34,6 +34,7 @@ classDiagram
 
 - Packages `internal/adapter/terraform` and `internal/adapter/ansible` are added. Both are pure Go, like the Go adapter, so the build without cgo reads them too
 - Terraform is read with the HCL parser Terraform itself uses (`hclsyntax` from `hashicorp/hcl/v2`), not with tree-sitter's HCL grammar. The versions of that grammar with Go bindings are built for ABI 15, which the Go binding hadome uses (ABI 14 at most) cannot load
+- `hashicorp/hcl/v2` is licensed under MPL-2.0. MPL applies file by file, so hadome's code stays MIT. The distributed executables ship with the MPL-2.0 text and a note on where the source of `hashicorp/hcl/v2` is
 - Ansible is read with `goccy/go-yaml`, which already reads the configuration. No dependency is added
 - The dependency diagram gains `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible`, and arrows from both to `internal/adapter/walk`, `engine`, `config` and `facts`
 
@@ -45,6 +46,16 @@ classDiagram
 | Ansible | `*.yml` and `*.yaml` under `tasks/`, `handlers/`, `defaults/`, `vars/` and `meta/` of `roles/<role>/`; under `playbooks/`; and `site.yml` and `playbook.yml` at the root | `*.yml` under `molecule/<scenario>/` (including those inside a role) | None |
 
 Ansible does not claim every YAML file because YAML holds things that are not Ansible too, such as CI settings and `.hadome.yml`. As for the other languages, whether a file is claimed depends on its path alone.
+
+A playbook outside this layout (a `deploy.yml` at the root, say) is added by glob under `files.ansible` in `.hadome.yml`.
+
+```yaml
+files:
+  ansible: ["deploy/*.yml", "ops/site-*.yml"]
+```
+
+- The added files are read as playbooks
+- Removing an entry reads fewer files, so it loosens the configuration (`LooserWhenRemoved`). Adding one does not
 
 ## Units
 
@@ -113,7 +124,7 @@ A `*.tf` file for which the HCL parser returns an error, or a file that cannot b
 
 1. Neither adapter runs code, `terraform` or `ansible`. They read only the files' tokens and syntax
 2. A claimed file is either read or reported as unread, never ignored
-3. Whether a file is claimed depends on its path alone
+3. Whether a file is claimed depends on its path and `files.ansible` alone, never on its content
 
 ## Deliberately left out
 
