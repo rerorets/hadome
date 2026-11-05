@@ -169,7 +169,7 @@ $ hadome check --base main
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
 
-The output is in English by default. With `--lang ja`, or `messages: ja` in `.hadome.yml`, it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change.
+The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
 
 ## What it checks
 
@@ -184,17 +184,6 @@ The output is in English by default. With `--lang ja`, or `messages: ja` in `.ha
 | `config/` | `loosened` (review): a change that loosens the rules judging it |
 
 Every rule reports why it matters and how to fix it. The rules are specified in [docs/design](docs/design).
-
-## Trying mutations
-
-With `mutation` in `.hadome.yml`, `hadome mutate` breaks the functions a change touched, one place at a time, and tries whether the tests notice. A break no test notices is reported as a `mutation/survived` regression.
-
-```yaml
-mutation:
-  test: [go, test, ./...]
-```
-
-It runs the tests once per break, so it takes far longer than `check`. It is meant to run locally, before a change is finished. The [guide for agents](docs/for-agents.md) has the details.
 
 ## Regression vs. cleanup
 
@@ -232,6 +221,8 @@ hadome only reads the repository and talks to no service such as GitHub. To post
 
 Settings go in `.hadome.yml`: limits, the dependency diagram, invariants and so on. hadome works without the file.
 
+`hadome init` writes a minimal `.hadome.yml`; it never overwrites one that exists. To have the output in Japanese every time, add `messages: ja` to it. `--lang`, when given, comes first.
+
 Changing the settings and proposing invariants is the agents' job. Agents read the specification with `hadome explain <key>` ([the guide for agents](docs/for-agents.md)). People decide which proposals to accept and whether to allow a change that loosens the rules. Such a change stops with exit code `3` for a person's review.
 
 ### Writing an exception
@@ -246,6 +237,17 @@ time.Sleep(50 * time.Millisecond)
 ### Rules only your product needs
 
 A rule such as "never UPDATE the log store" is a small program in your own repository, in any language. hadome treats it like the built-in rules: it reports only regressions, and reasoned exceptions work for it too. How to write one is in [product-specific gates](docs/external-gates.md).
+
+## Trying mutations
+
+With `mutation` in `.hadome.yml`, `hadome mutate` breaks the functions a change touched, one place at a time, and tries whether the tests notice. A break no test notices is reported as a `mutation/survived` regression.
+
+```yaml
+mutation:
+  test: [go, test, ./...]
+```
+
+It runs the tests once per break, so it takes far longer than `check`. It is meant to run locally, before a change is finished. The [guide for agents](docs/for-agents.md) has the details.
 
 ## The name
 
