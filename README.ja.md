@@ -60,7 +60,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.1.2                   # pip なら pip install hadome==0.1.2
+uv add --dev hadome==0.2.0                   # pip なら pip install hadome==0.2.0
 uv run hadome check
 ```
 
@@ -77,7 +77,7 @@ go tool hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.1.2" }
+plugins { id("io.github.rerorets.hadome") version "0.2.0" }
 ```
 
 `./gradlew hadomeCheck`で動かします。
@@ -89,7 +89,7 @@ plugins { id("io.github.rerorets.hadome") version "0.1.2" }
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.1.2</version>
+  <version>0.2.0</version>
 </plugin>
 ```
 
@@ -98,11 +98,11 @@ plugins { id("io.github.rerorets.hadome") version "0.1.2" }
 #### Rust
 
 ```sh
-cargo binstall hadome@0.1.2
+cargo binstall hadome@0.2.0
 hadome check
 ```
 
-#### それ以外
+#### それ以外（Terraform・Ansible など）
 
 ```sh
 brew install rerorets/tap/hadome
@@ -179,10 +179,22 @@ $ hadome check --base main
 | `deps/` | `not-in-diagram`（依存の図に無いimport）・`diagram-stale`（何も指さない箱） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
-| `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル |
+| `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル・`import`（確認待ち）: 行き先が実行するまで決まらないimport |
+| `mutation/` | `survived`（`hadome mutate`だけ）: テストが気づかなかった壊し方 |
 | `config/` | `loosened`（確認待ち）: 自分を判定するルールを緩める変更 |
 
 どのルールもなぜ問題かと直し方を一緒に出します。ルールの仕様は[docs/design](docs/design)にあります。
+
+## ミューテーションを試す
+
+`.hadome.yml`に`mutation`を書くと、`hadome mutate`で、変更が触れた関数を1か所ずつ壊し、テストが気づくかを試せます。どのテストも気づかなかった壊し方は、`mutation/survived`の後退として報告します。
+
+```yaml
+mutation:
+  test: [go, test, ./...]
+```
+
+壊し方ごとにテストを1回動かすので、`check`よりずっと時間がかかります。手元で、変更を仕上げる前に回すことを想定しています。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
 
 ## 後退と整理
 
@@ -205,6 +217,7 @@ $ hadome check --base main
 | エージェントのループの中 | `hadome check --format json` | 後退ごとに、ルール・ファイルと行・なぜ困るか・直し方 |
 | pushの前 | `hadome check`（pushの前のフックとして） | 読みやすい一覧 |
 | プルリクエストごとのCI | `hadome check --base origin/main` | 終了コードと、コメントに貼れる要約 |
+| 変更を仕上げる前（手元） | `hadome mutate` | テストが気づかなかった壊し方の一覧 |
 
 | 終了コード | 意味 |
 |---|---|
@@ -238,10 +251,7 @@ time.Sleep(50 * time.Millisecond)
 
 歯止めはラチェットの爪（英語でpawl）のことです。歯車を一方向にだけ回し、逆には戻さない部品です。hadomeもmainより悪くなる向きの変更だけを止めます。
 
-## まだのこと
-
-- npmとMaven Centralへの公開（準備中。ほかの入れ方は[公開の手順](docs/maintaining/releasing.ja.md)のとおり公開済み）
-- ミューテーションで、テストが守る範囲を測る
+## 版と不具合の報告
 
 0.xの間は、版の間で挙動が変わることがあります（[版の付け方](CONTRIBUTING.ja.md#版の付け方)）。不具合や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。
 
