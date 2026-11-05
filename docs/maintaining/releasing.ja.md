@@ -34,3 +34,26 @@ packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 で Gradle と Maven を外
 ```
 
 この手元の Linux バイナリから仮のリリースを作ってすべてのパッケージを作り、それぞれを入れて、版を表示することと終了コードをそのまま返すことを確かめる。CI はこれを push のたびに動かす。
+
+## 依存のライセンス
+
+配る実行ファイルには hadome の `LICENSE` と、リンクしたモジュールのライセンスをまとめた `THIRD_PARTY_NOTICES` を添える。
+
+| 配り方 | 置き場所 |
+|---|---|
+| リリースのアーカイブ | バイナリと同じ階層 |
+| npm | 各パッケージの直下 |
+| PyPI | wheel の `dist-info/licenses/` |
+| Homebrew | formula のインストール先（prefix） |
+
+Gradle と Maven のプラグイン、`cargo binstall` はアーカイブを取ってくるので、アーカイブに入っていれば足りる。
+
+依存を足したり上げたりしたら、`THIRD_PARTY_NOTICES` を作り直す。作り直さないと `go test ./...` が落ちる。
+
+```sh
+go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices
+```
+
+- 載せるのはリリースのビルド（cgo あり）で Linux・macOS・Windows のどれかにリンクされるモジュールである
+- 各モジュールの版、ソースを取れる場所（Go のモジュールプロキシ）、モジュールに入っているライセンスの本文を載せる
+- 最上位にライセンスのファイルが無いモジュールがあると、テストが落ちる。そのモジュールのライセンスを確かめてから足す

@@ -34,3 +34,26 @@ packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 to leave out Gradle and Mav
 ```
 
 It builds every package from a pretend release of this machine's Linux binary, installs each one, and checks that it prints the version and passes exit codes through. CI runs it on every push.
+
+## Licenses of the dependencies
+
+The distributed executables come with hadome's `LICENSE` and with `THIRD_PARTY_NOTICES`, which collects the licenses of the modules linked in.
+
+| Channel | Where |
+|---|---|
+| Release archives | Next to the binary |
+| npm | At the top of every package |
+| PyPI | In the wheel's `dist-info/licenses/` |
+| Homebrew | In the formula's install prefix |
+
+The Gradle and Maven plugins and `cargo binstall` download the archives, so the archives carrying the files is enough.
+
+After adding or upgrading a dependency, regenerate `THIRD_PARTY_NOTICES`. Until you do, `go test ./...` fails.
+
+```sh
+go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices
+```
+
+- It lists the modules the release build (with cgo) links on any of Linux, macOS and Windows
+- For each module it gives the version, where the source can be downloaded (the Go module proxy), and the license text the module ships
+- A module with no license file at its top fails the test. Find out its license before adding it

@@ -39,6 +39,7 @@ class Hadome < Formula
 
   def install
     bin.install "hadome"
+    prefix.install "LICENSE", "THIRD_PARTY_NOTICES"
   end
 
   test do

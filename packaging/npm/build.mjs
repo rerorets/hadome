@@ -14,6 +14,11 @@ if (!version || !binaries || !out) {
   process.exit(2);
 }
 const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..", "..");
+// Every package that holds the binary, and the launcher, carries the licenses of hadome and of every
+// module linked into it.
+const legal = ["LICENSE", "THIRD_PARTY_NOTICES"];
+const copyLegal = (dir) => legal.forEach((f) => copyFileSync(join(root, f), join(dir, f)));
 const targets = [
   ["linux", "amd64", "linux", "x64"], ["linux", "arm64", "linux", "arm64"],
   ["darwin", "amd64", "darwin", "x64"], ["darwin", "arm64", "darwin", "arm64"],
@@ -36,9 +41,10 @@ for (const [goos, goarch, os, cpu] of targets) {
   mkdirSync(join(dir, "bin"), { recursive: true });
   copyFileSync(src, join(dir, "bin", exe));
   chmodSync(join(dir, "bin", exe), 0o755);
+  copyLegal(dir);
   writeFileSync(join(dir, "package.json"), JSON.stringify({
     name, ...common, description: `The hadome binary for ${os} ${cpu}.`,
-    os: [os], cpu: [cpu], files: ["bin"], preferUnplugged: true,
+    os: [os], cpu: [cpu], files: ["bin", ...legal], preferUnplugged: true,
   }, null, 2) + "\n");
   optional[name] = version;
 }
@@ -46,11 +52,12 @@ for (const [goos, goarch, os, cpu] of targets) {
 const main = join(out, "hadome");
 mkdirSync(join(main, "bin"), { recursive: true });
 copyFileSync(join(here, "hadome", "bin", "hadome.js"), join(main, "bin", "hadome.js"));
-copyFileSync(join(here, "..", "..", "README.md"), join(main, "README.md"));
+copyFileSync(join(root, "README.md"), join(main, "README.md"));
+copyLegal(main);
 writeFileSync(join(main, "package.json"), JSON.stringify({
   name: "hadome", ...common,
   description: "Reports the violations a change adds and the tests it weakens.",
-  bin: { hadome: "bin/hadome.js" }, files: ["bin", "README.md"],
+  bin: { hadome: "bin/hadome.js" }, files: ["bin", "README.md", ...legal],
   optionalDependencies: optional,
   engines: { node: ">=18" },
 }, null, 2) + "\n");

@@ -9,6 +9,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 expect_version() { out=$("$@" version); [ "$out" = "hadome $v" ] || { echo "FAIL: $* version printed '$out'" >&2; exit 1; }; }
+# Every artifact that holds the binary carries the licenses of hadome and of every module linked into it.
+expect_legal() { for f in LICENSE THIRD_PARTY_NOTICES; do cmp "$root/$f" "$1/$f" || { echo "FAIL: $1 lacks $f" >&2; exit 1; }; done; }
 expect_exit() { want=$1; shift; set +e; "$@" explain nonsense >/dev/null 2>&1; got=$?; set -e
   [ "$got" = "$want" ] || { echo "FAIL: $* exited $got, want $want" >&2; exit 1; }; }
 
@@ -16,22 +18,26 @@ echo "== binary and pretend release"
 mkdir -p "$work/bins/linux_amd64" "$work/rel/v$v"
 (cd "$root" && CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=$v -linkmode external -extldflags -static" \
   -o "$work/bins/linux_amd64/hadome" ./cmd/hadome)
-tar -C "$work/bins/linux_amd64" -czf "$work/rel/v$v/hadome_${v}_linux_amd64.tar.gz" hadome
+cp "$root/LICENSE" "$root/THIRD_PARTY_NOTICES" "$work/bins/linux_amd64/"
+tar -C "$work/bins/linux_amd64" -czf "$work/rel/v$v/hadome_${v}_linux_amd64.tar.gz" hadome LICENSE THIRD_PARTY_NOTICES
 (cd "$work/rel/v$v" && sha256sum hadome_* > SHA256SUMS)
 "$root/packaging/extract.sh" "$work/rel/v$v" "$work/extracted"
 cmp "$work/bins/linux_amd64/hadome" "$work/extracted/linux_amd64/hadome"
+expect_legal "$work/extracted/linux_amd64"
 
 echo "== npm"
 node "$root/packaging/npm/build.mjs" "$v" "$work/bins" "$work/npm"
 (cd "$work/npm/hadome-linux-x64" && npm pack --silent >/dev/null) && (cd "$work/npm/hadome" && npm pack --silent >/dev/null)
 mkdir "$work/npmproj" && cd "$work/npmproj" && npm init -y >/dev/null
 npm install --silent --no-audit --no-fund "$work/npm/hadome-linux-x64/hadome-linux-x64-$v.tgz" "$work/npm/hadome/hadome-$v.tgz"
+expect_legal node_modules/hadome && expect_legal node_modules/hadome-linux-x64
 expect_version npx --no-install hadome
 expect_exit 2 npx --no-install hadome
 
 echo "== python"
 python3 -I "$root/packaging/python/build_wheels.py" "$v" "$work/bins" "$work/wheels" >/dev/null
 python3 -m venv "$work/venv" && "$work/venv/bin/pip" install -q "$work"/wheels/*.whl
+expect_legal "$(echo "$work"/venv/lib/python*/site-packages/hadome-"$v".dist-info/licenses)"
 expect_version "$work/venv/bin/hadome"
 expect_exit 2 "$work/venv/bin/hadome"
 
@@ -47,6 +53,7 @@ for p in darwin_arm64 darwin_amd64 linux_arm64; do echo "0000  hadome_${v}_$p.ta
 cat "$work/rel/v$v/SHA256SUMS" >> "$work/sums"
 python3 -I "$root/packaging/homebrew/formula.py" "$v" "$work/sums" > "$work/hadome.rb"
 if command -v ruby >/dev/null; then ruby -c "$work/hadome.rb" >/dev/null; fi
+grep -q 'prefix.install "LICENSE", "THIRD_PARTY_NOTICES"' "$work/hadome.rb" || { echo "FAIL: the formula does not install the licenses" >&2; exit 1; }
 
 if [ "${SMOKE_SKIP_JVM:-}" = 1 ]; then echo "ok (JVM skipped)"; exit 0; fi
 

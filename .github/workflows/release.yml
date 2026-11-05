@@ -67,10 +67,12 @@ jobs:
           v="${VERSION#v}"
           name="hadome_${v}_${{ matrix.goos }}_${{ matrix.goarch }}"
           mkdir -p dist
+          # The licenses of hadome and of every module linked into it travel with the binary.
+          cp LICENSE THIRD_PARTY_NOTICES out/
           if [ "${{ matrix.goos }}" = windows ]; then
-            (cd out && 7z a -tzip "../dist/$name.zip" hadome.exe >/dev/null)
+            (cd out && 7z a -tzip "../dist/$name.zip" hadome.exe LICENSE THIRD_PARTY_NOTICES >/dev/null)
           else
-            tar -C out -czf "dist/$name.tar.gz" hadome
+            tar -C out -czf "dist/$name.tar.gz" hadome LICENSE THIRD_PARTY_NOTICES
           fi
       - uses: actions/upload-artifact@v6
         with:

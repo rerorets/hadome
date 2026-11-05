@@ -65,12 +65,45 @@ flowchart LR
 
 npm と Python のパッケージはバイナリそのものを含むので、入れるときにレジストリより先のネットワークには触れない。JVM のプラグインはダウンロードする。ビルドプラグインのレジストリがプラットフォームでファイルを選ばないからだ。JVM のプラグインと Homebrew は、ダウンロードをリリースの時点で固定したチェックサムと照らし合わせる。`cargo binstall` は、クレートに固定した公開鍵で署名を確かめる。
 
+## 依存のライセンス
+
+hadome にリンクするモジュールのライセンス（MIT、BSD、Apache-2.0、MPL-2.0）は、どれもバイナリと一緒に本文を配ることを求める。MPL-2.0 は、ソースの在りかを示すことも求める。そこで、リポジトリの直下に `THIRD_PARTY_NOTICES` を置き、`LICENSE` と一緒に、バイナリを含むすべてのアーカイブとパッケージに入れる。置き場所と作り直し方は [releasing.ja.md](../maintaining/releasing.ja.md) にある。
+
+```mermaid
+classDiagram
+  class Module {
+    +Path string
+    +Version string
+    +Source string
+    +Licenses []License
+  }
+  class License {
+    +Name string
+    +Text string
+  }
+  class notices {
+    <<package>>
+    +Render(stdlib Module, mods []Module) []byte
+    +Problems(file []byte, stdlib Module, mods []Module) []string
+    +ProxySource(path, version string) string
+  }
+  Module --> License
+  notices ..> Module : 読む
+```
+
+- パッケージ `internal/notices` はモジュールの一覧からファイルを作り（`Render`）、ファイルが一覧に追いついていないところを挙げる（`Problems`）
+- `Problems` が挙げるのはライセンスのファイルが無いモジュール、節の無いモジュールや版、ソースやライセンスの本文が古い節、もうリンクしていないモジュールや版の節である
+- モジュールの一覧は `internal/notices` の外で作る。`cmd/hadome` のテストが、リリースのビルド（cgo あり。Linux、macOS、Windows）について `go list -deps` で一覧を取り、モジュールのキャッシュからライセンスのファイルを読む
+- ソースの在りかは Go のモジュールプロキシの URL で示す
+- Go の標準ライブラリのライセンスには、テストのデータに置いた写しを使う。GOROOT に `LICENSE` を置かない Go の入れ方があるからだ
+
 ## 不変条件
 
 1. どのエコシステムでも、厳密な版を固定できる
 2. 同じ版はどう入れたかに依らず同じに振る舞う
 3. インストーラはチェックサムか署名の合わないバイナリを実行しない
 4. hadome は自分を更新しない
+5. バイナリを含むアーカイブとパッケージは、どれも hadome のライセンスと、リンクしたすべてのモジュールのライセンスを含む
 
 ## 意図して入れなかったもの
 

@@ -14,6 +14,10 @@ import re
 import sys
 import zipfile
 
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+# The licenses of hadome and of every module linked into the binary travel in every wheel.
+LEGAL = ("LICENSE", "THIRD_PARTY_NOTICES")
+
 # Linux binaries are linked statically, so one wheel serves glibc and musl systems alike.
 TAGS = {
     ("linux", "amd64"): "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
@@ -51,6 +55,7 @@ def build(version, binary, exe, tag, out):
             f"Version: {version}\nSummary: Reports the violations a change adds and the tests it weakens.\n"
             "Home-page: https://github.com/rerorets/hadome\nLicense: MIT\nRequires-Python: >=3.8\n"
         ).encode(),
+        **{f"{dist}.dist-info/licenses/{name}": open(os.path.join(ROOT, name), "rb").read() for name in LEGAL},
         f"{dist}.dist-info/WHEEL": (
             "Wheel-Version: 1.0\nGenerator: hadome build_wheels.py\nRoot-Is-Purelib: false\n"
             + "".join(f"Tag: py3-none-{t}\n" for t in tag.split("."))

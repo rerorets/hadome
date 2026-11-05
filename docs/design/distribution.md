@@ -65,12 +65,45 @@ Everything that turns a release into a package lives under `packaging/`, one dir
 
 The npm and Python packages carry the binary itself, so installing them never touches the network beyond the registry. The JVM plugins download, because the registries for build plugins do not select files by platform. The JVM plugins and Homebrew check each download against checksums fixed at release time. `cargo binstall` checks the signature with the public key fixed in the crate.
 
+## Licenses of the dependencies
+
+The licenses of the modules linked into hadome (MIT, BSD, Apache-2.0, MPL-2.0) all require their text to be distributed with the binary. MPL-2.0 also requires saying where the source is. So `THIRD_PARTY_NOTICES` sits at the root of the repository and goes, with `LICENSE`, into every archive and package that holds the binary. Where it goes and how to regenerate it are in [releasing.md](../maintaining/releasing.md).
+
+```mermaid
+classDiagram
+  class Module {
+    +Path string
+    +Version string
+    +Source string
+    +Licenses []License
+  }
+  class License {
+    +Name string
+    +Text string
+  }
+  class notices {
+    <<package>>
+    +Render(stdlib Module, mods []Module) []byte
+    +Problems(file []byte, stdlib Module, mods []Module) []string
+    +ProxySource(path, version string) string
+  }
+  Module --> License
+  notices ..> Module : reads
+```
+
+- The package `internal/notices` writes the file from a list of modules (`Render`) and lists where the file has fallen behind the list (`Problems`)
+- `Problems` lists a module with no license file, a module or version with no section, a section whose source or license text is out of date, and a section for a module or version no longer linked in
+- The list of modules is made outside `internal/notices`. A test in `cmd/hadome` lists them with `go list -deps` for the release build (with cgo; Linux, macOS, Windows) and reads their license files from the module cache
+- Where the source is, is given as the Go module proxy's URL
+- The Go standard library's license comes from a copy in the test data, because some ways of installing Go keep no `LICENSE` in GOROOT
+
 ## Invariants
 
 1. Every ecosystem can pin an exact version
 2. The same version behaves the same regardless of how it was installed
 3. Installers never execute a binary whose checksum or signature does not match
 4. hadome never updates itself
+5. Every archive and package that holds the binary holds the licenses of hadome and of every module linked into it
 
 ## Deliberately left out
 
