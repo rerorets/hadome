@@ -116,13 +116,14 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	}
 	body := n.ChildByFieldName("body")
 	var methods []*sitter.Node
+	fields := map[string]string{}
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
-			for k := range annotations(f, m) {
-				if jvmMockAnnotations[k] {
-					jf.mocks = append(jf.mocks, m)
-				}
+			if hasAny(annotations(f, m), jvmMockAnnotations) {
+				jf.mocks = append(jf.mocks, m)
+			} else {
+				jf.javaFieldTypes(m, fields)
 			}
 		case m.Kind() == "method_declaration":
 			methods = append(methods, m)
@@ -132,7 +133,7 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	var out []facts.Test
 	for _, m := range methods {
 		if a := annotations(f, m); hasAny(a, jvmTestAnnotations) {
-			out = append(out, jf.javaTest(name+"."+f.field(m, "name"), m, a, classSkip))
+			out = append(out, jf.javaTest(name+"."+f.field(m, "name"), m, a, classSkip, fields))
 		}
 	}
 	for _, m := range named(body) {
@@ -152,7 +153,7 @@ func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
 	return false
 }
 
-func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node) facts.Test {
+func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node, fields map[string]string) facts.Test {
 	t := newTest(jf.f, name, m)
 	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
 	skip := classSkip
@@ -167,7 +168,7 @@ func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter
 	for _, mk := range jf.mocks {
 		t.hazard(facts.HazardMock, mk)
 	}
-	w := &jvmWalk{jf: jf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w := &jvmWalk{jf: jf, t: t, vars: copyMap(fields), locals: map[string]bool{}, walking: map[string]bool{}}
 	w.walk(m.ChildByFieldName("body"), javaLoops, w.javaVisit)
 	return t.done()
 }
@@ -277,4 +278,28 @@ var javaUses = useGrammar{
 	members: map[string]string{"field_access": "object"},
 	names:   map[string]string{"field_access": "field"},
 	callees: map[string][]string{"method_invocation": {"object", "name"}},
+}
+
+// javaFieldTypes types the fields of a test class, as ktFieldType does: by the constructor that
+// builds a field, or, with no initializer (injected), by its declared type. A field built some other
+// way (mock(), a factory) is left untyped.
+func (jf *jvmFile) javaFieldTypes(n *sitter.Node, into map[string]string) {
+	f := jf.f
+	declared := typeName(f.field(n, "type"))
+	for _, d := range named(n) {
+		if d.Kind() != "variable_declarator" {
+			continue
+		}
+		name, v := f.field(d, "name"), d.ChildByFieldName("value")
+		switch {
+		case v == nil:
+			if class := jf.names[declared]; class != "" {
+				into[name] = class
+			}
+		case v.Kind() == "object_creation_expression":
+			if class := jf.names[typeName(f.field(v, "type"))]; class != "" {
+				into[name] = class
+			}
+		}
+	}
 }
