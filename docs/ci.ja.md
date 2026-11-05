@@ -139,3 +139,31 @@ jobs:
 - コメントに要るのは、ジョブの `pull-requests: write` の権限だけである。ラベルやリポジトリの設定は要らない
 - 行ごとの警告は確認の要るものの場所（`.hadome.yml` の行、依存の図の矢印の行、例外の印の行）を指す。その行がプルリクエストの差分に入っていれば、Files changed のその行に出る
 - hadome 自身は GitHub と通信しない。コメントを書くのは、CI の手順である
+
+## push の前のフック
+
+GitHub Actions のような CI を使わないリポジトリでは、push の前のフックで `hadome check` を実行する。
+
+```sh
+#!/bin/sh
+# .githooks/pre-push; enable it with: git config core.hooksPath .githooks
+hadome check --head HEAD
+code=$?
+if [ "$code" -eq 3 ] && [ "${HADOME_REVIEWED:-}" = "1" ]; then
+  exit 0
+fi
+if [ "$code" -eq 3 ]; then
+  echo "hadome: something needs a person's review; once checked, push with HADOME_REVIEWED=1 git push" >&2
+fi
+exit "$code"
+```
+
+| 終了コード | push |
+|---|---|
+| `0` | 通す |
+| `1`・`2` | 止める |
+| `3` | 止める。確かめた人が `HADOME_REVIEWED=1 git push` で通す |
+
+- `3` の扱いが CI と逆になる。プルリクエストには、マージする人が判断する画面がある。そのため CI は `3` を通して、その画面に出す。push の前のフックにはその画面が無いので、止めて、push する本人が確かめる
+- `--head HEAD` を付ける。head の既定は作業ツリーなので、付けないとコミットしていない変更まで検査し、push する中身とずれる
+- 例は今のブランチ（`HEAD`）を push する前提で書いてある。別のブランチを名指しで push するときは、検査する中身と push する中身が合わない

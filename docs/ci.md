@@ -139,3 +139,31 @@ Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apar
 - The comment needs only the job's `pull-requests: write` permission: no label and no repository setting
 - A line warning points at where the item is (the line in `.hadome.yml`, the arrow in the dependency diagram, the exception marker). When that line is in the pull request's diff, it shows on that line in Files changed
 - hadome itself never talks to GitHub. Writing the comment is a step of the CI
+
+## Pre-push hook
+
+In a repository without a CI such as GitHub Actions, run `hadome check` from a pre-push hook.
+
+```sh
+#!/bin/sh
+# .githooks/pre-push; enable it with: git config core.hooksPath .githooks
+hadome check --head HEAD
+code=$?
+if [ "$code" -eq 3 ] && [ "${HADOME_REVIEWED:-}" = "1" ]; then
+  exit 0
+fi
+if [ "$code" -eq 3 ]; then
+  echo "hadome: something needs a person's review; once checked, push with HADOME_REVIEWED=1 git push" >&2
+fi
+exit "$code"
+```
+
+| Exit code | Push |
+|---|---|
+| `0` | Goes through |
+| `1`, `2` | Stopped |
+| `3` | Stopped. The person who checked it pushes with `HADOME_REVIEWED=1 git push` |
+
+- `3` is handled the opposite way from CI. A pull request has a page where the person who merges decides, so CI lets `3` pass and shows it there. A pre-push hook has no such page, so it stops, and the person pushing checks
+- Pass `--head HEAD`. Head defaults to the working tree, so without it uncommitted changes are checked too, and what is checked differs from what is pushed
+- The example assumes you push the current branch (`HEAD`). When you push another branch by name, what is checked and what is pushed differ
