@@ -134,6 +134,7 @@ Test file conventions:
 | Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
 | Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
 | Kotlin | Same as Java |
+| Terraform | `*.tftest.hcl` ([adapters-iac.md](adapters-iac.md)) |
 
 For repositories laid out against the conventions, configuration can add roles.
 
@@ -155,6 +156,7 @@ A **unit** is what a dependency diagram draws a box for. Each language has its n
 | Python | Package (directory with modules) |
 | Rust | Module path within a crate |
 | Java / Kotlin | Package |
+| Terraform | Module (a directory) |
 
 `Internal` is true when the import points inside the repository. `IO` is true when the imported unit performs input or output, according to the adapter's `io` table and the entries configuration adds (`rules.tests.io`). Only imports of non-test files are listed: they are what the unit itself depends on.
 
@@ -277,6 +279,7 @@ What decides whether a fact can block is whether the adapter identified it, not 
 |---|---|
 | Go | The standard library's parser (`go/parser`, `go/ast`). No C dependency |
 | TypeScript, Python, Rust, Java, Kotlin | tree-sitter grammars |
+| Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
 
@@ -298,4 +301,4 @@ Full parsers are used for every language because what users get (accurate functi
 - Resolving every module system completely (dynamic imports, Python path manipulation). Unresolvable imports are reported as `unknown`
 - Type information (what a call resolves to across files). Rules work on syntax only
 - Mutation analysis
-- Languages beyond the six
+- Languages not in this document or [adapters-iac.md](adapters-iac.md)

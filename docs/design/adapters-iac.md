@@ -36,7 +36,7 @@ classDiagram
 - Terraform is read with the HCL parser Terraform itself uses (`hclsyntax` from `hashicorp/hcl/v2`), not with tree-sitter's HCL grammar. The versions of that grammar with Go bindings are built for ABI 15, which the Go binding hadome uses (ABI 14 at most) cannot load
 - `hashicorp/hcl/v2` is licensed under MPL-2.0. MPL applies file by file, so hadome's code stays MIT. The distributed executables ship with the MPL-2.0 text and a note on where the source of `hashicorp/hcl/v2` is
 - Ansible is read with `goccy/go-yaml`, which already reads the configuration. No dependency is added
-- The dependency diagram gains `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible`, and arrows from both to `internal/adapter/walk`, `engine`, `config` and `facts`
+- The dependency diagram gains `internal/adapter --> internal/adapter/terraform`, and arrows from `internal/adapter/terraform` to `engine`, `config` and `facts`. Ansible's arrows are added with the Ansible adapter, one for each package it uses
 
 ## Files and roles
 
@@ -44,6 +44,8 @@ classDiagram
 |---|---|---|---|
 | Terraform | `*.tf` | `*.tftest.hcl` | `*.tfvars` (values only; nothing to read) |
 | Ansible | `*.yml` and `*.yaml` under `tasks/`, `handlers/`, `defaults/`, `vars/` and `meta/` of `roles/<role>/`; under `playbooks/`; and `site.yml` and `playbook.yml` at the root | `*.yml` under `molecule/<scenario>/` (including those inside a role) | None |
+
+`files.tests` does not apply to Terraform files. As for Go, Terraform itself decides what a test is, by the name `*.tftest.hcl`.
 
 Ansible does not claim every YAML file because YAML holds things that are not Ansible too, such as CI settings and `.hadome.yml`. As for the other languages, whether a file is claimed depends on its path alone.
 
@@ -61,8 +63,10 @@ files:
 
 | Language | Unit | ID | Location | Symbol ID |
 |---|---|---|---|---|
-| Terraform | Module (a directory) | The directory | The directory | `<directory>.<name>` |
+| Terraform | Module (a directory) | The directory | The directory | `<directory>.var.<name>`, `<directory>.output.<name>` |
 | Ansible | Role | The role's name | `roles/<role>`; a playbook's is its directory | `<role>.<name>` |
+
+A Terraform symbol's ID holds the name the module uses for it (`var.region`, `output.region`), so that a `variable` and an `output` of the same name stay apart. In the root module no directory goes in front (`var.region`, `output.vpc_id`).
 
 ## Imports
 
@@ -73,6 +77,9 @@ files:
 
 - An Ansible role name using `{{ }}` has a destination decided only at run time, so it is an import whose destination is unknown (`Import.Unknown`), for `unknown/import`
 - A Terraform `source` cannot hold an expression, so no import has an unknown destination
+- A `required_providers` import performs input and output (`IO`): a module reaches outside through its providers. A `module` import does only when it is listed in `rules.tests.io`
+- A file with a `resource` or `data` block has an import of that block's provider, which performs input and output: it reaches the provider even when `required_providers` does not name it. The provider is the local name in the `provider` argument, or else the first word of the type (`aws` for `aws_vpc`), looked up in the same module's `required_providers`. A name not found there is `hashicorp/<name>`, as in Terraform
+- A module of only `variable`, `output` and `locals` reaches nothing outside, so it stays pure
 
 ## Symbols
 
@@ -94,6 +101,7 @@ Terraform's `variable` and `output` are a module's way in and way out. So both a
 | Ansible | Each Molecule scenario's `verify.yml` | `assert` (`ansible.builtin.assert`) tasks, and tasks with `failed_when` | The roles the same scenario's `converge.yml` uses | `pause` (`ansible.builtin.pause`) is `sleep` |
 
 - Neither has a way to skip a test
+- In Terraform, `variables`, `mock_provider` and the like written outside `run` blocks apply to every `run` of the file
 - A test's body fingerprint (`Test.Body`) is made from the block's or tasks' tokens, by the same rules as in the other languages
 
 ## Comments

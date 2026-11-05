@@ -8,7 +8,7 @@ The version is pinned because a new version of hadome changes its rules. If the 
 
 ## How each ecosystem gets it
 
-hadome supports six widely used languages, and is distributed through each of their ecosystems.
+hadome supports six widely used languages and Terraform, and is distributed through the ecosystem of each of the six.
 
 | Ecosystem | Declared in | Run with | What is installed |
 |---|---|---|---|
@@ -24,14 +24,14 @@ Configuration is the same `.hadome.yml` in every case. Package managers only dif
 
 ## Go without a C compiler
 
-`go tool` builds from source, and tree-sitter is a C library. Go builds with cgo when a C compiler is installed and without it otherwise, and hadome follows:
+`go tool` builds from source, and tree-sitter is a C library. The Go and Terraform adapters are pure Go. Go builds with cgo when a C compiler is installed and without it otherwise, and hadome follows:
 
 | Build | Languages | Needs C |
 |---|---|---|
-| With cgo (any machine with a C compiler, and every prebuilt binary) | All six | Yes, at build time |
-| Without cgo (`CGO_ENABLED=0`, or no C compiler) | Go only | No |
+| With cgo (any machine with a C compiler, and every prebuilt binary) | All seven | Yes, at build time |
+| Without cgo (`CGO_ENABLED=0`, or no C compiler) | Go and Terraform | No |
 
-A Go project that also has TypeScript or Python files gets all six where a C compiler is installed, or uses a prebuilt binary. If the pure-Go build meets files of another language, it reports them as unread (`unknown/unread`, exit code `3`) rather than ignoring them. This report shows which files could not be read.
+A Go project that also has TypeScript or Python files gets all seven where a C compiler is installed, or uses a prebuilt binary. If the pure-Go build meets files of another language, it reports them as unread (`unknown/unread`, exit code `3`) rather than ignoring them. This report shows which files could not be read.
 
 ## Releases
 

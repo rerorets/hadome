@@ -82,7 +82,8 @@ type missingDoc struct{}
 func (missingDoc) ID() string           { return "comments/missing-doc" }
 func (missingDoc) Cases() []engine.Case { return docCases() }
 func (missingDoc) About() engine.About {
-	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment"),
+	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment, " +
+		"or a new Terraform variable or output without a description"),
 		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
 		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong")}
 }
@@ -95,9 +96,13 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 			continue
 		}
 		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
+		msg := engine.T("exported %s %s has no doc comment", string(s.Kind), name)
+		if s.Kind == facts.SymbolValue { // a Terraform variable or output: its description is its doc
+			msg = engine.T("value %s has no description", name)
+		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
-			Message: engine.T("exported %s %s has no doc comment", string(s.Kind), name),
+			Message: msg,
 			Why:     r.About().Why,
 			Fix:     r.About().Fix,
 		})

@@ -134,6 +134,7 @@ classDiagram
 | Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
 | Kotlin | Java と同じ |
+| Terraform | `*.tftest.hcl`（[adapters-iac.ja.md](adapters-iac.ja.md)） |
 
 慣習から外れた配置のリポジトリのために、設定で役割を足せる。
 
@@ -155,6 +156,7 @@ classDiagram
 | Python | パッケージ（モジュールを含むディレクトリ） |
 | Rust | クレート内のモジュールのパス |
 | Java / Kotlin | パッケージ |
+| Terraform | モジュール（ディレクトリ） |
 
 `Internal` は、import がリポジトリの中を指すときに真になる。`IO` は、import したユニットが入出力を行うときに真になる。判断はアダプタの `io` の表と、設定が足す項目（`rules.tests.io`）による。一覧に載るのはテストでないファイルの import だけだ。それがユニット自身の依存だからだ。
 
@@ -277,6 +279,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 |---|---|
 | Go | 標準ライブラリのパーサ（`go/parser`、`go/ast`）。C への依存は無い |
 | TypeScript、Python、Rust、Java、Kotlin | tree-sitter の文法 |
+| Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
 
 言語をまたいで共有するトークナイザは持たない。どの言語も、その言語のパーサで読む。
 
@@ -298,4 +301,4 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 - すべてのモジュールの仕組みを完全に解決すること（動的な import、Python のパスの操作）。解決できない import は `unknown` として報告する
 - 型の情報（呼び出しがファイルをまたいで何に解決されるか）。ルールは構文だけを扱う
 - ミューテーションの分析
-- 6つ以外の言語
+- この文書と [adapters-iac.ja.md](adapters-iac.ja.md) に無い言語

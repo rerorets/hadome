@@ -110,7 +110,10 @@ hadome agents --write AGENTS.md CLAUDE.md
 | TypeScript | `[npm, test]` |
 | Python | `[python, -m, pytest]` |
 | Rust | `[cargo, test]` |
-| Java、Kotlin | `[./gradlew, test]` |hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
+| Java、Kotlin | `[./gradlew, test]` |
+| Terraform | 書かない。壊す関数が無い |
+
+hadome はこのファイルが無くても動くので、`init` は近道であって必須ではない。
 
 ## 不変条件
 

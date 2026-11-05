@@ -121,7 +121,7 @@ var MessageLanguages = []Value{
 // Languages are the languages hadome has adapters for.
 var Languages = []Value{
 	{"go", "Go"}, {"typescript", "TypeScript and JavaScript"}, {"python", "Python"},
-	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"},
+	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"}, {"terraform", "Terraform"},
 }
 
 func stringList(name, doc, example string, looser Direction, elem ...Key) Key {

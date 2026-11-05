@@ -14,11 +14,11 @@ Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues). Sen
 
 ## Running it locally
 
-With Go and a C compiler, the build reads all six languages. Without a C compiler, it reads Go only and reports files of the other languages as unread.
+With Go and a C compiler, the build reads all seven languages. Without a C compiler, it reads Go and Terraform only and reports files of the other languages as unread.
 
 ```sh
-go test ./...                           # the build that reads six languages (cgo)
-CGO_ENABLED=0 go test ./...             # the Go-only build
+go test ./...                           # the build that reads seven languages (cgo)
+CGO_ENABLED=0 go test ./...             # the build that reads Go and Terraform only
 go run ./cmd/hadome self-test           # every rule's self-test
 go run ./cmd/hadome check --format json # hadome checks itself
 packaging/smoke.sh 0.0.0-local          # build, install and run every package

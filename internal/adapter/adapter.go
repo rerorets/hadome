@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/rerorets/hadome/internal/adapter/golang"
+	"github.com/rerorets/hadome/internal/adapter/terraform"
 	"github.com/rerorets/hadome/internal/adapter/treesitter"
 	"github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/config"
@@ -37,6 +38,7 @@ func New() Analyzer {
 	for _, l := range treesitter.Languages() { // a different type with and without cgo
 		langs = append(langs, l)
 	}
+	langs = append(langs, terraform.Adapter{})
 	return Analyzer{Languages: langs}
 }
 

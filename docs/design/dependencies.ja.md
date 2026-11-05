@@ -7,9 +7,9 @@ flowchart TB
   cmd["cmd/hadome"] --> adapter["internal/adapter"] & gate["internal/gate"] & rules["internal/rules/..."]
   cmd --> suggest["internal/suggest"] & source["internal/source"] & engine["internal/engine"] & config["internal/config"]
   cmd --> mutation["internal/mutation"]
-  adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"]
+  adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"] & terraform["internal/adapter/terraform"]
   adapter & golang & treesitter --> walk["internal/adapter/walk"]
-  adapter & golang & treesitter --> engine & config & facts["internal/facts"]
+  adapter & golang & treesitter & terraform --> engine & config & facts["internal/facts"]
   engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
   rules --> engine & config & facts
