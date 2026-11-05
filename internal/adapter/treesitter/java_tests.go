@@ -3,6 +3,8 @@
 package treesitter
 
 import (
+	"strings"
+
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -194,7 +196,9 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	if obj != "" {
 		key = obj + "." + name
 	}
-	w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...)
+	if !w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...) && jvmValidation(obj, name) {
+		w.t.test.Asserts++
+	}
 	if cat, ok := w.jf.t.calls[key]; ok {
 		w.t.hazard(cat, n)
 		return
@@ -302,4 +306,18 @@ func (jf *jvmFile) javaFieldTypes(n *sitter.Node, into map[string]string) {
 			}
 		}
 	}
+}
+
+// restAssuredChecks are the checks of REST Assured's validation chain, which starts at then().
+var restAssuredChecks = set("statusCode", "statusLine", "body", "header", "headers", "contentType", "cookie",
+	"cookies", "time")
+
+// jvmValidation recognises checks that do not start with assert: REST Assured's
+// given()…then().statusCode(200).body(…), where each call after then() checks the response, and
+// Spring MockMvc's perform(…).andExpect(…).
+func jvmValidation(obj, name string) bool {
+	if name == "andExpect" {
+		return true
+	}
+	return restAssuredChecks[name] && strings.Contains(strings.Join(strings.Fields(obj), ""), "then()")
 }

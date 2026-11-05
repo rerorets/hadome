@@ -207,7 +207,7 @@ base にある行き先の分からない import を持つユニットは、純�
 | Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require` |
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
 | TypeScript | `expect(…)`、`assert` と `assert.…` |
-| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…` |
+| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など）、Spring MockMvc の `andExpect` |
 | Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
 
 危険の分類と同じく、これは例で、全体の表は各アダプタにある。Go 以外の言語では、名前が `assert`・`expect`・`verify` で始まる関数も assert とみなす（`assertEquals`、`assert_called_once`、`expectValid`）。ほかのファイルにある確かめるためのヘルパーは、アダプタが中を読めないが、名前から確かめていると分かるからだ。
