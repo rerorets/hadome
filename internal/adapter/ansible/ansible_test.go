@@ -335,3 +335,44 @@ func TestAnsibleComments(t *testing.T) {
 		t.Errorf("comments:\n got %q\nwant %q", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: ansible.Adapter.Analyze
+// Molecule sets MOLECULE_PROJECT_DIRECTORY to the role a scenario is inside, so a scenario under
+// roles/<role>/molecule that names the role by that variable's base name calls the role. Outside a
+// role the same expression stays unidentified, and so does any other template.
+func TestAnsibleMoleculeProjectDirectoryNamesTheRole(t *testing.T) {
+	converge := func(names ...string) string {
+		src := "- hosts: all\n  tasks:\n"
+		for _, n := range names {
+			src += "    - ansible.builtin.include_role:\n        name: " + n + "\n"
+		}
+		return src
+	}
+	const plain = `"{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"`
+	const spaced = `'{{lookup("ansible.builtin.env","MOLECULE_PROJECT_DIRECTORY")|basename}}'`
+	const other = `"{{ lookup('env', 'ROLE') | basename }}"`
+	a := analyze(t, config.Config{}, map[string]string{
+		"roles/web/tasks/main.yml":                "- name: Install\n  ansible.builtin.package:\n    name: nginx\n",
+		"roles/web/molecule/default/converge.yml": converge(plain, spaced, other),
+		"roles/web/molecule/default/verify.yml":   "- hosts: all\n",
+		"molecule/default/converge.yml":           converge(plain),
+		"molecule/default/verify.yml":             "- hosts: all\n",
+	})
+	var got []string
+	for _, tt := range a.Tests {
+		var calls []string
+		for _, c := range tt.Calls {
+			calls = append(calls, fmt.Sprintf("%s x%d", c.Target, c.Times))
+		}
+		got = append(got, fmt.Sprintf("%s calls=%v unresolved=%d", tt.Path, calls, tt.Unresolved))
+	}
+	sort.Strings(got)
+	want := []string{
+		"molecule/default/verify.yml calls=[] unresolved=1",
+		"roles/web/molecule/default/verify.yml calls=[web x2] unresolved=1",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("tests:\n got %q\nwant %q", got, want)
+	}
+}

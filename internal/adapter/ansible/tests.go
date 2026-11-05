@@ -2,6 +2,7 @@ package ansible
 
 import (
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -17,10 +18,25 @@ var (
 	sleepTasks  = modules("pause")
 )
 
+// projectRole is how a scenario inside a role names that role: Molecule sets
+// MOLECULE_PROJECT_DIRECTORY to the role's directory, so its base name is the role.
+var projectRole = regexp.MustCompile(`^\{\{\s*lookup\(\s*['"](ansible\.builtin\.)?env['"]\s*,\s*['"]MOLECULE_PROJECT_DIRECTORY['"]\s*\)\s*\|\s*basename\s*\}\}$`)
+
+// enclosingRole is the role a scenario directory is inside (roles/web/molecule/default -> web), or "".
+func enclosingRole(scenario string) string {
+	elems := strings.Split(scenario, "/")
+	for i := 0; i+2 < len(elems); i++ {
+		if elems[i] == "roles" && elems[i+2] == "molecule" {
+			return elems[i+1]
+		}
+	}
+	return ""
+}
+
 // test reads a scenario's verify playbook as one test named after the scenario. Its asserts are its
 // assert tasks and the tasks with failed_when; what it calls are the repository's roles the scenario's
 // converge playbook applies, a role being a unit. A role named with {{ }} is a call hadome cannot
-// identify.
+// identify, except Molecule's name for the role a scenario is inside.
 func test(verify, converge parsed, roles map[string]bool) facts.Test {
 	t := facts.Test{Name: path.Base(verify.place.dir), Path: verify.path, Line: 1, Body: fingerprint(verify.src)}
 	for _, doc := range verify.body {
@@ -39,6 +55,9 @@ func test(verify, converge parsed, roles map[string]bool) facts.Test {
 	}
 	calls := map[string]int{}
 	for _, r := range roleRefs(converge) {
+		if own := enclosingRole(verify.place.dir); own != "" && projectRole.MatchString(strings.TrimSpace(r.name)) {
+			r.name = own
+		}
 		switch {
 		case template.MatchString(r.name):
 			t.Unresolved++

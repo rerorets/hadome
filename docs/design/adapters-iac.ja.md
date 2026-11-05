@@ -107,6 +107,7 @@ Terraform の `variable` と `output` はモジュールの入口と出口であ
 - どちらにもスキップの書き方は無い
 - Ansible のテストが呼ぶものはロール、つまりユニットそのものである。そこで `Call.Target` にはロールの名前（ユニットの ID）を入れる。ロールが head に残っていれば、`tests/scope-shrunk` はそのロールを消されたものとみなさない
 - `converge.yml` が `{{ }}` で名指すロールは、特定できなかった呼び出し（`Unresolved`）として数える
+- ただし、`roles/<ロール>/molecule/<シナリオ>/` のシナリオが `{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}` で名指すロールは、そのシナリオを含むロールとする。Molecule はこの環境変数にロールのディレクトリを入れるので、推測ではない。空白の違い、引用符の種類、`ansible.builtin.env` の書き方は問わない。ロールの外のシナリオでは、ほかの `{{ }}` と同じく特定できない
 - Terraform で `run` の外に書いた `variables` と `mock_provider` などは、そのファイルのすべての `run` に効くものとして読む
 - テストの本体の指紋（`Test.Body`）はブロックかタスクの字句から、ほかの言語と同じ決まりで作る
 

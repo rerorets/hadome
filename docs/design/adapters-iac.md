@@ -107,6 +107,7 @@ Terraform's `variable` and `output` are a module's way in and way out. So both a
 - Neither has a way to skip a test
 - What an Ansible test calls is a role, that is, a unit itself. So `Call.Target` holds the role's name (the unit's ID). While the role is still in head, `tests/scope-shrunk` does not take it as removed
 - A role `converge.yml` names with `{{ }}` counts as a call that could not be identified (`Unresolved`)
+- Except that a role a scenario under `roles/<role>/molecule/<scenario>/` names as `{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}` is the role holding the scenario. Molecule sets that variable to the role's directory, so this is not a guess. Whitespace, the kind of quotes and the `ansible.builtin.env` spelling do not matter. In a scenario outside a role, it cannot be identified, like any other `{{ }}`
 - In Terraform, `variables`, `mock_provider` and the like written outside `run` blocks apply to every `run` of the file
 - A test's body fingerprint (`Test.Body`) is made from the block's or tasks' tokens, by the same rules as in the other languages
 
