@@ -62,6 +62,13 @@ func WriteJSON(w io.Writer, r Report, lang string) error {
 	return enc.Encode(out)
 }
 
+// The sentences that introduce a list in the text output. They explain to the reader, unlike the
+// labels (why:, fix:), which are spelled like the JSON keys and stay English.
+var (
+	candidatesHeading = T("Invariant candidates this change adds (information only; propose them to a person, `hadome suggest` prints them as configuration):")
+	introducedHeading = T("Settings this change introduces with .hadome.yml (information only; base has no configuration, so nothing counts as loosening):")
+)
+
 // WriteText writes the report for people, with the findings' wording and the summary in lang.
 func WriteText(w io.Writer, r Report, lang string) {
 	for _, f := range r.Regressions {
@@ -75,13 +82,13 @@ func WriteText(w io.Writer, r Report, lang string) {
 		fmt.Fprintf(w, "? %-28s new exception: %s\n  %s:%d\n", m.Rule, m.Reason, m.File, m.Line)
 	}
 	if len(r.Candidates) > 0 {
-		fmt.Fprintln(w, "Invariant candidates this change adds (information only; propose them to a person, `hadome suggest` prints them as configuration):")
+		fmt.Fprintln(w, candidatesHeading.In(lang))
 		for _, c := range r.Candidates {
 			fmt.Fprintf(w, "  %s  %s — %s\n", c.Key(), location(c.File, c.Line), c.Why)
 		}
 	}
 	if len(r.Introduced) > 0 {
-		fmt.Fprintln(w, "Settings this change introduces with .hadome.yml (information only; base has no configuration, so nothing counts as loosening):")
+		fmt.Fprintln(w, introducedHeading.In(lang))
 		for _, c := range r.Introduced {
 			fmt.Fprintf(w, "  %s  %s  %s\n", c.Key, location(c.File, c.Line), changed(c))
 		}
