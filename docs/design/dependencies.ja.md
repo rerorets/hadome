@@ -16,6 +16,7 @@ flowchart TB
   suggest --> engine & config & facts
   source --> engine
   mutation --> engine & config & facts
+  notices["internal/notices"]
   packaging["packaging/..."]
 ```
 
@@ -23,4 +24,5 @@ flowchart TB
 - エンジンは言語もルールもプロセスも知らない。アダプタ、ルール、門番がエンジンに依存し、逆はない
 - ルールはアダプタを import しない。ルールが見るのは事実だけで、だからどのルールもどの言語でも動く
 - 部品を組み合わせるのは `cmd/hadome` だけ
+- `notices` を使うのは、`THIRD_PARTY_NOTICES` を作って確かめるテストだけである。`notices` は hadome のものを何も import せず、ほかのユニットからも import されない
 - `packaging/` は配布物である。Go のコードを何も import せず、そのユニット（インストーラとプラグイン）は1つの箱にまとめる

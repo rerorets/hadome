@@ -16,6 +16,7 @@ flowchart TB
   suggest --> engine & config & facts
   source --> engine
   mutation --> engine & config & facts
+  notices["internal/notices"]
   packaging["packaging/..."]
 ```
 
@@ -23,4 +24,5 @@ flowchart TB
 - The engine knows no language, no rule and no process: adapters, rules and gates depend on it, never the reverse
 - Rules never import adapters: they see facts only, which is why every rule works in every language
 - `cmd/hadome` is the only place that puts the pieces together
+- Only the test that writes and checks `THIRD_PARTY_NOTICES` uses `notices`. `notices` imports nothing of hadome, and no other unit imports it
 - `packaging/` is the distribution: it imports nothing of the Go code, and its units (the installer and the plugins) are one box
