@@ -100,7 +100,11 @@ hadome agents --write AGENTS.md CLAUDE.md
 
 ## `hadome init`
 
-Writes `.hadome.yml` with `schema: 1`, the detected languages as a comment, and comments pointing at `hadome suggest` and `hadome explain`. It refuses to overwrite an existing file. hadome works without the file, so `init` is a shortcut, never a requirement.
+Writes `.hadome.yml` with `schema: 1`, the detected languages as a comment, and comments pointing at `hadome suggest` and `hadome explain`. It refuses to overwrite an existing file.
+
+Languages are detected by file extension. Ansible's YAML cannot be told apart by extension, so Ansible is detected when a file is in the layout the Ansible adapter claims (`roles/…`, `playbooks/…`, `site.yml` and `playbook.yml` at the root), decided by the adapter's own rule.
+
+hadome works without the file, so `init` is a shortcut, never a requirement.
 
 It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)). For each language found it lists the usual test command on its own line, and the user keeps one and uncomments it. The commands are guesses, so none is turned on.
 

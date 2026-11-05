@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/suggest"
@@ -122,7 +123,19 @@ func initCmd(args []string, stdout, stderr io.Writer) int {
 	return engine.ExitOK
 }
 
+// detectLanguages lists the languages of the tree: by extension, and for a language whose files no
+// extension tells apart (Ansible's YAML), by the adapter's own claim on the path.
 func detectLanguages(tree fs.FS) ([]string, error) {
+	byExtension := map[string]bool{}
+	for _, l := range extensions {
+		byExtension[l] = true
+	}
+	var byLayout []adapter.Language
+	for _, l := range adapter.New().Languages {
+		if !byExtension[l.Name()] {
+			byLayout = append(byLayout, l)
+		}
+	}
 	found := map[string]bool{}
 	err := fs.WalkDir(tree, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -132,8 +145,16 @@ func detectLanguages(tree fs.FS) ([]string, error) {
 		if d.IsDir() && p != "." && (name == "vendor" || name == "node_modules" || strings.HasPrefix(name, ".")) {
 			return fs.SkipDir
 		}
-		if lang, ok := extensions[path.Ext(name)]; ok && !d.IsDir() {
+		if d.IsDir() {
+			return nil
+		}
+		if lang, ok := extensions[path.Ext(name)]; ok {
 			found[lang] = true
+		}
+		for _, l := range byLayout {
+			if l.Claims(p) {
+				found[l.Name()] = true
+			}
 		}
 		return nil
 	})
