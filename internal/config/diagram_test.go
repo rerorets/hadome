@@ -54,6 +54,30 @@ func TestALabelMayDescribeItsDirectoryAfterALineBreak(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: config.Load with rules.deps.diagram
+// A box is planned when it has the class planned, given on the node or by a class statement before
+// or after it; any other class leaves it as it is.
+func TestABoxIsPlannedByItsClass(t *testing.T) {
+	doc := "```mermaid\nflowchart LR\n  class b planned\n  a[\"internal/a\"]:::planned --> b[\"internal/b\"]\n" +
+		"  c[\"internal/c\"]:::wide --> d\n  class d,a planned\n```\n"
+	c := mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: d.md\n")},
+		"d.md": {Data: []byte(doc)}})
+	got := map[string]bool{}
+	for _, n := range c.Diagram.Nodes {
+		got[n.ID] = n.Planned
+	}
+	want := map[string]bool{"a": true, "b": true, "c": false, "d": true}
+	for id, planned := range want {
+		if got[id] != planned {
+			t.Errorf("node %s: planned %v, want %v", id, got[id], planned)
+		}
+	}
+	if arrows(c.Diagram) != "internal/a>internal/b internal/c>d" {
+		t.Errorf("a class must not change the arrows: %s", arrows(c.Diagram))
+	}
+}
+
 func mustLoadTree(t *testing.T, tree fstest.MapFS) Config {
 	t.Helper()
 	c, err := Load(tree, t.TempDir())
@@ -76,6 +100,7 @@ func TestABrokenDiagramIsAConfigurationError(t *testing.T) {
 		"not a path":           {"```mermaid\nflowchart LR\n  a[\"The core\"] --> b\n```\n", 3},
 		"two labels":           {"```mermaid\nflowchart LR\n  a[x] --> b\n  a[y] --> b\n```\n", 4},
 		"unreadable statement": {"```mermaid\nflowchart LR\n  a --> \n```\n", 3},
+		"planned unknown node": {"```mermaid\nflowchart LR\n  a --> b\n  class c planned\n```\n", 4},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -110,5 +135,36 @@ func TestDrawingAnArrowNeedsReview(t *testing.T) {
 		if got := looser(Diff(tc.base, tc.head)); len(got) != tc.want {
 			t.Errorf("%s: want %d looser changes, got %v", name, tc.want, got)
 		}
+	}
+}
+
+// viewpoint: state integrity
+// target: config.Diff
+// Marking a box base already draws as planned is looser, and the change points at the mark, so a
+// reviewer lands on it. Drawing a new box planned, or removing the mark, is not looser.
+func TestMarkingAnExistingBoxPlannedIsLooser(t *testing.T) {
+	load := func(flow string) Config {
+		return mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: d.md\n")},
+			"d.md": {Data: []byte("```mermaid\nflowchart LR\n" + flow + "\n```\n")}})
+	}
+	looser := func(base, head Config) []Change {
+		var out []Change
+		for _, ch := range Diff(base, head) {
+			if ch.Looser {
+				out = append(out, ch)
+			}
+		}
+		return out
+	}
+	plain, marked := load("  a --> b"), load("  a --> b\n  class b planned")
+	got := looser(plain, marked)
+	if len(got) != 1 || got[0].Added != "b planned" || got[0].File != "d.md" || got[0].Line != 4 {
+		t.Fatalf("want b planned at d.md:4 as looser, got %+v", got)
+	}
+	if got := looser(marked, plain); len(got) != 0 {
+		t.Errorf("removing the mark tightens, got %+v", got)
+	}
+	if got := looser(plain, load("  a --> b\n  c[\"internal/c\"]:::planned")); len(got) != 0 {
+		t.Errorf("a new box drawn planned is not looser, got %+v", got)
 	}
 }

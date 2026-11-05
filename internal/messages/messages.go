@@ -156,9 +156,12 @@ var Japanese = map[string]string{
 	"the diagram (%s) is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                        "人とエージェントは、何が何に依存してよいかを図（%s）で知る。図に描かれていない import は、図を誤りにする",
 	"depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews": "図が許すものに依存する。import する側のユニットが宣言するインターフェースを通すことが多い。設計が変わったなら矢印を描く。矢印は人が確かめる",
 	"the diagram's node %s names %s, which holds no unit":                                                                                                      "図のノード %s が指す %s に、ユニットが無い",
-	"a node of the dependency diagram whose label names no unit of the version":                                                                                "ラベルがその版のどのユニットも指していない、依存の図のノード",
+	"a node of the dependency diagram whose label names no unit of the version, or a planned node whose directory already holds one":                           "依存の図のノードのうち、ラベルがその版のどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
 	"a box that names nothing makes the diagram look complete when it is not":                                                                                  "何も指さない箱があると、図が完全でないのに完全に見える",
-	"correct the label to the unit's directory, or remove the node":                                                                                            "ラベルをユニットのディレクトリに直すか、ノードを消す",
+	"correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned":                                         "ラベルをユニットのディレクトリに直すか、ノードを消す。まだ作っていない箱なら、クラス planned を付ける",
+	"the diagram's node %s is planned, but %s already holds a unit":                                                                                            "図のノード %s は予定の箱だが、%s にはもうユニットがある",
+	"a planned box whose package exists tells readers it is still to be written":                                                                               "パッケージがあるのに予定の箱のままだと、まだ書かれていないと読み手に伝わってしまう",
+	"remove the class planned from node %s":                                                                                                                    "ノード %s からクラス planned を外す",
 
 	// unknown/.
 	"hadome could not read %s": "hadome は %s を読めなかった",

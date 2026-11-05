@@ -28,11 +28,13 @@ flowchart LR
 - A **node's label** names a directory of the repository, from its root. `dir/...` covers the directory and everything under it. A node without a label is named by its ID
 - A label may describe its directory after a line break (`<br/>`). Only the first line names the directory, so rewording the description changes nothing the arrows allow (`core["internal/core<br/>holds the rules"]`)
 - An **arrow** `a --> b` (also `-.->` and `==>`, with or without a `|label|`, in chains and with `&`) allows the units of `a` to import the units of `b`. Lines without arrows (`---`) allow nothing
-- Subgraphs, styles and comments (`%%`) are ignored
+- **Planned boxes**: a node with the class `planned` (`api["internal/api"]:::planned`, or `class api planned`) may name a directory that does not exist yet. This is for drawing the design first and creating the package in a later change. How it looks is the user's choice with `classDef planned` (a dashed border, for example). It is a class, not a comment (`%%`), so that the rendered diagram also shows it is planned
+- Arrows may be drawn to and from planned boxes. Adding one needs review, as for any box
+- Subgraphs, styles and comments (`%%`) are ignored, apart from the class `planned`
 - A unit belongs to the most specific node that covers it: an exact directory before a `/...`, a longer `/...` before a shorter one
 - Imports within one node are always allowed
 
-The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing an arrow never does. Removing `rules.deps.diagram` itself does, because every import then passes.
+The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression, unless it is planned. Marking `planned`, in head, a box base's diagram draws counts as loosening (review, exit code `3`): one mark would take a box that stopped naming anything out of the regressions. Adding a new box already `planned`, or removing `planned`, is not loosening. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing an arrow never does. Removing `rules.deps.diagram` itself does, because every import then passes.
 
 ## The rules
 
@@ -52,9 +54,9 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 
 ### `deps/diagram-stale`
 
-- **Finds**: a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted)
+- **Finds**: a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted), planned boxes aside. Conversely, a planned box that now names a unit (the package exists, but the diagram still says it is planned)
 - **Why**: when a box names nothing, the diagram looks complete when it is not
-- **Fix**: correct the label, or remove the node
+- **Fix**: correct the label, or remove the node. If the directory is not created yet, mark the box `planned`. If a planned box names a unit, remove `planned`
 - The anchor is the label
 
 ## Facts
@@ -72,6 +74,7 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes |
 | `deps/not-in-diagram` (more) | an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` (more) | a node naming a directory of tests only fails · moving a unit away from its node fails |
+| `deps/diagram-stale` (planned boxes) | a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review |
 
 ## Invariants
 
@@ -84,3 +87,4 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 - Transitive arrows. `a --> b --> c` does not allow `a` to import `c`
 - External libraries in the diagram
 - Diagram formats other than Mermaid flowcharts
+- A deadline for planned boxes. A box left planned for long is not a regression. When the plan is dropped, remove the box
