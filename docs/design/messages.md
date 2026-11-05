@@ -5,7 +5,7 @@ hadome shows people and agents its wording in English or in Japanese. The compar
 ## Responsibility
 
 - The wording of findings (`message`, `why`, `fix`) comes out in the chosen language
-- So do the text of `hadome explain <rule>` (`Finds`, `Why`, `Fix`) and the summary line of the text output (`2 regression(s). …`)
+- So do the text of `hadome explain <rule>` (`Finds`, `Why`, `Fix`) the summary line of the text output (`2 regression(s). …`), and the sentences that introduce a list (invariant candidates, `introduced`)
 - Wording with no Japanese comes out in English
 
 ## What it does not do
@@ -72,4 +72,4 @@ classDiagram
 - Translating configuration errors and command usage. Configuration keys are English, so errors in English are easier to match against them
 - Languages other than English and Japanese. The catalog can hold more, but a language nobody can keep translated is not added
 - Translating what goes into the arguments (function names, paths, pieces of code)
-- Translating the labels of the text output (`why:`, `fix:`, `Finds:`, `new exception:`). Spelled like the JSON keys, they make the text and the JSON easy to match against each other
+- Translating the labels of the text output (`why:`, `fix:`, `Finds:`, `new exception:`). Spelled like the JSON keys, they make the text and the JSON easy to match against each other. The sentences that introduce a list are translated: they explain to the reader rather than match a key

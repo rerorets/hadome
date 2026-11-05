@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/messages"
 )
@@ -146,5 +147,33 @@ func TestSwitchingTheLanguageChangesNoVerdict(t *testing.T) {
 	}
 	if r.Messages != "ja" {
 		t.Fatalf("the report must carry head's messages, got %q", r.Messages)
+	}
+}
+
+// viewpoint: invariant
+// target: engine.WriteText
+// The sentences that introduce a list explain it to the reader, so they come out in the chosen
+// language; the listed keys and places stay as they are.
+func TestListIntroductionsAreInTheChosenLanguage(t *testing.T) {
+	r := engine.Report{
+		Candidates: []engine.Candidate{{Type: "durable", Targets: []string{"store.Append"}, File: "store/store.go", Line: 3, Why: "writes rows"}},
+		Introduced: []config.Change{{Key: "rules.size.file-lines", File: ".hadome.yml", Line: 4, Removed: "400", Added: "500"}},
+	}
+	out := map[string]string{}
+	for _, lang := range []string{"en", "ja"} {
+		var b bytes.Buffer
+		engine.WriteText(&b, r, lang)
+		out[lang] = b.String()
+	}
+	if n := strings.Count(out["en"], "information only"); n != 2 {
+		t.Errorf("en: want both introductions in English, found %d\n%s", n, out["en"])
+	}
+	if strings.Contains(out["ja"], "information only") || strings.Count(out["ja"], "知らせるだけ") != 2 {
+		t.Errorf("ja: want both introductions in Japanese\n%s", out["ja"])
+	}
+	for _, kept := range []string{"durable store.Append", "rules.size.file-lines  .hadome.yml:4  400 → 500"} {
+		if !strings.Contains(out["ja"], kept) {
+			t.Errorf("ja: %q must stay as it is\n%s", kept, out["ja"])
+		}
 	}
 }
