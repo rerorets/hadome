@@ -28,6 +28,8 @@ classDiagram
     +r reader
     +tables *tables
     +directive func(text string) bool
+    +breaks *breaks
+    +Mutants(v Version, funcs []facts.Symbol) ([]facts.Mutant, error)
   }
   class reader {
     <<interface>>
@@ -110,6 +112,40 @@ Calls from tests are resolved to targets through the names each file imports fro
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 
+## Mutants
+
+A `lang` has `Mutants`, which makes it the Mutator of `hadome mutate` ([mutation.md](mutation.md)). The breaks are the same five as Go's, and in every language the same generic reader walks the tree to make the mutants. Only three things differ by language: how the operators are spelled, the zero values, and what takes the place of a removed call statement. These live in the `lang`'s table of breaks (`breaks`).
+
+| Break | TypeScript | Python | Rust | Java | Kotlin |
+|---|---|---|---|---|---|
+| Flip a comparison | Go's six, `===` ↔ `!==` | Go's six | Go's six | Go's six | Go's six, `===` ↔ `!==` |
+| Negate a boolean | `!x` → `x`, `true` ↔ `false` | `not x` → `x`, `True` ↔ `False` | `!x` → `x`, `true` ↔ `false` | `!x` → `x`, `true` ↔ `false` | `!x` → `x`, `true` ↔ `false` |
+| Swap arithmetic | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal or a template string | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal (f-strings included) | `+` ↔ `-`, `*` ↔ `/` | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal |
+| Return the zero value | The table below | The table below | The table below | The table below | The table below |
+| Remove a call statement | The statement becomes `;` | The statement becomes `pass` | A statement ending in `;` becomes `;` | The statement becomes `;` | The statement becomes `Unit` |
+
+Go's six are `<` → `>=`, `>=` → `<`, `<=` → `>`, `>` → `<=`, and `==` ↔ `!=`.
+
+The zero value comes from the declared result type.
+
+| Language | Types and zero values |
+|---|---|
+| TypeScript | `number` → `0`, `string` → `""`, `boolean` → `false`, a union with `null` or `undefined` → that value |
+| Python | `int` → `0`, `float` → `0.0`, `str` → `""`, `bool` → `False`, a type with `None` (`Optional[…]`, `X \| None`) → `None` |
+| Rust | integer types → `0`, `f32` and `f64` → `0.0`, `bool` → `false`, `&str` → `""`, `String` → `String::new()`, `Option<…>` → `None`, `Vec<…>` → `Vec::new()` |
+| Java | integer types, `float` and `double` → `0`, `boolean` → `false`, `String` → `""`, other reference types → `null` |
+| Kotlin | `Int`, `Short`, `Byte` → `0`, `Long` → `0L`, `Double` → `0.0`, `Float` → `0f`, `Boolean` → `false`, `String` → `""`, a type with `?` → `null` |
+
+- Functions whose result type is not in the table, or is not written (TypeScript functions without one, Python functions without an annotation, Kotlin expression bodies), get no mutant of this kind
+- What is replaced is the value of a `return`. In Rust, the last expression of a function's body (one without `;`) is replaced too, since Rust usually returns a value without writing `return`
+- As in Go, a statement that returns a boolean literal (negating a boolean breaks it) or already returns the zero value gets none
+
+The other rules are Go's too.
+
+- The anchor is "function | break | the line's tokens | which one". The line's tokens are the text of the leaf nodes that start on that line, comments left out, joined by one space. Reformatting the line, or adding a comment to it, leaves the anchor the same
+- Nothing inside a nested function (an arrow function, a lambda, a `def` inside a function, a closure, an anonymous class) is broken, as with Go's function literals. The arrow function of `const f = () =>` is a symbol itself, though, so its body is broken
+- Replacements are chosen, as far as the syntax shows, so that the code still compiles. A mutant that does not compile fails the test command, so it counts as caught and is never reported
+
 ## Grammars
 
 The grammars are pinned to versions built for tree-sitter's language ABI 14, the newest the Go binding loads. A grammar is upgraded together with the binding, never alone.
@@ -130,3 +166,6 @@ The grammars are pinned to versions built for tree-sitter's language ABI 14, the
 
 - Type inference beyond "a variable built by a constructor". Calls on anything else are unresolved
 - Every module system's corner cases: dynamic imports, Python path manipulation, Rust `#[path]`, TypeScript project references. They resolve as external or unresolved
+- Zero values that need type inference (functions without a written result type, and user-defined types)
+- Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
+- Flipping Python's `is` and `in`
