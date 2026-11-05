@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -208,4 +209,51 @@ func TestMutantAnchorsSurviveMovingAndCommenting(t *testing.T) {
 			}
 		})
 	}
+}
+
+// viewpoint: behaviour
+// target: lang.Mutants
+// Only functions and methods are broken, never a type declared on the same line as one. Mutants
+// come in the order of the files' paths, then of the functions' lines, whatever order the symbols
+// are given in, so two runs over the same change try the same mutants.
+func TestMutantsBreakFunctionsAndMethodsInPathAndLineOrder(t *testing.T) {
+	var l *lang
+	for _, c := range Languages() {
+		if c.name == "typescript" {
+			l = c
+		}
+	}
+	files := tree(
+		"src/b.ts", "export function late(a: number) { return a < 1 }\n\nexport function early(a: number) { return a > 1 }\n",
+		"src/a.ts", "export class Box { open(a: number) { return a <= 1 } }\n",
+	)
+	funcs := []facts.Symbol{
+		{ID: "b.early", Kind: facts.SymbolFunction, Path: "src/b.ts", Line: 3},
+		{ID: "a.Box", Kind: facts.SymbolType, Path: "src/a.ts", Line: 1},
+		{ID: "b.late", Kind: facts.SymbolFunction, Path: "src/b.ts", Line: 1},
+		{ID: "a.Box.open", Kind: facts.SymbolMethod, Path: "src/a.ts", Line: 1},
+	}
+	// More files than two, so that an order left to chance almost never comes out sorted.
+	var more []string
+	for _, c := range "zyxwvutsrqponmlkjihgfedc" {
+		p := "src/m" + string(c) + ".ts"
+		files[p] = &fstest.MapFile{Data: []byte("export function f(a: number) { return a >= 1 }\n")}
+		funcs = append(funcs, facts.Symbol{ID: "m" + string(c) + ".f", Kind: facts.SymbolFunction, Path: p, Line: 1})
+	}
+	for _, c := range "cdefghijklmnopqrstuvwxyz" {
+		more = append(more, "m"+string(c)+".f flip a comparison: >= -> <")
+	}
+	ms, err := l.Mutants(engine.Version{FS: files}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		got = append(got, fmt.Sprintf("%s %s: %s -> %s", m.Func, m.Operator, m.Original, m.Replacement))
+	}
+	expect(t, strings.Join(got, "\n"), `
+a.Box.open flip a comparison: <= -> >
+b.late flip a comparison: < -> >=
+b.early flip a comparison: > -> <=
+`+strings.Join(more, "\n"))
 }

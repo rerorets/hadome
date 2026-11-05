@@ -74,31 +74,41 @@ func (l *lang) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 	defer parser.Close()
 	var out []facts.Mutant
 	for _, p := range paths {
-		src, err := fs.ReadFile(v.FS, p)
+		ms, err := l.mutantsIn(parser, v, p, byPath[p])
 		if err != nil {
 			return nil, err
 		}
-		tree, err := l.parse(parser, p, src)
-		if err != nil {
-			return nil, err
+		out = append(out, ms...)
+	}
+	return out, nil
+}
+
+// mutantsIn makes the mutants of the given functions of one file, in the order of their lines.
+func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms []facts.Symbol) ([]facts.Mutant, error) {
+	src, err := fs.ReadFile(v.FS, p)
+	if err != nil {
+		return nil, err
+	}
+	tree, err := l.parse(parser, p, src)
+	if err != nil {
+		return nil, err
+	}
+	defer tree.Close()
+	f := &file{path: p, src: src, root: tree.RootNode()}
+	sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
+	var out []facts.Mutant
+	for _, s := range syms {
+		fn := l.functionAt(f, s.Line)
+		if fn == nil {
+			continue
 		}
-		f := &file{path: p, src: src, root: tree.RootNode()}
-		syms := byPath[p]
-		sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
-		for _, s := range syms {
-			fn := l.functionAt(f, s.Line)
-			if fn == nil {
-				continue
-			}
-			body := l.breaks.body(fn)
-			if body == nil {
-				continue
-			}
-			m := mutator{b: l.breaks, f: f, fn: s.ID, zero: l.breaks.zero(f, fn), seen: map[string]int{}}
-			m.function(body)
-			out = append(out, m.out...)
+		body := l.breaks.body(fn)
+		if body == nil {
+			continue
 		}
-		tree.Close()
+		m := mutator{b: l.breaks, f: f, fn: s.ID, zero: l.breaks.zero(f, fn), seen: map[string]int{}}
+		m.function(body)
+		out = append(out, m.out...)
 	}
 	return out, nil
 }
