@@ -98,6 +98,10 @@ Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not pr
 | Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/` and the like) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
 | Kotlin | Same as Java | A function with the same annotations as Java | `@Disabled`, `@Ignore` | The annotation's string argument |
 
+- What a test calls is read from the names it imports and the objects it builds
+- In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read
+- In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
+
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
 
 ## Hazards and io
@@ -182,7 +186,7 @@ Such files count as read and are not listed under `unknown/unread` (see "Deliber
 ## Deliberately left out
 
 - Type inference beyond "a variable built by a constructor". Calls on anything else are unresolved
-- Every module system's corner cases: dynamic imports, Python path manipulation, Rust `#[path]`, TypeScript project references. They resolve as external or unresolved
+- Every module system's corner cases: dynamic imports other than a test's `import()` named by a string, Python path manipulation, Rust `#[path]`, TypeScript project references. They resolve as external or unresolved
 - Zero values that need type inference (functions without a written result type, and user-defined types)
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`
