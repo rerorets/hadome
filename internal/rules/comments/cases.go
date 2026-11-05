@@ -29,7 +29,8 @@ func todoCases() []engine.Case {
 		{Name: "an existing bare TODO that moved passes", Base: with("\n// TODO: handle errors\n"),
 			Head: with("\n\n\n// TODO: handle errors\n")},
 		{Name: "TODO in the middle of a sentence passes", Base: with(""), Head: with("\n// The TODO list lives elsewhere.\n")},
-		{Name: "a product's own form is applied", Base: with(""),
+		// Base has a configuration: adding the first one introduces hadome, which is never loosening.
+		{Name: "a product's own form is applied", Base: module("store/store.go", store(appendFunc), ".hadome.yml", "schema: 1\n"),
 			Head: module("store/store.go", store(appendFunc+"\n// TODO(later): x\n"), ".hadome.yml",
 				"schema: 1\nrules:\n  comments:\n    todo: '^TODO\\(stage[0-9]+\\): \\S'\n"),
 			WantFail: []string{"comments/todo-format"}, WantReview: []string{engine.LoosenedID}},

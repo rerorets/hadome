@@ -79,7 +79,11 @@ func (e *Engine) Check(src Source) (Report, error) {
 	r := Report{Messages: headCfg.Messages}
 	r.Untouched = compareFindings(&r, base.findings, head.findings, renames)
 	r.NewExceptions = newMarkers(base.markers, head.markers, renames)
-	r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
+	if introduces(baseCfg, headCfg) {
+		r.Introduced = config.Diff(baseCfg, headCfg)
+	} else {
+		r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
+	}
 	if err := compareItems(&r, rules, base, head); err != nil {
 		return Report{}, err
 	}

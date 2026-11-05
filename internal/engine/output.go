@@ -4,19 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/rerorets/hadome/internal/config"
 )
 
 // JSONSchemaVersion is the version of the JSON report. It changes only by adding fields.
 const JSONSchemaVersion = 1
 
 type jsonReport struct {
-	Schema        int           `json:"schema"`
-	Regressions   []jsonFinding `json:"regressions"`
-	Reviews       []jsonFinding `json:"reviews"`
-	NewExceptions []Marker      `json:"new_exceptions"`
-	Candidates    []Candidate   `json:"candidates"`
-	Untouched     int           `json:"untouched"`
-	ExitCode      int           `json:"exit_code"`
+	Schema        int             `json:"schema"`
+	Regressions   []jsonFinding   `json:"regressions"`
+	Reviews       []jsonFinding   `json:"reviews"`
+	NewExceptions []Marker        `json:"new_exceptions"`
+	Candidates    []Candidate     `json:"candidates"`
+	Introduced    []config.Change `json:"introduced"`
+	Untouched     int             `json:"untouched"`
+	ExitCode      int             `json:"exit_code"`
 }
 
 // jsonFinding is a finding with its wording written out, so that the JSON carries plain strings.
@@ -51,6 +54,9 @@ func WriteJSON(w io.Writer, r Report, lang string) error {
 	if out.Candidates == nil {
 		out.Candidates = []Candidate{}
 	}
+	if out.Introduced = r.Introduced; out.Introduced == nil {
+		out.Introduced = []config.Change{}
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
@@ -74,7 +80,24 @@ func WriteText(w io.Writer, r Report, lang string) {
 			fmt.Fprintf(w, "  %s  %s — %s\n", c.Key(), location(c.File, c.Line), c.Why)
 		}
 	}
+	if len(r.Introduced) > 0 {
+		fmt.Fprintln(w, "Settings this change introduces with .hadome.yml (information only; base has no configuration, so nothing counts as loosening):")
+		for _, c := range r.Introduced {
+			fmt.Fprintf(w, "  %s  %s  %s\n", c.Key, location(c.File, c.Line), changed(c))
+		}
+	}
 	fmt.Fprintln(w, summary(r).In(lang))
+}
+
+// changed is a change's values: "removed → added", or only the side it has.
+func changed(c config.Change) string {
+	switch {
+	case c.Removed == "":
+		return c.Added
+	case c.Added == "":
+		return "removed " + c.Removed
+	}
+	return c.Removed + " → " + c.Added
 }
 
 // location is "file:line", or just the file for findings about a whole file, such as configuration.

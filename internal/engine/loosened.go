@@ -8,6 +8,13 @@ import (
 // can silence it, because the configuration it judges is the thing an exception would hide behind.
 const LoosenedID = "config/loosened"
 
+// introduces reports whether the change adds .hadome.yml where base has none. Such a change
+// introduces hadome: hadome did not run on base, so there is nothing to loosen, and a first
+// configuration written as the setup steps say must not stop on a review.
+func introduces(base, head config.Config) bool {
+	return len(base.Layers) == 0 && len(head.Layers) > 0
+}
+
 // loosened returns a review for every change that makes head's configuration more permissive than
 // base's. Head's configuration judges head, so loosening it is a decision for a person.
 func loosened(base, head config.Config) []Finding {

@@ -135,6 +135,8 @@ Both versions' files are still read and validated in full, so that the two can b
 
 A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. The report points at where the change is in head: the line of the added entry or the changed key in `.hadome.yml`, or the line of the added arrow in the diagram, so that the person reviewing it, or an annotation on the pull request, lands on that line. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`). `files.generated` loosens when an entry is added too, because the files it matches leave the size and comment rules (`LooserWhenAdded`). Adding to or removing from `files.tests` both count as loosening (`LooserAlways`): which files are tests moves what the rules cover in either direction, and hadome cannot tell which is stricter. `files.ansible` loosens when an entry is removed, because the files it matched are no longer read and leave every rule (`LooserWhenRemoved`).
 
+A change that adds `.hadome.yml` where base has none is taken as introducing hadome, and reports no `config/loosened`. Before it, hadome usually does not run on base, so there is nothing to loosen. If the first change that writes the configuration as the setup steps say stopped on `3`, users and agents alike would be stopped for following the steps. Instead, the settings that differ from the built-in ones are listed under `introduced`. The list is information only and does not change the exit code; the person reviewing the introducing change looks at the configuration there, once.
+
 If base's configuration is invalid, the check returns `2` rather than guessing: treating it as empty would hide removed invariants. hadome reads every `schema:` version it has ever accepted, so a valid base never becomes invalid by upgrading hadome.
 
 ## Package shape
@@ -256,9 +258,10 @@ classDiagram
 2. A configuration that does not match the schema never runs a check (exit code `2`)
 3. The schema and the key descriptions of `hadome explain` always agree, because both come from the same table of keys
 4. hadome never reads configuration from the network
-5. A change cannot loosen the rules that judge it without a person's review (exit code `3`)
+5. A change cannot loosen the rules that judge it without a person's review (exit code `3`), except a change that introduces hadome by adding `.hadome.yml` where base has none
 
 ## Deliberately left out
 
+- Stopping a repository that ran hadome without a configuration file from adding a loose `.hadome.yml` later. Every change on a base without the file is taken as introducing hadome, so this change only lists its settings under `introduced`. `hadome init` writes the file, so running on without one is taken to be rare
 - A configuration UI
 - Remote `extends` (URLs). Shared files are copied or checked out locally by whatever means the organisation prefers

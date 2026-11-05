@@ -98,8 +98,8 @@ Renames are detected by the engine, not by the source, so every source behaves t
 
 | Format | For | Content |
 |---|---|---|
-| `text` | People | Regressions sorted by rule, then reviews and new exceptions, then invariant candidates, then a one-line summary including how many existing findings were left untouched |
-| `json` | Agents and CI | A versioned schema: regressions and reviews (rule, file, line, message, why it matters, how to fix, value), new exceptions with reasons, invariant candidates, the count of existing findings, the exit code |
+| `text` | People | Regressions sorted by rule, then reviews and new exceptions, then invariant candidates, then, for a change that introduces hadome, the settings that differ from the built-in ones, then a one-line summary including how many existing findings were left untouched |
+| `json` | Agents and CI | A versioned schema: regressions and reviews (rule, file, line, message, why it matters, how to fix, value), new exceptions with reasons, invariant candidates, for a change that introduces hadome the settings that differ from the built-in ones (`introduced`: key, file, line, the built-in value, the configured value, whether it is looser), the count of existing findings, the exit code |
 
 The JSON schema has its own version number and changes only by adding fields.
 
