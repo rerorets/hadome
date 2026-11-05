@@ -174,6 +174,25 @@ func named(n *sitter.Node) []*sitter.Node {
 	return out
 }
 
+// callKinds are the nodes that call something, in every grammar.
+var callKinds = set("call_expression", "call", "method_invocation", "object_creation_expression", "new_expression",
+	"macro_invocation", "await_expression")
+
+// sameValue reports whether two expressions are one value compared with itself: spelled the same,
+// and calling nothing. Two calls spelled the same may return different values, so comparing them is
+// a check that can fail.
+func sameValue(f *file, a, b *sitter.Node) bool {
+	if f.text(a) != f.text(b) {
+		return false
+	}
+	calls := false
+	walk(a, func(n *sitter.Node) bool {
+		calls = calls || callKinds[n.Kind()]
+		return !calls
+	})
+	return !calls
+}
+
 // arguments returns the named children of an argument list without its comments, which the
 // grammars keep as named children: a comment between arguments is not one.
 func arguments(list *sitter.Node) []*sitter.Node {

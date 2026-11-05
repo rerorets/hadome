@@ -241,5 +241,5 @@ func (w *tsWalk) alwaysTrue(fn *sitter.Node, args []*sitter.Node) bool {
 		return false
 	}
 	actual := named(inner.ChildByFieldName("arguments"))
-	return len(actual) == 1 && f.text(actual[0]) == f.text(args[0])
+	return len(actual) == 1 && sameValue(f, actual[0], args[0])
 }

@@ -96,6 +96,8 @@ func alwaysTrueCases() []engine.Case {
 		{Name: "assert.True(t, true) fails", Base: tree(testFile(plainTest)), Head: tree(testFile(with("assert.True(t, true)"))), WantFail: []string{"tests/always-true"}},
 		{Name: "comparing a value with itself fails", Base: tree(testFile(plainTest)), Head: tree(testFile(with("assert.Equal(t, got, got)"))), WantFail: []string{"tests/always-true"}},
 		{Name: "comparing two different values passes", Base: tree(testFile(plainTest)), Head: tree(testFile(with("assert.Equal(t, 0, got)")))},
+		{Name: "comparing the results of the same call twice passes", Base: tree(testFile(plainTest)),
+			Head: tree(testFile(with("assert.Equal(t, store.New().Len(), store.New().Len())")))},
 	}
 }
 

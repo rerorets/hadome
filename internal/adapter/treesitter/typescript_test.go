@@ -148,7 +148,7 @@ symbol interface src/store.Repo exported=true doc=false params=0 cx=0 methods=2 
 symbol method src/store.Store.add exported=true doc=true params=1 cx=3 methods=0 scoped=false
 symbol method src/store.Store.secret exported=false doc=false params=0 cx=1 methods=0 scoped=false
 symbol type src/store.Store exported=true doc=true params=0 cx=0 methods=0 scoped=false
-test "posts creates once" calls=[src/store.Store×1/0 src/store.Store.add×1/1 src/store.createPost×2/1] hazards=[always-true clock] skip=false:"" unresolved=0
+test "posts creates once" calls=[src/store.Store×1/0 src/store.Store.add×1/1 src/store.createPost×2/1] hazards=[clock] skip=false:"" unresolved=0
 test "posts later" calls=[src/store.listPosts×2/2] hazards=[] skip=true:"flaky on CI" unresolved=0
 test "posts loop" calls=[src/store.createPost×2/1] hazards=[always-true] skip=false:"" unresolved=1
 `)

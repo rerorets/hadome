@@ -55,7 +55,7 @@ All are on by default and need no configuration.
 
 ### `tests/always-true`
 
-- **Finds**: an `always-true` hazard — an assertion on a constant, or a value compared with itself
+- **Finds**: an `always-true` hazard — an assertion on a constant, or a value compared with itself. An expression that holds a call is not compared with itself even when spelled the same: calling `f(x)` twice and comparing the results checks that the same input gives the same result, and can fail
 - **Why**: the assertion cannot fail, so the test reports success no matter what the code does
 - **Fix**: assert on the behaviour under test
 
@@ -193,7 +193,7 @@ Each rule ships with at least these cases.
 | `tests/no-clock` | a new clock read fails · an existing one moved within the file passes · a clock read inside a string passes |
 | `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business · calling a helper that sleeps once more is not a new sleep |
 | `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails · a conditional skip without a reason fails |
-| `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes |
+| `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes · comparing the results of the same call twice passes |
 | `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes |
 | `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards · deleting the only Molecule scenario of an Ansible role fails · deleting the role with its scenario passes |
