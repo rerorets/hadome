@@ -112,7 +112,21 @@ brew install rerorets/tap/hadome
 hadome check
 ```
 
-[リリース](https://github.com/rerorets/hadome/releases)のアーカイブから直接入れることもできます。
+[リリース](https://github.com/rerorets/hadome/releases)のアーカイブから直接入れることもできます。Homebrew の無い Windows では、この方法か Python の入れ方を使います。展開したフォルダを PATH に足すと、`hadome`で呼べます。
+
+```powershell
+# Windows (PowerShell); on an arm64 machine, use windows_arm64
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.2.0_windows_amd64.zip -OutFile hadome.zip
+Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
+& "$HOME\hadome\hadome.exe" version
+```
+
+```sh
+# macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.2.0_linux_amd64.tar.gz
+tar -xzf hadome_0.2.0_linux_amd64.tar.gz
+./hadome version
+```
 
 ### 2. AIエージェントに覚えさせる
 
