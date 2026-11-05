@@ -76,6 +76,14 @@ go tool hadome check
 
 Built from source. With a C compiler it reads all eight languages; without one, Go, Terraform and Ansible only.
 
+`go get -tool` adds hadome's dependencies to your product's `go.mod`. Go picks one version of each dependency for the whole module, so your product's dependencies can move up to match hadome's. To avoid that, keep a separate `go.mod` for tools. Then pass `-modfile=tools.mod` on every call, and commit `tools.mod` and `tools.sum` as you do `go.mod`.
+
+```sh
+cp go.mod tools.mod
+go get -modfile=tools.mod -tool github.com/rerorets/hadome/cmd/hadome
+go tool -modfile=tools.mod hadome check
+```
+
 #### Java / Kotlin (Gradle)
 
 ```kotlin
@@ -224,7 +232,7 @@ The background, thinking of tests in three layers (invariants, writing rules, ga
 | Where | What to run | What you get |
 |---|---|---|
 | Inside an agent's loop | `hadome check --format json` | For each regression: the rule, file and line, why it matters, how to fix it |
-| Before a push | `hadome check` (as a pre-push hook) | A readable list |
+| Before a push | `hadome check --head HEAD` (as a pre-push hook) | A readable list |
 | CI on every pull request | `hadome check --base origin/main` | An exit code and a summary to post as a comment |
 | Before finishing a change (locally) | `hadome mutate` | The breaks no test noticed |
 

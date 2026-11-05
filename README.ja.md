@@ -76,6 +76,14 @@ go tool hadome check
 
 ソースからビルドします。Cコンパイラがあれば8言語を読み、無ければGo・Terraform・Ansibleだけを読みます。
 
+`go get -tool`は、hadomeの依存を製品の`go.mod`に足します。Goはモジュール全体で依存の版を1つに選ぶので、製品の依存の版がhadomeに合わせて上がることがあります。避けたいときは、道具用の`go.mod`を分けます。この形では、呼ぶたびに`-modfile=tools.mod`を付け、`go.mod`と同じく`tools.mod`と`tools.sum`もコミットします。
+
+```sh
+cp go.mod tools.mod
+go get -modfile=tools.mod -tool github.com/rerorets/hadome/cmd/hadome
+go tool -modfile=tools.mod hadome check
+```
+
 #### Java / Kotlin（Gradle）
 
 ```kotlin
@@ -224,7 +232,7 @@ $ hadome check --base main
 | 場面 | 呼ぶもの | 返ってくるもの |
 |---|---|---|
 | エージェントのループの中 | `hadome check --format json` | 後退ごとに、ルール・ファイルと行・なぜ困るか・直し方 |
-| pushの前 | `hadome check`（pushの前のフックとして） | 読みやすい一覧 |
+| pushの前 | `hadome check --head HEAD`（pushの前のフックとして） | 読みやすい一覧 |
 | プルリクエストごとのCI | `hadome check --base origin/main` | 終了コードと、コメントに貼れる要約 |
 | 変更を仕上げる前（手元） | `hadome mutate` | テストが気づかなかった壊し方の一覧 |
 
