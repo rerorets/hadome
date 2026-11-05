@@ -204,7 +204,7 @@ func alwaysTruePy(f *file, n *sitter.Node) bool {
 		return true
 	}
 	ops := named(e)
-	return e.Kind() == "comparison_operator" && len(ops) == 2 && strings.Contains(f.text(e), "==") && f.text(ops[0]) == f.text(ops[1])
+	return e.Kind() == "comparison_operator" && len(ops) == 2 && strings.Contains(f.text(e), "==") && sameValue(f, ops[0], ops[1])
 }
 
 func (w *pyWalk) call(n *sitter.Node) {

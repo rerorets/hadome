@@ -232,7 +232,7 @@ func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {
 	case "assertFalse":
 		return len(args) == 1 && f.text(args[0]) == "false"
 	case "assertEquals", "assertSame":
-		return len(args) >= 2 && f.text(args[0]) == f.text(args[1])
+		return len(args) >= 2 && sameValue(f, args[0], args[1])
 	}
 	return false
 }

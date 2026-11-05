@@ -202,7 +202,7 @@ func (w *rustWalk) macro(n *sitter.Node) {
 	parts := strings.Split(args, ",")
 	switch {
 	case name == "assert!" && strings.TrimSpace(args) == "true",
-		(name == "assert_eq!" || name == "assert_ne!") && len(parts) == 2 && strings.TrimSpace(parts[0]) == strings.TrimSpace(parts[1]):
+		(name == "assert_eq!" || name == "assert_ne!") && len(parts) == 2 && strings.TrimSpace(parts[0]) == strings.TrimSpace(parts[1]) && !strings.Contains(parts[0], "("):
 		w.t.hazard(facts.HazardAlwaysTrue, n)
 	}
 }
