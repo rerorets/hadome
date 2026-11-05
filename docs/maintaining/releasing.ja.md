@@ -3,9 +3,11 @@
 リリースは版のタグを push して始める。それ以降の作業はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
 
 ```sh
-git tag v1.2.0
+git tag -s v1.2.0 -m "hadome 1.2.0"
 git push origin v1.2.0
 ```
+
+タグは署名つきで打つ。GitHub のタグに Verified が付き、誰が打ったタグかを確かめられる。ワークフローはタグの署名を確かめないので、署名が無くても動きは変わらない。
 
 ワークフローは6つのバイナリをネイティブにビルドし、`SHA256SUMS` と一緒に GitHub のリリースを公開し、有効にしてある各エコシステムに公開する。ワークフローを手で動かす（Actions → release → Run workflow）と、公開せずにすべてをビルドして確かめる。
 
