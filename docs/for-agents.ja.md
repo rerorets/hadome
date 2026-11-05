@@ -15,7 +15,7 @@ hadome check --format json
 | `2` | 設定が不正、またはチェックを実行できなかった | 標準エラーが挙げたもの（ファイル、行、キー、許される値、例）を直し、もう1度チェックを実行する |
 | `3` | 人の確認が要るものがある: `reviews` か `new_exceptions` のエントリ | 止まる。挙がったものとその理由を人に伝える。消すためにコードを変えない |
 
-後退にはそれぞれ `rule`、`file`、`line`、`message`、`why`、`fix` が付く。`fix` はそれを解消する最小の変更である。ルールそのものを知るには `hadome explain <rule>`（例: `hadome explain tests/no-sleep`）を実行する。`candidates` はその変更で増えた不変条件の候補を挙げる。候補は終了コードを変えない（下の「不変条件の候補」を参照）。
+後退にはそれぞれ `rule`、`file`、`line`、`message`、`why`、`fix` が付く。`fix` はそれを解消する最小の変更である。`.hadome.yml` に `messages: ja` があるか、`--lang ja` を付けたときは、`message`、`why`、`fix` の値が日本語になる。鍵、`rule`、終了コードは変わらない。ルールそのものを知るには `hadome explain <rule>`（例: `hadome explain tests/no-sleep`）を実行する。`candidates` はその変更で増えた不変条件の候補を挙げる。候補は終了コードを変えない（下の「不変条件の候補」を参照）。
 
 落ちるのは後退だけである。基準のブランチにすでにあった見つかったものは `untouched` に数え、止めない。直す必要はなく、直すなら別の変更にする。
 

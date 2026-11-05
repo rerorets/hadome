@@ -10,7 +10,7 @@ flowchart TB
   adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"]
   adapter & golang & treesitter --> walk["internal/adapter/walk"]
   adapter & golang & treesitter --> engine & config & facts["internal/facts"]
-  engine --> config & facts
+  engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
   rules --> engine & config & facts
   suggest --> engine & config & facts
@@ -19,7 +19,7 @@ flowchart TB
   packaging["packaging/..."]
 ```
 
-- `facts`, `config` and `walk` import nothing of hadome's: everything else is built on them
+- `facts`, `config`, `walk` and `messages` import nothing of hadome's: everything else is built on them
 - The engine knows no language, no rule and no process: adapters, rules and gates depend on it, never the reverse
 - Rules never import adapters: they see facts only, which is why every rule works in every language
 - `cmd/hadome` is the only place that puts the pieces together

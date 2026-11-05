@@ -109,6 +109,12 @@ var InvariantTypes = []Value{
 		"`guards: fail-closed <target>`."},
 }
 
+// MessageLanguages are the languages hadome writes its wording in: `messages` and every command's --lang.
+var MessageLanguages = []Value{
+	{"en", "English."},
+	{"ja", "Japanese. Wording without a Japanese version comes out in English."},
+}
+
 // Languages are the languages hadome has adapters for.
 var Languages = []Value{
 	{"go", "Go"}, {"typescript", "TypeScript and JavaScript"}, {"python", "Python"},
@@ -267,6 +273,11 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 		{Name: "languages", Kind: KindList, Looser: LooserWhenRemoved, OmittedIsWidest: true,
 			Elem: &Key{Kind: KindString, Allowed: Languages},
 			Doc:  "Languages to check. Detected when omitted.", Example: "languages: [go, typescript]"},
+		{Name: "messages", Kind: KindString, Allowed: MessageLanguages, Default: "en", Looser: LooserNever,
+			Doc: "The language of what hadome writes for people and agents: the message, why and fix of findings, " +
+				"hadome explain <rule> and the summary line. A command's --lang overrides it. JSON keys, rule IDs and " +
+				"exit codes stay the same in every language. Default en.",
+			Example: "messages: ja"},
 		invariantKey,
 		rulesKey,
 		filesKey,

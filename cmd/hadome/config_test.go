@@ -56,7 +56,7 @@ func TestEveryBuiltInRuleExplainsItself(t *testing.T) {
 			continue
 		}
 		a := d.About()
-		if a.Finds == "" || a.Why == "" || a.Fix == "" {
+		if a.Finds.In("en") == "" || a.Why.In("en") == "" || a.Fix.In("en") == "" {
 			t.Errorf("%s: Finds, Why and Fix must all be written: %+v", r.ID(), a)
 		}
 		for _, k := range a.Keys {
@@ -64,7 +64,7 @@ func TestEveryBuiltInRuleExplainsItself(t *testing.T) {
 				t.Errorf("%s names %s, which is not a configuration key", r.ID(), k)
 			}
 		}
-		if _, ok := explainRule(r.ID()); !ok {
+		if _, ok := explainRule(r.ID(), "en"); !ok {
 			t.Errorf("hadome explain %s finds nothing", r.ID())
 		}
 	}

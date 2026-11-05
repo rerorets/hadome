@@ -1,8 +1,6 @@
 package tests
 
 import (
-	"strings"
-
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -16,9 +14,9 @@ type invariantUnguarded struct{}
 func (invariantUnguarded) ID() string           { return "tests/invariant-unguarded" }
 func (invariantUnguarded) Cases() []engine.Case { return invariantCases() }
 func (invariantUnguarded) About() engine.About {
-	return engine.About{Finds: "an invariant in configuration that no active test guards",
-		Why:  "the invariant is written down, but nothing fails when it is broken",
-		Fix:  "write a test that checks it; built-in types are recognised from the test's calls, others need guards: in the test's doc comment",
+	return engine.About{Finds: engine.T("an invariant in configuration that no active test guards"),
+		Why:  engine.T("the invariant is written down, but nothing fails when it is broken"),
+		Fix:  engine.T("write a test that checks it; built-in types are recognised from the test's calls, others need guards: in the test's doc comment"),
 		Keys: []string{"invariants"}}
 }
 
@@ -28,10 +26,10 @@ func (r invariantUnguarded) Find(in engine.Input) ([]engine.Finding, error) {
 		if guarded(inv, in.Facts.Tests) {
 			continue
 		}
-		msg := "invariant " + inv.Key() + " is guarded by no active test"
+		msg := engine.T("invariant %s is guarded by no active test", inv.Key())
 		for _, t := range targets(inv) {
 			if !hasMatch(in.Facts.Symbols, t) {
-				msg += "; no symbol matches " + t
+				msg = engine.T("%s; no symbol matches %s", msg, t)
 			}
 		}
 		out = append(out, engine.Finding{
@@ -44,22 +42,26 @@ func (r invariantUnguarded) Find(in engine.Input) ([]engine.Finding, error) {
 }
 
 // shaped are the built-in types whose guarding tests are recognised by the shape of their calls.
+// The value is the fix: a format whose one verb is the targets.
 var shaped = map[string]string{
-	"idempotent": "calls %s two or more times",
-	"round-trip": "calls %s",
-	"isolated":   "calls %s with two different users or tenants",
+	"idempotent": "write an active test that calls %s two or more times",
+	"round-trip": "write an active test that calls %s",
+	"isolated":   "write an active test that calls %s with two different users or tenants",
 }
 
-func fix(inv config.Invariant) string {
-	declare := "add `guards: " + inv.Key() + "` to its doc comment"
+func fix(inv config.Invariant) engine.Text {
 	if inv.ID != "" {
-		return "write a test that checks it and " + declare
+		return engine.T("write a test that checks it and add `guards: %s` to its doc comment", inv.Key())
 	}
-	all := strings.Join(targets(inv), " and ")
+	ts := targets(inv)
+	all := engine.Verbatim(ts[0])
+	for _, t := range ts[1:] {
+		all = engine.T("%s and %s", all, t)
+	}
 	if shape, ok := shaped[inv.Type]; ok {
-		return "write an active test that " + strings.Replace(shape, "%s", all, 1)
+		return engine.T(shape, all)
 	}
-	return "write an active test that calls " + all + " and " + declare
+	return engine.T("write an active test that calls %s and add `guards: %s` to its doc comment", all, inv.Key())
 }
 
 func targets(inv config.Invariant) []string {

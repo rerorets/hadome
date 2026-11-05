@@ -20,7 +20,8 @@ func mutate(args []string, stdout, stderr io.Writer) int {
 	format := fl.String("format", "text", "output format: text or json")
 	baseDir := fl.String("base-dir", "", "compare two directories instead of git: base directory")
 	headDir := fl.String("head-dir", "", "compare two directories instead of git: head directory")
-	if err := fl.Parse(args); err != nil {
+	lang := fl.String("lang", "", "language of the findings' wording and the summary: en or ja (default: messages in .hadome.yml, else en)")
+	if err := fl.Parse(args); err != nil || (*lang != "" && !validLang(*lang, stderr)) {
 		return engine.ExitConfig
 	}
 	src, ok := pickSource(*base, *head, *baseDir, *headDir, stderr)
@@ -34,12 +35,5 @@ func mutate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hadome: mutate could not run, so it does not pass:", err)
 		return engine.ExitConfig
 	}
-	if *format == "json" {
-		if err := engine.WriteJSON(stdout, r); err != nil {
-			return engine.ExitConfig
-		}
-	} else {
-		engine.WriteText(stdout, r)
-	}
-	return r.ExitCode()
+	return writeReport(stdout, r, *format, pickLang(*lang, r.Messages))
 }

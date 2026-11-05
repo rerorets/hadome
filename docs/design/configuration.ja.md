@@ -59,6 +59,8 @@ extends: [../shared/hadome.yml] # 任意。複数のリポジトリで共有す�
 
 languages: [go, typescript]    # 任意。省くと検出する
 
+messages: ja                   # 任意。見つけたものの文言の言語。en か ja で、既定は en。コマンドの --lang が優先する（messages.ja.md）
+
 invariants:
   - type: idempotent           # 組み込みの種類。名前を書き、対象を指す
     target: api.CreatePost
