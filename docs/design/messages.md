@@ -72,3 +72,4 @@ classDiagram
 - Translating configuration errors and command usage. Configuration keys are English, so errors in English are easier to match against them
 - Languages other than English and Japanese. The catalog can hold more, but a language nobody can keep translated is not added
 - Translating what goes into the arguments (function names, paths, pieces of code)
+- Translating the labels of the text output (`why:`, `fix:`, `Finds:`, `new exception:`). Spelled like the JSON keys, they make the text and the JSON easy to match against each other
