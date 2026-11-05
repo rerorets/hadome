@@ -62,7 +62,10 @@ func (Adapter) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 		}
 		for _, d := range f.Decls {
 			fn, ok := d.(*ast.FuncDecl)
-			if id, wanted := byPath[p][fset.Position(fn.Pos()).Line]; ok && wanted && fn.Body != nil {
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if id, wanted := byPath[p][fset.Position(fn.Pos()).Line]; wanted {
 				m := mutator{fset: fset, src: src, path: p, fn: id, seen: map[string]int{}}
 				m.function(fn)
 				out = append(out, m.out...)

@@ -429,3 +429,36 @@ func Name() string { return "x" + "y" }
 		}
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// A file almost always declares more than functions: imports, constants, variables, types. The
+// mutants of its functions come out all the same.
+func TestGoMutantsInAFileWithOtherDeclarations(t *testing.T) {
+	src := `package calc
+
+import "strings"
+
+const limit = 3
+
+var names = []string{"a"}
+
+type Row struct{ N int }
+
+func Short(s string) bool { return len(strings.TrimSpace(s)) < limit }
+`
+	tree := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}, "calc/calc.go": {Data: []byte(src)}}
+	funcs := []facts.Symbol{{ID: "example.com/app/calc.Short", Kind: facts.SymbolFunction, Path: "calc/calc.go", Line: 11}}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		got = append(got, fmt.Sprintf("%d %s: %s -> %s", m.Line, m.Operator, m.Original, m.Replacement))
+	}
+	want := "11 return the zero value: len(strings.TrimSpace(s)) < limit -> false\n11 flip a comparison: < -> >="
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
