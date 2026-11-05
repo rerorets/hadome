@@ -466,3 +466,29 @@ func TestChangesSayWhereTheyAre(t *testing.T) {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
 }
+
+// Invariant 5 of docs/design/configuration.md: without a mutation section hadome mutate does not run,
+// so adding one never loosens anything; removing or weakening one that base has does.
+func TestAddingTheMutationSectionIsNotLoosening(t *testing.T) {
+	dir := t.TempDir()
+	const without = "schema: 1\n"
+	const with = "schema: 1\nmutation:\n  test: [go, test, ./...]\n  max-mutants: 30\n"
+	cases := []struct {
+		name, base, head string
+		want             []string
+	}{
+		{"adding the section", without, with, nil},
+		{"removing the section", with, without, []string{"mutation.test -./...", "mutation.test -go", "mutation.test -test"}},
+		{"lowering the limit", with, strings.Replace(with, "30", "10", 1), []string{"mutation.max-mutants -30"}},
+		{"changing the command", with, strings.Replace(with, "./...", "./store", 1), []string{"mutation.test -", "mutation.test -./..."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := looser(Diff(mustLoad(t, tc.base, dir), mustLoad(t, tc.head, dir)))
+			sort.Strings(got)
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Errorf("looser changes:\n%s\n\nwant:\n%s", strings.Join(got, "\n"), strings.Join(tc.want, "\n"))
+			}
+		})
+	}
+}

@@ -118,6 +118,8 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 		p := joinPath(path, f.Name)
 		b, h := base[f.Name], head[f.Name]
 		switch {
+		case f.Kind == KindObject && f.OmittedIsOff && b == nil:
+			diffTurnedOn(out, object(h), f, p)
 		case f.Kind == KindObject:
 			diffObject(out, object(b), object(h), f, p)
 		case f.Kind == KindList:
@@ -126,12 +128,7 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 			}
 			diffList(out, list(b), list(h), f, p)
 		case f.Kind == KindInt:
-			def, _ := f.Default.(int)
-			bi, hi := intOr(b, def), intOr(h, def)
-			if bi != hi {
-				*out = append(*out, Change{Key: p, Removed: strconv.Itoa(bi), Added: strconv.Itoa(hi),
-					Looser: f.Looser == LooserWhenHigher && hi > bi || f.Looser == LooserWhenLower && hi < bi})
-			}
+			diffInt(out, b, h, f, p)
 		case f.Default != nil:
 			if bs, hs := fmtValue(orDefault(b, f.Default)), fmtValue(orDefault(h, f.Default)); bs != hs {
 				*out = append(*out, Change{Key: p, Removed: bs, Added: hs, Looser: f.Looser == LooserWhenChanged})
@@ -139,6 +136,26 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 		case !reflect.DeepEqual(b, h):
 			*out = append(*out, Change{Key: p, Removed: fmtValue(b), Added: fmtValue(h)})
 		}
+	}
+}
+
+// diffTurnedOn lists what an OmittedIsOff object holds in head when base has none. Base did not
+// run the feature at all, so nothing in it is looser.
+func diffTurnedOn(out *[]Change, head map[string]any, k Key, path string) {
+	var added []Change
+	diffObject(&added, nil, head, k, path)
+	for _, c := range added {
+		c.Looser = false
+		*out = append(*out, c)
+	}
+}
+
+func diffInt(out *[]Change, b, h any, k Key, path string) {
+	def, _ := k.Default.(int)
+	bi, hi := intOr(b, def), intOr(h, def)
+	if bi != hi {
+		*out = append(*out, Change{Key: path, Removed: strconv.Itoa(bi), Added: strconv.Itoa(hi),
+			Looser: k.Looser == LooserWhenHigher && hi > bi || k.Looser == LooserWhenLower && hi < bi})
 	}
 }
 
