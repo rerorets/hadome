@@ -60,7 +60,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.1.2                   # or pip install hadome==0.1.2
+uv add --dev hadome==0.2.0                   # or pip install hadome==0.2.0
 uv run hadome check
 ```
 
@@ -77,7 +77,7 @@ Built from source. With a C compiler it reads all eight languages; without one, 
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.1.2" }
+plugins { id("io.github.rerorets.hadome") version "0.2.0" }
 ```
 
 Run it with `./gradlew hadomeCheck`.
@@ -89,7 +89,7 @@ Run it with `./gradlew hadomeCheck`.
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.1.2</version>
+  <version>0.2.0</version>
 </plugin>
 ```
 
@@ -98,11 +98,11 @@ Run it with `mvn hadome:check`.
 #### Rust
 
 ```sh
-cargo binstall hadome@0.1.2
+cargo binstall hadome@0.2.0
 hadome check
 ```
 
-#### Anything else
+#### Anything else (Terraform, Ansible and others)
 
 ```sh
 brew install rerorets/tap/hadome
@@ -124,7 +124,7 @@ hadome agents --write CLAUDE.md
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
 
-To add it by hand, paste this block.
+To add it by hand, paste this block as it is, including the first and last lines, `<!-- hadome:begin -->` and `<!-- hadome:end -->`. With those two lines, `hadome agents --write` can later rewrite the same block.
 
 <details>
 <summary>The block</summary>
@@ -169,7 +169,7 @@ $ hadome check --base main
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
 
-The output is in English by default. With `--lang ja`, or `messages: ja` in `.hadome.yml`, it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change.
+The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
 
 ## What it checks
 
@@ -179,7 +179,8 @@ The output is in English by default. With `--lang ja`, or `messages: ja` in `.ha
 | `deps/` | `not-in-diagram` (imports your dependency diagram does not draw) · `diagram-stale` (boxes that name nothing) |
 | `size/` | `file-lines` · `function-lines` · `params` · `complexity` · `interface-methods` |
 | `comments/` | `todo-format` (TODOs without a when) · `missing-doc` · `broken-reference` (comments pointing at missing documents) |
-| `unknown/` | `unread` (review): a file hadome could not read |
+| `unknown/` | `unread` (review): a file hadome could not read · `import` (review): an import whose destination is decided only at run time |
+| `mutation/` | `survived` (`hadome mutate` only): a break no test notices |
 | `config/` | `loosened` (review): a change that loosens the rules judging it |
 
 Every rule reports why it matters and how to fix it. The rules are specified in [docs/design](docs/design).
@@ -205,6 +206,7 @@ The background, thinking of tests in three layers (invariants, writing rules, ga
 | Inside an agent's loop | `hadome check --format json` | For each regression: the rule, file and line, why it matters, how to fix it |
 | Before a push | `hadome check` (as a pre-push hook) | A readable list |
 | CI on every pull request | `hadome check --base origin/main` | An exit code and a summary to post as a comment |
+| Before finishing a change (locally) | `hadome mutate` | The breaks no test noticed |
 
 | Exit code | Meaning |
 |---|---|
@@ -218,6 +220,8 @@ hadome only reads the repository and talks to no service such as GitHub. To post
 ## Configuration and exceptions
 
 Settings go in `.hadome.yml`: limits, the dependency diagram, invariants and so on. hadome works without the file.
+
+`hadome init` writes a minimal `.hadome.yml`; it never overwrites one that exists. To have the output in Japanese every time, add `messages: ja` to it. `--lang`, when given, comes first.
 
 Changing the settings and proposing invariants is the agents' job. Agents read the specification with `hadome explain <key>` ([the guide for agents](docs/for-agents.md)). People decide which proposals to accept and whether to allow a change that loosens the rules. Such a change stops with exit code `3` for a person's review.
 
@@ -234,14 +238,22 @@ time.Sleep(50 * time.Millisecond)
 
 A rule such as "never UPDATE the log store" is a small program in your own repository, in any language. hadome treats it like the built-in rules: it reports only regressions, and reasoned exceptions work for it too. How to write one is in [product-specific gates](docs/external-gates.md).
 
+## Trying mutations
+
+With `mutation` in `.hadome.yml`, `hadome mutate` breaks the functions a change touched, one place at a time, and tries whether the tests notice. A break no test notices is reported as a `mutation/survived` regression.
+
+```yaml
+mutation:
+  test: [go, test, ./...]
+```
+
+It runs the tests once per break, so it takes far longer than `check`. It is meant to run locally, before a change is finished. The [guide for agents](docs/for-agents.md) has the details.
+
 ## The name
 
 歯止め (*hadome*) is the Japanese word for a pawl: the part of a ratchet that lets the wheel turn one way and stops it from turning back. hadome likewise stops only changes that make things worse than main.
 
-## Not yet done
-
-- Publishing to npm and Maven Central (in progress; the other ways to install are published, see [releasing](docs/maintaining/releasing.md))
-- Measuring what tests guard with mutations
+## Versions and bug reports
 
 While hadome is 0.x, behaviour may change between versions ([versioning](CONTRIBUTING.md#versioning)). Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues).
 
