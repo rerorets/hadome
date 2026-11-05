@@ -124,7 +124,7 @@ hadome agents --write CLAUDE.md
 - 日本語のブロックにするときは`--lang ja`を付けます。
 - 詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
 
-手で足すときは、次のブロックを貼り付けます。
+手で足すときは、次のブロックを、最初と最後の`<!-- hadome:begin -->`と`<!-- hadome:end -->`の行も含めてそのまま貼り付けます。この2行があると、あとで`hadome agents --write`が同じブロックを書き換えられます。
 
 <details>
 <summary>ブロックの中身</summary>

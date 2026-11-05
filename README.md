@@ -124,7 +124,7 @@ hadome agents --write CLAUDE.md
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
 
-To add it by hand, paste this block.
+To add it by hand, paste this block as it is, including the first and last lines, `<!-- hadome:begin -->` and `<!-- hadome:end -->`. With those two lines, `hadome agents --write` can later rewrite the same block.
 
 <details>
 <summary>The block</summary>
