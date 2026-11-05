@@ -52,7 +52,8 @@ func fileCases() []engine.Case {
 		{Name: "a lowered limit reports only what the change adds",
 			Base: module(map[string]string{"store/a.go": lines(350)}),
 			Head: module(map[string]string{"store/a.go": lines(350), ".hadome.yml": "schema: 1\nrules:\n  size:\n    file-lines: 300\n"})},
-		{Name: "a raised limit needs review", Base: module(src()),
+		// Base has a configuration: adding the first one introduces hadome, which is never loosening.
+		{Name: "a raised limit needs review", Base: module(map[string]string{"store/store.go": "package store\n", ".hadome.yml": "schema: 1\n"}),
 			Head:       module(map[string]string{"store/store.go": "package store\n", ".hadome.yml": "schema: 1\nrules:\n  size:\n    file-lines: 500\n"}),
 			WantReview: []string{engine.LoosenedID}},
 	}

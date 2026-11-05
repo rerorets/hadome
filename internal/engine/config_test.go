@@ -1,6 +1,8 @@
 package engine_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -45,6 +47,28 @@ func TestLooseningTheConfigurationNeedsReviewOnce(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: engine.Engine.Check
+// Configuration invariant 5's exception: a change that adds .hadome.yml where base has none
+// introduces hadome. Nothing ran on base, so nothing is loosened; the settings that differ from the
+// built-in ones are listed instead, without changing the exit code.
+func TestAddingTheFirstConfigurationIntroducesHadome(t *testing.T) {
+	const raised = "schema: 1\nrules:\n  size:\n    file-lines: 500\n"
+	tree := module("")
+	r := check(t, treeSource{base: tree, head: withConfig(tree, raised)})
+	if r.ExitCode() != engine.ExitOK || hasRule(r.Reviews, engine.LoosenedID) {
+		t.Fatalf("the first configuration must not need review; got exit %d, reviews %+v", r.ExitCode(), r.Reviews)
+	}
+	if len(r.Introduced) != 1 || r.Introduced[0].Key != "rules.size.file-lines" || r.Introduced[0].Added != "500" ||
+		r.Introduced[0].File != ".hadome.yml" || r.Introduced[0].Line != 4 {
+		t.Fatalf("want rules.size.file-lines 500 at .hadome.yml:4 listed as introduced, got %+v", r.Introduced)
+	}
+	r = check(t, treeSource{base: withConfig(tree, "schema: 1\n"), head: withConfig(tree, raised)})
+	if !hasRule(r.Reviews, engine.LoosenedID) || len(r.Introduced) != 0 {
+		t.Fatalf("once base has a configuration, raising a limit needs review; got reviews %+v, introduced %+v", r.Reviews, r.Introduced)
+	}
+}
+
 // viewpoint: failure handling
 // target: engine.Engine.Check
 // Configuration invariant 2: a configuration that does not match the schema never runs a check,
@@ -79,5 +103,42 @@ func TestAddedHazardEntriesJudgeNewCodeOnly(t *testing.T) {
 	r = check(t, treeSource{base: base, head: head})
 	if !hasRule(r.Regressions, "tests/no-sleep") {
 		t.Fatalf("a new use of an added entry must fail: %+v", r.Regressions)
+	}
+}
+
+// viewpoint: behaviour
+// target: engine.WriteJSON, engine.WriteText
+// The introduced settings reach agents under "introduced", an empty list when there are none so the
+// key is always there, and reach people as one line each with where the setting is.
+func TestIntroducedSettingsAreWrittenOut(t *testing.T) {
+	tree := module("")
+	for name, tc := range map[string]struct {
+		head fstest.MapFS
+		want int
+	}{
+		"introducing": {withConfig(tree, "schema: 1\nrules:\n  size:\n    file-lines: 500\n"), 1},
+		"no change":   {tree, 0},
+	} {
+		r := check(t, treeSource{base: tree, head: tc.head})
+		var js bytes.Buffer
+		if err := engine.WriteJSON(&js, r, "en"); err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(js.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		got, ok := m["introduced"].([]any)
+		if !ok || len(got) != tc.want {
+			t.Errorf("%s: want %d introduced setting(s) in JSON, got %v", name, tc.want, m["introduced"])
+		}
+		var text bytes.Buffer
+		engine.WriteText(&text, r, "en")
+		if listed := strings.Contains(text.String(), "rules.size.file-lines  .hadome.yml:4  400 → 500"); listed != (tc.want == 1) {
+			t.Errorf("%s: the text lists the setting: %v\n%s", name, listed, text.String())
+		}
+		if said := strings.Contains(text.String(), "information only"); said != (tc.want == 1) {
+			t.Errorf("%s: the text says the list is information only: %v\n%s", name, said, text.String())
+		}
 	}
 }

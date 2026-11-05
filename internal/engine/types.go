@@ -157,6 +157,9 @@ type Report struct {
 	NewExceptions []Marker
 	// Candidates are the invariant candidates this change adds.
 	Candidates []Candidate
+	// Introduced lists the settings that differ from the built-in ones, when the change introduces
+	// hadome by adding .hadome.yml. It is information only and never changes the exit code.
+	Introduced []config.Change
 	Untouched  int
 	// Messages is the language of wording that head's configuration asks for (`messages`).
 	Messages string
