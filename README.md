@@ -112,7 +112,21 @@ brew install rerorets/tap/hadome
 hadome check
 ```
 
-You can also install from an archive on the [releases](https://github.com/rerorets/hadome/releases) page.
+You can also install from an archive on the [releases](https://github.com/rerorets/hadome/releases) page. On Windows, which has no Homebrew, use this or the Python way. Add the unpacked folder to PATH to call it as `hadome`.
+
+```powershell
+# Windows (PowerShell); on an arm64 machine, use windows_arm64
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.2.0_windows_amd64.zip -OutFile hadome.zip
+Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
+& "$HOME\hadome\hadome.exe" version
+```
+
+```sh
+# macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.2.0_linux_amd64.tar.gz
+tar -xzf hadome_0.2.0_linux_amd64.tar.gz
+./hadome version
+```
 
 ### 2. Tell your AI agents
 
