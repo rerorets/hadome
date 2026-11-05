@@ -32,6 +32,28 @@ func TestTheDiagramIsReadLikeMermaid(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: config.Load with rules.deps.diagram
+// A box may describe its directory after a line break; only the first line names the directory,
+// so editing the description changes nothing the diagram allows.
+func TestALabelMayDescribeItsDirectoryAfterALineBreak(t *testing.T) {
+	doc := "```mermaid\nflowchart LR\n  core[\"internal/core<br/>the core. Holds the rules\"] --> store[\"internal/store <BR> where data lives\"]\n" +
+		"  store --> domain[\"internal/domain<br>\"]\n```\n"
+	c := mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: docs/deps.md\n")},
+		"docs/deps.md": {Data: []byte(doc)}})
+	want := "internal/core>internal/store internal/store>internal/domain"
+	if got := arrows(c.Diagram); got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	reworded := mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: docs/deps.md\n")},
+		"docs/deps.md": {Data: []byte(strings.ReplaceAll(doc, "the core. Holds the rules", "rewritten"))}})
+	for _, ch := range Diff(c, reworded) {
+		if ch.Looser {
+			t.Errorf("rewording a description loosens %s: %s → %s", ch.Key, ch.Removed, ch.Added)
+		}
+	}
+}
+
 func mustLoadTree(t *testing.T, tree fstest.MapFS) Config {
 	t.Helper()
 	c, err := Load(tree, t.TempDir())

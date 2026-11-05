@@ -15,7 +15,7 @@ type Diagram struct {
 }
 
 // Node is one box of the diagram. Label names a directory, or a directory and everything under
-// it when it ends in "/...".
+// it when it ends in "/...". A description after a line break (<br/>) is not part of it.
 type Node struct {
 	ID    string
 	Label string
@@ -51,7 +51,9 @@ var (
 		regexp.MustCompile(`^\["?(.*?)"?\]`), regexp.MustCompile(`^\("?(.*?)"?\)`),
 		regexp.MustCompile(`^\{"?(.*?)"?\}`), regexp.MustCompile(`^>"?(.*?)"?\]`),
 	}
-	ignored = regexp.MustCompile(`^(%%|subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|direction\b)`)
+	// lineBreak starts a label's description: the first line names the directory, the rest is prose.
+	lineBreak = regexp.MustCompile(`(?i)<br\s*/?>`)
+	ignored   = regexp.MustCompile(`^(%%|subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|direction\b)`)
 )
 
 // parseDiagram reads the flowcharts of a Markdown file. Errors carry the line they are on.
@@ -158,6 +160,9 @@ func (p *diagramParser) node(s string, line int) (string, string, bool) {
 	for _, shape := range shapes {
 		if m := shape.FindStringSubmatch(rest); m != nil {
 			label, rest = m[1], rest[len(m[0]):]
+			if at := lineBreak.FindStringIndex(label); at != nil {
+				label = strings.TrimSpace(label[:at[0]])
+			}
 			break
 		}
 	}
