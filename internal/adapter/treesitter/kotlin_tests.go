@@ -3,6 +3,8 @@
 package treesitter
 
 import (
+	"strings"
+
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -64,11 +66,14 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 		}
 	}
 	var tests []*sitter.Node
+	fields := jf.ktConstructorFields(n)
 	for _, m := range ktMembers(n) {
 		switch m.Kind() {
 		case "property_declaration":
 			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
 				jf.mocks = append(jf.mocks, m)
+			} else if name, class := jf.ktFieldType(m); class != "" {
+				fields[name] = class
 			}
 		case "function_declaration":
 			if hasAny(ktAnnotations(f, m), jvmTestAnnotations) {
@@ -80,7 +85,7 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 	}
 	var out []facts.Test
 	for _, m := range tests {
-		out = append(out, jf.ktTest(name+"."+f.field(m, "name"), m, classSkip))
+		out = append(out, jf.ktTest(name+"."+f.field(m, "name"), m, classSkip, fields))
 	}
 	for _, m := range ktMembers(n) {
 		if ktTypes[m.Kind()] {
@@ -99,7 +104,7 @@ func ktBody(fn *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node) facts.Test {
+func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, fields map[string]string) facts.Test {
 	t := newTest(jf.f, name, m)
 	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
 	skip := classSkip
@@ -114,7 +119,7 @@ func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node) facts.Test {
 	for _, mk := range jf.mocks {
 		t.hazard(facts.HazardMock, mk)
 	}
-	w := &jvmWalk{jf: jf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w := &jvmWalk{jf: jf, t: t, vars: copyMap(fields), locals: map[string]bool{}, walking: map[string]bool{}}
 	w.walk(ktBody(m), ktLoops, w.ktVisit)
 	return t.done()
 }
@@ -186,4 +191,94 @@ func (w *jvmWalk) ktCall(n *sitter.Node) {
 // packageOf returns the package of a class target ("a.b.Store" -> "a.b").
 func packageOf(class string) string {
 	return class[:len(class)-len(lastElem(class))-1]
+}
+
+// ktFieldType types a property of a test class, so that calls through it reach the product: by the
+// constructor that builds it, or, with no initializer (lateinit, injected), by its declared type. A
+// property built some other way (mockk(), a factory) is left untyped: what it holds is unknown.
+func (jf *jvmFile) ktFieldType(n *sitter.Node) (string, string) {
+	f := jf.f
+	name, declared, init := "", "", (*sitter.Node)(nil)
+	for _, c := range named(n) {
+		switch c.Kind() {
+		case "variable_declaration":
+			name = f.text(c.NamedChild(0))
+			if c.NamedChildCount() > 1 {
+				declared = typeName(f.text(c.NamedChild(1)))
+			}
+		case "call_expression":
+			init = c
+		default:
+			if name != "" && !strings.Contains(c.Kind(), "comment") && c.Kind() != "property_delegate" {
+				init = c
+			}
+		}
+	}
+	switch {
+	case name == "":
+		return "", ""
+	case init == nil:
+		return name, jf.names[declared]
+	case init.Kind() == "call_expression":
+		return name, jf.names[f.text(init.NamedChild(0))]
+	}
+	return name, ""
+}
+
+// ktConstructorFields types the val and var parameters of a test class's primary constructor
+// (constructor injection) by their declared types.
+func (jf *jvmFile) ktConstructorFields(class *sitter.Node) map[string]string {
+	f := jf.f
+	out := map[string]string{}
+	for _, c := range named(class) {
+		if c.Kind() != "primary_constructor" {
+			continue
+		}
+		for _, p := range ktClassParameters(c) {
+			property, name, typ := false, "", ""
+			for i := uint(0); i < p.ChildCount(); i++ {
+				x := p.Child(i)
+				switch x.Kind() {
+				case "val", "var":
+					property = true
+				case "identifier", "simple_identifier":
+					name = f.text(x)
+				case "user_type", "nullable_type":
+					typ = typeName(f.text(x))
+				}
+			}
+			if property && name != "" && jf.names[typ] != "" {
+				out[name] = jf.names[typ]
+			}
+		}
+	}
+	return out
+}
+
+func ktClassParameters(ctor *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	walk(ctor, func(n *sitter.Node) bool {
+		if n.Kind() == "class_parameter" {
+			out = append(out, n)
+			return false
+		}
+		return true
+	})
+	return out
+}
+
+// typeName is a type's simple name, without its type arguments and nullability: Repo<T>? -> Repo.
+func typeName(t string) string {
+	if i := strings.IndexAny(t, "<?"); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSpace(t)
+}
+
+func copyMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
