@@ -264,7 +264,7 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 			w.t.call(class, nil)
 		}
 	case "method_invocation":
-		w.invoke(n, f.field(n, "object"), f.field(n, "name"), named(n.ChildByFieldName("arguments")),
+		w.invoke(n, f.field(n, "object"), f.field(n, "name"), arguments(n.ChildByFieldName("arguments")),
 			func(body *sitter.Node) { w.walk(body, javaLoops, w.javaVisit) })
 	case "identifier": // a name in a type is a type_identifier, never an identifier
 		if _, ok := w.jf.names[f.text(n)]; ok {
