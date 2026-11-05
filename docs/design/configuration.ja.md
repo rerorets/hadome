@@ -158,6 +158,7 @@ classDiagram
     +Looser Direction
     +Identity []string
     +OmittedIsWidest bool
+    +OmittedIsOff bool
   }
   class Variant {
     +Name string
@@ -244,6 +245,7 @@ classDiagram
 - 層は仕様に沿って合わせる。mapping はキーごと、オブジェクトのリストは見分け方（identity）で（後の項目が同じ見分け方の前の項目を置き換える）、`OmittedIsWidest` の付いたリスト（`languages` など）は丸ごと、その他のリストは重複なしでつなぐ
 - エンジンは版ごとに1つの `Config` を読み込み、base のものは `ForBase` で組み立て、それぞれをその版の事実と一緒にアダプタとルールに渡す。`facts` パッケージは設定を知らないままにする
 - `Diff(base, head)` は変わった項目を並べる。エンジンはそのうち緩いものを `config/loosened` の人の確認にする。`OmittedIsWidest` の付いたキーを省くことは緩めることとして数えない。省けばすべてを覆うからである
+- `OmittedIsOff` の付いたオブジェクト（`mutation`）は、省くとその機能が動かない。そのため、base に無いこのオブジェクトを head で足すのは、中身が何であっても緩めることとして数えない。ただし `Diff` の一覧には、変わった項目として並べる。base にあるものを消したり中身を緩めたりするのは、ほかのキーと同じく緩めることとして数える
 
 ## 不変条件
 

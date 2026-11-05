@@ -158,6 +158,7 @@ classDiagram
     +Looser Direction
     +Identity []string
     +OmittedIsWidest bool
+    +OmittedIsOff bool
   }
   class Variant {
     +Name string
@@ -244,6 +245,7 @@ classDiagram
 - Layers merge by the specification: mappings key by key; lists of objects by their identity (a later entry with the same identity replaces the earlier one); lists marked `OmittedIsWidest` (such as `languages`) as a whole; other lists are joined without duplicates
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration
 - `Diff(base, head)` lists changed entries; the engine turns the looser ones into `config/loosened` reviews. Omitting a key marked `OmittedIsWidest` never counts as loosening, because omitting it covers everything
+- Leaving out an object marked `OmittedIsOff` (`mutation`) turns its feature off. So adding such an object in head when base has none never counts as loosening, whatever it holds; its entries are still listed as changes. Removing it or loosening its content when base has it counts as loosening, as for any other key
 
 ## Invariants
 

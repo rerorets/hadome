@@ -218,6 +218,7 @@ mutation:
 - Before breaking anything, the test command runs once in head. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
 - A timeout counts as caught: a mutant that made the tests stop finishing did not let them pass
 - Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
+- Adding `mutation` when base has none does not loosen anything, because base did not run `mutate` at all (`OmittedIsOff`)
 
 ## Invariants
 
