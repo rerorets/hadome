@@ -46,6 +46,8 @@ func module(extra, run string) fstest.MapFS {
 
 const checked = "run \"plans\" {\n  variables {\n    cidr = \"10.0.0.0/24\"\n  }\n  assert {\n    condition     = output.id != \"\"\n    error_message = \"no id\"\n  }\n}\n"
 
+const resource = "\nresource \"aws_vpc\" \"main\" {\n  cidr_block = var.cidr\n}\n"
+
 const provider = "\nterraform {\n  required_providers {\n    aws = {\n      source = \"hashicorp/aws\"\n    }\n  }\n}\n"
 
 func regressions(t *testing.T, base, head fstest.MapFS) []string {
@@ -86,6 +88,8 @@ func TestTheSameRegressionFailsInTerraform(t *testing.T) {
 			module("", "mock_provider \"aws\" {}\n\n"+checked)},
 		{"the same mock for a module that requires a provider", "", module(provider, checked),
 			module(provider, "mock_provider \"aws\" {}\n\n"+checked)},
+		{"the same mock for a module with a resource and no required provider", "", module(resource, checked),
+			module(resource, "mock_provider \"aws\" {}\n\n"+checked)},
 		{"adding a variable without a description", "comments/missing-doc", base, module("\nvariable \"name\" {}\n", checked)},
 		{"adding a variable with a description", "", base,
 			module("\nvariable \"name\" {\n  description = \"The network's name.\"\n}\n", checked)},

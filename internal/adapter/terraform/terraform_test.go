@@ -81,7 +81,7 @@ func TestTerraformFilesAndRoles(t *testing.T) {
 	for _, s := range a.Symbols {
 		ids = append(ids, s.ID)
 	}
-	if want := []string{"..var.region", "modules/network.output.id"}; !slices.Equal(ids, want) {
+	if want := []string{"var.region", "modules/network.output.id"}; !slices.Equal(ids, want) {
 		t.Errorf("symbols of source files: got %v, want %v", ids, want)
 	}
 }
@@ -167,6 +167,38 @@ module "queue" {
 	}
 }
 
+// viewpoint: behaviour
+// target: terraform.Adapter.Analyze
+// A resource or data source talks to its provider even when no required_providers names it: the
+// provider is found by local name in the module's required providers, in any of its files, or else
+// is Terraform's default hashicorp/<name>. A module of variables, outputs and locals imports nothing.
+func TestTerraformResourcesImportTheirProvider(t *testing.T) {
+	a := analyze(t, config.Config{}, map[string]string{
+		"modules/repo/versions.tf": "terraform {\n  required_providers {\n    github = {\n      source = \"integrations/github\"\n    }\n  }\n}\n",
+		"modules/repo/main.tf": `resource "github_repository" "a" {}
+resource "github_team" "b" {}
+data "aws_region" "current" {}
+resource "random_id" "c" {
+  provider = random.west
+}
+`,
+		"modules/naming/main.tf": "variable \"name\" {}\nlocals {\n  full = var.name\n}\noutput \"full\" {\n  value = local.full\n}\n",
+	})
+	var got []string
+	for _, im := range a.Imports {
+		got = append(got, fmt.Sprintf("%s:%d -> %s io=%v", im.Path, im.Line, im.ToUnit, im.IO))
+	}
+	want := []string{
+		"modules/repo/main.tf:1 -> integrations/github io=true",
+		"modules/repo/main.tf:3 -> hashicorp/aws io=true",
+		"modules/repo/main.tf:4 -> hashicorp/random io=true",
+		"modules/repo/versions.tf:4 -> integrations/github io=true",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("imports:\n got %q\nwant %q", got, want)
+	}
+}
+
 const testFile = `mock_provider "aws" {}
 
 variables {
@@ -233,7 +265,7 @@ func TestTerraformRunBlocksAreTests(t *testing.T) {
 		return s
 	}
 	wantSmall := summary{name: "small_range", line: 9, asserts: 2,
-		calls:   []string{"..output.id x3", "..output.subnets x1", "..var.cidr x1", "..var.region x1"},
+		calls:   []string{"output.id x3", "output.subnets x1", "var.cidr x1", "var.region x1"},
 		hazards: []string{`mock 1 mock_provider "aws"`}}
 	wantBad := summary{name: "rejects_bad_cidr", line: 24, asserts: 1,
 		calls:   []string{"modules/network.var.cidr x1", "modules/network.var.region x1"},
