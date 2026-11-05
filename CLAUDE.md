@@ -16,7 +16,7 @@ hadome (歯止め) is a ratcheting checker: it compares a change against the mai
 | Layer | What it is | Where |
 |---|---|---|
 | Engine | Base comparison, violations, reasoned exceptions, self-test harness, output | this repository |
-| Language adapters | Finding tests, reading imports, measuring size, reading docblocks — for Go, TypeScript, Python, Rust, Java, Kotlin | this repository |
+| Language adapters | Finding tests, reading imports, measuring size, reading docblocks — for Go, TypeScript, Python, Rust, Java, Kotlin, Terraform, Ansible | this repository |
 | Generic rules | `tests/`, `deps/`, `size/`, `comments/` | this repository, tuned by configuration |
 | Product configuration | Thresholds, dependency diagram, invariant list, enabled rules | each user's repository |
 | Product-specific gates | Anything a single product needs | each user's repository, using the same interface |
