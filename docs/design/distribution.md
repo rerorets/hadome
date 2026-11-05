@@ -37,6 +37,7 @@ A Go project that also has TypeScript or Python files gets all eight where a C c
 
 - One release produces binaries for each supported operating system and architecture (Linux, macOS and Windows; x86-64 and ARM64), each built natively with cgo on GitHub Actions, then publishes them to every ecosystem above
 - A release starts from a tag `vX.Y.Z`. The version is stamped into the binary (`hadome version`) and into every package
+- Installed with `go get -tool`, hadome is built from source on the user's machine, without the version a release build stamps. `hadome version` then prints the module version Go embeds in the binary (`1.2.0` for `v1.2.0`)
 - Every binary is published with a checksum in `SHA256SUMS`. Archives also get a minisign signature (`.sig`), because a signature is all `cargo binstall` can check. Installers that download binaries verify a checksum or a signature before running anything
 - All ecosystems receive the same version number at the same time. Which ecosystems it is published to is decided by the repository variables `PUBLISH_<ECOSYSTEM>` ([how to publish](../maintaining/releasing.md))
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/adapter"
@@ -25,6 +26,23 @@ import (
 
 // version is set when a release is built: go build -ldflags "-X main.version=1.2.0".
 var version = "dev"
+
+// modulePath is hadome's module, whose version Go embeds when it builds hadome from a module.
+const modulePath = "github.com/rerorets/hadome"
+
+// versionOf is the version hadome prints: the stamped one, or else the module version Go embedded,
+// since go get -tool builds from source without the release's ldflags.
+func versionOf(stamped string, info *debug.BuildInfo, ok bool) string {
+	if stamped != "dev" || !ok || info.Main.Path != modulePath {
+		return stamped
+	}
+	switch v := info.Main.Version; v {
+	case "", "(devel)":
+		return stamped
+	default:
+		return strings.TrimPrefix(v, "v")
+	}
+}
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -63,7 +81,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "init":
 		return initCmd(args[1:], stdout, stderr)
 	case "version", "--version":
-		fmt.Fprintln(stdout, "hadome", version)
+		info, ok := debug.ReadBuildInfo()
+		fmt.Fprintln(stdout, "hadome", versionOf(version, info, ok))
 		return engine.ExitOK
 	default:
 		fmt.Fprintf(stderr, "hadome: unknown command %q\n", args[0])
