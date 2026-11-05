@@ -15,7 +15,7 @@ import (
 type hazardRule struct {
 	id       string
 	category facts.HazardCategory
-	message  string
+	message  string // a format with one verb, for the evidence
 	finds    string
 	why      string
 	fix      string
@@ -28,7 +28,7 @@ type hazardRule struct {
 func (r hazardRule) ID() string           { return r.id }
 func (r hazardRule) Cases() []engine.Case { return r.cases }
 func (r hazardRule) About() engine.About {
-	return engine.About{Finds: r.finds, Why: r.why, Fix: r.fix, Keys: r.keys}
+	return engine.About{Finds: engine.T(r.finds), Why: engine.T(r.why), Fix: engine.T(r.fix), Keys: r.keys}
 }
 
 func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
@@ -59,7 +59,7 @@ func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 			}
 			out = append(out, engine.Finding{
 				Rule: r.id, File: file, Line: h.Line, Anchor: anchor,
-				Message: r.message + ": " + h.Evidence, Why: r.why, Fix: r.fix,
+				Message: engine.T(r.message, h.Evidence), Why: engine.T(r.why), Fix: engine.T(r.fix),
 			})
 		}
 	}
@@ -70,7 +70,7 @@ func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 func NoClock() engine.Rule {
 	return hazardRule{
 		id: "tests/no-clock", category: facts.HazardClock,
-		message: "test reads the clock",
+		message: "test reads the clock: %s",
 		finds:   "a test that reads the current time directly",
 		keys:    []string{"rules.tests.hazards.clock"},
 		why:     "the result depends on when the test runs; it passes today and fails at midnight, at month end, or in another time zone",
@@ -83,7 +83,7 @@ func NoClock() engine.Rule {
 func NoSleep() engine.Rule {
 	return hazardRule{
 		id: "tests/no-sleep", category: facts.HazardSleep,
-		message: "test waits by sleeping",
+		message: "test waits by sleeping: %s",
 		finds:   "a test that waits by sleeping",
 		keys:    []string{"rules.tests.hazards.sleep"},
 		why:     "a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event",
@@ -96,7 +96,7 @@ func NoSleep() engine.Rule {
 func AlwaysTrue() engine.Rule {
 	return hazardRule{
 		id: "tests/always-true", category: facts.HazardAlwaysTrue,
-		message: "assertion cannot fail",
+		message: "assertion cannot fail: %s",
 		finds:   "an assertion that cannot fail, such as assertTrue(true) or comparing a value with itself",
 		why:     "the test reports success no matter what the code does",
 		fix:     "assert on the behaviour under test",
@@ -110,9 +110,9 @@ type skipWithoutReason struct{}
 func (skipWithoutReason) ID() string           { return "tests/skip-without-reason" }
 func (skipWithoutReason) Cases() []engine.Case { return skipCases() }
 func (skipWithoutReason) About() engine.About {
-	return engine.About{Finds: "a test that is skipped or disabled without a reason",
-		Why: "a skipped test protects nothing, and without a reason nobody can decide when it should come back",
-		Fix: "write the reason in the skip itself"}
+	return engine.About{Finds: engine.T("a test that is skipped or disabled without a reason"),
+		Why: engine.T("a skipped test protects nothing, and without a reason nobody can decide when it should come back"),
+		Fix: engine.T("write the reason in the skip itself")}
 }
 
 func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
@@ -121,9 +121,9 @@ func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 		if (t.Skip.Skipped || t.Skip.Conditional) && t.Skip.Reason == "" {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Skip.Line, Anchor: t.Name,
-				Message: t.Name + " is skipped without a reason",
+				Message: engine.T("%s is skipped without a reason", t.Name),
 				Why:     r.About().Why,
-				Fix:     r.About().Fix + ", for example " + skipExample(t.Path),
+				Fix:     engine.T("write the reason in the skip itself, for example %s", skipExample(t.Path)),
 			})
 		}
 	}
@@ -133,18 +133,18 @@ func (r skipWithoutReason) Find(in engine.Input) ([]engine.Finding, error) {
 func itoa(n int) string { return strconv.Itoa(n) }
 
 // skipExample shows a skip with a reason in the form the test file's language reads it.
-func skipExample(path string) string {
+func skipExample(path string) engine.Text {
 	switch filepath.Ext(path) {
 	case ".go":
-		return `t.Skip("waits for …")`
+		return engine.Verbatim(`t.Skip("waits for …")`)
 	case ".py":
-		return `@pytest.mark.skip(reason="waits for …")`
+		return engine.Verbatim(`@pytest.mark.skip(reason="waits for …")`)
 	case ".rs":
-		return `#[ignore = "waits for …"]`
+		return engine.Verbatim(`#[ignore = "waits for …"]`)
 	case ".java", ".kt":
-		return `@Disabled("waits for …")`
+		return engine.Verbatim(`@Disabled("waits for …")`)
 	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs":
-		return "a comment on or above it.skip: // waits for …"
+		return engine.T("a comment on or above it.skip: // waits for …")
 	}
-	return "a reason the language's skip accepts"
+	return engine.T("a reason the language's skip accepts")
 }

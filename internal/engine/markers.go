@@ -30,16 +30,16 @@ func parseMarkers(comments []facts.Comment, known map[string]bool) ([]Marker, []
 		case reason == "":
 			bad = append(bad, Finding{
 				Rule: ruleMarkerWithoutReason, File: c.Path, Line: c.Line, Anchor: rule,
-				Message: "exception for " + rule + " has no reason",
-				Why:     "an exception without a reason cannot be reviewed, so it has no effect",
-				Fix:     "write the reason after 'reason:', or remove the marker",
+				Message: T("exception for %s has no reason", rule),
+				Why:     T("an exception without a reason cannot be reviewed, so it has no effect"),
+				Fix:     T("write the reason after 'reason:', or remove the marker"),
 			})
 		case !known[rule]:
 			bad = append(bad, Finding{
 				Rule: ruleMarkerUnknownRule, File: c.Path, Line: c.Line, Anchor: rule,
-				Message: "exception names an unknown rule: " + rule,
-				Why:     "a marker for a rule that does not exist suppresses nothing",
-				Fix:     "use a rule id that hadome reports, or remove the marker",
+				Message: T("exception names an unknown rule: %s", rule),
+				Why:     T("a marker for a rule that does not exist suppresses nothing"),
+				Fix:     T("use a rule id that hadome reports, or remove the marker"),
 			})
 		default:
 			valid = append(valid, Marker{Rule: rule, Reason: reason, File: c.Path, Line: c.Line})
@@ -69,9 +69,9 @@ func suppress(findings []Finding, markers []Marker) ([]Finding, []Finding) {
 		if !used[i] {
 			unused = append(unused, Finding{
 				Rule: ruleMarkerUnused, File: m.File, Line: m.Line, Anchor: m.Rule + "|" + m.Reason,
-				Message: "exception for " + m.Rule + " suppresses nothing",
-				Why:     "stale exceptions pile up and hide what is really excepted",
-				Fix:     "remove the marker",
+				Message: T("exception for %s suppresses nothing", m.Rule),
+				Why:     T("stale exceptions pile up and hide what is really excepted"),
+				Fix:     T("remove the marker"),
 			})
 		}
 	}

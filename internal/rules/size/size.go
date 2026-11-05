@@ -4,7 +4,6 @@
 package size
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/engine"
@@ -30,9 +29,9 @@ type limitRule struct {
 func (r limitRule) ID() string           { return "size/" + r.key }
 func (r limitRule) Cases() []engine.Case { return r.cases() }
 func (r limitRule) About() engine.About {
-	return engine.About{Finds: "product code over the " + r.key + " limit (" + r.what + "); an existing one that grows is a regression too",
-		Why:  "past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it",
-		Fix:  r.fix + "; raising the limit (rules.size." + r.key + ") is a change a person reviews",
+	return engine.About{Finds: engine.T("product code over the %s limit (%s); an existing one that grows is a regression too", r.key, engine.T(r.what)),
+		Why:  engine.T("past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it"),
+		Fix:  engine.T("%s; raising the limit (rules.size.%s) is a change a person reviews", engine.T(r.fix), r.key),
 		Keys: []string{"rules.size." + r.key}}
 }
 
@@ -45,7 +44,7 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: m.file, Line: m.line, Anchor: m.name, Value: m.size,
-			Message: fmt.Sprintf("%s: %s %d, limit %d", display(m), r.what, m.size, limit),
+			Message: engine.T("%s: %s %d, limit %d", display(m), engine.T(r.what), m.size, limit),
 			Why:     r.About().Why,
 			Fix:     r.About().Fix,
 		})

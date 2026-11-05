@@ -36,14 +36,12 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	if err := fl.Parse(args); err != nil || (*write == "" && fl.NArg() != 0) {
 		return engine.ExitConfig
 	}
-	block := agentBlock
-	switch *lang {
-	case "en":
-	case "ja":
-		block = agentBlockJa
-	default:
-		fmt.Fprintf(stderr, "hadome: --lang must be en or ja, got %q\n", *lang)
+	if !validLang(*lang, stderr) {
 		return engine.ExitConfig
+	}
+	block := agentBlock
+	if *lang == "ja" {
+		block = agentBlockJa
 	}
 	if *write == "" {
 		fmt.Fprint(stdout, block)

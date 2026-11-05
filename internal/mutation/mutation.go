@@ -92,8 +92,8 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation) (ma
 	for _, lang := range m.Mutator.Unmutated(funcs) {
 		found[hv.Label] = append(found[hv.Label], engine.Finding{Rule: RuleID, File: config.FileName,
 			Anchor: "unmutated|" + lang, Review: true,
-			Message: "hadome cannot break " + lang + " code yet, so the functions this change touched in " + lang + " were not tried",
-			Why:     "untried code is not known to be guarded", Fix: "a person checks the tests of those functions"})
+			Message: engine.T("hadome cannot break %s code yet, so the functions this change touched in %s were not tried", lang, lang),
+			Why:     engine.T("untried code is not known to be guarded"), Fix: engine.T("a person checks the tests of those functions")})
 	}
 	mutants, err := m.Mutator.Mutants(hv, funcs)
 	if err != nil || len(mutants) == 0 {
@@ -228,12 +228,12 @@ func testsCalling(a *facts.Analysis) map[string][]string {
 }
 
 func finding(m facts.Mutant) engine.Finding {
-	change := fmt.Sprintf("changing `%s` to `%s`", m.Original, m.Replacement)
+	msg := engine.T("%s: changing `%s` to `%s` does not fail any test", short(m.Func), m.Original, m.Replacement)
 	if m.Operator == "remove a call statement" {
-		change = fmt.Sprintf("removing `%s`", m.Original)
+		msg = engine.T("%s: removing `%s` does not fail any test", short(m.Func), m.Original)
 	}
 	return engine.Finding{Rule: RuleID, File: m.Path, Line: m.Line, Anchor: m.Anchor,
-		Message: fmt.Sprintf("%s: %s does not fail any test", short(m.Func), change),
+		Message: msg,
 		Why:     survived{}.About().Why, Fix: survived{}.About().Fix}
 }
 
@@ -250,9 +250,9 @@ func untried(rest []facts.Mutant) engine.Finding {
 	}
 	sort.Strings(names)
 	return engine.Finding{Rule: RuleID, File: config.FileName, Anchor: "untried", Review: true,
-		Message: fmt.Sprintf("%d mutants beyond mutation.max-mutants were not tried, in %s", len(rest), strings.Join(names, ", ")),
-		Why:     "untried code is not known to be guarded",
-		Fix:     "split the change, or have a person decide whether to raise mutation.max-mutants"}
+		Message: engine.T("%d mutants beyond mutation.max-mutants were not tried, in %s", len(rest), strings.Join(names, ", ")),
+		Why:     engine.T("untried code is not known to be guarded"),
+		Fix:     engine.T("split the change, or have a person decide whether to raise mutation.max-mutants")}
 }
 
 // short drops the import path of a symbol ID: example.com/app/store.Append is store.Append.

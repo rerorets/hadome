@@ -16,9 +16,9 @@ type unread struct{}
 func (unread) ID() string { return "unknown/unread" }
 
 func (unread) About() engine.About {
-	return engine.About{Finds: "a new file of a supported language that hadome could not read",
-		Why:    "no rule saw what the file does, so nothing it adds was checked",
-		Fix:    "make it parse, or use a build of hadome that reads its language (every prebuilt binary does)",
+	return engine.About{Finds: engine.T("a new file of a supported language that hadome could not read"),
+		Why:    engine.T("no rule saw what the file does, so nothing it adds was checked"),
+		Fix:    engine.T("make it parse, or use a build of hadome that reads its language (every prebuilt binary does)"),
 		Review: true}
 }
 
@@ -48,9 +48,9 @@ func (r unread) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: f.Path, Review: true,
-			Message: "hadome could not read " + f.Path,
-			Why:     "it does not parse, or this build of hadome has no reader for " + f.Language + "; no rule saw what it does",
-			Fix:     "make it parse, or use a build of hadome that reads " + f.Language + " (every prebuilt binary does)",
+			Message: engine.T("hadome could not read %s", f.Path),
+			Why:     engine.T("it does not parse, or this build of hadome has no reader for %s; no rule saw what it does", f.Language),
+			Fix:     engine.T("make it parse, or use a build of hadome that reads %s (every prebuilt binary does)", f.Language),
 		})
 	}
 	return out, nil
@@ -65,9 +65,9 @@ type unknownImport struct{}
 func (unknownImport) ID() string { return "unknown/import" }
 
 func (unknownImport) About() engine.About {
-	return engine.About{Finds: "a new import whose destination is decided only at run time, such as import(name) or Class.forName(name)",
-		Why:    "no rule can tell what it reaches, so dependencies and purity are judged without it",
-		Fix:    "import the destination by name; if it must stay dynamic, a person approves it",
+	return engine.About{Finds: engine.T("a new import whose destination is decided only at run time, such as import(name) or Class.forName(name)"),
+		Why:    engine.T("no rule can tell what it reaches, so dependencies and purity are judged without it"),
+		Fix:    engine.T("import the destination by name; if it must stay dynamic, a person approves it"),
 		Review: true}
 }
 
@@ -100,7 +100,7 @@ func (r unknownImport) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: im.Path, Line: im.Line, Anchor: im.Text, Review: true,
-			Message: "the destination of this import is decided only at run time: " + im.Text,
+			Message: engine.T("the destination of this import is decided only at run time: %s", im.Text),
 			Why:     r.About().Why, Fix: r.About().Fix,
 		})
 	}

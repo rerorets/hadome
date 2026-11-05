@@ -59,6 +59,8 @@ extends: [../shared/hadome.yml] # optional; shared settings for several reposito
 
 languages: [go, typescript]    # optional; detected when omitted
 
+messages: ja                   # optional; the language of the findings' wording, en or ja; default en; a command's --lang wins (messages.md)
+
 invariants:
   - type: idempotent           # a built-in type: name it and point at the target
     target: api.CreatePost

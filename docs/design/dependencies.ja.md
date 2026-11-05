@@ -10,7 +10,7 @@ flowchart TB
   adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"]
   adapter & golang & treesitter --> walk["internal/adapter/walk"]
   adapter & golang & treesitter --> engine & config & facts["internal/facts"]
-  engine --> config & facts
+  engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
   rules --> engine & config & facts
   suggest --> engine & config & facts
@@ -20,7 +20,7 @@ flowchart TB
   packaging["packaging/..."]
 ```
 
-- `facts`、`config`、`walk` は hadome のものを何も import しない。他のすべてはこれらの上に作る
+- `facts`、`config`、`walk`、`messages` は hadome のものを何も import しない。他のすべてはこれらの上に作る
 - エンジンは言語もルールもプロセスも知らない。アダプタ、ルール、門番がエンジンに依存し、逆はない
 - ルールはアダプタを import しない。ルールが見るのは事実だけで、だからどのルールもどの言語でも動く
 - 部品を組み合わせるのは `cmd/hadome` だけ

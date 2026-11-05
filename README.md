@@ -169,6 +169,8 @@ $ hadome check --base main
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
 
+The output is in English by default. With `--lang ja`, or `messages: ja` in `.hadome.yml`, it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change.
+
 ## What it checks
 
 | Group | Rules |

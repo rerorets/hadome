@@ -60,9 +60,9 @@ type SelfTester interface {
 // About is what a rule says about itself when a person or an agent asks (hadome explain <rule>).
 // Findings carry the same Why and Fix wherever they do not depend on what was found.
 type About struct {
-	Finds string   // what the rule reports
-	Why   string   // why that matters
-	Fix   string   // the usual way to resolve it
+	Finds Text     // what the rule reports
+	Why   Text     // why that matters
+	Fix   Text     // the usual way to resolve it
 	Keys  []string // configuration keys that tune the rule
 	// Review is true when what the rule reports asks for a person's review (exit code 3) instead
 	// of failing the check.
@@ -90,19 +90,21 @@ type MeasureRule interface {
 }
 
 // Finding is one violation. Anchor must survive unrelated edits; it never contains a line number.
+// Its wording is never part of how it is matched across versions, so the language changes nothing
+// but what is written out. WriteJSON writes it with its wording as plain strings.
 type Finding struct {
-	Rule    string `json:"rule"`
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Anchor  string `json:"-"`
-	Message string `json:"message"`
-	Why     string `json:"why"`
-	Fix     string `json:"fix"`
+	Rule    string
+	File    string
+	Line    int
+	Anchor  string
+	Message Text
+	Why     Text
+	Fix     Text
 	// Review marks findings that need a person's review instead of failing the check (exit code 3).
-	Review bool `json:"-"`
+	Review bool
 	// Value is what the rule measured, for findings about an amount (lines, parameters). A finding
 	// that matches base but has a larger Value is a regression: the violation got worse.
-	Value int `json:"value,omitempty"`
+	Value int
 }
 
 // Item is one guarded thing reported by a measure rule.
@@ -111,9 +113,9 @@ type Item struct {
 	Key    string
 	File   string
 	Line   int
-	Detail string
-	Why    string
-	Fix    string
+	Detail Text
+	Why    Text
+	Fix    Text
 	// Review marks items whose disappearance needs a person's review instead of failing the check.
 	Review bool
 }
@@ -148,14 +150,16 @@ type Candidate struct {
 // Key identifies the candidate across versions.
 func (c Candidate) Key() string { return c.Type + " " + strings.Join(c.Targets, ",") }
 
-// Report is the result of a check. All slices are sorted.
+// Report is the result of a check. All slices are sorted. WriteJSON and WriteText write it out.
 type Report struct {
-	Regressions   []Finding `json:"regressions"`
-	Reviews       []Finding `json:"reviews"`
-	NewExceptions []Marker  `json:"new_exceptions"`
+	Regressions   []Finding
+	Reviews       []Finding
+	NewExceptions []Marker
 	// Candidates are the invariant candidates this change adds.
-	Candidates []Candidate `json:"candidates"`
-	Untouched  int         `json:"untouched"`
+	Candidates []Candidate
+	Untouched  int
+	// Messages is the language of wording that head's configuration asks for (`messages`).
+	Messages string
 }
 
 // Exit codes of a check.

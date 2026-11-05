@@ -16,18 +16,18 @@ func loosened(base, head config.Config) []Finding {
 		if !c.Looser {
 			continue
 		}
-		msg := "configuration changes " + c.Key + ": " + c.Removed + " → " + c.Added
+		msg := T("configuration changes %s: %s → %s", c.Key, c.Removed, c.Added)
 		switch {
 		case c.Added == "":
-			msg = "configuration removes " + c.Key + " entry: " + c.Removed
+			msg = T("configuration removes %s entry: %s", c.Key, c.Removed)
 		case c.Removed == "":
-			msg = "configuration adds to " + c.Key + ": " + c.Added
+			msg = T("configuration adds to %s: %s", c.Key, c.Added)
 		}
 		out = append(out, Finding{
 			Rule: LoosenedID, File: c.File, Line: c.Line, Anchor: c.Key + "\x00" + c.Removed + "\x00" + c.Added, Review: true,
 			Message: msg,
-			Why:     "the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive",
-			Fix:     "if the removal is intended, a person approves it; otherwise restore the entry",
+			Why:     T("the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive"),
+			Fix:     T("if the removal is intended, a person approves it; otherwise restore the entry"),
 		})
 	}
 	return out
