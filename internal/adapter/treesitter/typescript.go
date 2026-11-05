@@ -16,14 +16,23 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// typescript reads TypeScript and JavaScript with the TSX grammar, which accepts both.
+// typescript reads TypeScript and JavaScript.
 type typescript struct {
 	exists  map[string]bool
 	aliases map[string]string // "@/" -> "src/", from tsconfig.json compilerOptions.paths
 	scopes  map[string]int    // target ID -> position of its scope parameter
 }
 
-func (*typescript) grammar() *sitter.Language { return sitter.NewLanguage(tsx.LanguageTSX()) }
+// grammar parses .ts, .mts and .cts with the TypeScript grammar and every other file with the TSX
+// grammar. Neither grammar reads all of them: TSX rejects the `<T>x` type assertion, which .ts files
+// may use, and the TypeScript grammar rejects JSX, which .tsx and JavaScript files may use.
+func (*typescript) grammar(p string) *sitter.Language {
+	switch path.Ext(p) {
+	case ".ts", ".mts", ".cts":
+		return sitter.NewLanguage(tsx.LanguageTypescript())
+	}
+	return sitter.NewLanguage(tsx.LanguageTSX())
+}
 
 var tsBranches = branches{
 	kinds: set("if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement",

@@ -22,7 +22,7 @@ type python struct {
 	scopes map[string]int
 }
 
-func (*python) grammar() *sitter.Language { return sitter.NewLanguage(py.Language()) }
+func (*python) grammar(string) *sitter.Language { return sitter.NewLanguage(py.Language()) }
 
 var pyBranches = branches{
 	kinds: set("if_statement", "elif_clause", "for_statement", "while_statement", "except_clause",

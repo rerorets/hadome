@@ -179,3 +179,40 @@ test("adds", () => {
 		t.Errorf("want a mock hazard, got %v", categories)
 	}
 }
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// A .ts file may use the `<T>x` type assertion and a .tsx or JavaScript file may use JSX. Each is
+// read with a grammar that accepts it, so the functions around either come out whole.
+func TestTypeAssertionsAndJSXEachReadWhole(t *testing.T) {
+	a := analyze(t, "typescript", tree(
+		"src/token.ts", `export function token(env: Record<string, unknown>): string {
+  const raw = <string>env.TOKEN
+  if (raw === "") { return "none" }
+  return raw
+}
+export function size(s: string): number { return s.length }
+`,
+		"src/view.tsx", `export function View(p: { on: boolean }) {
+  if (p.on) { return <img src="/a.svg" /> }
+  return <span>off</span>
+}
+`,
+		"src/legacy.jsx", `export function Old(p) {
+  if (p.on) { return <b>on</b> }
+  return null
+}
+`))
+	var syms []string
+	for _, line := range strings.Split(summary(a), "\n") {
+		if strings.HasPrefix(line, "symbol ") {
+			syms = append(syms, line)
+		}
+	}
+	expect(t, strings.Join(syms, "\n"), `
+symbol function src.Old exported=true doc=false params=1 cx=2 methods=0 scoped=false
+symbol function src.View exported=true doc=false params=1 cx=2 methods=0 scoped=false
+symbol function src.size exported=true doc=false params=1 cx=1 methods=0 scoped=false
+symbol function src.token exported=true doc=false params=1 cx=2 methods=0 scoped=false
+`)
+}

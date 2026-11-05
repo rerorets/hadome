@@ -72,16 +72,16 @@ func (l *lang) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 	sort.Strings(paths)
 	parser := sitter.NewParser()
 	defer parser.Close()
-	if err := parser.SetLanguage(l.r.grammar()); err != nil {
-		return nil, err
-	}
 	var out []facts.Mutant
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {
 			return nil, err
 		}
-		tree := parser.Parse(src, nil)
+		tree, err := l.parse(parser, p, src)
+		if err != nil {
+			return nil, err
+		}
 		f := &file{path: p, src: src, root: tree.RootNode()}
 		syms := byPath[p]
 		sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
