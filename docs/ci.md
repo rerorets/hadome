@@ -96,7 +96,7 @@ jobs:
 
 ## Trying mutations too
 
-Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apart from `check`. `mutate` runs the tests once per mutant, so it takes far longer than `check`, and a separate job shows `check`'s result first. Add this job under `jobs:` in the example above.
+Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apart from `check`. `mutate` runs the tests once per mutant, so it takes far longer than `check`, and a separate job shows `check`'s result first. Add this job under `jobs:` in the example above. hadome's own CI runs its `mutate` job the same way.
 
 ```yaml
   mutate:

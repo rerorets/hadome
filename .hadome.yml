@@ -19,3 +19,8 @@ invariants:
     says: "The same change fails the same rule in every language"
   - id: no-network
     says: "hadome never reads configuration from the network"
+
+# hadome mutate breaks the Go functions a pull request touched; CI fails when no test notices.
+mutation:
+  test: [go, test, ./..., -run, "^({tests})$"]
+  max-mutants: 30
