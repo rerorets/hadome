@@ -37,6 +37,7 @@ func (r *typescript) tests(f *file, t *tables) []facts.Test {
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{},
 		helpers: map[string]*sitter.Node{}, comments: map[int]string{}}
 	tf.bind()
+	tf.bindHelpers()
 	var out []facts.Test
 	tf.suite(f.root, "", false, &out)
 	return out
@@ -58,8 +59,6 @@ func (tf *tsFile) bind() {
 			if internal {
 				tf.bindImport(top, unit)
 			}
-		case "function_declaration":
-			tf.helpers[f.field(top, "name")] = top.ChildByFieldName("body")
 		case "expression_statement":
 			if call := top.NamedChild(0); call != nil && call.Kind() == "call_expression" {
 				if cat, ok := tf.t.calls[f.field(call, "function")]; ok && cat == facts.HazardMock {
@@ -165,6 +164,8 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 		}
 	case "call_expression":
 		w.call(n)
+	case "jsx_opening_element", "jsx_self_closing_element":
+		w.element(n)
 	case "identifier": // a name in a type is a type_identifier, never an identifier
 		if _, ok := w.tf.names[f.text(n)]; ok {
 			w.t.readName(n, tsUses)
@@ -242,4 +243,48 @@ func (w *tsWalk) alwaysTrue(fn *sitter.Node, args []*sitter.Node) bool {
 	}
 	actual := named(inner.ChildByFieldName("arguments"))
 	return len(actual) == 1 && sameValue(f, actual[0], args[0])
+}
+
+// bindHelpers records the functions of the file a test may call, at any depth: declarations and
+// functions held by a const (const renderPage = () => render(<Page />)), which test files often
+// declare inside a describe block. The first of a name wins.
+func (tf *tsFile) bindHelpers() {
+	f := tf.f
+	walk(f.root, func(n *sitter.Node) bool {
+		name, body := "", (*sitter.Node)(nil)
+		switch n.Kind() {
+		case "function_declaration":
+			name, body = f.field(n, "name"), n.ChildByFieldName("body")
+		case "variable_declarator":
+			if v := n.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
+				name, body = f.field(n, "name"), v.ChildByFieldName("body")
+			}
+		}
+		if _, seen := tf.helpers[name]; name != "" && body != nil && !seen {
+			tf.helpers[name] = body
+		}
+		return true
+	})
+}
+
+// element records a JSX element of a component of the repository as a call: rendering <Page /> runs
+// Page. Lowercase names are HTML elements.
+func (w *tsWalk) element(n *sitter.Node) {
+	f := w.tf.f
+	name := n.ChildByFieldName("name")
+	if name == nil {
+		return
+	}
+	target := ""
+	switch name.Kind() {
+	case "identifier":
+		target = w.tf.names[f.text(name)]
+	case "member_expression":
+		if unit, ok := w.tf.spaces[f.field(name, "object")]; ok {
+			target = unit + "." + f.field(name, "property")
+		}
+	}
+	if target != "" {
+		w.t.call(target, nil)
+	}
 }

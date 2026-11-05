@@ -98,6 +98,8 @@ classDiagram
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 | Kotlin | Java と同じ | Java と同じアノテーションの付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 
+- TypeScript のテストが呼ぶものには、JSX の要素（`<Page />`）で描いたリポジトリの部品も入る。ファイルの中のヘルパーは、`function` の宣言でも、`const` に入れた関数（`const renderPage = () => …`）でもたどる。`describe` の中で宣言したものも同じ
+
 テストからの呼び出しは、Go のアダプタと同じように、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数を通して対象に解決する。解決できない呼び出しは未解決として数える。
 
 ## 危険と io
