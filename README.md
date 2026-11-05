@@ -52,6 +52,9 @@ From here on, commands are written as `hadome …`. Use the form for how you ins
 
 #### TypeScript / JavaScript
 
+> [!NOTE]
+> Publishing to npm is delayed while npm reviews the package names. Until then, use one of the ways under "Anything else" below.
+
 ```sh
 npm install --save-dev --save-exact hadome   # pnpm, yarn and bun work too (bun add -d -E hadome, then bunx hadome check)
 npx hadome check

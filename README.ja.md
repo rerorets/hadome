@@ -52,6 +52,9 @@ cd path/to/your-repo
 
 #### TypeScript / JavaScript
 
+> [!NOTE]
+> npmへの公開はnpmの審査を待っていて遅れています。それまでは、下の「それ以外」の入れ方を使ってください。
+
 ```sh
 npm install --save-dev --save-exact hadome   # pnpm・yarn・bun でも同じ（bun add -d -E hadome → bunx hadome check）
 npx hadome check
