@@ -83,9 +83,12 @@ const (
 	SymbolMethod    SymbolKind = "method"
 	SymbolInterface SymbolKind = "interface"
 	SymbolType      SymbolKind = "type" // a named type that is not an interface
+	// SymbolValue is a value a unit takes in or gives out, in a language without functions: a
+	// Terraform variable or output. Rules that measure functions do not count it.
+	SymbolValue SymbolKind = "value"
 )
 
-// Symbol is a function, method or named type of non-test, non-generated code. ID is unique within a
+// Symbol is a function, method, named type or value of non-test, non-generated code. ID is unique within a
 // version and stable across versions as long as the symbol keeps its name and unit.
 type Symbol struct {
 	ID      string

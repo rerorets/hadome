@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -53,7 +54,7 @@ func suggestCmd(args []string, stdout, stderr io.Writer) int {
 var extensions = map[string]string{
 	".go": "go", ".ts": "typescript", ".tsx": "typescript", ".js": "typescript", ".jsx": "typescript",
 	".mjs": "typescript", ".cjs": "typescript", ".py": "python", ".rs": "rust", ".java": "java",
-	".kt": "kotlin", ".kts": "kotlin",
+	".kt": "kotlin", ".kts": "kotlin", ".tf": "terraform",
 }
 
 const initTemplate = `# hadome configuration. hadome works without this file; everything except schema is optional.
@@ -70,7 +71,8 @@ schema: 1
 %s`
 
 // testCommands are the usual test commands of each language, offered by init for hadome mutate. They
-// are guesses, so init writes them as comments and never turns one on.
+// are guesses, so init writes them as comments and never turns one on. A language without functions
+// to break (Terraform) has none.
 var testCommands = map[string]string{
 	"go": "[go, test, ./...]", "typescript": "[npm, test]", "python": "[python, -m, pytest]",
 	"rust": "[cargo, test]", "java": "[./gradlew, test]", "kotlin": "[./gradlew, test]",
@@ -78,6 +80,7 @@ var testCommands = map[string]string{
 
 // mutationComment is the commented mutation setting, with one test command per language found.
 func mutationComment(langs []string) string {
+	langs = slices.DeleteFunc(slices.Clone(langs), func(l string) bool { return testCommands[l] == "" })
 	if len(langs) == 0 {
 		return ""
 	}

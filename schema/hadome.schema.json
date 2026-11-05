@@ -169,7 +169,8 @@
           "python",
           "rust",
           "java",
-          "kotlin"
+          "kotlin",
+          "terraform"
         ],
         "type": "string"
       },
