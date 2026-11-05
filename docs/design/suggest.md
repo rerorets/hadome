@@ -111,6 +111,7 @@ It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)).
 | Python | `[python, -m, pytest]` |
 | Rust | `[cargo, test]` |
 | Java, Kotlin | `[./gradlew, test]` |
+| Terraform | None: there are no functions to break |
 
 ## Invariants
 

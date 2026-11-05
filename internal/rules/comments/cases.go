@@ -47,7 +47,16 @@ func docCases() []engine.Case {
 			WantFail: []string{"comments/missing-doc"}},
 		{Name: "a test file is not checked", Base: with(""),
 			Head: module("store/store.go", store(appendFunc), "store/store_test.go", "package store\n\nfunc Helper() {}\n")},
+		{Name: "a new Terraform variable without a description fails", Base: tf(""), Head: tf("variable \"name\" {}\n"),
+			WantFail: []string{"comments/missing-doc"}},
+		{Name: "a new Terraform output with a description passes", Base: tf(""),
+			Head: tf("output \"id\" {\n  description = \"The network's ID.\"\n  value       = 1\n}\n")},
 	}
+}
+
+// tf is a Terraform module with one documented variable, and more configuration.
+func tf(more string) fstest.MapFS {
+	return module("modules/network/main.tf", "variable \"cidr\" {\n  description = \"The address range.\"\n}\n\n"+more)
 }
 
 func referenceCases() []engine.Case {

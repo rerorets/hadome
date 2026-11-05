@@ -12,7 +12,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
-  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin-555.svg">
+  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin%20%7C%20Terraform-555.svg">
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@ hadome（歯止め）は変更をmainと比べ、その変更で増えた違反�
 
 AIエージェントがコードの大半を書くリポジトリで使うことを想定しています。結果はJSONでも出せて、エージェントはそれを読んで直します。
 
-Go・TypeScript・Python・Rust・Java・Kotlinを、1つのバイナリで読みます。
+Go・TypeScript・Python・Rust・Java・Kotlin・Terraformを、1つのバイナリで読みます。
 
 ## はじめかた
 
@@ -71,7 +71,7 @@ go get -tool github.com/rerorets/hadome/cmd/hadome
 go tool hadome check
 ```
 
-ソースからビルドします。Cコンパイラがあれば6言語を読み、無ければGoだけを読みます。
+ソースからビルドします。Cコンパイラがあれば7言語を読み、無ければGoとTerraformだけを読みます。
 
 #### Java / Kotlin（Gradle）
 

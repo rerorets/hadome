@@ -45,6 +45,8 @@ classDiagram
 | Terraform | `*.tf` | `*.tftest.hcl` | `*.tfvars` (values only; nothing to read) |
 | Ansible | `*.yml` and `*.yaml` under `tasks/`, `handlers/`, `defaults/`, `vars/` and `meta/` of `roles/<role>/`; under `playbooks/`; and `site.yml` and `playbook.yml` at the root | `*.yml` under `molecule/<scenario>/` (including those inside a role) | None |
 
+`files.tests` does not apply to Terraform files. As for Go, Terraform itself decides what a test is, by the name `*.tftest.hcl`.
+
 Ansible does not claim every YAML file because YAML holds things that are not Ansible too, such as CI settings and `.hadome.yml`. As for the other languages, whether a file is claimed depends on its path alone.
 
 A playbook outside this layout (a `deploy.yml` at the root, say) is added by glob under `files.ansible` in `.hadome.yml`.
@@ -61,8 +63,10 @@ files:
 
 | Language | Unit | ID | Location | Symbol ID |
 |---|---|---|---|---|
-| Terraform | Module (a directory) | The directory | The directory | `<directory>.<name>` |
+| Terraform | Module (a directory) | The directory | The directory | `<directory>.var.<name>`, `<directory>.output.<name>` |
 | Ansible | Role | The role's name | `roles/<role>`; a playbook's is its directory | `<role>.<name>` |
+
+A Terraform symbol's ID holds the name the module uses for it (`var.region`, `output.region`), so that a `variable` and an `output` of the same name stay apart.
 
 ## Imports
 
@@ -73,6 +77,7 @@ files:
 
 - An Ansible role name using `{{ }}` has a destination decided only at run time, so it is an import whose destination is unknown (`Import.Unknown`), for `unknown/import`
 - A Terraform `source` cannot hold an expression, so no import has an unknown destination
+- A `required_providers` import performs input and output (`IO`): a module reaches outside through its providers. A `module` import does only when it is listed in `rules.tests.io`
 
 ## Symbols
 
@@ -94,6 +99,7 @@ Terraform's `variable` and `output` are a module's way in and way out. So both a
 | Ansible | Each Molecule scenario's `verify.yml` | `assert` (`ansible.builtin.assert`) tasks, and tasks with `failed_when` | The roles the same scenario's `converge.yml` uses | `pause` (`ansible.builtin.pause`) is `sleep` |
 
 - Neither has a way to skip a test
+- In Terraform, `variables`, `mock_provider` and the like written outside `run` blocks apply to every `run` of the file
 - A test's body fingerprint (`Test.Body`) is made from the block's or tasks' tokens, by the same rules as in the other languages
 
 ## Comments

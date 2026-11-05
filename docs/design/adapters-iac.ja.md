@@ -45,6 +45,8 @@ classDiagram
 | Terraform | `*.tf` | `*.tftest.hcl` | `*.tfvars`（値だけで、読むものが無い） |
 | Ansible | `roles/<ロール>/` の下の `tasks/`、`handlers/`、`defaults/`、`vars/`、`meta/` の `*.yml` と `*.yaml`。`playbooks/` の下と、ルートの `site.yml`、`playbook.yml` | `molecule/<シナリオ>/` の下の `*.yml`（ロールの下にあるものも含む） | なし |
 
+`files.tests` は Terraform のファイルに当てない。Go と同じく、テストかどうかは Terraform 自身が `*.tftest.hcl` という名前で決めるからだ。
+
 Ansible が YAML のファイルをすべて受け持たないのは、YAML が CI の設定や `.hadome.yml` のように、Ansible でないものにも使われるからだ。受け持つかどうかはほかの言語と同じくパスだけで決める。
 
 この配置から外れたプレイブック（ルートの `deploy.yml` など）は、`.hadome.yml` の `files.ansible` に glob で足す。
@@ -61,8 +63,10 @@ files:
 
 | 言語 | ユニット | ID | 場所 | シンボルの ID |
 |---|---|---|---|---|
-| Terraform | モジュール（ディレクトリ） | そのディレクトリ | そのディレクトリ | `<directory>.<name>` |
+| Terraform | モジュール（ディレクトリ） | そのディレクトリ | そのディレクトリ | `<directory>.var.<name>`、`<directory>.output.<name>` |
 | Ansible | ロール | ロールの名前 | `roles/<ロール>`。プレイブックはそのディレクトリ | `<role>.<name>` |
+
+Terraform のシンボルの ID には、モジュールの中での呼び方（`var.region`、`output.region`）を入れる。同じ名前の `variable` と `output` を区別するためだ。
 
 ## import
 
@@ -73,6 +77,7 @@ files:
 
 - Ansible のロールの名前に `{{ }}` を使ったものは、行き先が実行するまで決まらない import（`Import.Unknown`）として `unknown/import` に回す
 - Terraform の `source` には式を書けないので、行き先が決まらない import は無い
+- `required_providers` の import は入出力（`IO`）とする。モジュールはプロバイダを通して外に触れるからだ。`module` の import が入出力になるのは、`rules.tests.io` に挙げたときだけである
 
 ## シンボル
 
@@ -94,6 +99,7 @@ Terraform の `variable` と `output` はモジュールの入口と出口であ
 | Ansible | Molecule の各シナリオの `verify.yml` | `assert`（`ansible.builtin.assert`）のタスク、`failed_when` を付けたタスク | 同じシナリオの `converge.yml` が使うロール | `pause`（`ansible.builtin.pause`）を `sleep` とする |
 
 - どちらにもスキップの書き方は無い
+- Terraform で `run` の外に書いた `variables` と `mock_provider` などは、そのファイルのすべての `run` に効くものとして読む
 - テストの本体の指紋（`Test.Body`）はブロックかタスクの字句から、ほかの言語と同じ決まりで作る
 
 ## コメント

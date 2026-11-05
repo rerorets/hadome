@@ -14,11 +14,11 @@
 
 ## 手元で動かす
 
-GoとCコンパイラがあれば、6言語すべてを読むビルドになります。Cコンパイラが無いとGoだけを読むビルドになり、ほかの言語のファイルは「読めなかった」と報告します。
+GoとCコンパイラがあれば、7言語すべてを読むビルドになります。Cコンパイラが無いとGoとTerraformだけを読むビルドになり、ほかの言語のファイルは「読めなかった」と報告します。
 
 ```sh
-go test ./...                           # 6言語を読むビルド（cgo あり）
-CGO_ENABLED=0 go test ./...             # Go だけを読むビルド
+go test ./...                           # 7言語を読むビルド（cgo あり）
+CGO_ENABLED=0 go test ./...             # Go と Terraform だけを読むビルド
 go run ./cmd/hadome self-test           # 各ルールの自己テスト
 go run ./cmd/hadome check --format json # hadome で hadome 自身を検査する
 packaging/smoke.sh 0.0.0-local          # 全パッケージを作り、入れて動かす

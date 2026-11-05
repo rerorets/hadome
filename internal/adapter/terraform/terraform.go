@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -77,7 +78,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 			a.Tests = append(a.Tests, tests(p, src, body, lc)...)
 			continue
 		}
-		a.Imports = append(a.Imports, imports(p, body)...)
+		a.Imports = append(a.Imports, imports(p, body, c.IO)...)
 		if f.Role == facts.RoleSource {
 			a.Symbols = append(a.Symbols, symbols(p, body)...)
 		}
@@ -129,17 +130,20 @@ func literal(e hclsyntax.Expression) (string, bool) {
 	return v.AsString(), true
 }
 
-// imports lists the modules a file calls and the providers it requires.
-func imports(p string, body *hclsyntax.Body) []facts.Import {
+// imports lists the modules a file calls and the providers it requires. A provider is how a module
+// reaches outside, so its import performs input and output; a module's does when configuration lists
+// it in rules.tests.io.
+func imports(p string, body *hclsyntax.Body, io []string) []facts.Import {
 	dir := path.Dir(p)
 	var out []facts.Import
-	add := func(line int, source string) {
-		im := facts.Import{Path: p, Line: line, FromUnit: dir, Text: source}
+	add := func(line int, source string, provider bool) {
+		im := facts.Import{Path: p, Line: line, FromUnit: dir, Text: source, IO: provider}
 		if strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") {
 			im.ToUnit, im.Internal = path.Join(dir, source), true
 		} else {
 			im.ToUnit = external(source)
 		}
+		im.IO = im.IO || slices.ContainsFunc(io, func(e string) bool { return im.ToUnit == e || strings.HasPrefix(im.ToUnit, e+"/") })
 		out = append(out, im)
 	}
 	for _, b := range body.Blocks {
@@ -147,32 +151,43 @@ func imports(p string, body *hclsyntax.Body) []facts.Import {
 		case "module":
 			if attr, ok := b.Body.Attributes["source"]; ok {
 				if s, ok := literal(attr.Expr); ok {
-					add(attr.SrcRange.Start.Line, s)
+					add(attr.SrcRange.Start.Line, s, false)
 				}
 			}
 		case "terraform":
-			for _, rp := range b.Body.Blocks {
-				if rp.Type != "required_providers" {
-					continue
-				}
-				for _, attr := range sortedAttributes(rp.Body) {
-					obj, ok := attr.Expr.(*hclsyntax.ObjectConsExpr)
-					if !ok { // the old form, a version alone, names no source
-						continue
-					}
-					for _, item := range obj.Items {
-						if hcl.ExprAsKeyword(item.KeyExpr) != "source" {
-							continue
-						}
-						if s, ok := literal(item.ValueExpr); ok {
-							add(item.ValueExpr.Range().Start.Line, s)
-						}
-					}
+			for _, src := range providerSources(b.Body) {
+				add(src.Range().Start.Line, mustLiteral(src), true)
+			}
+		}
+	}
+	return out
+}
+
+// providerSources returns the source of every provider a terraform block requires.
+func providerSources(body *hclsyntax.Body) []hclsyntax.Expression {
+	var out []hclsyntax.Expression
+	for _, rp := range body.Blocks {
+		if rp.Type != "required_providers" {
+			continue
+		}
+		for _, attr := range sortedAttributes(rp.Body) {
+			obj, ok := attr.Expr.(*hclsyntax.ObjectConsExpr)
+			if !ok { // the old form, a version alone, names no source
+				continue
+			}
+			for _, item := range obj.Items {
+				if _, ok := literal(item.ValueExpr); ok && hcl.ExprAsKeyword(item.KeyExpr) == "source" {
+					out = append(out, item.ValueExpr)
 				}
 			}
 		}
 	}
 	return out
+}
+
+func mustLiteral(e hclsyntax.Expression) string {
+	s, _ := literal(e)
+	return s
 }
 
 // external is the name of a module or provider outside the repository: the address as written,
