@@ -82,6 +82,9 @@ type Key struct {
 	Identity []string
 	// OmittedIsWidest means leaving the key out covers everything, so omitting it never loosens.
 	OmittedIsWidest bool
+	// OmittedIsOff means leaving the object out turns its feature off, so adding the object to a base
+	// that lacks it never loosens, whatever it holds.
+	OmittedIsOff bool
 }
 
 // SchemaVersions are the values of `schema:` this hadome reads. A version once accepted is never
@@ -275,7 +278,7 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 	}}
 
 // mutationKey configures hadome mutate. The test command is never guessed.
-var mutationKey = Key{Name: "mutation", Kind: KindObject,
+var mutationKey = Key{Name: "mutation", Kind: KindObject, OmittedIsOff: true,
 	Doc: "hadome mutate: breaks the functions a change touched, one small change at a time, and fails when no test notices. " +
 		"Removing it or weakening it needs review.",
 	Example: "mutation:\n  test: [go, test, ./...]",
