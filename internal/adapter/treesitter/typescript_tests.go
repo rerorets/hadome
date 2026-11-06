@@ -62,8 +62,6 @@ func (tf *tsFile) bind() {
 			if internal {
 				tf.bindImport(top, unit)
 			}
-		case "function_declaration":
-			tf.helpers[f.field(top, "name")] = top.ChildByFieldName("body")
 		case "expression_statement":
 			if call := top.NamedChild(0); call != nil && call.Kind() == "call_expression" {
 				if cat, ok := tf.t.calls[f.field(call, "function")]; ok && cat == facts.HazardMock {
@@ -175,6 +173,8 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 		}
 	case "call_expression":
 		w.call(n)
+	case "jsx_opening_element", "jsx_self_closing_element":
+		w.element(n)
 	case "identifier": // a name in a type is a type_identifier, never an identifier
 		if _, ok := w.tf.names[f.text(n)]; ok {
 			w.t.readName(n, tsUses)
@@ -274,8 +274,11 @@ func (tf *tsFile) dynamicImport(call *sitter.Node) string {
 	return ""
 }
 
-// bindLoaders finds the functions of the file, at any depth, whose body loads exactly one module of
-// the repository with import(): a helper that resets modules and loads a fresh copy is common.
+// bindLoaders finds the functions of the file, at any depth: declarations and functions held by a
+// const (const renderPage = () => render(<Page />)), which test files often declare inside a
+// describe block. Each is a helper a test may call; the first of a name wins. A function whose body
+// loads exactly one module of the repository with import() is also a loader of that module: a helper
+// that resets modules and loads a fresh copy is common.
 func (tf *tsFile) bindLoaders() {
 	f := tf.f
 	walk(f.root, func(n *sitter.Node) bool {
@@ -290,6 +293,9 @@ func (tf *tsFile) bindLoaders() {
 		}
 		if name == "" || body == nil {
 			return true
+		}
+		if _, seen := tf.helpers[name]; !seen {
+			tf.helpers[name] = body
 		}
 		units := map[string]bool{}
 		walk(body, func(x *sitter.Node) bool {
@@ -335,5 +341,27 @@ func (w *tsWalk) bindLoaded(n *sitter.Node) {
 				w.loaded[f.field(p, "value")] = unit + "." + f.field(p, "key")
 			}
 		}
+	}
+}
+
+// element records a JSX element of a component of the repository as a call: rendering <Page /> runs
+// Page. Lowercase names are HTML elements.
+func (w *tsWalk) element(n *sitter.Node) {
+	f := w.tf.f
+	name := n.ChildByFieldName("name")
+	if name == nil {
+		return
+	}
+	target := ""
+	switch name.Kind() {
+	case "identifier":
+		target = w.tf.names[f.text(name)]
+	case "member_expression":
+		if unit, ok := w.tf.spaces[f.field(name, "object")]; ok {
+			target = unit + "." + f.field(name, "property")
+		}
+	}
+	if target != "" {
+		w.t.call(target, nil)
 	}
 }
