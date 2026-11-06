@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"io/fs"
 	"path"
 	"regexp"
 	"strings"
@@ -18,10 +19,13 @@ import (
 // rust reads Rust. A unit is a module, named by its location: src/store for src/store.rs or
 // src/store/mod.rs, src for lib.rs and main.rs.
 type rust struct {
-	modules map[string]bool     // module locations
-	crates  map[string]bool     // directories holding a Cargo.toml
-	defs    map[string][]string // module location -> names of its top-level items, for use ...::*
-	scopes  map[string]int
+	modules map[string]bool // module locations
+	crates  map[string]bool // directories holding a Cargo.toml
+	// names are the crates' library names by directory: what code outside the library (tests/,
+	// benches/, examples/, a binary) calls it by, as in use acme::Store.
+	names  map[string]string
+	defs   map[string][]string // module location -> names of its top-level items, for use ...::*
+	scopes map[string]int
 	// automocks are the types mockall's #[automock] generates (MockStore for trait Store). The
 	// attribute sits on product code, so a test that uses one imports nothing that says mock.
 	automocks map[string]bool
@@ -52,11 +56,14 @@ var rustTestDir = regexp.MustCompile(`(^|/)(tests|benches)/`)
 
 func (r *rust) index(v engine.Version, files []*file) {
 	r.modules, r.crates, r.defs, r.scopes = map[string]bool{}, map[string]bool{}, map[string][]string{}, map[string]int{}
-	r.automocks = map[string]bool{}
+	r.automocks, r.names = map[string]bool{}, map[string]string{}
 	paths, _ := fsFiles(v)
 	for _, p := range paths {
 		if path.Base(p) == "Cargo.toml" {
 			r.crates[path.Dir(p)] = true
+			if data, err := fs.ReadFile(v.FS, p); err == nil {
+				r.names[path.Dir(p)] = cargoLibName(string(data))
+			}
 		}
 	}
 	for _, f := range files {
@@ -122,6 +129,8 @@ func (r *rust) resolve(from string, segs []string) (string, bool) {
 		for len(segs) > 1 && segs[1] == "super" {
 			loc, segs = path.Dir(loc), segs[1:]
 		}
+	case r.crateName(from):
+		loc = r.crateSrc(from)
 	default:
 		last := segs[len(segs)-1]
 		if len(segs) > 1 && (unicode.IsUpper(rune(last[0])) || last == "*") {
@@ -240,4 +249,45 @@ func rustDoc(f *file, n *sitter.Node) bool {
 		}
 	}
 	return false
+}
+
+// crateName returns the library name of the crate holding a file, or "" when it has none.
+func (r *rust) crateName(p string) string {
+	for d := path.Dir(p); ; d = path.Dir(d) {
+		if r.crates[d] {
+			return r.names[d]
+		}
+		if d == "." || d == "/" {
+			return ""
+		}
+	}
+}
+
+var (
+	tomlSection = regexp.MustCompile(`^\s*\[([^\]]+)\]`)
+	tomlName    = regexp.MustCompile(`^\s*name\s*=\s*"([^"]+)"`)
+)
+
+// cargoLibName reads a Cargo.toml's library name: [lib] name, or else [package] name with - read as
+// _, as Rust code spells it.
+func cargoLibName(toml string) string {
+	section, pkg, lib := "", "", ""
+	for _, line := range strings.Split(toml, "\n") {
+		if m := tomlSection.FindStringSubmatch(line); m != nil {
+			section = strings.TrimSpace(m[1])
+			continue
+		}
+		if m := tomlName.FindStringSubmatch(line); m != nil {
+			switch section {
+			case "package":
+				pkg = m[1]
+			case "lib":
+				lib = m[1]
+			}
+		}
+	}
+	if lib != "" {
+		pkg = lib
+	}
+	return strings.ReplaceAll(pkg, "-", "_")
 }

@@ -71,7 +71,7 @@ Every symbol ID ends in the unit's last path element and the name, so a configur
 |---|---|---|
 | TypeScript | The specifier starts with `.` or `/`, or matches a `compilerOptions.paths` alias of the root `tsconfig.json` | To a file by trying the path, then `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, then `/index.*`; the unit is its directory. Anything else is an external package, named by its first path element (two for `@scope/name`) |
 | Python | The module exists in the repository (as a directory or a `.py` file, from the root or from `src/`) | Relative imports from the file's package. The unit is the module's package. `from a import b` where `b` is a module binds the module |
-| Rust | The path starts with `crate`, `self` or `super` | To the longest prefix that is a module file; the rest names an item |
+| Rust | A path starting with `crate`, `self`, `super`, or the name of the file's crate (`[lib] name` in `Cargo.toml`, else `[package] name` with `-` read as `_`). The crate's name is how integration tests under `tests/` and binaries call the library | To the longest prefix that is a module file; the rest names an item |
 | Java, Kotlin | Some file of the repository declares the package | `import a.b.C` is the package `a.b`; `a.b.*` too |
 
 External imports keep their name as `ToUnit` and are checked against the `io` table.

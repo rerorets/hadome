@@ -167,7 +167,7 @@ var rustUses = useGrammar{
 func (w *rustWalk) product(name string) bool {
 	_, named := w.sc.names[name]
 	_, space := w.sc.spaces[name]
-	return named || space || name == "crate" || name == "super"
+	return named || space || name == "crate" || name == "super" || name == w.sc.r.crateName(w.sc.f.path)
 }
 
 // typeOf returns the type a value is built as: Store::new(...) or Store { .. } of a bound type.
@@ -274,11 +274,8 @@ func (w *rustWalk) scoped(p, name string) string {
 	if typ, ok := w.sc.names[p]; ok {
 		return typ + "." + name
 	}
-	segs := strings.Split(p, "::")
-	if segs[0] == "crate" || segs[0] == "self" || segs[0] == "super" {
-		if loc, internal := w.sc.r.resolve(w.sc.f.path, segs); internal {
-			return loc + "." + name
-		}
+	if loc, internal := w.sc.r.resolve(w.sc.f.path, strings.Split(p, "::")); internal {
+		return loc + "." + name
 	}
 	return ""
 }
