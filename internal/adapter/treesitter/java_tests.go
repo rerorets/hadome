@@ -28,6 +28,9 @@ type jvmFile struct {
 	// drivers are the names of the HTTP test clients the file imports, whose calls drive the
 	// application from outside.
 	drivers map[string]bool
+	// valueFields are the fields of the file's test classes whose initializer uses the product
+	// (private val query = QUERY.trim()): a test reading one reads the product's value.
+	valueFields map[string]bool
 	// assertPrefixes are what start the names of assertions in this language beyond the common ones.
 	assertPrefixes []string
 }
@@ -139,6 +142,11 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 				jf.mocks = append(jf.mocks, m)
 			} else {
 				jf.javaFieldTypes(m, fields)
+				for _, d := range named(m) {
+					if d.Kind() == "variable_declarator" {
+						jf.noteValueField(f.field(d, "name"), d.ChildByFieldName("value"))
+					}
+				}
 			}
 		case m.Kind() == "method_declaration":
 			methods = append(methods, m)
@@ -289,6 +297,8 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 	case "identifier": // a name in a type is a type_identifier, never an identifier
 		if _, ok := w.jf.names[f.text(n)]; ok {
 			w.t.readName(n, javaUses)
+		} else if w.readsValueField(n) {
+			w.t.test.Reads++
 		}
 	}
 	return true
@@ -344,4 +354,39 @@ var jvmDrivers = map[string][]string{
 	"io.restassured":                               {"given"},
 	"org.springframework.test.web.servlet":         {"perform"},
 	"org.springframework.test.web.reactive.server": {"exchange"},
+}
+
+// noteValueField records a field of a test class whose initializer names something of the product.
+func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
+	if name == "" || init == nil {
+		return
+	}
+	uses := false
+	walk(init, func(n *sitter.Node) bool {
+		uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
+		return !uses
+	})
+	if uses {
+		if jf.valueFields == nil {
+			jf.valueFields = map[string]bool{}
+		}
+		jf.valueFields[name] = true
+	}
+}
+
+// readsValueField reports whether an identifier in a test reads a value field of its class: not a
+// local of the same name, and not the member side of a.b.
+func (w *jvmWalk) readsValueField(n *sitter.Node) bool {
+	name := w.jf.f.text(n)
+	if !w.jf.valueFields[name] || w.locals[name] {
+		return false
+	}
+	// The member side of a.b names a's field, unless a is this.
+	switch p := n.Parent(); p.Kind() {
+	case "navigation_expression":
+		return !isField(p, "-", n) || w.jf.f.text(p.NamedChild(0)) == "this"
+	case "field_access":
+		return !isField(p, "field", n) || w.jf.f.field(p, "object") == "this"
+	}
+	return true
 }
