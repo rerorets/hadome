@@ -207,7 +207,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 | Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require` |
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
 | TypeScript | `expect(…)`, `assert` and `assert.…` |
-| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…` |
+| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like), Spring MockMvc's `andExpect` |
 | Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
 
 As with hazard categories, these are examples; each adapter holds the full table. In languages other than Go, a function whose name starts with `assert`, `expect` or `verify` counts too (`assertEquals`, `assert_called_once`, `expectValid`). A checking helper in another file cannot be read by the adapter, but its name says that it checks.
