@@ -21,6 +21,8 @@ func (w *walker) recordVars(as *ast.AssignStmt) {
 	}
 	if t := w.typeOf(as.Rhs[0]); t != "" {
 		w.vars[name.Name] = t
+	} else {
+		delete(w.vars, name.Name) // a local of the same name hides a package-level variable
 	}
 }
 
