@@ -204,7 +204,7 @@ base にある行き先の分からない import を持つユニットは、純�
 
 | 言語 | assert とみなすもの（例） |
 |---|---|
-| Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require` |
+| Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require`、testify の suite の確かめ（`s.Equal(…)`、`s.Require().…`） |
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
 | TypeScript | `expect(…)`、`assert` と `assert.…` |
 | Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など）、Spring MockMvc の `andExpect` |
@@ -284,7 +284,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
 | Ansible | 設定を読むのと同じ YAML のパーサ（`goccy/go-yaml`）。C への依存は無い |
 
-Go のテストは、同じファイルのパッケージの変数（`var shared = store.New()`、`var shared *store.Store`）も型で読む。
+Go のテストは、同じファイルのパッケージの変数（`var shared = store.New()`、`var shared *store.Store`）も型で読む。testify の suite では、`suite.Run(t, new(X))` を呼ぶテストが、`X` の `Setup…`・`BeforeTest`・`Test…` のメソッドをたどる。suite の構造体のフィールドは宣言した型で読む。
 
 言語をまたいで共有するトークナイザは持たない。どの言語も、その言語のパーサで読む。
 

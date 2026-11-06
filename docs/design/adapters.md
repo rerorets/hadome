@@ -204,7 +204,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 
 | Language | Counted as an assertion (examples) |
 |---|---|
-| Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require` |
+| Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require`, testify suite checks (`s.Equal(…)`, `s.Require().…`) |
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
 | TypeScript | `expect(…)`, `assert` and `assert.…` |
 | Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like), Spring MockMvc's `andExpect` |
@@ -284,7 +284,7 @@ What decides whether a fact can block is whether the adapter identified it, not 
 | Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
 | Ansible | The YAML parser that reads the configuration (`goccy/go-yaml`). No dependency on C |
 
-A Go test also reads its file's package-level variables by type (`var shared = store.New()`, `var shared *store.Store`).
+A Go test also reads its file's package-level variables by type (`var shared = store.New()`, `var shared *store.Store`). For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
 

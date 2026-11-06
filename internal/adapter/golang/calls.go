@@ -80,6 +80,9 @@ func (w *walker) call(c *ast.CallExpr) {
 }
 
 func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
+	if w.suiteCall(c, sel) {
+		return
+	}
 	x, ok := sel.X.(*ast.Ident)
 	if !ok {
 		// A method on the result of a call or literal, for example store.New().Len().
@@ -96,14 +99,7 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 		return
 	}
 	if w.tParams[x.Name] {
-		switch {
-		case name == "Skip" || name == "SkipNow" || name == "Skipf":
-			w.skip(c)
-		case failing[name]:
-			w.test.Asserts++
-		case name == "Run" && len(c.Args) == 2:
-			w.subtest(c.Args[1])
-		}
+		w.toolCall(c, name)
 		return
 	}
 	if t, ok := w.vars[x.Name]; ok && ast.IsExported(name) {
@@ -111,6 +107,18 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 		return
 	}
 	w.test.Unresolved++
+}
+
+// toolCall reads a call on the testing tool: t.Skip, t.Fatal and the like, or t.Run.
+func (w *walker) toolCall(c *ast.CallExpr, name string) {
+	switch {
+	case name == "Skip" || name == "SkipNow" || name == "Skipf":
+		w.skip(c)
+	case failing[name]:
+		w.test.Asserts++
+	case name == "Run" && len(c.Args) == 2:
+		w.subtest(c.Args[1])
+	}
 }
 
 // record counts one call site of a target, and the argument passed as its scope.
@@ -222,6 +230,8 @@ func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 	switch {
 	case w.tables.mocks[p]:
 		w.hazard(facts.HazardMock, c)
+	case p == suitePkg && name == "Run" && len(c.Args) == 2:
+		w.suite(c.Args[1])
 	case assertImports[p]:
 		if alwaysTrue(name, c) {
 			w.hazard(facts.HazardAlwaysTrue, c)

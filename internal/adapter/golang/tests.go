@@ -116,8 +116,11 @@ type walker struct {
 	// that neither is taken for a read of a product value.
 	callees map[ast.Expr]bool
 	fields  map[*ast.Ident]bool
-	// file is the test's file, whose package-level variables the walker reads.
+	// file is the test's file, whose package-level variables and suite types the walker reads.
 	file *ast.File
+	// recv is the receiver of the suite method being walked ("s" in func (s *StoreSuite) TestAdd()),
+	// and suiteType its type's name. Calls on the receiver are the suite's own or its assertions.
+	recv, suiteType string
 }
 
 type callCount struct {
