@@ -25,6 +25,9 @@ type jvmFile struct {
 	names   map[string]string // simple name -> target: a class ("a.b.Store") or a static import ("a.b.Store.create")
 	helpers map[string]*sitter.Node
 	mocks   []*sitter.Node
+	// drivers are the names of the HTTP test clients the file imports, whose calls drive the
+	// application from outside.
+	drivers map[string]bool
 	// assertPrefixes are what start the names of assertions in this language beyond the common ones.
 	assertPrefixes []string
 }
@@ -37,6 +40,16 @@ func (jf *jvmFile) bindClasses(imports func(visit func(name string, wildcard boo
 	imports(func(name string, wildcard bool, n *sitter.Node) {
 		if jf.t.isMock(name) {
 			jf.mocks = append(jf.mocks, n)
+		}
+		for prefix, calls := range jvmDrivers {
+			if strings.HasPrefix(name, prefix) {
+				if jf.drivers == nil {
+					jf.drivers = map[string]bool{}
+				}
+				for _, c := range calls {
+					jf.drivers[c] = true
+				}
+			}
 		}
 		pkg, class, internal := jf.j.resolve(name, wildcard)
 		switch {
@@ -196,6 +209,9 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	if obj != "" {
 		key = obj + "." + name
 	}
+	if w.jf.drivers[name] {
+		w.t.test.Drives = true
+	}
 	if !w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...) && jvmValidation(obj, name) {
 		w.t.test.Asserts++
 	}
@@ -320,4 +336,12 @@ func jvmValidation(obj, name string) bool {
 		return true
 	}
 	return restAssuredChecks[name] && strings.Contains(strings.Join(strings.Fields(obj), ""), "then()")
+}
+
+// jvmDrivers are the HTTP test clients, by the package a test file imports, and the calls with which
+// a test drives the application through them.
+var jvmDrivers = map[string][]string{
+	"io.restassured":                               {"given"},
+	"org.springframework.test.web.servlet":         {"perform"},
+	"org.springframework.test.web.reactive.server": {"exchange"},
 }

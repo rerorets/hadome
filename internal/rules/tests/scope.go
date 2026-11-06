@@ -61,7 +61,7 @@ func (targetUnknown) About() engine.About {
 func (r targetUnknown) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
 	for _, t := range in.Facts.Tests {
-		if len(t.Calls) == 0 && t.Unresolved > 0 && !t.Skip.Skipped {
+		if len(t.Calls) == 0 && t.Unresolved > 0 && !t.Drives && !t.Skip.Skipped {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name, Review: true,
 				Message: engine.T("could not identify what %s tests", t.Name),
