@@ -284,6 +284,8 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
 | Ansible | 設定を読むのと同じ YAML のパーサ（`goccy/go-yaml`）。C への依存は無い |
 
+Go のテストは、同じファイルのパッケージの変数（`var shared = store.New()`、`var shared *store.Store`）も型で読む。
+
 言語をまたいで共有するトークナイザは持たない。どの言語も、その言語のパーサで読む。
 
 全言語で完全なパーサを使うのは、利用者が得るもの（正確な関数の範囲、テストの境界、アノテーションと import、少ない `unknown`）を、hadome のビルドのしやすさより優先するためだ。そのために増える手間（tree-sitter のための C への依存、OS とアーキテクチャごとのビルド）は、利用者ではなくリリースの手順で引き受ける。[distribution.ja.md](distribution.ja.md) を参照。

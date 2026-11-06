@@ -116,6 +116,8 @@ type walker struct {
 	// that neither is taken for a read of a product value.
 	callees map[ast.Expr]bool
 	fields  map[*ast.Ident]bool
+	// file is the test's file, whose package-level variables the walker reads.
+	file *ast.File
 }
 
 type callCount struct {
@@ -136,11 +138,12 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 			samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
 			tParams: map[string]bool{}, vars: map[string]string{}, calls: map[string]*callCount{},
 			helpers: helpers, walking: map[string]bool{}, curPath: pf.path,
-			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{},
+			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
 			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
 				Body: body(fset, pf.src, fn)},
 		}
 		w.collectTParams(fn.Type, fn.Body)
+		w.packageVars()
 		ast.Inspect(fn.Body, w.visit)
 		w.test.Calls = w.callFacts()
 		out = append(out, w.test)

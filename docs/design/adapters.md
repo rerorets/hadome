@@ -284,6 +284,8 @@ What decides whether a fact can block is whether the adapter identified it, not 
 | Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
 | Ansible | The YAML parser that reads the configuration (`goccy/go-yaml`). No dependency on C |
 
+A Go test also reads its file's package-level variables by type (`var shared = store.New()`, `var shared *store.Store`).
+
 There is no tokenizer shared across languages. Each language is read with its own parser.
 
 Full parsers are used for every language because what users get (accurate function spans, test boundaries, annotations and imports, and few `unknown` facts) comes ahead of how easy hadome is to build. The extra work this brings (a C dependency for tree-sitter, and builds per operating system and architecture) is taken on by the release process, not by users. See [distribution.md](distribution.md).
