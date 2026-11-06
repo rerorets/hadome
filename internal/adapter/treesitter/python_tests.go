@@ -19,6 +19,8 @@ type pyFile struct {
 	spaces  map[string]string // local name of an imported module -> module path
 	helpers map[string]*sitter.Node
 	mocks   []*sitter.Node
+	// fixtures types the pytest fixtures of the file: name -> the class it returns or yields.
+	fixtures map[string]string
 }
 
 var (
@@ -33,8 +35,10 @@ func (r *python) tests(f *file, t *tables) []facts.Test {
 	if !f.test {
 		return nil
 	}
-	pf := &pyFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, helpers: map[string]*sitter.Node{}}
+	pf := &pyFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, helpers: map[string]*sitter.Node{},
+		fixtures: map[string]string{}}
 	pf.bind()
+	pf.bindSetup()
 	var out []facts.Test
 	for _, n := range named(f.root) {
 		def := definition(n)
@@ -111,7 +115,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 			t.hazard(facts.HazardMock, def.ChildByFieldName("parameters"))
 		}
 	}
-	w := &pyWalk{body: def.ChildByFieldName("body"), pf: pf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w := &pyWalk{body: def.ChildByFieldName("body"), pf: pf, t: t, vars: pf.given(def, class), locals: map[string]bool{}, walking: map[string]bool{}}
 	w.walk(w.body)
 	return t.done()
 }
@@ -172,6 +176,7 @@ func (w *pyWalk) visit(n *sitter.Node) bool {
 		left, right := n.ChildByFieldName("left"), n.ChildByFieldName("right")
 		if left != nil && left.Kind() == "identifier" {
 			w.locals[f.text(left)] = true
+			delete(w.vars, f.text(left)) // reassigning a fixture's name drops what the fixture gave
 			if right != nil && right.Kind() == "call" {
 				if target, ok := w.pf.names[f.field(right, "function")]; ok {
 					w.vars[f.text(left)] = target
