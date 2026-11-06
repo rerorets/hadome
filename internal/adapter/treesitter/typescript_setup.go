@@ -1,0 +1,198 @@
+//go:build cgo
+
+package treesitter
+
+import (
+	"strings"
+
+	sitter "github.com/tree-sitter/go-tree-sitter"
+)
+
+// What a TypeScript test file sets up outside its tests: helpers, modules loaded with import(),
+// variables of describe blocks, and HTTP test clients.
+
+// dynamicImport returns the unit a call loads when it is import() of a module of the repository,
+// named by a string.
+func (tf *tsFile) dynamicImport(call *sitter.Node) string {
+	if call == nil || call.Kind() != "call_expression" || tf.f.field(call, "function") != "import" {
+		return ""
+	}
+	args := arguments(call.ChildByFieldName("arguments"))
+	if len(args) != 1 || args[0].Kind() != "string" {
+		return ""
+	}
+	if unit, internal := tf.r.resolve(tf.f.path, unquote(tf.f.text(args[0]))); internal {
+		return unit
+	}
+	return ""
+}
+
+// bindLoaders finds the functions of the file, at any depth: declarations and functions held by a
+// const (const renderPage = () => render(<Page />)), which test files often declare inside a
+// describe block. Each is a helper a test may call; the first of a name wins. A function whose body
+// loads exactly one module of the repository with import() is also a loader of that module: a helper
+// that resets modules and loads a fresh copy is common.
+func (tf *tsFile) bindLoaders() {
+	f := tf.f
+	walk(f.root, func(n *sitter.Node) bool {
+		name, body := "", (*sitter.Node)(nil)
+		switch n.Kind() {
+		case "function_declaration":
+			name, body = f.field(n, "name"), n.ChildByFieldName("body")
+		case "variable_declarator":
+			if v := n.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
+				name, body = f.field(n, "name"), v.ChildByFieldName("body")
+			} else if v != nil && v.Kind() == "object" {
+				tf.objectHelpers(f.field(n, "name"), v)
+			}
+		}
+		if name == "" || body == nil {
+			return true
+		}
+		if _, seen := tf.helpers[name]; !seen {
+			tf.helpers[name] = body
+		}
+		tf.loaderOf(name, body)
+		return true
+	})
+}
+
+// loaderOf records a function as a loader of the one module of the repository its body loads with
+// import(), if it loads exactly one.
+func (tf *tsFile) loaderOf(name string, body *sitter.Node) {
+	units := map[string]bool{}
+	walk(body, func(x *sitter.Node) bool {
+		if u := tf.dynamicImport(x); u != "" {
+			units[u] = true
+		}
+		return true
+	})
+	if len(units) == 1 {
+		for u := range units {
+			tf.loaders[name] = u
+		}
+	}
+}
+
+// bindLoaded records the names a declaration takes from a module loaded with import(), directly or
+// through a loader: const { send } = await import('./mail'), or const mail = await fresh().
+func (w *tsWalk) bindLoaded(n *sitter.Node) {
+	f := w.tf.f
+	v := n.ChildByFieldName("value")
+	if v != nil && v.Kind() == "await_expression" {
+		v = v.NamedChild(0)
+	}
+	unit := w.tf.dynamicImport(v)
+	if unit == "" && v != nil && v.Kind() == "call_expression" {
+		unit = w.tf.loaders[f.field(v, "function")]
+	}
+	if unit == "" {
+		return
+	}
+	pattern := n.ChildByFieldName("name")
+	switch pattern.Kind() {
+	case "identifier":
+		w.modules[f.text(pattern)] = unit
+	case "object_pattern":
+		for _, p := range named(pattern) {
+			switch p.Kind() {
+			case "shorthand_property_identifier_pattern":
+				w.loaded[f.text(p)] = unit + "." + f.text(p)
+			case "pair_pattern":
+				w.loaded[f.field(p, "value")] = unit + "." + f.field(p, "key")
+			}
+		}
+	}
+}
+
+// bindDriver records the names an import of an HTTP test client binds: import request from
+// 'supertest', or import * as request from 'supertest'.
+func (tf *tsFile) bindDriver(n *sitter.Node) {
+	if tf.drivers == nil {
+		tf.drivers = map[string]bool{}
+	}
+	walk(n, func(x *sitter.Node) bool {
+		switch x.Kind() {
+		case "import_clause":
+			if first := x.NamedChild(0); first != nil && first.Kind() == "identifier" {
+				tf.drivers[tf.f.text(first)] = true
+			}
+		case "namespace_import":
+			for _, id := range named(x) {
+				tf.drivers[tf.f.text(id)] = true
+			}
+		}
+		return true
+	})
+}
+
+// objectHelpers records the functions an object of the file holds, as helpers named obj.key:
+// const helpers = { twice: (n) => double(n), build() { return new Store() } }.
+func (tf *tsFile) objectHelpers(obj string, o *sitter.Node) {
+	f := tf.f
+	for _, m := range named(o) {
+		key, body := "", (*sitter.Node)(nil)
+		switch m.Kind() {
+		case "pair":
+			if v := m.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
+				key, body = f.field(m, "key"), v.ChildByFieldName("body")
+			}
+		case "method_definition":
+			key, body = f.field(m, "name"), m.ChildByFieldName("body")
+		}
+		if _, seen := tf.helpers[obj+"."+key]; key != "" && body != nil && !seen {
+			tf.helpers[obj+"."+key] = body
+		}
+	}
+}
+
+// bindOuter types the variables declared outside the tests: let store: Store, let store = new
+// Store(), or store = new Store() in a beforeEach. A test that calls store.add() calls Store.add.
+func (tf *tsFile) bindOuter() {
+	f := tf.f
+	note := func(name, class string) {
+		if name == "" || class == "" {
+			return
+		}
+		if had, ok := tf.outer[name]; ok && had != class {
+			class = ""
+		}
+		tf.outer[name] = class
+	}
+	walk(f.root, func(n *sitter.Node) bool {
+		switch n.Kind() {
+		case "variable_declarator":
+			name := f.field(n, "name")
+			if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
+				note(name, tf.names[f.field(v, "constructor")])
+			} else if typ := n.ChildByFieldName("type"); typ != nil {
+				note(name, tf.names[tsTypeName(f.text(typ))])
+			}
+		case "assignment_expression":
+			if r := n.ChildByFieldName("right"); r != nil && r.Kind() == "new_expression" {
+				note(f.field(n, "left"), tf.names[f.field(r, "constructor")])
+			}
+		}
+		return true
+	})
+}
+
+// outerVars is a test's own copy of the typed outer variables.
+func (tf *tsFile) outerVars() map[string]string {
+	out := map[string]string{}
+	for name, class := range tf.outer {
+		if class != "" {
+			out[name] = class
+		}
+	}
+	return out
+}
+
+// tsTypeName is the class a type annotation names: ": Store | undefined" -> Store.
+func tsTypeName(t string) string {
+	t = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), ":"))
+	if i := strings.IndexAny(t, "|<[&"); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSpace(t)
+}

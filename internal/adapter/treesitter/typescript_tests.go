@@ -22,7 +22,10 @@ type tsFile struct {
 	// loaders are the functions of the file that load one module of the repository with import():
 	// function name -> unit. A test that takes names from what they return calls that module.
 	loaders map[string]string
-	mocks   []*sitter.Node // file-level evidence that the file mocks
+	// outer types the variables declared outside the tests (in a describe block, set in beforeEach):
+	// name -> class, by the class they are built with or declared as. A name given two classes is "".
+	outer map[string]string
+	mocks []*sitter.Node // file-level evidence that the file mocks
 	// drivers are the local names of the HTTP test clients the file imports (supertest's request),
 	// whose calls drive the application from outside.
 	drivers  map[string]bool
@@ -41,9 +44,10 @@ func (r *typescript) tests(f *file, t *tables) []facts.Test {
 		return nil
 	}
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{},
-		helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{}}
+		helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{}, outer: map[string]string{}}
 	tf.bind()
 	tf.bindLoaders()
+	tf.bindOuter()
 	var out []facts.Test
 	tf.suite(f.root, "", false, &out)
 	return out
@@ -136,7 +140,7 @@ func (tf *tsFile) test(name string, at, fn *sitter.Node, skipped bool) facts.Tes
 	for _, m := range tf.mocks {
 		t.hazard(facts.HazardMock, m)
 	}
-	w := &tsWalk{tf: tf, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{},
+	w := &tsWalk{tf: tf, t: t, vars: tf.outerVars(), locals: map[string]bool{}, walking: map[string]bool{},
 		loaded: map[string]string{}, modules: map[string]string{}}
 	w.walk(fn.ChildByFieldName("body"))
 	return t.done()
@@ -165,6 +169,7 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 	case "variable_declarator":
 		name := f.field(n, "name")
 		w.locals[name] = true
+		delete(w.vars, name) // a local shadows a variable of the same name outside the test
 		w.bindLoaded(n)
 		if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
 			if target, ok := w.tf.names[f.field(v, "constructor")]; ok {
@@ -220,10 +225,8 @@ func (w *tsWalk) call(n *sitter.Node) {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		} else if target, ok := w.tf.names[callee]; ok {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
-		} else if body, ok := w.tf.helpers[callee]; ok && !w.walking[callee] {
-			w.walking[callee] = true
-			w.walk(body)
-			delete(w.walking, callee)
+		} else {
+			w.follow(callee)
 		}
 	case "member_expression":
 		if target := w.memberTarget(f.field(fn, "object"), f.field(fn, "property")); target != "" {
@@ -232,13 +235,18 @@ func (w *tsWalk) call(n *sitter.Node) {
 	}
 }
 
-// memberTarget names what obj.prop() calls: a function of a module or a method of a class. A
-// method of a local value of unknown type counts as unresolved.
+// memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
+// it follows a function an object of the file holds, and a method of a local value of unknown type
+// counts as unresolved.
 func (w *tsWalk) memberTarget(obj, prop string) string {
+	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
 	for _, owners := range []map[string]string{w.tf.spaces, w.modules, w.vars, w.tf.names} {
 		if owner, ok := owners[obj]; ok {
 			return owner + "." + prop
 		}
+	}
+	if w.follow(obj + "." + prop) { // a function an object of the file holds
+		return ""
 	}
 	if w.locals[obj] {
 		w.t.test.Unresolved++
@@ -268,92 +276,6 @@ func (w *tsWalk) alwaysTrue(fn *sitter.Node, args []*sitter.Node) bool {
 	return len(actual) == 1 && sameValue(f, actual[0], args[0])
 }
 
-// dynamicImport returns the unit a call loads when it is import() of a module of the repository,
-// named by a string.
-func (tf *tsFile) dynamicImport(call *sitter.Node) string {
-	if call == nil || call.Kind() != "call_expression" || tf.f.field(call, "function") != "import" {
-		return ""
-	}
-	args := arguments(call.ChildByFieldName("arguments"))
-	if len(args) != 1 || args[0].Kind() != "string" {
-		return ""
-	}
-	if unit, internal := tf.r.resolve(tf.f.path, unquote(tf.f.text(args[0]))); internal {
-		return unit
-	}
-	return ""
-}
-
-// bindLoaders finds the functions of the file, at any depth: declarations and functions held by a
-// const (const renderPage = () => render(<Page />)), which test files often declare inside a
-// describe block. Each is a helper a test may call; the first of a name wins. A function whose body
-// loads exactly one module of the repository with import() is also a loader of that module: a helper
-// that resets modules and loads a fresh copy is common.
-func (tf *tsFile) bindLoaders() {
-	f := tf.f
-	walk(f.root, func(n *sitter.Node) bool {
-		name, body := "", (*sitter.Node)(nil)
-		switch n.Kind() {
-		case "function_declaration":
-			name, body = f.field(n, "name"), n.ChildByFieldName("body")
-		case "variable_declarator":
-			if v := n.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
-				name, body = f.field(n, "name"), v.ChildByFieldName("body")
-			}
-		}
-		if name == "" || body == nil {
-			return true
-		}
-		if _, seen := tf.helpers[name]; !seen {
-			tf.helpers[name] = body
-		}
-		units := map[string]bool{}
-		walk(body, func(x *sitter.Node) bool {
-			if u := tf.dynamicImport(x); u != "" {
-				units[u] = true
-			}
-			return true
-		})
-		if len(units) == 1 {
-			for u := range units {
-				tf.loaders[name] = u
-			}
-		}
-		return true
-	})
-}
-
-// bindLoaded records the names a declaration takes from a module loaded with import(), directly or
-// through a loader: const { send } = await import('./mail'), or const mail = await fresh().
-func (w *tsWalk) bindLoaded(n *sitter.Node) {
-	f := w.tf.f
-	v := n.ChildByFieldName("value")
-	if v != nil && v.Kind() == "await_expression" {
-		v = v.NamedChild(0)
-	}
-	unit := w.tf.dynamicImport(v)
-	if unit == "" && v != nil && v.Kind() == "call_expression" {
-		unit = w.tf.loaders[f.field(v, "function")]
-	}
-	if unit == "" {
-		return
-	}
-	pattern := n.ChildByFieldName("name")
-	switch pattern.Kind() {
-	case "identifier":
-		w.modules[f.text(pattern)] = unit
-	case "object_pattern":
-		for _, p := range named(pattern) {
-			switch p.Kind() {
-			case "shorthand_property_identifier_pattern":
-				w.loaded[f.text(p)] = unit + "." + f.text(p)
-			case "pair_pattern":
-				w.loaded[f.field(p, "value")] = unit + "." + f.field(p, "key")
-			}
-		}
-	}
-}
-
 // element records a JSX element of a component of the repository as a call: rendering <Page /> runs
 // Page. Lowercase names are HTML elements.
 func (w *tsWalk) element(n *sitter.Node) {
@@ -376,23 +298,17 @@ func (w *tsWalk) element(n *sitter.Node) {
 	}
 }
 
-// bindDriver records the names an import of an HTTP test client binds: import request from
-// 'supertest', or import * as request from 'supertest'.
-func (tf *tsFile) bindDriver(n *sitter.Node) {
-	if tf.drivers == nil {
-		tf.drivers = map[string]bool{}
+// follow walks a helper of the file the test calls, once per chain of calls, and reports whether
+// there was one.
+func (w *tsWalk) follow(name string) bool {
+	body, ok := w.tf.helpers[name]
+	if !ok {
+		return false
 	}
-	walk(n, func(x *sitter.Node) bool {
-		switch x.Kind() {
-		case "import_clause":
-			if first := x.NamedChild(0); first != nil && first.Kind() == "identifier" {
-				tf.drivers[tf.f.text(first)] = true
-			}
-		case "namespace_import":
-			for _, id := range named(x) {
-				tf.drivers[tf.f.text(id)] = true
-			}
-		}
-		return true
-	})
+	if !w.walking[name] {
+		w.walking[name] = true
+		w.walk(body)
+		delete(w.walking, name)
+	}
+	return true
 }
