@@ -67,7 +67,7 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 	}
 	var tests []*sitter.Node
 	fields := jf.ktConstructorFields(n)
-	for _, m := range ktMembers(n) {
+	for _, m := range ktClassMembers(n) {
 		switch m.Kind() {
 		case "property_declaration":
 			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
@@ -311,4 +311,18 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
 			jf.noteValueField(name, c)
 		}
 	}
+}
+
+// ktClassMembers lists a class's members with those of its companion object, whose properties and
+// functions the class's tests use by their bare names.
+func ktClassMembers(n *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	for _, m := range ktMembers(n) {
+		if m.Kind() == "companion_object" {
+			out = append(out, ktMembers(m)...)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
