@@ -62,7 +62,8 @@ echo "== gradle"
 mkdir "$work/gproj" && cd "$work/gproj"
 printf 'pluginManagement { includeBuild("%s") }\nrootProject.name = "sample"\n' "$root/packaging/jvm/gradle-plugin" > settings.gradle.kts
 printf 'plugins { id("io.github.rerorets.hadome") }\n' > build.gradle.kts
-out=$(gradle -q -g "$work/gh" -PhadomeVersion="$v" -Dhadome.downloadBaseUrl="file://$work/rel" hadomeCheck --args=version)
+# --no-daemon: a daemon left running keeps writing under $work/gh, and the cleanup's rm -rf fails.
+out=$(gradle -q --no-daemon -g "$work/gh" -PhadomeVersion="$v" -Dhadome.downloadBaseUrl="file://$work/rel" hadomeCheck --args=version)
 [ "$out" = "hadome $v" ] || { echo "FAIL: gradle hadomeCheck printed '$out'" >&2; exit 1; }
 
 echo "== maven"
