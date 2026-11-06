@@ -75,6 +75,7 @@ classDiagram
     +Calls []Call
     +Unresolved int
     +Reads int
+    +Drives bool
     +Asserts int
     +AssertsUnknown bool
     +Body string
@@ -102,7 +103,7 @@ classDiagram
     <<interface>>
     +Name() string
     +Claims(path) bool
-    +Analyze(v Version, c Config, paths []string) Analysis
+    +Analyze(v Version, c Config, paths []string) (*Analysis, error)
   }
   Analysis --> File
   Analysis --> Comment

@@ -1,6 +1,9 @@
 # 依存
 
-hadome のどのユニットがどれを import してよいか。この図が正であり、hadome は自分自身をこれと照らして検査する（[.hadome.yml](../../.hadome.yml) の `rules.deps.diagram`）。図に描かれていない import は落ち、新しい矢印を描くには人の確認が要る。
+hadome のどのユニットが、どのユニットを import してよいかを決めた図です。hadome は自分自身の import を、この図を正として検査します。この図を指す設定は、[.hadome.yml](../../.hadome.yml) の `rules.deps.diagram` です。
+
+- 図に描かれていない import があると、チェックが落ちます。
+- 新しい矢印を描くには、人の確認が要ります。
 
 ```mermaid
 flowchart TB
@@ -20,9 +23,9 @@ flowchart TB
   packaging["packaging/..."]
 ```
 
-- `facts`、`config`、`walk`、`messages` は hadome のものを何も import しない。他のすべてはこれらの上に作る
-- エンジンは言語もルールもプロセスも知らない。アダプタ、ルール、門番がエンジンに依存し、逆はない
-- ルールはアダプタを import しない。ルールが見るのは事実だけで、だからどのルールもどの言語でも動く
-- 部品を組み合わせるのは `cmd/hadome` だけ
-- `notices` を使うのは、`THIRD_PARTY_NOTICES` を作って確かめるテストだけである。`notices` は hadome のものを何も import せず、ほかのユニットからも import されない
-- `packaging/` は配布物である。Go のコードを何も import せず、そのユニット（インストーラとプラグイン）は1つの箱にまとめる
+- `facts`、`config`、`walk`、`messages` は、hadome のものを何も import しません。ほかのユニットはすべて、これらの上に作ります。
+- エンジンは言語もルールもプロセスも知りません。アダプタ・ルール・門番がエンジンに依存し、エンジンからそれらへの依存はありません。
+- ルールはアダプタを import しません。ルールが見るのは事実だけです。そのため、どのルールもどの言語でも動きます。
+- 部品を組み合わせるのは `cmd/hadome` だけです。
+- `notices` を使うのは、`THIRD_PARTY_NOTICES` を作って確かめるテストだけです。`notices` は hadome のものを何も import せず、ほかのユニットからも import されません。
+- `packaging/` は配布物です。Go のコードを何も import しません。`packaging/` のユニット（インストーラとプラグイン）は、図では1つの箱にまとめます。

@@ -46,7 +46,7 @@ cd path/to/your-repo
 
 ### 1. 入れる
 
-使っている言語のものを選びます。どれも版を固定して入れます（[配布の設計](docs/design/distribution.ja.md)）。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。
+使っている言語のものを選びます。どれもバージョンを固定して入れます。詳しくは[配布の設計](docs/design/distribution.ja.md)にあります。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。
 
 以降は`hadome …`と書きます。`npx hadome …`や`go tool hadome …`など、入れた方法の呼び方に読み替えてください。
 
@@ -63,7 +63,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.4.1                   # pip なら pip install hadome==0.4.1
+uv add --dev hadome==0.4.2                   # pip なら pip install hadome==0.4.2
 uv run hadome check
 ```
 
@@ -76,7 +76,7 @@ go tool hadome check
 
 ソースからビルドします。Cコンパイラがあれば8言語を読み、無ければGo・Terraform・Ansibleだけを読みます。
 
-`go get -tool`は、hadomeの依存を製品の`go.mod`に足します。Goはモジュール全体で依存の版を1つに選ぶので、製品の依存の版がhadomeに合わせて上がることがあります。避けたいときは、道具用の`go.mod`を分けます。この形では、呼ぶたびに`-modfile=tools.mod`を付け、`go.mod`と同じく`tools.mod`と`tools.sum`もコミットします。
+`go get -tool`は、hadomeの依存を製品の`go.mod`に足します。Goはモジュール全体で依存のバージョンを1つに選ぶので、製品の依存のバージョンがhadomeに合わせて上がることがあります。避けたいときは、道具用の`go.mod`を分けます。この形では呼ぶたびに`-modfile=tools.mod`を付けます。`go.mod`と同じく、`tools.mod`と`tools.sum`もコミットします。
 
 ```sh
 cp go.mod tools.mod
@@ -88,7 +88,7 @@ go tool -modfile=tools.mod hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.4.1" }
+plugins { id("io.github.rerorets.hadome") version "0.4.2" }
 ```
 
 `./gradlew hadomeCheck`で動かします。
@@ -100,7 +100,7 @@ plugins { id("io.github.rerorets.hadome") version "0.4.1" }
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.4.1</version>
+  <version>0.4.2</version>
 </plugin>
 ```
 
@@ -109,7 +109,7 @@ plugins { id("io.github.rerorets.hadome") version "0.4.1" }
 #### Rust
 
 ```sh
-cargo binstall hadome@0.4.1
+cargo binstall hadome@0.4.2
 hadome check
 ```
 
@@ -124,7 +124,7 @@ hadome check
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
-Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.1_windows_amd64.zip -OutFile hadome.zip
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.2_windows_amd64.zip -OutFile hadome.zip
 Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$HOME\hadome", "User")
 # open a new terminal, then:
@@ -133,8 +133,8 @@ hadome version
 
 ```sh
 # macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
-curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.1_linux_amd64.tar.gz
-tar -xzf hadome_0.4.1_linux_amd64.tar.gz
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.2_linux_amd64.tar.gz
+tar -xzf hadome_0.4.2_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```
@@ -197,13 +197,18 @@ $ hadome check --base main
 3 regression(s). 0 existing finding(s) unchanged (not blocking).
 ```
 
-出力は既定で英語です。`--lang ja`を付けると日本語で出ます。日本語になるのは、見つけたものの文言（`message`・`why`・`fix`）、`hadome explain <ルール>`の説明、最後のまとめの行です。JSONの鍵、ルールのID、終了コードは変わりません。毎回付けずに日本語にする設定は、下の「設定と例外」にあります。
+出力は既定で英語です。`--lang ja`を付けると日本語で出ます。
+
+- 日本語になるもの: 違反の文言（`message`・`why`・`fix`）、`hadome explain <ルール>`の説明、最後のまとめの行
+- 変わらないもの: JSONのキー、ルールのID、終了コード
+
+毎回付けずに日本語にする設定は、下の「設定と例外」にあります。
 
 ## 検査するもの
 
 | 分類 | ルール |
 |---|---|
-| `tests/` | `scope-shrunk`（テストが守る範囲の縮小）・`invariant-unguarded`・`no-clock`・`no-sleep`・`always-true`・`skip-without-reason`・`no-mock`（純粋なコードのテストのモック）・`guards-nothing`（本体を呼ばないテスト）・`no-assertion`（assert の無いテスト）・`duplicate`（本体が同じテスト）・`purity-lost`と`target-unknown`（確認待ち） |
+| `tests/` | `scope-shrunk`（テストが守る範囲の縮小）・`invariant-unguarded`・`no-clock`・`no-sleep`・`always-true`・`skip-without-reason`・`no-mock`（純粋なコードのテストのモック）・`guards-nothing`（製品のコードを呼ばないテスト）・`no-assertion`（assert の無いテスト）・`duplicate`（本体が同じテスト）・`purity-lost`と`target-unknown`（確認待ち） |
 | `deps/` | `not-in-diagram`（依存の図に無いimport）・`diagram-stale`（何も指さない箱） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
@@ -215,7 +220,10 @@ $ hadome check --base main
 
 ## 後退と整理
 
-テストが3本減ったとき、それが整理なのか後退なのかは、本数だけでは分かりません。hadomeは、テストが呼んでいる関数やメソッド（対象）を割り出し、有効なテストが届く対象の集合を「守っている範囲」として比べます。
+hadomeはテストの本数ではなく「守っている範囲」を比べて、整理と後退を見分けます。テストが3本減っても、それが整理なのか後退なのかは、本数だけでは分かりません。
+
+- **対象**: テストが呼んでいる関数やメソッド。hadomeが割り出します
+- **守っている範囲**: 有効なテストが届く対象の集合
 
 | やったこと | 本数 | 守っている範囲 | 判定 |
 |---|---|---|---|
@@ -225,7 +233,7 @@ $ hadome check --base main
 
 要らなくなった振る舞いは、テストだけでなくコードごと消すと、整理として通ります。
 
-テストを3つの段（不変条件・記載ルール・門番）で考える背景は、[考え方](docs/model.ja.md)にあります。
+テストを3つの段（不変条件・記載ルール・チェック）で考える背景は、[考え方](docs/model.ja.md)にあります。
 
 ## 使う場面と終了コード
 
@@ -240,18 +248,18 @@ $ hadome check --base main
 |---|---|
 | `0` | 後退なし |
 | `1` | 後退が1つ以上ある |
-| `2` | 設定の誤り。検査を信じられないので通さない |
+| `2` | 設定の誤り。チェックの結果を信じられないので通さない |
 | `3` | 後退は無いが、人の確認が要るもの（新しい例外、ルールを緩める設定など）がある |
 
 hadomeはリポジトリを読むだけで、GitHubなどのサービスとは通信しません。要約をコメントに貼るなら、CIの側で貼ります。GitHub Actions の例は[CI で使う](docs/ci.ja.md)にあります。
 
 ## 設定と例外
 
-設定は`.hadome.yml`に書きます。上限の数字、依存の図、不変条件などです。ファイルが無くても動きます。
+設定は`.hadome.yml`に書きます。例: 上限の数字、依存の図、不変条件。ファイルが無くても動きます。
 
 `hadome init`で最小の`.hadome.yml`を作れます。すでにあるファイルは上書きしません。出力をいつも日本語にするなら、そこに`messages: ja`を書きます。`--lang`を付けたときは、`--lang`を優先します。
 
-設定を変えたり、不変条件を提案したりするのはエージェントの役目です。エージェントは`hadome explain <キー>`で仕様を読みます（[エージェント向けの手引き](docs/for-agents.ja.md)）。人は提案を採るかどうかと、ルールを緩める変更を認めるかどうかを決めます。緩める変更には、終了コード`3`で人の確認が入ります。
+設定を変えたり、不変条件を提案したりするのはエージェントの役目です。エージェントは`hadome explain <キー>`で仕様を読みます。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。人は提案を採るかどうかと、ルールを緩める変更を認めるかどうかを決めます。緩める変更には、終了コード`3`で人の確認が入ります。
 
 ### 例外の書き方
 
@@ -262,7 +270,7 @@ hadomeはリポジトリを読むだけで、GitHubなどのサービスとは�
 time.Sleep(50 * time.Millisecond)
 ```
 
-### 自分のプロダクトだけのルール
+### 自分の製品だけのルール
 
 「ログの置き場にUPDATEを書かない」のようなルールは、自分のリポジトリに小さなプログラムとして書きます。言語は問いません。hadomeはそれを組み込みのルールと同じように扱い、後退だけを報告し、理由つきの例外も効かせます。書き方は[製品固有の門番](docs/external-gates.ja.md)にあります。
 
@@ -281,9 +289,9 @@ mutation:
 
 歯止めはラチェットの爪（英語でpawl）のことです。歯車を一方向にだけ回し、逆には戻さない部品です。hadomeもmainより悪くなる向きの変更だけを止めます。
 
-## 版と不具合の報告
+## バージョンと不具合の報告
 
-0.xの間は、版の間で挙動が変わることがあります（[版の付け方](CONTRIBUTING.ja.md#版の付け方)）。不具合や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。
+0.xの間は、バージョンが変わると挙動が変わることがあります。詳しくは[バージョンの付け方](CONTRIBUTING.ja.md#バージョンの付け方)にあります。不具合や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。
 
 ## ライセンス
 

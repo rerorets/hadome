@@ -127,7 +127,7 @@ Exception markers (`gate:allow`) are written in comments in both.
 | `deps/` | Module dependencies; which modules may use a provider can be limited | Role dependencies |
 | `comments/` | `variable` and `output` without a `description` | Variables without a description in `argument_specs` |
 | `size/` | File lines | File lines |
-| `tests/` | The number of `run` blocks and asserts; too much `mock_provider` | A `verify.yml` without asserts; a role that lost its only scenario; a scenario that uses no role of the repository; `pause` |
+| `tests/` | The number of `run` blocks and asserts; `mock_provider` and `override_*` are mocks to `tests/no-mock` | A `verify.yml` without asserts; a role that lost its only scenario (`tests/scope-shrunk`); a scenario that uses no role of the repository (`tests/guards-nothing`); `pause` |
 | `unknown/` | Files that could not be read | Files that could not be read; roles with an unknown destination |
 | `hadome mutate` | Breaks nothing, since there are no functions | The same |
 

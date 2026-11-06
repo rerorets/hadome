@@ -2,14 +2,16 @@
 
 不具合の報告や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。コードや文書の変更はプルリクエストで送ってください。
 
-## 文書の地図
+## 文書の一覧
+
+読み手ごとの文書は次のとおりです。
 
 | 読み手 | 文書 |
 |---|---|
 | hadomeを使う人 | [README](README.ja.md)、[テストを信じるための3つの段](docs/model.ja.md)、[製品固有の門番](docs/external-gates.ja.md) |
-| 利用者のリポジトリで動くエージェント | [エージェント向けの手引き](docs/for-agents.ja.md)。`hadome agents`が書き込むブロックの本体は`cmd/hadome/agents.ja.md` |
+| 利用者のリポジトリで動くエージェント | [エージェント向けの手引き](docs/for-agents.ja.md)。`hadome agents`が書き込むブロックの中身は`cmd/hadome/agents.ja.md` |
 | hadomeを作る人 | この文書、[設計書](docs/design)、[依存の図](docs/design/dependencies.ja.md) |
-| メンテナ | [公開の手順](docs/maintaining/releasing.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
+| メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
 | 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md) |
 
 ## 手元で動かす
@@ -24,7 +26,7 @@ go run ./cmd/hadome check --format json # hadome で hadome 自身を検査す�
 packaging/smoke.sh 0.0.0-local          # 全パッケージを作り、入れて動かす
 ```
 
-CIはプルリクエストごとに、上の4つをLinux・macOS・Windowsで、最後の1つをLinuxで動かします。
+CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の3つはLinux・macOS・Windowsで、`hadome check`と`packaging/smoke.sh`はLinuxで動かします。
 
 ### フック
 
@@ -47,20 +49,22 @@ git config core.hooksPath .githooks
 ## レビュー
 
 - プルリクエストは、メンテナが確かめてマージします。
-- マージできるのは、CIの4つのチェック（3つのOSでのテストと、パッケージの確認）が通ったものだけです。
+- マージできるのは、CIの4つのチェックが通ったものだけです。4つのチェックは3つのOSでのテストと、パッケージの確認です。
 - メンテナは1人なので、返事に数日かかることがあります。
 
 ## 書き方
 
 - コード・コメント・コミットメッセージは英語で書きます。
-- 文書は日本語の`foo.ja.md`と英語の`foo.md`の2本です。日本語が正で、日本語を先に直し、同じ変更で英語を合わせます。2本の見出しとコードブロックがそろっていないと、`cmd/hadome/docs_test.go`が落ちます。
+- 文書は日本語の`foo.ja.md`と英語の`foo.md`の2本です。
+- 日本語のほうを正とします。日本語を先に直し、同じ変更で英語を合わせます。
+- 2本の見出しとコードブロックがそろっていないと、`cmd/hadome/docs_test.go`が落ちます。
 - コメントにはコードを読んでも分からないことだけを書きます。たとえば、一般的でない書き方をした理由や、不変条件です。経緯・進捗・チケット番号は書きません。
-- テストは[テストを信じるための3つの段](docs/model.ja.md)に沿って書きます。外から見える振る舞いだけを確かめ、期待値を実装からコピーせず、時刻を読まず、sleepで待たず、黙ってスキップしません。
+- テストは[テストを信じるための3つの段](docs/model.ja.md)に沿って書きます。外から見える振る舞いだけを確かめます。期待値を実装からコピーせず、時刻を読まず、sleepで待たず、黙ってスキップしません。
 - 公開リポジトリなので、勤め先や非公開のプロジェクトのコード・名前・パス・テーブル名を持ち込みません。例は`store.Append`や「製品A」のような一般的なものにします。
 
-## 版の付け方
+## バージョンの付け方
 
-版は`vX.Y.Z`の形で、[Semantic Versioning](https://semver.org/lang/ja/)に従います。
+バージョンは`vX.Y.Z`の形で、[Semantic Versioning](https://semver.org/lang/ja/)に従います。
 
 | 変更 | 0.xの間 | 1.0から |
 |---|---|---|
@@ -68,8 +72,8 @@ git config core.hooksPath .githooks
 | ルールの追加、ルールを厳しくすること、新しい言語や設定のキー | マイナー（0.2.0） | マイナー |
 | 設定のキー、JSONの出力の形、終了コードの意味、例外の印の書き方を変えたり消したりすること | マイナー | メジャー |
 
-- ルールを厳しくしてもマイナーで出すのは、hadomeがmainと比べて増えた違反だけを報告するからです。版を上げても、mainにすでにあるコードは落ちません。落ちるのは、そのあとの変更で足したコードだけです。
-- hadomeは、一度受け付けた`schema:`の版を読めなくすることはありません。古い`schema:`で書いた`.hadome.yml`も、hadomeを上げたあとで読めます。
+- ルールを厳しくしてもマイナーで出すのは、hadomeがmainと比べて増えた違反だけを報告するからです。バージョンを上げても、mainにすでにあるコードは落ちません。落ちるのは、そのあとの変更で足したコードだけです。
+- hadomeは、一度受け付けた`schema:`のバージョンを読めなくすることはありません。古い`schema:`で書いた`.hadome.yml`もhadomeを上げたあとで読めます。
 
 ## ライセンス
 

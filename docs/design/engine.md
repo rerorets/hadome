@@ -253,7 +253,7 @@ classDiagram
 The engine loads the configuration of both versions before analysing anything. An invalid configuration in either version stops the check with exit code `2`.
 
 - Head is analysed and judged with head's configuration
-- Base is analysed with head's settings and tables but its own invariants and its own dependency diagram (`config.ForBase`), so tightening a setting never fails a change on code that was already there, while a new invariant without a guarding test still does
+- Base is analysed with head's settings and tables (the hazard, io and assertion tables, built in plus what the configuration adds) (the hazard, io and assertion tables, built in plus what the configuration adds) but its own invariants and its own dependency diagram (`config.ForBase`), so tightening a setting never fails a change on code that was already there, while a new invariant without a guarding test still does
 - Changes that loosen the configuration are reported as `config/loosened` reviews (exit code `3`). This is the engine's own check, not a rule, so no exception marker can silence it
 
 ## Invariants

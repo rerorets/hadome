@@ -38,6 +38,8 @@ The diagram is configuration: it is read when configuration is loaded, an unread
 
 ## The rules
 
+The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-of-rules).
+
 | Rule | Kind | Regression when |
 |---|---|---|
 | `deps/not-in-diagram` | finding | An import between two of the repository's units is not drawn: no arrow between their nodes, or a unit no node covers |
@@ -70,11 +72,8 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 
 | Rule | Cases |
 |---|---|
-| `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes |
-| `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes |
-| `deps/not-in-diagram` (more) | an import between two units in no node fails · drawing the arrow needs review instead |
-| `deps/diagram-stale` (more) | a node naming a directory of tests only fails · moving a unit away from its node fails |
-| `deps/diagram-stale` (planned boxes) | a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review |
+| `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
+| `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review |
 
 ## Invariants
 

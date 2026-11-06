@@ -24,7 +24,7 @@ go run ./cmd/hadome check --format json # hadome checks itself
 packaging/smoke.sh 0.0.0-local          # build, install and run every package
 ```
 
-On every pull request, CI runs the first four on Linux, macOS and Windows, and the last one on Linux.
+CI runs on every pull request and every push to main: the first three on Linux, macOS and Windows, and `hadome check` and `packaging/smoke.sh` on Linux.
 
 ### Hooks
 

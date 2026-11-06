@@ -63,7 +63,7 @@ npx hadome check
 #### Python
 
 ```sh
-uv add --dev hadome==0.4.1                   # or pip install hadome==0.4.1
+uv add --dev hadome==0.4.2                   # or pip install hadome==0.4.2
 uv run hadome check
 ```
 
@@ -88,7 +88,7 @@ go tool -modfile=tools.mod hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.4.1" }
+plugins { id("io.github.rerorets.hadome") version "0.4.2" }
 ```
 
 Run it with `./gradlew hadomeCheck`.
@@ -100,7 +100,7 @@ Run it with `./gradlew hadomeCheck`.
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.4.1</version>
+  <version>0.4.2</version>
 </plugin>
 ```
 
@@ -109,7 +109,7 @@ Run it with `mvn hadome:check`.
 #### Rust
 
 ```sh
-cargo binstall hadome@0.4.1
+cargo binstall hadome@0.4.2
 hadome check
 ```
 
@@ -124,7 +124,7 @@ You can also install from an archive on the [releases](https://github.com/rerore
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
-Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.1_windows_amd64.zip -OutFile hadome.zip
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.2_windows_amd64.zip -OutFile hadome.zip
 Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$HOME\hadome", "User")
 # open a new terminal, then:
@@ -133,8 +133,8 @@ hadome version
 
 ```sh
 # macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
-curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.1_linux_amd64.tar.gz
-tar -xzf hadome_0.4.1_linux_amd64.tar.gz
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.4.2_linux_amd64.tar.gz
+tar -xzf hadome_0.4.2_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```
@@ -225,7 +225,7 @@ When three tests disappear, their number alone cannot tell cleanup from regressi
 
 A behaviour you no longer need passes as cleanup when you delete the code along with its tests.
 
-The background, thinking of tests in three layers (invariants, writing rules, gate), is in [the model](docs/model.md).
+The background, thinking of tests in three layers (invariants, writing rules, check), is in [the model](docs/model.md).
 
 ## Where it runs and exit codes
 
