@@ -72,8 +72,11 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 		case "property_declaration":
 			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
 				jf.mocks = append(jf.mocks, m)
-			} else if name, class := jf.ktFieldType(m); class != "" {
-				fields[name] = class
+			} else {
+				if name, class := jf.ktFieldType(m); class != "" {
+					fields[name] = class
+				}
+				jf.ktNoteValueField(m)
 			}
 		case "function_declaration":
 			if hasAny(ktAnnotations(f, m), jvmTestAnnotations) {
@@ -137,6 +140,8 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 	case "identifier":
 		if _, ok := w.jf.names[w.jf.f.text(n)]; ok {
 			w.t.readName(n, ktUses)
+		} else if w.readsValueField(n) {
+			w.t.test.Reads++
 		}
 	}
 	return true
@@ -292,4 +297,18 @@ func ktArgumentValue(a *sitter.Node) *sitter.Node {
 		return nil
 	}
 	return a.NamedChild(a.NamedChildCount() - 1)
+}
+
+// ktNoteValueField records a property of a test class whose initializer names something of the
+// product: its expression after the declaration (val query = QUERY.trim()).
+func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
+	name := "" // what comes before the name (modifiers) is not the initializer
+	for _, c := range named(n) {
+		switch {
+		case c.Kind() == "variable_declaration":
+			name = jf.f.text(c.NamedChild(0))
+		case name != "" && !strings.Contains(c.Kind(), "comment"):
+			jf.noteValueField(name, c)
+		}
+	}
 }
