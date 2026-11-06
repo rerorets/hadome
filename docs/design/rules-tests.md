@@ -99,6 +99,7 @@ Adding tests does not always widen what they guard. These three rules stop tests
 - **Fix**: call the product function you mean to check, or delete the test
 - A test with any call that could not be identified may be calling product code, so it is not reported. A test none of whose targets can be identified is `tests/target-unknown`'s
 - A test that reads a product constant or embedded data is not reported: when the value changes, the test's result can change too
+- A test that drives the application from outside through an HTTP test client (`Test.Drives`) is not reported. It calls no product function, so what it guards cannot be named, but it exercises the product. The clients read are in [adapters-treesitter.md](adapters-treesitter.md)
 
 ### `tests/no-assertion`
 
@@ -131,7 +132,7 @@ A test counts only when it is active: skipped tests (with or without a reason) d
 - **Regression**: a target guarded in base is not guarded in head
 - **Legitimate removal**: the target itself no longer exists in head (the code was removed or renamed). When the target is a unit itself (an Ansible role), that unit no longer exists in head. hadome verifies this; nobody needs to declare it
 - **Cleanup passes**: merging duplicate tests, deleting tests that guard nothing new, moving or renaming tests — the set of guarded targets is unchanged
-- **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable
+- **Unidentified**: a test whose target cannot be identified at all is reported by `tests/target-unknown` and returns exit code `3`. Tests that reach the code through helper functions in test files are followed into the helpers, so helpers do not make a target unidentifiable. A test that drives the application through an HTTP test client (`Test.Drives`) is not reported either: what it guards cannot be named, but that is not worth a person's review each time. Such a test does not count as guarding any function
 
 ### Which tests guard an invariant
 
@@ -198,6 +199,7 @@ Each rule ships with at least these cases.
 | `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards · deleting the only Molecule scenario of an Ansible role fails · deleting the role with its scenario passes |
 | `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes |
+| `tests/guards-nothing` (HTTP) | a test that drives the application through an HTTP test client passes · a test calling a function of the same name that is not a client fails |
 | `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported |
 | `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes · a skipped test passes · a test already in base is not reported |

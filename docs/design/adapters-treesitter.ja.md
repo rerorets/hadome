@@ -102,6 +102,7 @@ classDiagram
 - Java と Kotlin では、テストのクラスのフィールドも読む。コンストラクタで作ったフィールドはそのクラス、初期値の無いフィールド（`lateinit`、注入、コンストラクタのプロパティ）は宣言した型として読む。モックなど、ほかの方法で作ったフィールドは読まない
 - TypeScript では、テストが文字列で名指した `import('./x')` で読み込んだモジュールから取り出した名前も読む。ファイルの中の関数が1つのモジュールだけを読み込んで返すとき（モジュールを読み直すヘルパー）は、その関数の結果から取り出した名前も読む
 - TypeScript のテストが呼ぶものには、JSX の要素（`<Page />`）で描いたリポジトリの部品も入る。ファイルの中のヘルパーは、`function` の宣言でも、`const` に入れた関数（`const renderPage = () => …`）でもたどる。`describe` の中で宣言したものも同じ
+- HTTP のテストの道具の入口を呼ぶテストは、アプリを外から動かすテスト（`Test.Drives`）とする。道具は、ファイルがその道具を import していることで見分ける。Java と Kotlin は REST Assured の `given()`（`io.restassured`）、MockMvc の `perform()`（`org.springframework.test.web.servlet`）、WebTestClient の `exchange()`（`org.springframework.test.web.reactive.server`）。TypeScript は supertest の `request()`。Python と Rust の道具はまだ読まない
 
 テストからの呼び出しは、Go のアダプタと同じように、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数を通して対象に解決する。解決できない呼び出しは未解決として数える。
 

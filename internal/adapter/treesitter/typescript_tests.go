@@ -21,8 +21,11 @@ type tsFile struct {
 	helpers map[string]*sitter.Node
 	// loaders are the functions of the file that load one module of the repository with import():
 	// function name -> unit. A test that takes names from what they return calls that module.
-	loaders  map[string]string
-	mocks    []*sitter.Node // file-level evidence that the file mocks
+	loaders map[string]string
+	mocks   []*sitter.Node // file-level evidence that the file mocks
+	// drivers are the local names of the HTTP test clients the file imports (supertest's request),
+	// whose calls drive the application from outside.
+	drivers  map[string]bool
 	comments map[int]string
 }
 
@@ -58,6 +61,9 @@ func (tf *tsFile) bind() {
 			unit, internal := tf.r.resolve(f.path, spec)
 			if tf.t.isMock(spec) {
 				tf.mocks = append(tf.mocks, top)
+			}
+			if spec == "supertest" {
+				tf.bindDriver(top)
 			}
 			if internal {
 				tf.bindImport(top, unit)
@@ -197,6 +203,9 @@ func (w *tsWalk) call(n *sitter.Node) {
 	callee := f.text(fn)
 	args := named(n.ChildByFieldName("arguments"))
 	w.t.assertion(callee, w.tf.t.asserts)
+	if w.tf.drivers[callee] {
+		w.t.test.Drives = true
+	}
 	if cat, ok := w.tf.t.calls[callee]; ok {
 		w.t.hazard(cat, n)
 		return
@@ -217,23 +226,24 @@ func (w *tsWalk) call(n *sitter.Node) {
 			delete(w.walking, callee)
 		}
 	case "member_expression":
-		obj, prop := f.field(fn, "object"), f.field(fn, "property")
-		target := ""
-		if unit, ok := w.tf.spaces[obj]; ok {
-			target = unit + "." + prop
-		} else if unit, ok := w.modules[obj]; ok {
-			target = unit + "." + prop
-		} else if class, ok := w.vars[obj]; ok {
-			target = class + "." + prop
-		} else if class, ok := w.tf.names[obj]; ok {
-			target = class + "." + prop
-		} else if w.locals[obj] {
-			w.t.test.Unresolved++
-		}
-		if target != "" {
+		if target := w.memberTarget(f.field(fn, "object"), f.field(fn, "property")); target != "" {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		}
 	}
+}
+
+// memberTarget names what obj.prop() calls: a function of a module or a method of a class. A
+// method of a local value of unknown type counts as unresolved.
+func (w *tsWalk) memberTarget(obj, prop string) string {
+	for _, owners := range []map[string]string{w.tf.spaces, w.modules, w.vars, w.tf.names} {
+		if owner, ok := owners[obj]; ok {
+			return owner + "." + prop
+		}
+	}
+	if w.locals[obj] {
+		w.t.test.Unresolved++
+	}
+	return ""
 }
 
 // alwaysTrue recognises expect(x).toBe(x), expect(true).toBe(true) and assert(true).
@@ -364,4 +374,25 @@ func (w *tsWalk) element(n *sitter.Node) {
 	if target != "" {
 		w.t.call(target, nil)
 	}
+}
+
+// bindDriver records the names an import of an HTTP test client binds: import request from
+// 'supertest', or import * as request from 'supertest'.
+func (tf *tsFile) bindDriver(n *sitter.Node) {
+	if tf.drivers == nil {
+		tf.drivers = map[string]bool{}
+	}
+	walk(n, func(x *sitter.Node) bool {
+		switch x.Kind() {
+		case "import_clause":
+			if first := x.NamedChild(0); first != nil && first.Kind() == "identifier" {
+				tf.drivers[tf.f.text(first)] = true
+			}
+		case "namespace_import":
+			for _, id := range named(x) {
+				tf.drivers[tf.f.text(id)] = true
+			}
+		}
+		return true
+	})
 }

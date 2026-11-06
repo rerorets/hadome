@@ -13,8 +13,14 @@ import (
 // of its values. Whatever the code does, the test's result stays the same.
 type guardsNothing struct{}
 
-func (guardsNothing) ID() string           { return "tests/guards-nothing" }
-func (guardsNothing) Cases() []engine.Case { return guardsNothingCases() }
+func (guardsNothing) ID() string { return "tests/guards-nothing" }
+func (guardsNothing) Cases() []engine.Case {
+	return append(guardsNothingCases(), languageGuardsCases...)
+}
+
+// languageGuardsCases are cases in languages only a cgo build reads; see guards_cases_cgo.go.
+var languageGuardsCases []engine.Case
+
 func (guardsNothing) About() engine.About {
 	return engine.About{Finds: engine.T("a new test that calls no code of the repository and reads none of its values"),
 		Why: engine.T("the code can change in any way without this test noticing"),
@@ -25,7 +31,7 @@ func (r guardsNothing) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
 	for _, t := range in.Facts.Tests {
 		// One unresolved call may reach the repository; tests/target-unknown covers a test made only of those.
-		if len(t.Calls) == 0 && t.Unresolved == 0 && t.Reads == 0 && !t.Skip.Skipped {
+		if len(t.Calls) == 0 && t.Unresolved == 0 && t.Reads == 0 && !t.Drives && !t.Skip.Skipped {
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name,
 				Message: engine.T("%s calls no code of this repository and reads none of its values", t.Name),
