@@ -58,7 +58,7 @@ classDiagram
 - Rules write their wording in English formats, as now. Instead of `fmt.Sprintf` they call `engine.T(format, args...)`, which keeps the format and the arguments in a `Text`
 - The Japanese lives in a catalog in package `internal/messages`. The catalog maps English formats to Japanese formats (``%s: changing `%s` to `%s` does not fail any test`` → ``%s: `%s` を `%s` に変えても、どのテストも落ちない``)
 - Wording becomes a string only at output. The engine calls `Text.In` with the chosen language
-- The dependency diagram gains `internal/engine --> internal/messages`. `internal/messages` imports nothing of hadome's
+- The dependency diagram has `internal/engine --> internal/messages`. `internal/messages` imports nothing of hadome's
 
 ## Invariants
 

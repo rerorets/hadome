@@ -1,32 +1,38 @@
 # リリース
 
-リリースは版のタグを push して始める。それ以降の作業はすべて `release` ワークフロー（[.github/workflows/release.yml](../../.github/workflows/release.yml)）が行う。設計は [distribution.ja.md](../design/distribution.ja.md) にある。
+リリースはバージョンのタグを push して始めます。それ以降の作業は、すべて `release` ワークフローが行います。ワークフローの定義は [.github/workflows/release.yml](../../.github/workflows/release.yml) に、設計は [distribution.ja.md](../design/distribution.ja.md) にあります。
 
 ```sh
 git tag -s v1.2.0 -m "hadome 1.2.0"
 git push origin v1.2.0
 ```
 
-タグは署名つきで打つ。GitHub のタグに Verified が付き、誰が打ったタグかを確かめられる。ワークフローはタグの署名を確かめないので、署名が無くても動きは変わらない。
+タグは署名つきで打ちます。署名があると GitHub のタグに Verified が付き、誰が打ったタグかを確かめられます。ワークフローはタグの署名を確かめないので、署名が無くても動きは変わりません。
 
-ワークフローは6つのバイナリをネイティブにビルドし、`SHA256SUMS` と一緒に GitHub のリリースを公開し、有効にしてある各エコシステムに公開する。ワークフローを手で動かす（Actions → release → Run workflow）と、公開せずにすべてをビルドして確かめる。
+タグで動いたワークフローは、次のことをします。
 
-公開が途中で落ちたら、原因を直してから落ちたジョブだけを再実行する。npm のジョブはレジストリにすでにある版を飛ばす。
+- 6つのバイナリをネイティブにビルドする
+- `SHA256SUMS` と一緒に GitHub のリリースを公開する
+- 有効にしてある各エコシステムに公開する
+
+ワークフローを手で動かすと、公開せずに、すべてをビルドして確かめます。手で動かすには、Actions → release → Run workflow を使います。
+
+公開が途中で落ちたら、原因を直してから、落ちたジョブだけを再実行します。npm のジョブはレジストリにすでにあるバージョンを飛ばします。
 
 ## エコシステムを有効にする
 
-各エコシステムは、リポジトリの変数が `true` のときだけ公開する（Settings → Secrets and variables → Actions → Variables）。資格情報はシークレットとして要る。
+各エコシステムは、リポジトリの変数が `true` のときだけ公開します。変数は Settings → Secrets and variables → Actions → Variables に置きます。資格情報はシークレットとして要ります。
 
-シークレットはリポジトリ直下ではなく、環境 `release` に入れる（Settings → Environments → release）。環境 `release` と `pypi` は、どちらもデプロイできる参照をタグ `v[0-9]*` だけにする。こうすると、ブランチで動くワークフローは資格情報を読めない。
+シークレットはリポジトリ直下ではなく環境 `release` に入れます。環境は Settings → Environments → release にあります。環境 `release` と `pypi` は、どちらもデプロイできる参照をタグ `v[0-9]*` だけにします。こうすると、ブランチで動くワークフローは資格情報を読めません。
 
 | エコシステム | 変数 | シークレット | 一度だけ用意するもの |
 |---|---|---|---|
-| npm | `PUBLISH_NPM` | `NPM_TOKEN` | `hadome` と `hadome-<os>-<arch>` を公開できるアカウントの granular access token（Read and write・All packages・2FA の迂回。書き込みのトークンは最長90日で切れる） |
+| npm | `PUBLISH_NPM` | `NPM_TOKEN` | `hadome` と `hadome-<os>-<arch>` を公開できるアカウントの granular access token。権限は Read and write・All packages・2FA の迂回。書き込みのトークンは最長90日で切れる |
 | PyPI | `PUBLISH_PYPI` | 無し | PyPI のプロジェクト `hadome` の trusted publisher: このリポジトリ、ワークフロー `release.yml`、環境 `pypi` |
-| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN`、`MINISIGN_SECRET_KEY` | `hadome` を公開できる crates.io のトークン（publish-new と publish-update）。アーカイブに署名する minisign の鍵の組（`minisign -G -W` で作る。パスワード無しにするのは、ワークフローが入力できないため）。秘密鍵のファイルの中身をシークレットに入れ、公開鍵を `packaging/cargo/Cargo.toml` の `pubkey` に書く |
+| crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN`、`MINISIGN_SECRET_KEY` | `hadome` を公開できる crates.io のトークン。権限は publish-new と publish-update。アーカイブに署名する minisign の鍵の組。鍵の組は `minisign -G -W` で作り、ワークフローがパスワードを入力できないので、パスワード無しにする。秘密鍵のファイルの中身をシークレットに入れ、公開鍵を `packaging/cargo/Cargo.toml` の `pubkey` に書く |
 | Gradle Plugin Portal | `PUBLISH_GRADLE` | `GRADLE_PUBLISH_KEY`、`GRADLE_PUBLISH_SECRET` | Plugin Portal のアカウント。名前空間 `io.github.rerorets` は GitHub を通して検証する |
 | Maven Central | `PUBLISH_MAVEN` | `CENTRAL_USERNAME`、`CENTRAL_PASSWORD`、`MAVEN_GPG_PRIVATE_KEY`、`MAVEN_GPG_PASSPHRASE` | Central Portal のユーザートークン、検証済みの名前空間 `io.github.rerorets`、鍵サーバーに公開した GPG 鍵 |
-| Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | リポジトリ `rerorets/homebrew-tap`（コミットが1つ以上あること）と、そこだけに Contents の書き込みを許した fine-grained トークン |
+| Homebrew | `PUBLISH_HOMEBREW` | `HOMEBREW_TAP_TOKEN` | コミットが1つ以上あるリポジトリ `rerorets/homebrew-tap` と、そのリポジトリだけに Contents の書き込みを許した fine-grained トークン |
 | Go | — | — | 無し。モジュールプロキシがタグを配る |
 
 ## リリースの前にパッケージを試す
@@ -35,11 +41,19 @@ git push origin v1.2.0
 packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 で Gradle と Maven を外す
 ```
 
-この手元の Linux バイナリから仮のリリースを作ってすべてのパッケージを作り、それぞれを入れて、版を表示することと終了コードをそのまま返すことを確かめる。CI はこれを push のたびに動かす。
+`packaging/smoke.sh` は、手元の Linux バイナリから仮のリリースを作り、すべてのパッケージを作ります。そして、それぞれのパッケージを入れて、次の2つを確かめます。
+
+- バージョンを表示すること
+- 終了コードをそのまま返すこと
+
+CI はこれを、プルリクエストのたびと、main への push のたびに動かします。
 
 ## 依存のライセンス
 
-配る実行ファイルには hadome の `LICENSE` と、リンクしたモジュールのライセンスをまとめた `THIRD_PARTY_NOTICES` を添える。
+配る実行ファイルには次の2つを添えます。
+
+- hadome の `LICENSE`
+- リンクしたモジュールのライセンスをまとめた `THIRD_PARTY_NOTICES`
 
 | 配り方 | 置き場所 |
 |---|---|
@@ -48,14 +62,14 @@ packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 で Gradle と Maven を外
 | PyPI | wheel の `dist-info/licenses/` |
 | Homebrew | formula のインストール先（prefix） |
 
-Gradle と Maven のプラグイン、`cargo binstall` はアーカイブを取ってくるので、アーカイブに入っていれば足りる。
+Gradle と Maven のプラグインと `cargo binstall` は、アーカイブを取ってきます。そのため、アーカイブに入っていれば足ります。
 
-依存を足したり上げたりしたら、`THIRD_PARTY_NOTICES` を作り直す。作り直さないと `go test ./...` が落ちる。
+依存を足したり上げたりしたら、`THIRD_PARTY_NOTICES` を作り直します。作り直さないと、`go test ./...` が落ちます。
 
 ```sh
 go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices
 ```
 
-- 載せるのはリリースのビルド（cgo あり）で Linux・macOS・Windows のどれかにリンクされるモジュールである
-- 各モジュールの版、ソースを取れる場所（Go のモジュールプロキシ）、モジュールに入っているライセンスの本文を載せる
-- 最上位にライセンスのファイルが無いモジュールがあると、テストが落ちる。そのモジュールのライセンスを確かめてから足す
+- 載せるのは、cgo ありのリリースのビルドで、Linux・macOS・Windows のどれかにリンクされるモジュールです。
+- 各モジュールについて、バージョン、ソースを取れる場所、モジュールに入っているライセンスの本文を載せます。ソースを取れる場所は Go のモジュールプロキシです。
+- 最上位にライセンスのファイルが無いモジュールがあると、テストが落ちます。そうしたモジュールは、ライセンスを確かめてから依存に足します。

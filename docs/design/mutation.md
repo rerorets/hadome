@@ -15,7 +15,7 @@ Does:
 Does not:
 
 - Guess the test command. Configuration always names it; hadome never calls `go`, `pytest`, `cargo` and the like on its own
-- Call existing mutation tools (gremlins, mutmut, Stryker, PIT, cargo-mutants). This keeps the six languages behaving the same, and keeps hadome from chasing how outside tools are installed and what they print
+- Call existing mutation tools (gremlins, mutmut, Stryker, PIT, cargo-mutants). This keeps the six languages that have mutators (Go, TypeScript, Python, Rust, Java, Kotlin) behaving the same, and keeps hadome from chasing how outside tools are installed and what they print
 - Break code the change did not touch. Breaking the whole repository every time would make the time depend on the repository's size, not the change's
 - Run inside `hadome check`. It runs the tests many times, so it is a separate command, `hadome mutate`
 
@@ -29,7 +29,7 @@ Does not:
 | Runs code | No | Runs the configured test command |
 | Time | Seconds | Minutes: the number of mutants × the test time |
 | Agent, locally | Before finishing every change | Once before finishing, when configured |
-| CI | Required on every PR | Required on every PR (recommended) |
+| CI | Required on every PR | Recommended as required on every PR |
 
 ```mermaid
 flowchart LR
@@ -45,8 +45,8 @@ flowchart LR
 hadome cannot change a user's CI settings or branch protection. Whether it is required on PRs is for the repository's owner to decide. Within that, four things keep it in use.
 
 1. Once in, it cannot be taken out without a person's review. A change that removes or weakens the `mutation` setting asks for review as `config/loosened` (exit code `3`), like other settings. An agent cannot drop it for being slow
-2. To tell agents, the `hadome agents` block gains "when `mutation` is configured, run `hadome mutate` before finishing a change"
-3. To show how to add it to CI, `docs/` gets a GitHub Actions example with `check` and `mutate` as separate jobs
+2. To tell agents, the `hadome agents` block says "when `mutation` is configured, run `hadome mutate` before finishing a change"
+3. To show how to add it to CI, [ci.md](../ci.md) has a GitHub Actions example with `check` and `mutate` as separate jobs
 4. To make starting easy, `hadome init` writes a `mutation` setting with a test command for the languages it found, as a comment. It never turns a guessed command on
 
 ### Steps for agents
@@ -226,7 +226,7 @@ mutation:
 2. The repository's working tree is never changed. Only a version copied to a temporary directory is broken
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
-5. Mutants that could not be tried (beyond the limit) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
+5. Mutants that could not be tried (beyond the limit, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
 
 ## Deliberately left out

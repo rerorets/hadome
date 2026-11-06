@@ -32,6 +32,22 @@ func TestTheAgentBlockIsTheREADMEs(t *testing.T) {
 	}
 }
 
+// viewpoint: external contract
+// target: hadome agents
+// This repository's own instructions for agents carry the block hadome prints, in each language:
+// a block edited by hand in one of them tells agents something hadome no longer says.
+func TestTheAgentBlockIsThisRepositorysInstructions(t *testing.T) {
+	for file, block := range map[string]string{"CLAUDE.md": agentBlock, "CLAUDE.ja.md": agentBlockJa} {
+		data, err := os.ReadFile(filepath.Join("..", "..", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), block) {
+			t.Errorf("%s does not contain the block `hadome agents` prints in its language", file)
+		}
+	}
+}
+
 // viewpoint: state integrity
 // target: hadome agents --write
 // Suggest invariant 2: writing the block twice leaves the file as the first write did, and

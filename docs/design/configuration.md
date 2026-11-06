@@ -100,7 +100,7 @@ Settings are merged from three layers. A later layer adds to or overrides an ear
 
 | Layer | Where | Typical content |
 |---|---|---|
-| Built-in | hadome itself | All rules, default limits, invariant types, hazard tables |
+| Built-in | hadome itself | All rules, default limits, invariant types, hazard tables (the calls of each [hazard category](adapters.md#hazard-categories)) |
 | Shared | Files listed in `extends` (local paths; they live outside hadome) | Settings common to several repositories of one person or organisation |
 | Product | `.hadome.yml` | What only this product has |
 

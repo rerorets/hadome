@@ -116,7 +116,7 @@ Proved by: `hadome check` reports no `tests/invariant-unguarded` for it.
 
 ## Hitting a size limit
 
-A `size/` regression means a file, function or interface of product code is over its limit, or an existing one got bigger. Split it along a line it already has: a function per step, a file per type, an interface per caller. Do not raise the limit in `.hadome.yml`: that returns `3`, because it loosens the rule for everyone.
+A `size/` regression means a file, function or interface of product code is over its limit, or one already over its limit in base got bigger. Split it along a line it already has: a function per step, a file per type, an interface per caller. Do not raise the limit in `.hadome.yml`: that returns `3`, because it loosens the rule for everyone.
 
 Proved by: `hadome check` reports no `size/` regression.
 

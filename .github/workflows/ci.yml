@@ -24,9 +24,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Test with cgo (all six languages)
+      - name: Test with cgo (all eight languages)
         run: go test ./...
-      - name: Test without cgo (Go only)
+      - name: Test without cgo (Go, Terraform and Ansible)
         env:
           CGO_ENABLED: "0"
         run: go test ./...
