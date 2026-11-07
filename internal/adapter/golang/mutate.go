@@ -107,10 +107,7 @@ func (m *mutator) function(fn *ast.FuncDecl) {
 				m.add(negateBoolean, n.Pos(), n.End(), map[string]string{"true": "false", "false": "true"}[n.Name])
 			}
 		case *ast.ReturnStmt:
-			if zero != "" && len(n.Results) == 1 && !boolLiteral(n.Results[0]) && m.text(n.Results[0].Pos(), n.Results[0].End()) != zero &&
-				(zero == "nil" || !m.consts.zero(m.file, m.path, n.Results[0])) {
-				m.add(returnZero, n.Results[0].Pos(), n.Results[0].End(), zero)
-			}
+			m.returnZero(n, zero)
 		case *ast.ExprStmt:
 			if _, ok := n.X.(*ast.CallExpr); ok {
 				m.add(removeCall, n.Pos(), n.End(), "_ = 0")
@@ -118,6 +115,19 @@ func (m *mutator) function(fn *ast.FuncDecl) {
 		}
 		return true
 	})
+}
+
+// returnZero breaks a return of a single result by returning the zero value instead, unless the
+// result already is that value: a literal, or a constant whose value it is.
+func (m *mutator) returnZero(n *ast.ReturnStmt, zero string) {
+	if zero == "" || len(n.Results) != 1 || boolLiteral(n.Results[0]) {
+		return
+	}
+	r := n.Results[0]
+	if m.text(r.Pos(), r.End()) == zero || (zero != "nil" && m.consts.zero(m.file, m.path, r)) {
+		return
+	}
+	m.add(returnZero, r.Pos(), r.End(), zero)
 }
 
 func (m *mutator) binary(n *ast.BinaryExpr) {

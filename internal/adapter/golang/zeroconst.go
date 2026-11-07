@@ -82,28 +82,8 @@ func (z *zeroConsts) in(dir, pkg string) map[string]bool {
 			continue
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), e.Name(), src, parser.SkipObjectResolution)
-		if err != nil || (pkg != "" && f.Name.Name != pkg) {
-			continue
-		}
-		for _, d := range f.Decls {
-			g, ok := d.(*ast.GenDecl)
-			if !ok || g.Tok != token.CONST {
-				continue
-			}
-			var values []ast.Expr
-			for i, s := range g.Specs {
-				vs := s.(*ast.ValueSpec)
-				if len(vs.Values) > 0 {
-					values = vs.Values // a spec without values repeats the previous ones
-				}
-				for j, n := range vs.Names {
-					isZero := j < len(values) && zeroValue(values[j], i)
-					if seen[n.Name] && out[n.Name] != isZero {
-						isZero = false
-					}
-					seen[n.Name], out[n.Name] = true, isZero
-				}
-			}
+		if err == nil && (pkg == "" || f.Name.Name == pkg) {
+			addZeroConsts(f, out, seen)
 		}
 	}
 	if z.byDir == nil {
@@ -113,38 +93,68 @@ func (z *zeroConsts) in(dir, pkg string) map[string]bool {
 	return out
 }
 
+// addZeroConsts records, for each package-level constant of f, whether its value is the zero value.
+func addZeroConsts(f *ast.File, out, seen map[string]bool) {
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.CONST {
+			continue
+		}
+		var values []ast.Expr
+		for i, s := range g.Specs {
+			vs := s.(*ast.ValueSpec)
+			if len(vs.Values) > 0 {
+				values = vs.Values // a spec without values repeats the previous ones
+			}
+			for j, n := range vs.Names {
+				isZero := j < len(values) && zeroValue(values[j], i)
+				if seen[n.Name] && out[n.Name] != isZero {
+					isZero = false
+				}
+				seen[n.Name], out[n.Name] = true, isZero
+			}
+		}
+	}
+}
+
 // zeroValue reports whether a constant expression is the zero value, with iota at the given index.
 func zeroValue(e ast.Expr, iota int) bool {
 	switch e := e.(type) {
 	case *ast.ParenExpr:
 		return zeroValue(e.X, iota)
 	case *ast.BasicLit:
-		v := constant.MakeFromLiteral(e.Value, e.Kind, 0)
-		switch v.Kind() {
-		case constant.String:
-			return constant.StringVal(v) == ""
-		case constant.Int, constant.Float, constant.Complex:
-			return constant.Sign(v) == 0
-		}
+		return zeroLiteral(e)
 	case *ast.Ident:
 		return e.Name == "false" || (e.Name == "iota" && iota == 0)
 	case *ast.CallExpr:
-		if len(e.Args) != 1 || e.Ellipsis != token.NoPos {
-			return false
-		}
-		switch fn := e.Fun.(type) {
-		case *ast.Ident: // a conversion such as Code(0); len, cap and the like are not
-			if fn.Name == "len" || fn.Name == "cap" || fn.Name == "real" || fn.Name == "imag" {
-				return false
-			}
-		case *ast.SelectorExpr: // pkg.Code(0); unsafe.Sizeof and the like are not
-			if x, ok := fn.X.(*ast.Ident); !ok || x.Name == "unsafe" {
-				return false
-			}
-		default:
-			return false
-		}
-		return zeroValue(e.Args[0], iota)
+		return conversion(e) && zeroValue(e.Args[0], iota)
+	}
+	return false
+}
+
+func zeroLiteral(l *ast.BasicLit) bool {
+	v := constant.MakeFromLiteral(l.Value, l.Kind, 0)
+	switch v.Kind() {
+	case constant.String:
+		return constant.StringVal(v) == ""
+	case constant.Int, constant.Float, constant.Complex:
+		return constant.Sign(v) == 0
+	}
+	return false
+}
+
+// conversion reports a call that may be a conversion such as Code(0) or pkg.Code(0), and not a
+// builtin or an unsafe function whose result differs from its argument's value.
+func conversion(c *ast.CallExpr) bool {
+	if len(c.Args) != 1 || c.Ellipsis != token.NoPos {
+		return false
+	}
+	switch fn := c.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name != "len" && fn.Name != "cap" && fn.Name != "real" && fn.Name != "imag"
+	case *ast.SelectorExpr:
+		x, ok := fn.X.(*ast.Ident)
+		return ok && x.Name != "unsafe"
 	}
 	return false
 }
