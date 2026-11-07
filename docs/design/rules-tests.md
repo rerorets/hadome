@@ -185,6 +185,8 @@ The agent instruction block tells agents to propose a candidate to a person when
 
 Every finding carries `why` and `fix` written for an agent: what went wrong, why it matters, and the smallest change that resolves it. The text above is the starting point for those messages.
 
+The `message` of a hazard finding (`no-clock`, `no-sleep`, `always-true`, `no-mock`) shows the code it found on one line. A call written over several lines shows only its first line, and anything past 80 characters is cut. "…" marks what was left out. Example: `test waits by sleeping: setTimeout(() => { …`. Matching against base uses the whole code, not the shortened one.
+
 ## Self-test cases
 
 Each rule ships with at least these cases.
