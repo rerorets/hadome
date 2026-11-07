@@ -47,7 +47,7 @@ func identifiers(f *file, n *sitter.Node) []string {
 // zeroConstant reports whether v names a constant of the file whose value is the function's zero
 // value, and that the function does not declare a name of its own that hides it.
 func (m *mutator) zeroConstant(v *sitter.Node) bool {
-	if m.consts == nil || (v.Kind() != "identifier" && v.Kind() != "simple_identifier") {
+	if v.Kind() != "identifier" { // every grammar's plain name, Kotlin's too
 		return false
 	}
 	name := m.f.text(v)

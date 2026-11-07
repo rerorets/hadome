@@ -630,7 +630,8 @@ var defaults row
 // many names lead to it. A constant of that type whose value is zero is still not broken. No such
 // mutant is made where the underlying type cannot be told: a fixed-size array, a type with type
 // arguments, a type declared in two files, another module's type, or a type parameter (of the
-// function or of its receiver) that hides a package type of the same name.
+// function or of its receiver) that hides a package type of the same name. Types that name each
+// other in a cycle do not compile; reading them stops, with no mutant.
 func TestGoMutantsReturnTheZeroValueOfNamedTypes(t *testing.T) {
 	const queue = `package worker
 
@@ -687,6 +688,8 @@ func Outside() codes.Code { return c }
 
 func Get[T any]() T { return v }
 
+func Cycle() status.Loop { return loop }
+
 type box[T any] struct{ v T }
 
 func (b box[T]) Take() T { return b.v }
@@ -724,6 +727,10 @@ type Pair [2]int
 type Set[K comparable] map[K]bool
 
 type Twice int
+
+type Loop Back
+
+type Back Loop
 
 const OK Code = 0
 `)},

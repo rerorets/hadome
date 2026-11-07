@@ -428,6 +428,57 @@ fun local(): Int {
 	}
 	names := []string{"done", "label", "hex", "wide", "big", "nothing", "rate", "fail", "counted", "moved", "twice",
 		"limit", "shadow", "local"}
+	runZeroConstantCases(t, cases, names)
+}
+
+// viewpoint: behaviour
+// target: lang.Mutants
+// A number constant is zero however its literal spells zero: a fraction, an exponent, another
+// base, underscores, a type suffix. A literal whose value is not zero, or that is not a number of
+// the declared type (a TypeScript bigint, a Python complex), is broken.
+func TestMutantsReadZeroInEverySpellingOfANumber(t *testing.T) {
+	source := func(declare, function string, spellings []string) string {
+		var b strings.Builder
+		for i, s := range spellings {
+			fmt.Fprintf(&b, declare+"\n", i, s)
+		}
+		for i := range spellings {
+			fmt.Fprintf(&b, function+"\n", i, i)
+		}
+		return b.String()
+	}
+	ts := []string{"0.0", ".0", "0e5", "0E+2", "0b0", "0o0", "0x00", "0.0e-3", "0x10", "0n", "1e0", "10", "0.5"}
+	py := []string{"0.", "0e0", "0.0", "0j", "1.0", "0"}
+	rust := []string{"0f64", "0_0.0", "0.0e0f64", "1f64"}
+	kt := []string{"0L", "0x0L", "0b0L", "1L"}
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"typescript", "src/calc.ts", source("const C%d = %s;", "function f%d(): number { return C%d; }", ts), []string{
+			"f8: C8 -> 0", "f9: C9 -> 0", "f10: C10 -> 0", "f11: C11 -> 0", "f12: C12 -> 0",
+		}},
+		{"python", "src/calc.py", source("C%d = %s", "def f%d() -> float:\n    return C%d\n", py), []string{
+			"f3: C3 -> 0.0", "f4: C4 -> 0.0", "f5: C5 -> 0.0",
+		}},
+		{"rust", "src/calc.rs", source("const C%d: f64 = %s;", "fn f%d() -> f64 { C%d }", rust), []string{
+			"f3: C3 -> 0.0",
+		}},
+		{"kotlin", "src/main/kotlin/calc/Calc.kt", source("const val C%d = %s", "fun f%d(): Long { return C%d }", kt),
+			[]string{"f3: C3 -> 0L"}},
+	}
+	var names []string
+	for i := range ts {
+		names = append(names, fmt.Sprintf("f%d", i))
+	}
+	runZeroConstantCases(t, cases, names)
+}
+
+func runZeroConstantCases(t *testing.T, cases []struct {
+	lang, path, src string
+	want            []string
+}, names []string) {
+	t.Helper()
 	for _, c := range cases {
 		t.Run(c.lang, func(t *testing.T) {
 			_, ms := mutantsOf(t, c.lang, c.path, c.src, names...)

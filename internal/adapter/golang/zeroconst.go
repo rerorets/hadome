@@ -35,24 +35,21 @@ func (z *zeroConsts) zero(f *ast.File, p string, e ast.Expr) bool {
 		}
 		return z.in(path.Dir(p), f.Name.Name)[e.Name]
 	case *ast.SelectorExpr:
-		dir, ok := z.imported(f, e)
-		return ok && z.in(dir, "")[e.Sel.Name]
+		dir := z.imported(f, e)
+		return dir != "" && z.in(dir, "")[e.Sel.Name]
 	}
 	return false
 }
 
-// imported is the directory of the package a selector such as pkg.Name names, when it is one of
-// the version's modules.
-func (z *zeroConsts) imported(f *ast.File, e *ast.SelectorExpr) (string, bool) {
+// imported is the directory of the package a selector such as pkg.Name names, or "" when that is
+// not a package of one of the version's modules.
+func (z *zeroConsts) imported(f *ast.File, e *ast.SelectorExpr) string {
 	pkg, ok := e.X.(*ast.Ident)
 	if !ok || pkg.Obj != nil {
-		return "", false // a field or a method, not a package's declaration
+		return "" // a field or a method, not a package's declaration
 	}
-	importPath, ok := fileImports(f)[pkg.Name]
-	if !ok {
-		return "", false
-	}
-	return z.dirOf(importPath)
+	dir, _ := z.dirOf(fileImports(f)[pkg.Name])
+	return dir
 }
 
 // dirOf is the directory of a package of one of the version's modules.
@@ -184,7 +181,7 @@ func (z *zeroConsts) zeroType(f *ast.File, dir string, e ast.Expr, hidden map[st
 		}
 		return builtinZero(e.Name), false
 	case *ast.SelectorExpr:
-		if to, ok := z.imported(f, e); ok {
+		if to := z.imported(f, e); to != "" {
 			if ts, declared := z.typesIn(to, "")[e.Sel.Name]; declared {
 				return z.underlying(to, ts, depth)
 			}
