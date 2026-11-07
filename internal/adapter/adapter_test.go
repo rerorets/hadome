@@ -9,7 +9,9 @@ import (
 	"testing/fstest"
 
 	"github.com/rerorets/hadome/internal/adapter"
+	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
 	"github.com/rerorets/hadome/internal/rules/tests"
 )
 
@@ -148,5 +150,106 @@ func TestTheSkipFixShowsTheTestsOwnLanguage(t *testing.T) {
 			}
 			t.Errorf("no tests/skip-without-reason among %v", r.Regressions)
 		})
+	}
+}
+
+// viewpoint: behaviour
+// target: adapter.Analyzer.Analyze
+// Every language counts a file's lines as an editor shows them; the newline that ends the last
+// line does not add one, so file-lines never reports a file one line longer than it is.
+func TestEveryLanguageCountsTheLinesAnEditorShows(t *testing.T) {
+	twoLines := map[string]string{ // each has exactly two lines and ends with a newline
+		"store/store.go":           "package store\nvar Rows = 1\n",
+		"src/store.ts":             "export const rows = 1\nexport const cols = 2\n",
+		"app/store.py":             "rows = 1\ncols = 2\n",
+		"src/main/java/A.java":     "package app;\nclass A {}\n",
+		"src/main/kotlin/A.kt":     "package app\nclass A\n",
+		"src/store.rs":             "pub const ROWS: i32 = 1;\npub const COLS: i32 = 2;\n",
+		"main.tf":                  "variable \"rows\" {\n}\n",
+		"roles/web/tasks/main.yml": "- name: ping\n  ping:\n",
+		"notes.txt":                "a\nb\n",
+		"no-final-newline.txt":     "a\nb",
+	}
+	fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}}
+	for p, src := range twoLines {
+		fsys[p] = &fstest.MapFile{Data: []byte(src)}
+	}
+	a, err := adapter.New().Analyze(engine.Version{FS: fsys}, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, f := range a.Files {
+		if _, ok := twoLines[f.Path]; !ok {
+			continue
+		}
+		seen++
+		if f.Lines != 2 && f.Role != facts.RoleOther {
+			t.Errorf("%s (%s): %d lines, want 2", f.Path, f.Language, f.Lines)
+		}
+	}
+	if seen != len(twoLines) {
+		t.Errorf("listed %d of the %d files", seen, len(twoLines))
+	}
+}
+
+// viewpoint: external contract
+// target: adapter.Analyzer through engine.Engine.Check
+// Code under a directory that starts with an underscore is the product's own: a test in jest's
+// __tests__ is a test, and importing a pure module from _lib keeps the importer pure instead of
+// asking a person to review a side effect that is not there.
+func TestUnderscoreDirectoriesAreReadAsProductCode(t *testing.T) {
+	base := fstest.MapFS{
+		"src/total.ts": {Data: []byte("/** Sums. */\nexport function total(a: number, b: number) { return a + b; }\n")},
+	}
+	head := fstest.MapFS{
+		"src/total.ts":                {Data: []byte("import { twice } from \"./_lib/twice\";\n\n/** Sums. */\nexport function total(a: number, b: number) { return twice(a) + b; }\n")},
+		"src/_lib/twice.ts":           {Data: []byte("/** Doubles. */\nexport function twice(a: number) { return a * 2; }\n")},
+		"src/__tests__/total.test.ts": {Data: []byte("import { total } from \"../total\";\n\nit(\"sums\", () => {\n  expect(total(1, 2)).toBe(4);\n});\n")},
+	}
+	a, err := adapter.New().Analyze(engine.Version{FS: head}, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Tests) != 1 || a.Tests[0].Path != "src/__tests__/total.test.ts" {
+		t.Errorf("tests: got %v, want the one in src/__tests__", a.Tests)
+	}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
+	r, err := e.Check(trees{base: base, head: head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Reviews {
+		if f.Rule == "tests/purity-lost" {
+			t.Errorf("importing a pure module under _lib needs review: %s", f.Message.In("en"))
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: adapter.Analyzer.Analyze
+// The go tool ignores a directory whose name starts with an underscore, so its Go files are no
+// package and its tests never run; they are listed, but not as Go code or tests.
+func TestGoFilesUnderAnUnderscoreDirectoryAreNotGoCode(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod":                 {Data: []byte("module example.com/app\n")},
+		"_examples/main.go":      {Data: []byte("package main\n\nfunc main() {}\n")},
+		"_examples/main_test.go": {Data: []byte("package main\n\nimport \"testing\"\n\nfunc TestMain2(t *testing.T) {}\n")},
+		"store/store.go":         {Data: []byte("package store\n")},
+	}
+	a, err := adapter.New().Analyze(engine.Version{FS: fsys}, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range a.Files {
+		got = append(got, f.Path+" "+string(f.Role))
+	}
+	want := "_examples/main.go other,_examples/main_test.go other,go.mod other,store/store.go source"
+	if strings.Join(got, ",") != want {
+		t.Errorf("got %v, want %s", got, want)
+	}
+	if len(a.Tests) != 0 {
+		t.Errorf("tests: got %v, want none", a.Tests)
 	}
 }

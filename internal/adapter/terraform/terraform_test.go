@@ -66,13 +66,13 @@ func TestTerraformFilesAndRoles(t *testing.T) {
 		got = append(got, fmt.Sprintf("%s %s %s unit=%s path=%s unread=%v lines=%d", f.Path, f.Language, f.Role, f.Unit, f.UnitPath, f.Unread, f.Lines))
 	}
 	want := []string{
-		"gen/main.tf terraform generated unit=gen path=gen unread=false lines=2",
-		"main.tf terraform source unit=. path=. unread=false lines=2",
-		"modules/network/broken.tf terraform other unit= path= unread=true lines=2",
-		"modules/network/generated.tf terraform generated unit=modules/network path=modules/network unread=false lines=3",
-		"modules/network/main.tf terraform source unit=modules/network path=modules/network unread=false lines=4",
-		"prod.tfvars terraform other unit= path= unread=false lines=2",
-		"tests/main.tftest.hcl terraform test unit=tests path=tests unread=false lines=4",
+		"gen/main.tf terraform generated unit=gen path=gen unread=false lines=1",
+		"main.tf terraform source unit=. path=. unread=false lines=1",
+		"modules/network/broken.tf terraform other unit= path= unread=true lines=1",
+		"modules/network/generated.tf terraform generated unit=modules/network path=modules/network unread=false lines=2",
+		"modules/network/main.tf terraform source unit=modules/network path=modules/network unread=false lines=3",
+		"prod.tfvars terraform other unit= path= unread=false lines=1",
+		"tests/main.tftest.hcl terraform test unit=tests path=tests unread=false lines=3",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("files:\n got %q\nwant %q", got, want)

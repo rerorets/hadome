@@ -6,6 +6,7 @@ package tests
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -59,11 +60,28 @@ func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 			}
 			out = append(out, engine.Finding{
 				Rule: r.id, File: file, Line: h.Line, Anchor: anchor,
-				Message: engine.T(r.message, h.Evidence), Why: engine.T(r.why), Fix: engine.T(r.fix),
+				Message: engine.T(r.message, excerpt(h.Evidence)), Why: engine.T(r.why), Fix: engine.T(r.fix),
 			})
 		}
 	}
 	return out, nil
+}
+
+// excerptLimit is the most characters of a hazard's source text a message shows.
+const excerptLimit = 80
+
+// excerpt is the part of a hazard's source text a one-line message shows: its first line, cut to
+// excerptLimit characters, with "…" where anything was left out. The anchor keeps the whole text.
+func excerpt(evidence string) string {
+	first, rest, multiline := strings.Cut(strings.TrimSpace(evidence), "\n")
+	first = strings.TrimSpace(first)
+	if r := []rune(first); len(r) > excerptLimit {
+		return string(r[:excerptLimit]) + "…"
+	}
+	if multiline && strings.TrimSpace(rest) != "" {
+		return first + " …"
+	}
+	return first
 }
 
 // NoClock is tests/no-clock.

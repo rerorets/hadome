@@ -34,6 +34,8 @@ type jvmFile struct {
 	valueFields map[string]bool
 	// assertPrefixes are what start the names of assertions in this language beyond the common ones.
 	assertPrefixes []string
+	// kt is the Kotlin reader, which finds the test classes a Kotlin test class extends; nil in Java.
+	kt *kotlin
 }
 
 // bindClasses binds the classes of the file's own package and of what it imports.
@@ -87,7 +89,7 @@ func (j *java) tests(f *file, t *tables) []facts.Test {
 	var out []facts.Test
 	for _, n := range named(f.root) {
 		if javaTypes[n.Kind()] {
-			out = append(out, jf.javaClass(n, "", nil)...)
+			out = append(out, jf.javaClass(n, "", nil, jvmScope{fields: map[string]string{}})...)
 		}
 	}
 	return out
@@ -124,7 +126,7 @@ func annotationReason(f *file, a *sitter.Node) string {
 	return reason
 }
 
-func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.Node) []facts.Test {
+func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.Node, outer jvmScope) []facts.Test {
 	f := jf.f
 	name := prefix + f.field(n, "name")
 	anns := annotations(f, n)
@@ -135,14 +137,14 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	}
 	body := n.ChildByFieldName("body")
 	var methods []*sitter.Node
-	fields := map[string]string{}
+	scope := outer.nested()
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
 			if hasAny(annotations(f, m), jvmMockAnnotations) {
 				jf.mocks = append(jf.mocks, m)
 			} else {
-				jf.javaFieldTypes(m, fields)
+				jf.javaFieldTypes(m, scope.fields)
 				for _, d := range named(m) {
 					if d.Kind() == "variable_declarator" {
 						jf.noteValueField(f.field(d, "name"), d.ChildByFieldName("value"))
@@ -152,17 +154,20 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 		case m.Kind() == "method_declaration":
 			methods = append(methods, m)
 			jf.helpers[f.field(m, "name")] = m.ChildByFieldName("body")
+			if hasAny(annotations(f, m), jvmSetupAnnotations) {
+				scope.setups = append(scope.setups, jvmCode{jf, m.ChildByFieldName("body")})
+			}
 		}
 	}
 	var out []facts.Test
 	for _, m := range methods {
 		if a := annotations(f, m); hasAny(a, jvmTestAnnotations) {
-			out = append(out, jf.javaTest(name+"."+f.field(m, "name"), m, a, classSkip, fields))
+			out = append(out, jf.javaTest(name+"."+f.field(m, "name"), m, a, classSkip, scope))
 		}
 	}
 	for _, m := range named(body) {
 		if javaTypes[m.Kind()] {
-			out = append(out, jf.javaClass(m, name+".", classSkip)...)
+			out = append(out, jf.javaClass(m, name+".", classSkip, scope)...)
 		}
 	}
 	return out
@@ -177,7 +182,7 @@ func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
 	return false
 }
 
-func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node, fields map[string]string) facts.Test {
+func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
 	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
 	skip := classSkip
@@ -189,10 +194,7 @@ func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter
 	if skip != nil {
 		t.skip(annotationReason(jf.f, skip), skip)
 	}
-	for _, mk := range jf.mocks {
-		t.hazard(facts.HazardMock, mk)
-	}
-	w := &jvmWalk{jf: jf, t: t, vars: copyMap(fields), locals: map[string]bool{}, walking: map[string]bool{}}
+	w := jf.startTest(t, scope, func(w *jvmWalk, n *sitter.Node) { w.walk(n, javaLoops, w.javaVisit) })
 	w.walk(m.ChildByFieldName("body"), javaLoops, w.javaVisit)
 	return t.done()
 }
@@ -204,6 +206,8 @@ type jvmWalk struct {
 	vars    map[string]string
 	locals  map[string]bool
 	walking map[string]bool
+	// inherited are the helpers of a test class of another file that the test's class extends.
+	inherited map[string]jvmCode
 }
 
 func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
@@ -221,7 +225,7 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	if w.jf.drivers[name] {
 		w.t.test.Drives = true
 	}
-	if !w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...) && jvmValidation(obj, name) {
+	if !w.t.assertion(key, w.jf.t.asserts, w.jf.assertPrefixes...) && w.validation(obj, name) {
 		w.t.test.Asserts++
 	}
 	if cat, ok := w.jf.t.calls[key]; ok {
@@ -235,23 +239,38 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	target := ""
 	switch {
 	case obj == "":
-		if tg, ok := w.jf.names[name]; ok {
-			target = tg
-		} else if body, ok := w.jf.helpers[name]; ok && !w.walking[name] {
-			w.walking[name] = true
-			follow(body)
-			delete(w.walking, name)
-		}
+		target = w.unqualified(name, follow)
 	case w.vars[obj] != "":
 		target = w.vars[obj] + "." + name
 	case w.jf.names[obj] != "":
 		target = w.jf.names[obj] + "." + name
 	case w.locals[obj]:
 		w.t.test.Unresolved++
+	default:
+		target = w.member(obj, name)
 	}
 	if target != "" {
 		w.t.call(target, scopeArg(w.jf.j.scopes, target, args))
 	}
+}
+
+// unqualified resolves a call by a bare name: a target the file binds, or a helper of the file or
+// of a class the test's class extends, which it follows.
+func (w *jvmWalk) unqualified(name string, follow func(*sitter.Node)) string {
+	if tg, ok := w.jf.names[name]; ok {
+		return tg
+	}
+	if w.walking[name] {
+		return ""
+	}
+	w.walking[name] = true
+	if body, ok := w.jf.helpers[name]; ok {
+		follow(body)
+	} else if h, ok := w.inherited[name]; ok {
+		w.within(h.jf, func() { follow(h.n) })
+	}
+	delete(w.walking, name)
+	return ""
 }
 
 func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {
@@ -296,13 +315,22 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 		w.invoke(n, f.field(n, "object"), f.field(n, "name"), arguments(n.ChildByFieldName("arguments")),
 			func(body *sitter.Node) { w.walk(body, javaLoops, w.javaVisit) })
 	case "identifier": // a name in a type is a type_identifier, never an identifier
-		if _, ok := w.jf.names[f.text(n)]; ok {
-			w.t.readName(n, javaUses)
-		} else if w.readsValueField(n) {
-			w.t.test.Reads++
-		}
+		w.javaIdentifier(n)
 	}
 	return true
+}
+
+// javaIdentifier counts the reads of product values a name makes: the product's own name, a value
+// field of the test class, or a field of a product object (cache.ttl).
+func (w *jvmWalk) javaIdentifier(n *sitter.Node) {
+	name := w.jf.f.text(n)
+	if _, ok := w.jf.names[name]; ok {
+		w.t.readName(n, javaUses)
+	} else if w.readsValueField(n) {
+		w.t.test.Reads++
+	} else if p := n.Parent(); w.vars[name] != "" && p.Kind() == "field_access" && isField(p, "object", n) {
+		w.t.test.Reads++
+	}
 }
 
 var javaUses = useGrammar{
@@ -333,28 +361,6 @@ func (jf *jvmFile) javaFieldTypes(n *sitter.Node, into map[string]string) {
 			}
 		}
 	}
-}
-
-// restAssuredChecks are the checks of REST Assured's validation chain, which starts at then().
-var restAssuredChecks = set("statusCode", "statusLine", "body", "header", "headers", "contentType", "cookie",
-	"cookies", "time")
-
-// jvmValidation recognises checks that do not start with assert: REST Assured's
-// given()…then().statusCode(200).body(…), where each call after then() checks the response, and
-// Spring MockMvc's perform(…).andExpect(…).
-func jvmValidation(obj, name string) bool {
-	if name == "andExpect" {
-		return true
-	}
-	return restAssuredChecks[name] && strings.Contains(strings.Join(strings.Fields(obj), ""), "then()")
-}
-
-// jvmDrivers are the HTTP test clients, by the package a test file imports, and the calls with which
-// a test drives the application through them.
-var jvmDrivers = map[string][]string{
-	"io.restassured":                               {"given"},
-	"org.springframework.test.web.servlet":         {"perform"},
-	"org.springframework.test.web.reactive.server": {"exchange"},
 }
 
 // noteValueField records a field of a test class whose initializer names something of the product.

@@ -84,15 +84,15 @@ func TestAnsibleFilesAndRoles(t *testing.T) {
 		got = append(got, fmt.Sprintf("%s %s %s unit=%s path=%s unread=%v lines=%d", f.Path, f.Language, f.Role, f.Unit, f.UnitPath, f.Unread, f.Lines))
 	}
 	want := []string{
-		"deploy/web.yml ansible source unit=deploy path=deploy unread=false lines=2",
-		"playbooks/web.yml ansible source unit=playbooks path=playbooks unread=false lines=4",
-		"roles/db/defaults/main.yml ansible generated unit=db path=roles/db unread=false lines=3",
-		"roles/gen/defaults/main.yml ansible generated unit=gen path=roles/gen unread=false lines=2",
-		"roles/web/defaults/main.yml ansible source unit=web path=roles/web unread=false lines=2",
-		"roles/web/molecule/default/verify.yml ansible test unit=roles/web/molecule/default path=roles/web/molecule/default unread=false lines=2",
-		"roles/web/tasks/main.yml ansible source unit=web path=roles/web unread=false lines=4",
-		"roles/web/vars/broken.yml ansible other unit= path= unread=true lines=2",
-		"site.yml ansible source unit=. path=. unread=false lines=2",
+		"deploy/web.yml ansible source unit=deploy path=deploy unread=false lines=1",
+		"playbooks/web.yml ansible source unit=playbooks path=playbooks unread=false lines=3",
+		"roles/db/defaults/main.yml ansible generated unit=db path=roles/db unread=false lines=2",
+		"roles/gen/defaults/main.yml ansible generated unit=gen path=roles/gen unread=false lines=1",
+		"roles/web/defaults/main.yml ansible source unit=web path=roles/web unread=false lines=1",
+		"roles/web/molecule/default/verify.yml ansible test unit=roles/web/molecule/default path=roles/web/molecule/default unread=false lines=1",
+		"roles/web/tasks/main.yml ansible source unit=web path=roles/web unread=false lines=3",
+		"roles/web/vars/broken.yml ansible other unit= path= unread=true lines=1",
+		"site.yml ansible source unit=. path=. unread=false lines=1",
 	}
 	sort.Strings(got)
 	if !slices.Equal(got, want) {

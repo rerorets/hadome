@@ -122,6 +122,7 @@ var Japanese = map[string]string{
 
 	// size/.
 	"%s: %s %d, limit %d": "%s: %s %d（上限 %d）",
+	"%s; grew from %d":    "%s。base の %d から増えた",
 	"product code over the %s limit (%s); an existing one that grows is a regression too":                                "%s の上限（%s）を超えた製品のコード。既にあるものが大きくなるのも後退になる",
 	"past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it": "上限を超えると、コードは一度に読み切れなくなり、全体を分からないまま変更されるようになる",
 	"%s; raising the limit (rules.size.%s) is a change a person reviews":                                                 "%s。上限（rules.size.%s）を上げるのは、人が確かめる変更である",
@@ -139,8 +140,9 @@ var Japanese = map[string]string{
 	"TODO without the required form: %s":                                                                                               "決まった形になっていない TODO: %s",
 	"a new TODO, FIXME or XXX comment that does not match the configured form":                                                         "設定した形に合わない、新しい TODO、FIXME、XXX のコメント",
 	"a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished": "いつやるかを書いていない「後でやる」は、やられない。雑音として残り、何が終わったかを読み手に取り違えさせる",
-	"write it in the configured form (for example TODO(stage 2): …), do it now, or delete it":                                          "設定した形（例: TODO(stage 2): …）で書くか、今やるか、消す",
-	"write it in the form %s (for example TODO(stage 2): …), do it now, or delete it":                                                  "%s の形（例: TODO(stage 2): …）で書くか、今やるか、消す",
+	"write it in the configured form (rules.comments.todo), do it now, or delete it":                                                   "設定した形（rules.comments.todo）で書くか、今やるか、消す",
+	"write it in the form %s (for example %s), do it now, or delete it":                                                                "%s の形（例: %s）で書くか、今やるか、消す",
+	"write it in the form %s, do it now, or delete it":                                                                                 "%s の形で書くか、今やるか、消す",
 	"exported %s %s has no doc comment":                                                                                                "公開した %s %s に doc コメントが無い",
 	"value %s has no description":                                                                                                      "値 %s に description が無い",
 	"a new exported function, method or type of product code without a doc comment, or a new Terraform variable or output or Ansible role default without a description":                                   "doc コメントの無い、製品のコードの新しい公開した関数、メソッド、型。description の無い、新しい Terraform の variable と output、Ansible のロールの defaults の変数",
@@ -195,6 +197,16 @@ var Japanese = map[string]string{
 	"a person checks the tests of those functions":                                                                                              "それらの関数のテストを人が確かめる",
 	"%d mutants beyond mutation.max-mutants were not tried, in %s":                                                                              "mutation.max-mutants を超えた %d 個の変異を試していない。対象: %s",
 	"split the change, or have a person decide whether to raise mutation.max-mutants":                                                           "変更を分けるか、mutation.max-mutants を上げるかどうかを人が決める",
+
+	// hadome mutate's progress lines.
+	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
+	"caught":                        "テストが気づいた",
+	"survived":                      "どのテストも気づかない",
+	"flip a comparison":             "比較を逆にする",
+	"negate a boolean":              "真偽を反転する",
+	"swap arithmetic":               "算術を入れ替える",
+	"return the zero value":         "ゼロの値を返す",
+	"remove a call statement":       "呼び出しの文を消す",
 
 	// Product-specific gates of kind measure.
 	"%s: %s is no longer guarded (was: %s)":                                               "%s: %s が守られなくなった（前は %s）",

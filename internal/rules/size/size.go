@@ -4,8 +4,6 @@
 package size
 
 import (
-	"strings"
-
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
@@ -56,7 +54,7 @@ func display(m measured) string {
 	if m.name == "" {
 		return m.file
 	}
-	return m.name[strings.LastIndex(m.name, "/")+1:]
+	return facts.ShortName(m.name)
 }
 
 func files(a *facts.Analysis) []measured {

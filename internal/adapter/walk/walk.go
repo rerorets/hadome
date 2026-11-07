@@ -8,11 +8,12 @@ import (
 )
 
 // Skip reports whether a directory is skipped: vendored and installed dependencies, test fixtures,
-// and hidden or underscore-prefixed directories, which tools use for their own files.
+// build outputs, and hidden directories, which tools use for their own files. A leading underscore
+// does not skip a directory: frameworks keep the product's own code and tests there (__tests__,
+// _components, _internal).
 func Skip(name string) bool {
 	return name == "vendor" || name == "testdata" || name == "node_modules" || name == "target" ||
-		name == "build" || name == "dist" || name == "__pycache__" ||
-		strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
+		name == "build" || name == "dist" || name == "__pycache__" || strings.HasPrefix(name, ".")
 }
 
 // Files lists every file outside skipped directories, in lexical order.

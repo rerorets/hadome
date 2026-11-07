@@ -126,6 +126,14 @@ classDiagram
 | `generated` | Generated code; size and comment rules skip it | Standard headers (e.g. Go's `Code generated … DO NOT EDIT.`), or a `files.generated` glob in configuration |
 | `other` | A language hadome does not know, or not code | Still listed, so file-level rules can see it |
 
+Directories that are not read:
+
+- Nothing under these directories is listed or read. They hold copies of dependencies, build outputs and tools' working files, not the product's code
+  - `vendor`, `node_modules`, `testdata`, `target`, `build`, `dist`, `__pycache__`
+  - Anything starting with `.`. Example: `.git`
+- Directories starting with `_` are read. Frameworks keep the product's code and tests there. Examples: jest's `__tests__`, Next.js's `_components`, Python's `_internal`
+- Only Go lists the `.go` files under a directory starting with `_` with role `other`. The go command does not treat it as a package and does not run its tests
+
 Test file conventions:
 
 | Language | Test files |
@@ -209,7 +217,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 | Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require`, testify suite checks (`s.Equal(…)`, `s.Require().…`) |
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
 | TypeScript | `expect(…)` with a matcher called (`expect(x).toBe(1)`, `expect(x).not.toBe(1)`), chai's `expect(x).to.…`, `assert` and `assert.…`. `expect(x)` alone, and a matcher not called (`expect(x).toBeTruthy`), do not count |
-| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like), Spring MockMvc's `andExpect` |
+| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, MockK's `verify…`, `coVerify…` and `confirmVerified`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like, including those after a helper whose body ends in `then()`), Spring MockMvc's `andExpect` |
 | Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
 
 As with hazard categories, these are examples; each adapter holds the full table. In languages other than Go, a function whose name starts with `assert`, `expect` or `verify` counts too (`assertEquals`, `assert_called_once`, `expectValid`). A checking helper in another file cannot be read by the adapter, but its name says that it checks.
@@ -230,7 +238,7 @@ For `tests/guards-nothing`, the adapter stores in `Test.Reads` how many product 
 | Go | Package variables and constants (`store.Limit`, or `limit` in the same package), and functions passed as values without being called (`sort.Slice(rows, store.Less)`) |
 | Python | A name imported from product code and used in an expression without being called (comparing with `MAX_ROWS`, passing `normalize` to `map`, `isinstance(x, Store)`) |
 | TypeScript | A name imported from product code and used in an expression without being called |
-| Java / Kotlin | Static fields and constants of a class (`Store.LIMIT`), method references (`Store::normalize`), Kotlin top-level `val`s |
+| Java / Kotlin | Static fields and constants of a class (`Store.LIMIT`), method references (`Store::normalize`), Kotlin top-level `val`s, properties of a product object (`cache.ttl`) |
 | Rust | Product `const`s and `static`s, and functions passed as values without being called. A product name inside a macro's arguments also counts (the parser does not read macro arguments as expressions, so a call there cannot be told from a read) |
 
 Names in type positions (type annotations, TypeScript's `import type`, generic type arguments) do not count. Types do not run, so a test whose only mention of product code is in types runs no product code.

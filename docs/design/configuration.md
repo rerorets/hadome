@@ -141,7 +141,7 @@ If base's configuration is invalid, the check returns `2` rather than guessing: 
 
 ## Package shape
 
-One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions, a description and an example. Everything else is generated from it, which is how the schema, `explain` and the validation messages stay in agreement.
+One table, the **specification** (`Spec`, a tree of `Key`), describes every key: its type, allowed values, which direction is looser, how list entries are identified across versions (a list whose order matters, a command and its arguments, is compared as one value and shown in its order), a description and an example. Everything else is generated from it, which is how the schema, `explain` and the validation messages stay in agreement.
 
 ```mermaid
 classDiagram
@@ -158,6 +158,7 @@ classDiagram
     +Min int
     +MinItems int
     +Elem *Key
+    +Sequence bool
     +Fields []Key
     +Variants []Variant
     +Looser Direction

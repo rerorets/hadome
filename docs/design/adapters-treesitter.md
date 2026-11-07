@@ -141,7 +141,7 @@ Some imports look like the repository's own but resolve to no file.
 | Python | `def` at module level and in classes | `class` | Name does not start with `_` | A docstring: the body's first statement is a string |
 | Rust | `fn` items and `impl` methods | `struct`, `enum`, `trait` (as interface), `type` | `pub` | `///` lines right before it |
 | Java | Methods and constructors | Classes, interfaces, enums, records | `public` | A `/** */` comment right before it |
-| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it |
+| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when a line with an annotation with arguments (`@Suppress("x")`) stands between them |
 
 Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not product code. Cyclomatic complexity counts each language's `if`, loops, `case`/match arms (not the default one), `catch`, `&&`, `||`, and the ternary operator.
 
@@ -165,6 +165,12 @@ TypeScript test declarations are read as follows.
 
 - What a test calls is read from the names it imports and the objects it builds
 - In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read. In Kotlin, the fields and helpers of a `companion object` are read as the class's own
+- The tests of an inner class (`@Nested` and the like) use the fields and helpers of the class around it too
+- When a Kotlin test class extends another class of the test files (`class StoreTest : StoreTestSupport()`), the fields, helpers, mock fields and the code run before each test of the class it extends are read as its own, and so are those of the class that one extends in turn. The class it extends is found by name: one of the same package first, otherwise the only class of that name. Names in an inherited helper are read through the imports of the helper's own file
+- In Kotlin, a variable or field built with `apply` or `also` (`Queue().apply { limit = 3 }`) is of the class of the object built, since these two return the object they receive. One that holds an enum constant (`val kind = Kind.DAILY`) is of that enum class. A call chained right on a built object (`Store().append(1)`) calls that class's method
+- In Java and Kotlin, a call of the form `Class.member.method()` is read as follows. When the member is an enum constant, it calls the enum class's method (`Kind.ORDERS.toTable()` calls `Kind.toTable`). When the member is an inner class, it calls that class's method (`Outer.Inner.build()`). Any other member (a property of an `object` and the like) holds a value whose class is unknown, so the test counts as reading product code (`Reads`)
+- In Java and Kotlin, reading a property of a variable read as a product class (`cache.ttl`) counts as reading product code. Calling a method on it (`cache.clear()`) is a call, not a read
+- In Kotlin, `assertThrows<E> { … }` and `assertThrows<E>({ … })` are parsed by the grammar as two comparisons in a row (`(assertThrows < E) > { … }`). They are read as calls, and so are `mockk<T> { … }` and product functions written the same way. The type argument is not read as a value
 - A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change
 - In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
 - In TypeScript, `require('./x')` named by a string is read like an import, at the top of the file, in a `describe` block and inside a test: `const { send } = require('./mail')`, `const mail = require('./mail')`
@@ -203,7 +209,7 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 
 | | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
-| `clock` | `Date.now`, `new Date()`, `performance.now` | `datetime.now`, `datetime.utcnow`, `date.today`, `time.time` | `SystemTime::now`, `Instant::now`, `Utc::now`, `Local::now` | `Instant.now`, `LocalDate(Time).now`, `System.currentTimeMillis`, `System.nanoTime` | as Java, `Clock.System.now` |
+| `clock` | `Date.now`, `new Date()`, `performance.now` | `datetime.now`, `datetime.utcnow`, `date.today`, `time.time` | `SystemTime::now`, `Instant::now`, `Utc::now`, `Local::now` | `Instant.now`, `LocalDate(Time).now`, `System.currentTimeMillis`, `System.nanoTime` | as Java, `Clock.System.now`, `measureTimeMillis`, `measureNanoTime`, `measureTime`, `measureTimedValue`, `TimeSource.Monotonic.markNow` |
 | `sleep` | `setTimeout` | `time.sleep`, `asyncio.sleep` | `thread::sleep`, `tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`, `delay` |
 | `mock` | `jest.mock`, `vi.mock`, `mock.module` (bun), `vi.spyOn`, `jest.spyOn`, `vi.stubGlobal`, importing `sinon` | importing `unittest.mock`, `mock`; `mocker`; `monkeypatch.setattr`, `monkeypatch.delattr` | `mock!`, using a `Mock<Name>` type that `#[automock]` generates, importing `mockall` | importing `org.mockito`; fields annotated `@Mock`, `@Spy`, `@MockBean`, Quarkus's `@InjectMock`, `@InjectSpy` | importing `io.mockk`, `org.mockito`; the Java annotations, `@MockK`, `@SpyK` |
 | `always-true` | `expect(true).toBe(true)`, `expect(x).toBe(x)` | `assert True`, `assert x == x` | `assert!(true)`, `assert_eq!(x, x)` | `assertTrue(true)`, `assertEquals(x, x)` | as Java |
@@ -215,6 +221,13 @@ The entries in the table are a selection. All of them are in the code's tables.
 Global APIs are recognised by name only: calling a local variable of the same name counts too. Counting one makes the unit impure, so when a name is mistaken, `tests/no-mock` errs by not reporting. Each API found is in the list of imports as an import with `Global` true ([adapters.md](adapters.md)), once per file.
 
 After a TypeScript test switches to a fake clock, `Date.now`, `new Date()` and `setTimeout` do not count as `clock` or `sleep`. The fake clock is switched on by `vi.useFakeTimers()`, `jest.useFakeTimers()`, `vi.setSystemTime()`, `jest.setSystemTime()` and `sinon.useFakeTimers()`. Called in a test, it applies from that point on; called in `beforeEach` or directly in a `describe` block, it applies everywhere in the tests inside. After `vi.useRealTimers()` or `jest.useRealTimers()` they count again.
+
+In Java and Kotlin, the `clock` and `sleep` hazards of the code that runs before each test are hazards of every test of the class.
+
+- The code that runs before each test is a method annotated `@BeforeEach`, `@BeforeAll`, `@Before` or `@BeforeClass`, and a Kotlin `init` block
+- That of the enclosing classes and of the class extended counts too
+- The hazard is placed on the line of that code, in another file when the class extended is there
+- The calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 

@@ -177,3 +177,32 @@ func TestListIntroductionsAreInTheChosenLanguage(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: external contract
+// target: engine.WriteText and engine.WriteJSON
+// A finding about a whole file (file-lines, purity-lost) has no line. The text output names only
+// the file, never "file:0"; the JSON keeps line 0, which CI reads as the whole file.
+func TestAWholeFileFindingShowsNoLine(t *testing.T) {
+	r := engine.Report{Regressions: []engine.Finding{{Rule: "size/file-lines", File: "store/store.go",
+		Message: engine.T("too long"), Why: engine.T("why"), Fix: engine.T("fix")}}}
+	var text bytes.Buffer
+	engine.WriteText(&text, r, "en")
+	if strings.Contains(text.String(), "store/store.go:") || !strings.Contains(text.String(), "\n  store/store.go\n") {
+		t.Errorf("text: want the file alone on its line\n%s", text.String())
+	}
+	var js bytes.Buffer
+	if err := engine.WriteJSON(&js, r, "en"); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Regressions []struct {
+			Line *int `json:"line"`
+		} `json:"regressions"`
+	}
+	if err := json.Unmarshal(js.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Regressions) != 1 || got.Regressions[0].Line == nil || *got.Regressions[0].Line != 0 {
+		t.Errorf("json: want line 0\n%s", js.String())
+	}
+}

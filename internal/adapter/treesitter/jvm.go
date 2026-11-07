@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 
+	sitter "github.com/tree-sitter/go-tree-sitter"
+
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -17,13 +19,68 @@ type jvm struct {
 	packages map[string]string          // package -> its directory
 	classes  map[string]map[string]bool // package -> class names of product code
 	scopes   map[string]int
+	// entries are the constants of the product's top-level enum classes: class target -> names.
+	entries map[string]map[string]bool
+	// testTypes are the top-level classes of test files by simple name, which a test class of
+	// another file may extend.
+	testTypes map[string][]jvmDecl
+}
+
+// jvmDecl is a declaration with the file that holds it.
+type jvmDecl struct {
+	f *file
+	n *sitter.Node
 }
 
 var jvmTestDir = regexp.MustCompile(`(^|/)src/[A-Za-z]*[tT]est[A-Za-z]*/`)
 
 func (j *jvm) reset() {
 	j.packages, j.classes, j.scopes = map[string]string{}, map[string]map[string]bool{}, map[string]int{}
+	j.entries, j.testTypes = map[string]map[string]bool{}, map[string][]jvmDecl{}
 }
+
+// isClass reports whether a target names a class of the product, not a function or a constant.
+func (j *jvm) isClass(target string) bool {
+	return strings.Contains(target, ".") && j.classes[packageOf(target)][lastElem(target)]
+}
+
+// noteType records a top-level class of a file after place: a test class, which a test class of
+// another file may extend, or the constants of an enum class of the product.
+func (j *jvm) noteType(f *file, n *sitter.Node, name string, entries []string) {
+	if f.test {
+		j.testTypes[name] = append(j.testTypes[name], jvmDecl{f, n})
+		return
+	}
+	if len(entries) == 0 {
+		return
+	}
+	class := f.unit + "." + name
+	if j.entries[class] == nil {
+		j.entries[class] = map[string]bool{}
+	}
+	for _, e := range entries {
+		j.entries[class][e] = true
+	}
+}
+
+// testType finds the test class that a test class of unit extends, by its simple name: the one of
+// the same package, or else the only one of that name.
+func (j *jvm) testType(unit, name string) (jvmDecl, bool) {
+	found := j.testTypes[name]
+	for _, d := range found {
+		if d.f.unit == unit {
+			return d, true
+		}
+	}
+	if len(found) == 1 {
+		return found[0], true
+	}
+	return jvmDecl{}, false
+}
+
+// jvmSetupAnnotations mark the methods that run before each test of their class, or once before
+// all of them.
+var jvmSetupAnnotations = set("BeforeEach", "BeforeAll", "Before", "BeforeClass")
 
 // place sets a file's unit from its package declaration, and records the package and its classes.
 func (j *jvm) place(f *file, pkg string, classes []string) {

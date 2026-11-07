@@ -176,7 +176,7 @@ func parse(p string, src []byte, c config.Config) (parsed, bool) {
 	if !ok { // claimed through files.ansible
 		pl = place{kind: playbook, dir: path.Dir(p)}
 	}
-	lines := strings.Count(string(src), "\n") + 1
+	lines := facts.CountLines(src)
 	f, err := parser.ParseBytes(src, 0)
 	if err != nil {
 		return parsed{place: pl, file: facts.File{Path: p, Language: name, Role: facts.RoleOther, Lines: lines, Unread: true}}, false

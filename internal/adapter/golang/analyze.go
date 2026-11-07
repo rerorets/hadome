@@ -36,8 +36,20 @@ type parsedFile struct {
 // Name is the language's name in configuration.
 func (Adapter) Name() string { return "go" }
 
-// Claims reports whether the file is Go.
-func (Adapter) Claims(p string) bool { return strings.HasSuffix(p, ".go") }
+// Claims reports whether the file is Go that the go tool builds. Like the go tool, it ignores a
+// directory whose name starts with an underscore (_examples): its tests never run, so they guard
+// nothing. Such files are still listed, with role other.
+func (Adapter) Claims(p string) bool {
+	if !strings.HasSuffix(p, ".go") {
+		return false
+	}
+	for _, dir := range strings.Split(path.Dir(p), "/") {
+		if strings.HasPrefix(dir, "_") {
+			return false
+		}
+	}
+	return true
+}
 
 // Analyze reads the Go files of the version. Files that do not parse are listed but yield no other
 // facts: a broken file is the compiler's business, not a reason to stop checking everything else.
@@ -56,7 +68,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		}
 		pf := parsedFile{path: p, src: src, pkgPath: importPath(modules, path.Dir(p)), test: strings.HasSuffix(p, "_test.go"),
 			generated: config.MatchesAny(c.GeneratedFiles, p)}
-		lines := strings.Count(string(src), "\n") + 1
+		lines := facts.CountLines(src)
 		f, perr := parser.ParseFile(fset, p, src, parser.ParseComments)
 		if perr != nil {
 			a.Files = append(a.Files, facts.File{Path: p, Language: "go", Role: facts.RoleOther, Lines: lines, Unread: true})

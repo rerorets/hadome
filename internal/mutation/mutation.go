@@ -37,6 +37,9 @@ type Mutate struct {
 	Mutator  Mutator
 	Workdir  string    // where shared configuration layers are read from
 	Progress io.Writer // one line per mutant tried; may be io.Discard
+	// Lang is the language of the progress lines (en or ja). Empty means messages in head's
+	// configuration, as for the report.
+	Lang string
 }
 
 // Run tries the mutants of head, then base's counterparts of head's survivors, and compares the two
@@ -70,7 +73,11 @@ func (m *Mutate) Run(src engine.Source) (engine.Report, error) {
 		return engine.Report{}, err
 	}
 	vs := versions{base: bv, head: hv, baseFacts: baseFacts, headFacts: headFacts}
-	found, err := m.judge(vs, touched(baseFacts, headFacts, bv, hv), *headCfg.Mutation)
+	lang := m.Lang
+	if lang == "" {
+		lang = headCfg.Messages
+	}
+	found, err := m.judge(vs, touched(baseFacts, headFacts, bv, hv), *headCfg.Mutation, lang)
 	if err != nil {
 		return engine.Report{}, err
 	}
@@ -85,8 +92,9 @@ type versions struct {
 	baseFacts, headFacts *facts.Analysis
 }
 
-// judge tries the mutants and returns the findings of each version, by label.
-func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation) (map[string][]engine.Finding, error) {
+// judge tries the mutants and returns the findings of each version, by label. lang is the language
+// of the progress lines.
+func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lang string) (map[string][]engine.Finding, error) {
 	bv, hv := vs.base, vs.head
 	found := map[string][]engine.Finding{}
 	for _, lang := range m.Mutator.Unmutated(funcs) {
@@ -115,7 +123,7 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation) (ma
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintf(m.Progress, "mutate %d/%d %s %s: %s\n", i+1, len(mutants), mu.Func, mu.Operator, outcome(out))
+		fmt.Fprintln(m.Progress, progress(i+1, len(mutants), mu, out).In(lang))
 		if out == Survived {
 			survivors = append(survivors, mu)
 			found[hv.Label] = append(found[hv.Label], finding(mu))
@@ -256,11 +264,14 @@ func untried(rest []facts.Mutant) engine.Finding {
 }
 
 // short drops the import path of a symbol ID: example.com/app/store.Append is store.Append.
-func short(id string) string { return id[strings.LastIndex(id, "/")+1:] }
+func short(id string) string { return facts.ShortName(id) }
 
-func outcome(o Outcome) string {
+// progress is the line written after trying the n-th of total mutants: where the break is, what it
+// broke, and whether a test noticed.
+func progress(n, total int, mu facts.Mutant, o Outcome) engine.Text {
+	result := engine.T("caught")
 	if o == Survived {
-		return "survived"
+		result = engine.T("survived")
 	}
-	return "caught"
+	return engine.T("mutate %d/%d %s:%d %s, %s: %s", n, total, mu.Path, mu.Line, short(mu.Func), engine.T(mu.Operator), result)
 }

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // scopeShrunk is tests/scope-shrunk: every target guarded by an active test in base must still be
@@ -24,16 +25,16 @@ func (r scopeShrunk) Measure(in engine.Input) ([]engine.Item, error) {
 			continue // a skipped test guards nothing
 		}
 		for _, c := range t.Calls {
-			target := c.Target
+			target, name := c.Target, facts.ShortName(c.Target)
 			if seen[target] {
 				continue
 			}
 			seen[target] = true
 			out = append(out, engine.Item{
 				Rule: r.ID(), Key: target, File: t.Path, Line: t.Line,
-				Detail: engine.T("guarded scope shrank: %s is no longer exercised by any active test (was: %s)", target, t.Name),
-				Why:    engine.T("the behaviour of %s can now change without any test noticing", target),
-				Fix:    engine.T("keep or restore a test that calls %s, or remove %s itself if it is no longer needed", target, target),
+				Detail: engine.T("guarded scope shrank: %s is no longer exercised by any active test (was: %s)", name, t.Name),
+				Why:    engine.T("the behaviour of %s can now change without any test noticing", name),
+				Fix:    engine.T("keep or restore a test that calls %s, or remove %s itself if it is no longer needed", name, name),
 			})
 		}
 	}
