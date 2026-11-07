@@ -61,7 +61,23 @@ func docCases() []engine.Case {
 			WantFail: []string{"comments/missing-doc"}},
 		{Name: "a new Ansible default it describes passes", Base: role(""), Head: role("web_port: 80\n")},
 		{Name: "a new Ansible default kept to the role passes", Base: role(""), Head: role("_web_cache: /tmp\n")},
+		{Name: "a function matching a configured entry point's name and paths passes", Base: routes(""),
+			Head: routes("\nfunc Load() {}\n")},
+		{Name: "a function with a configured name outside its paths fails",
+			Base:     module("store/store.go", store(appendFunc), ".hadome.yml", entryPoints),
+			Head:     module("store/store.go", store(appendFunc+"\nfunc Load() {}\n"), ".hadome.yml", entryPoints),
+			WantFail: []string{"comments/missing-doc"}},
 	}
+}
+
+// entryPoints lets Load in the files under routes/ off its doc comment, as a framework that calls
+// a page's Load by name documents it.
+const entryPoints = "schema: 1\nrules:\n  comments:\n    entry-points:\n      - names: [Load]\n        paths: [\"routes/**\"]\n"
+
+// routes is a page package under routes/, configured with entryPoints, with body after Render.
+func routes(body string) fstest.MapFS {
+	return module("routes/page/page.go", "// Package page renders a page.\npackage page\n\n// Render draws it.\nfunc Render() {}\n"+body,
+		".hadome.yml", entryPoints)
 }
 
 // role is an Ansible role whose argument_specs describes web_port, with these defaults.

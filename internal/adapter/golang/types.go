@@ -194,6 +194,9 @@ func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
 	if t, local := s.localResult(fun, c); local {
 		return t
 	}
+	if h, ok := s.supportFunc(fun); ok {
+		return h.resultType(s)
+	}
 	if id := s.qualify(fun, func(id string) bool { return s.idx.funcs[id] }); id != "" {
 		return s.idx.result(id)
 	}
@@ -241,6 +244,9 @@ func (h helper) resultType(caller scope) *vtype {
 	}
 	in := caller
 	in.imports, in.frame = h.imports, nil
+	if h.pkgPath != "" {
+		in.pkgPath, in.samePkg, in.testKey = h.pkgPath, true, ""
+	}
 	return in.resolve(r.List[0].Type)
 }
 

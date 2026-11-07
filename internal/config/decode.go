@@ -40,14 +40,20 @@ func decode(raw map[string]any, layers []string) Config {
 	c.TestFiles = textList(files["tests"])
 	c.GeneratedFiles = textList(files["generated"])
 	c.AnsibleFiles = textList(files["ansible"])
+	c.ProductFiles = textList(files["product"])
 	size := object(object(raw["rules"])["size"])
 	c.Size = Limits{}
 	for _, k := range sizeKey.Fields {
 		c.Size[k.Name] = intOr(size[k.Name], k.Default.(int))
 	}
 	c.TodoForm = DefaultTodo
-	if form, ok := object(object(raw["rules"])["comments"])["todo"].(string); ok {
+	comments := object(object(raw["rules"])["comments"])
+	if form, ok := comments["todo"].(string); ok {
 		c.TodoForm = form
+	}
+	for _, v := range list(comments["entry-points"]) {
+		m := object(v)
+		c.EntryPoints = append(c.EntryPoints, EntryPoint{Names: textList(m["names"]), Paths: textList(m["paths"])})
 	}
 	return c
 }

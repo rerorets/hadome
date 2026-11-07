@@ -10,6 +10,7 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	tsx "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
+	fswalk "github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
@@ -57,19 +58,22 @@ var tsDirective = regexp.MustCompile(`^(//\s*@ts-|//\s*eslint-|/\*\s*eslint|///\
 
 var tsTestFile = regexp.MustCompile(`(\.(test|spec)\.[cm]?[jt]sx?$)|(^|/)__tests__/`)
 
-// supportDirs hold files that exist for the tests, in TypeScript and Python alike.
-const supportDirs = `(^|/)(test|tests|e2e|__mocks__|__fixtures__|testutils?|test-utils|test_utils)/`
+// tsSupportFile matches the test support files besides those under walk.SupportDir: test_helpers.ts
+// and the like, and the setup files of the test runners.
+var tsSupportFile = regexp.MustCompile(`(?i:test[_-]?helpers?\.[cm]?[jt]sx?$)|(^|/)(setupTests|jest\.setup|vitest\.setup)\.[cm]?[jt]sx?$`)
 
-// tsSupportFile matches the test support files: files under supportDirs, test_helpers.ts and the
-// like, and the setup files of the test runners.
-var tsSupportFile = regexp.MustCompile(supportDirs + `|(?i:test[_-]?helpers?\.[cm]?[jt]sx?$)|(^|/)(setupTests|jest\.setup|vitest\.setup)\.[cm]?[jt]sx?$`)
+// supportFile reports whether a file is test support: under a support directory or named like
+// one, unless configuration says it is generated or product code.
+func supportFile(f *file, named *regexp.Regexp) bool {
+	return (fswalk.SupportDir(f.path) || named.MatchString(f.path)) && !f.generatedGlob && !f.productGlob
+}
 
 func (r *typescript) index(v engine.Version, files []*file) {
 	r.files, r.modules, r.scopes, r.supports = map[string]*file{}, map[string]*tsModule{}, map[string]int{}, map[string]*tsFile{}
 	r.project = newTSProject(v.FS, files)
 	for _, f := range files {
 		r.files[f.path] = f
-		f.support = tsSupportFile.MatchString(f.path) && !f.generatedGlob
+		f.support = supportFile(f, tsSupportFile)
 		f.test = tsTestFile.MatchString(f.path) || f.support || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}

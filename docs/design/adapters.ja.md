@@ -139,7 +139,7 @@ classDiagram
 
 | 言語 | テストのファイル |
 |---|---|
-| Go | `*_test.go` |
+| Go | `*_test.go`、テストの補助のパッケージ（下の注） |
 | TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル、テストの補助のファイル（`test/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
 | Python | `test_*.py`、`*_test.py`、テストの補助のファイル（`conftest.py`、`tests/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
 | Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
@@ -156,8 +156,25 @@ classDiagram
 - `files.generated` の glob に合うファイルは、ヘッダが無くても生成されたコードとして扱います
 - 両方に合うファイルは生成されたコードになります
 - glob の書き方は設定の `gates` に書く門番の `paths` と同じです。例: `**` は任意の深さのディレクトリに合います
-- glob は役割を足すだけです。慣習やヘッダで決まった役割を外すことはできません
+- `files.product` の glob に合うファイルは、テストの補助のファイルにしません。製品のコードとして読みます
+  - 外すのは、ディレクトリや名前から既定で決まるテストの補助の役割だけです。例: `e2e/server/` の下に、テストの相手として動かす製品のサーバを置くリポジトリ
+  - 慣習で決まるテストのファイル（`*_test.go`、`*.test.ts`、`__tests__/` の下、`test_*.py` など）と、`files.tests` に合うファイルは、テストのファイルのままです
+  - 対象になるのは、テストの補助のファイルを持つ TypeScript・Python・Go のファイルです
+- `files.product` を除き、glob は役割を足すだけです。慣習やヘッダで決まった役割を外すことはできません
 - 役割を決めてから、言語がファイルを読みます。テストのファイルかどうかで、読み取る事実（テストか、シンボルか）が変わるからです
+
+Go のテストの補助のパッケージ:
+
+- 次のパッケージの `_test.go` でないファイルは、テストの補助のファイルとして役割 `test` にします。テストのためだけにあるコードで、製品のコードではないからです
+  - 名前がテストのヘルパーを表すディレクトリの下にあるパッケージ: `testutil/`、`testutils/`、`test-utils/`、`test_utils/`、`testhelper/`、`testhelpers/`、`__mocks__/`、`__fixtures__/`。例: `internal/testutil`
+  - TypeScript・Python と違い、`test/`、`tests/`、`e2e/` の下は補助にしません。Go ではディレクトリの名前がパッケージの名前になり、`tests` という名前の製品のパッケージもあるからです（例: テストについてのルールを持つパッケージ）
+  - 名前が `test` で終わり、`test` の前の部分と同じ名前のパッケージを import するか、その名前のディレクトリの中にあるパッケージ。例: `store` を import する `storetest`、`store/storetest`。標準ライブラリの `httptest`・`fstest` と同じ慣習です
+  - `latest` のように、たまたま `test` で終わる名前のパッケージは、前の部分（`la`）のパッケージを import しないので、製品のコードのままです
+- 補助のパッケージの関数は、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません
+- テストが補助のパッケージの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のパッケージ自身の import で解決します。例: `storetest.New(t)` が `store.Open()` を呼ぶなら、`storetest.New(t)` を呼ぶテストは `store.Open` を守ります
+  - 補助のパッケージの関数の結果は、宣言した型で読みます。`s := storetest.New(t)` の結果が `*store.Store` なら、`s.Append()` は `store.Store.Append` を呼びます
+  - 補助のパッケージで宣言した型のメソッドは、たどりません。呼ぶと未解決と数えます
+  - 中の危険（時計、待ち、モック）は、そのテストのものとして、補助のパッケージのファイルの行で報告します
 
 ### ユニット（依存のルール向け）
 

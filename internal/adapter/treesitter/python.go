@@ -56,9 +56,9 @@ var pyDirective = regexp.MustCompile(`^#\s*(type:|noqa|pylint:|fmt:|pragma|mypy:
 
 var pyTestFile = regexp.MustCompile(`(^|/)(test_[^/]*|[^/]*_test)\.py$`)
 
-// pySupportFile matches the test support files: files under supportDirs, conftest.py, and
-// test_helpers.py and the like.
-var pySupportFile = regexp.MustCompile(supportDirs + `|(^|/)conftest\.py$|(?i:test[_-]?helpers?\.py$)`)
+// pySupportFile matches the test support files besides those under walk.SupportDir: conftest.py,
+// and test_helpers.py and the like.
+var pySupportFile = regexp.MustCompile(`(^|/)conftest\.py$|(?i:test[_-]?helpers?\.py$)`)
 
 // pyProjectFiles mark the directory of a Python project, whose packages may sit beside them or in src/.
 var pyProjectFiles = []string{"pyproject.toml", "setup.cfg", "setup.py"}
@@ -82,7 +82,7 @@ func (r *python) index(v engine.Version, files []*file) {
 				}
 			}
 		}
-		f.support = pySupportFile.MatchString(f.path) && !f.generatedGlob
+		f.support = supportFile(f, pySupportFile)
 		f.test = pyTestFile.MatchString(f.path) || f.support || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}

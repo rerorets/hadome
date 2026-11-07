@@ -24,10 +24,11 @@ type file struct {
 	// support is a test support file (test/helpers.ts, conftest.py): test code too, and a test that
 	// calls one of its functions is followed into it.
 	support bool
-	// testGlob and generatedGlob are set from configuration before the language indexes the file.
-	testGlob, generatedGlob bool
-	unit                    string // the unit's ID, as imports name it
-	unitPath                string // the unit's location, as diagrams name it
+	// testGlob, generatedGlob and productGlob are set from configuration before the language indexes
+	// the file. productGlob keeps a file that would be test support product code.
+	testGlob, generatedGlob, productGlob bool
+	unit                                 string // the unit's ID, as imports name it
+	unitPath                             string // the unit's location, as diagrams name it
 }
 
 func (f *file) text(n *sitter.Node) string { return n.Utf8Text(f.src) }
@@ -81,7 +82,8 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		defer tree.Close()
 		gen := config.MatchesAny(c.GeneratedFiles, p)
 		files = append(files, &file{path: p, src: src, root: tree.RootNode(),
-			testGlob: !gen && config.MatchesAny(c.TestFiles, p), generatedGlob: gen})
+			testGlob: !gen && config.MatchesAny(c.TestFiles, p), generatedGlob: gen,
+			productGlob: config.MatchesAny(c.ProductFiles, p)})
 	}
 	l.r.index(v, files)
 	t := l.tables.with(c)

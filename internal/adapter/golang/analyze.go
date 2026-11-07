@@ -29,6 +29,9 @@ type parsedFile struct {
 	file    *ast.File
 	src     []byte
 	test    bool
+	// support is a file of a test support package (testutil, storetest): test code that is not a
+	// _test.go file. A test that calls one of its functions is followed into it.
+	support bool
 	// generated is true for a file with the standard header, or one matching files.generated.
 	// files.tests never applies to Go: the compiler decides what a test is.
 	generated bool
@@ -62,6 +65,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	fset := token.NewFileSet()
 	var files []parsedFile
 	a := &facts.Analysis{}
+	at := map[string]int{} // where each parsed file is in a.Files, whose role waits for markSupport
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {
@@ -78,9 +82,13 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		pf.file = f
 		pf.generated = pf.generated || ast.IsGenerated(f)
 		files = append(files, pf)
-		a.Files = append(a.Files, facts.File{Path: p, Language: "go", Role: role(pf), Lines: lines,
-			Unit: pf.pkgPath, UnitPath: path.Dir(p)})
+		at[p] = len(a.Files)
+		a.Files = append(a.Files, facts.File{Path: p, Language: "go", Lines: lines, Unit: pf.pkgPath, UnitPath: path.Dir(p)})
 		a.Comments = append(a.Comments, comments(fset, p, f)...)
+	}
+	markSupport(files, c.ProductFiles)
+	for _, pf := range files {
+		a.Files[at[pf.path]].Role = role(pf)
 	}
 	idx := buildIndex(files, modules)
 	helpers := collectHelpers(files)
@@ -88,6 +96,9 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	for _, pf := range files {
 		if pf.test {
 			a.Tests = append(a.Tests, extractTests(fset, pf, idx, tb, helpers[helperKey(pf)])...)
+			continue
+		}
+		if pf.support { // test code: neither the product's dependencies nor its documented API
 			continue
 		}
 		a.Imports = append(a.Imports, importsOf(fset, pf, idx, tb.io)...)
@@ -100,7 +111,7 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 
 func role(pf parsedFile) facts.Role {
 	switch {
-	case pf.test:
+	case pf.test || pf.support:
 		return facts.RoleTest
 	case pf.generated:
 		return facts.RoleGenerated

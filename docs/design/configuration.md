@@ -77,6 +77,9 @@ rules:                         # optional; only what differs from the defaults
     file-lines: 300            # limits; raising one needs a person's review
   comments:
     todo: '^TODO\(stage[0-9]+\): \S' # the form a TODO must have
+    entry-points:              # framework entry points that need no doc comment (comments/missing-doc); adding one needs review
+      - names: [load]
+        paths: ["**/+page*.ts"]
   deps:
     diagram: docs/conventions/dependencies.md  # a Mermaid flowchart; adding an arrow needs review
 
@@ -84,6 +87,7 @@ files:                         # optional; for layouts against the languages' co
   tests: ["checks/**"]         # read as test files (not applied to Go, Terraform or Ansible files); changing it needs review
   generated: ["gen/**"]        # treated as generated code; adding to it needs review
   ansible: ["deploy/*.yml"]    # Ansible playbooks outside its layout; removing one needs review
+  product: ["e2e/server/**"]   # read as product code rather than test support; changing it needs review
 
 mutation:                      # optional; hadome mutate (mutation.md)
   test: [go, test, ./...]      # required; the test command, never guessed; changing it needs review
@@ -133,7 +137,7 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 
 Both versions' files are still read and validated in full, so that the two can be compared.
 
-A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. The report points at where the change is in head: the line of the added entry or the changed key in `.hadome.yml`, or the line of the added arrow in the diagram, so that the person reviewing it, or an annotation on the pull request, lands on that line. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`). `files.generated` loosens when an entry is added too, because the files it matches leave the size and comment rules (`LooserWhenAdded`). Adding to or removing from `files.tests` both count as loosening (`LooserAlways`): which files are tests moves what the rules cover in either direction, and hadome cannot tell which is stricter. `files.ansible` loosens when an entry is removed, because the files it matched are no longer read and leave every rule (`LooserWhenRemoved`).
+A change that makes a rule more permissive than base — a higher limit, an entry added to a table removed, an invariant removed — is reported as `config/loosened` and returns exit code `3`. The report points at where the change is in head: the line of the added entry or the changed key in `.hadome.yml`, or the line of the added arrow in the diagram, so that the person reviewing it, or an annotation on the pull request, lands on that line. Tightening never needs review. Each setting in the specification states which direction is looser, so this needs no per-rule code. For gates, whose effect hadome cannot judge, changing an existing entry counts as loosening too (`LooserWhenChanged`). The functions that count as assertions (`rules.tests.assertions`) loosen when an entry is added, because an added function that checks nothing would let a test pass (`LooserWhenAdded`). `files.generated` loosens when an entry is added too, because the files it matches leave the size and comment rules (`LooserWhenAdded`). Adding to or removing from `files.tests` both count as loosening (`LooserAlways`): which files are tests moves what the rules cover in either direction, and hadome cannot tell which is stricter. `files.ansible` loosens when an entry is removed, because the files it matched are no longer read and leave every rule (`LooserWhenRemoved`). Adding to or removing from `files.product` both count as loosening (`LooserAlways`): removing an entry takes files out of product code; adding one brings files into the targets and the size and comment rules, but the tests stop counting the hazards in those files as their own, so hadome cannot tell which is stricter. `rules.comments.entry-points` loosens when an entry is added, because the symbols it matches need no doc comment; changing an entry counts as adding it (`LooserWhenAdded`).
 
 A change that adds `.hadome.yml` where base has none is taken as introducing hadome, and reports no `config/loosened`. Before it, hadome usually does not run on base, so there is nothing to loosen. If the first change that writes the configuration as the setup steps say stopped on `3`, users and agents alike would be stopped for following the steps. Instead, the settings that differ from the built-in ones are listed under `introduced`. The list is information only and does not change the exit code; the person reviewing the introducing change looks at the configuration there, once.
 
@@ -186,8 +190,10 @@ classDiagram
     +Assertions []string
     +TestFiles []string
     +GeneratedFiles []string
+    +ProductFiles []string
     +Size Limits
     +TodoForm string
+    +EntryPoints []EntryPoint
     +Diagram *Diagram
     +OwnDiagram *Diagram
     +Layers []string
@@ -199,6 +205,10 @@ classDiagram
     +ID string
     +Says string
     +Key() string
+  }
+  class EntryPoint {
+    +Names []string
+    +Paths []string
   }
   class Gate {
     +ID string
@@ -237,6 +247,7 @@ classDiagram
   Variant --> Key
   Config --> Invariant
   Config --> Gate
+  Config --> EntryPoint
   functions ..> Key : walks Spec
   functions ..> Config
   functions ..> Error : Load returns Errors
@@ -246,7 +257,7 @@ classDiagram
 - The YAML is parsed into a syntax tree (with positions) and walked against `Spec`, so every error carries the file, the line, the key, what is allowed and an example. Unknown keys, wrong types and unknown invariant types are errors
 - All errors of a file are reported together, not only the first
 - `schema/hadome.schema.json` in the repository is the output of `JSONSchema()`; a test fails when the two differ, so the published schema cannot drift
-- A value that takes a glob (`files.tests`, `files.generated`, `files.ansible`, a gate's `paths`) is an error when it is not a readable glob: such a glob would match nothing and stop working without a word
+- A value that takes a glob (`files.tests`, `files.generated`, `files.ansible`, `files.product`, the `names` and `paths` of `rules.comments.entry-points`, a gate's `paths`) is an error when it is not a readable glob: such a glob would match nothing and stop working without a word
 - A misspelt key gets a suggestion (`did you mean invariants?`) when a known key is within two edits, and the example shows how that key is written. Without a suggestion, the example shows how the enclosing level is written. A test checks that every key in the specification has an example
 - Layers merge by the specification: mappings key by key; lists of objects by their identity (a later entry with the same identity replaces the earlier one); lists marked `OmittedIsWidest` (such as `languages`) as a whole; other lists are joined without duplicates
 - The engine loads one `Config` per version, builds base's with `ForBase`, and hands each to the adapters and rules together with that version's facts. The `facts` package stays free of configuration

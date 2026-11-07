@@ -508,3 +508,66 @@ func TestAddingTheMutationSectionIsNotLoosening(t *testing.T) {
 		})
 	}
 }
+
+// Re-classifying test support as product code moves what the rules cover both ways: the files
+// enter the size and comment rules, but tests stop counting the hazards in them as their own. So
+// adding and removing a product glob both need review.
+func TestProductFilesLoosenBothWays(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	prod := mustLoad(t, "schema: 1\nfiles:\n  product: [\"e2e/server/**\"]\n", dir)
+	if got := looser(Diff(none, prod)); strings.Join(got, "|") != "files.product -" {
+		t.Errorf("adding a product glob: want 1 looser change of files.product, got %v", got)
+	}
+	if got := looser(Diff(prod, none)); strings.Join(got, "|") != "files.product -e2e/server/**" {
+		t.Errorf("removing a product glob: want 1 looser change, got %v", got)
+	}
+	if !MatchesAny(prod.ProductFiles, "e2e/server/main.ts") || MatchesAny(prod.ProductFiles, "e2e/fixtures.ts") {
+		t.Errorf("e2e/server/** matches only what is under e2e/server/: %v", prod.ProductFiles)
+	}
+	if es := loadErrors(t, "schema: 1\nfiles:\n  product: [\"e2e/[a\"]\n", dir); es[0].Key != "files.product[0]" {
+		t.Errorf("a malformed product glob is an error: %v", es)
+	}
+}
+
+// An entry point lets symbols off their doc comment, so adding one, or widening one, needs review;
+// removing one asks for more doc comments and does not.
+func TestEntryPointsLoosenWhenAdded(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	narrow := mustLoad(t, "schema: 1\nrules:\n  comments:\n    entry-points:\n      - names: [load]\n        paths: [\"**/+page*.ts\"]\n", dir)
+	wide := mustLoad(t, "schema: 1\nrules:\n  comments:\n    entry-points:\n      - names: [load]\n", dir)
+	if got := looser(Diff(none, narrow)); len(got) != 1 || !strings.HasPrefix(got[0], "rules.comments.entry-points ") {
+		t.Errorf("adding an entry point: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(narrow, none)); len(got) != 0 {
+		t.Errorf("removing an entry point: want none, got %v", got)
+	}
+	if got := looser(Diff(narrow, wide)); len(got) != 1 {
+		t.Errorf("dropping an entry point's paths widens it: want 1 looser change, got %v", got)
+	}
+	e := narrow.EntryPoints
+	if len(e) != 1 || !e[0].Matches("load", "web/src/routes/+page.server.ts") || e[0].Matches("load", "web/src/lib/data.ts") ||
+		e[0].Matches("loader", "web/src/routes/+page.ts") {
+		t.Errorf("load in +page*.ts files only: %+v", e)
+	}
+	if len(wide.EntryPoints) != 1 || !wide.EntryPoints[0].Matches("load", "any/file.ts") {
+		t.Errorf("an entry point without paths applies to every file: %+v", wide.EntryPoints)
+	}
+}
+
+// An entry point without names would let off nothing or everything, so it is an error, as is a
+// name glob path.Match cannot read.
+func TestAnEntryPointNeedsReadableNames(t *testing.T) {
+	dir := t.TempDir()
+	for yml, key := range map[string]string{
+		"      - paths: [\"functions/**\"]\n": "rules.comments.entry-points[0].names",
+		"      - names: []\n":                 "rules.comments.entry-points[0].names",
+		"      - names: [\"on[\"]\n":          "rules.comments.entry-points[0].names[0]",
+	} {
+		es := loadErrors(t, "schema: 1\nrules:\n  comments:\n    entry-points:\n"+yml, dir)
+		if es[0].Key != key {
+			t.Errorf("%q: want an error at %s, got %v", yml, key, es)
+		}
+	}
+}

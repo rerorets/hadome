@@ -240,7 +240,7 @@ TypeScript のテストの宣言は、次のように読みます。
 
 | 言語 | テストの補助のファイル |
 |---|---|
-| TypeScript | 次のディレクトリの下のファイル: `test/`、`tests/`、`e2e/`、`__mocks__/`、`__fixtures__/`、`testutil/`、`testutils/`、`test-utils/`、`test_utils/`。名前が test と helper(s) をつないだもので終わるファイル（`test_helpers.ts`、`test-helpers.ts`、`testHelpers.ts`）。`setupTests.*`、`jest.setup.*`、`vitest.setup.*` |
+| TypeScript | 次のディレクトリの下のファイル: `test/`、`tests/`、`e2e/`、`__mocks__/`、`__fixtures__/`、`testutil/`、`testutils/`、`test-utils/`、`test_utils/`、`testhelper/`、`testhelpers/`。名前が test と helper(s) をつないだもので終わるファイル（`test_helpers.ts`、`test-helpers.ts`、`testHelpers.ts`）。`setupTests.*`、`jest.setup.*`、`vitest.setup.*` |
 | Python | TypeScript と同じディレクトリの下のファイル。`conftest.py`。名前が test と helper(s) をつないだもので終わるファイル（`test_helpers.py`） |
 
 - **役割**: `test` です。そのため、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません
@@ -248,7 +248,8 @@ TypeScript のテストの宣言は、次のように読みます。
 - **たどり方**: テストが補助のファイルの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のファイル自身の import で解決します。そのため、ヘルパーを通して製品のコードを呼ぶテストは、その製品のコードを守ります
   - 例: `test/helpers.ts` の `createApp()` が `src/app.ts` の `buildApp()` を呼ぶなら、`createApp()` を呼ぶテストは `buildApp` を守ります
   - 補助のファイルの中で関数として見つからない名前（関数でない値など）を呼ぶと、未解決と数えます
-- **ほかの役割の指定**: `files.tests` の glob に合うファイルは、これまでどおりテストのファイルです
+- **ほかの役割の指定**: `files.tests` の glob に合うファイルは、これまでどおりテストのファイルです。`files.product` の glob に合うファイルは、テストの補助のファイルにせず、製品のコードとして読みます（[adapters.ja.md](adapters.ja.md)）
+- **ディレクトリの一覧**: 一覧は `walk.SupportDir` にあります。Go のアダプタは、このうち `test/`、`tests/`、`e2e/` を除いたものを使います（[adapters.ja.md](adapters.ja.md)）
 
 ## 危険と io
 
