@@ -158,7 +158,7 @@ A break that gives back the same value is not made a mutant. It changes nothing,
 - `return 0` is not broken by returning the zero value
 - In Go, a return of a constant whose value is the zero value is not broken either. For example, with `ExitOK = 0`, `return engine.ExitOK` is not broken
 - The constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. Only a literal, `false`, `iota` at the start of its block, and conversions of these are read
-- A constant whose value cannot be read (one from another module, or a value written as an expression) is broken as before
+- A constant whose value cannot be read (one from another module, a value written as an expression, or one declared with different values in two files) is broken as before
 
 A mutant's anchor is the function's name, the kind, and the normalised original line, with no line number. When a change moves the function, the mutant still matches.
 

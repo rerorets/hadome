@@ -49,8 +49,12 @@ func (Adapter) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
+	modules, err := findModules(v.FS)
+	if err != nil {
+		return nil, err
+	}
 	var out []facts.Mutant
-	consts := &zeroConsts{fsys: v.FS}
+	consts := &zeroConsts{fsys: v.FS, modules: modules}
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {

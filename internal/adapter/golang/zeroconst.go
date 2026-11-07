@@ -16,7 +16,7 @@ import (
 // value is a literal, false, iota at the start of its block, or a conversion of one of these.
 type zeroConsts struct {
 	fsys    fs.FS
-	modules map[string]string          // directory -> module path; read when first needed
+	modules map[string]string          // directory -> module path
 	byDir   map[string]map[string]bool // directory -> constant name -> its value is the zero value
 }
 
@@ -26,7 +26,7 @@ func (z *zeroConsts) zero(f *ast.File, p string, e ast.Expr) bool {
 	case *ast.ParenExpr:
 		return z.zero(f, p, e.X)
 	case *ast.Ident:
-		if e.Obj != nil && (e.Obj.Kind != ast.Con || f.Scope.Lookup(e.Name) != e.Obj) {
+		if e.Obj != nil && f.Scope.Lookup(e.Name) != e.Obj {
 			return false // a variable, a parameter, or a constant declared in the function
 		}
 		return z.in(path.Dir(p), f.Name.Name)[e.Name]
@@ -47,13 +47,6 @@ func (z *zeroConsts) zero(f *ast.File, p string, e ast.Expr) bool {
 
 // dirOf is the directory of a package of one of the version's modules.
 func (z *zeroConsts) dirOf(importPath string) (string, bool) {
-	if z.modules == nil {
-		mods, err := findModules(z.fsys)
-		if err != nil {
-			return "", false
-		}
-		z.modules = mods
-	}
 	dir, best := "", ""
 	for d, m := range z.modules {
 		if (importPath == m || strings.HasPrefix(importPath, m+"/")) && len(m) > len(best) {
@@ -134,27 +127,22 @@ func zeroValue(e ast.Expr, iota int) bool {
 
 func zeroLiteral(l *ast.BasicLit) bool {
 	v := constant.MakeFromLiteral(l.Value, l.Kind, 0)
-	switch v.Kind() {
-	case constant.String:
+	if v.Kind() == constant.String {
 		return constant.StringVal(v) == ""
-	case constant.Int, constant.Float, constant.Complex:
-		return constant.Sign(v) == 0
 	}
-	return false
+	return constant.Sign(v) == 0 // a number or a rune
 }
 
-// conversion reports a call that may be a conversion such as Code(0) or pkg.Code(0), and not a
-// builtin or an unsafe function whose result differs from its argument's value.
+// conversion reports a call that may be a conversion such as Code(0) or pkg.Code(0). A builtin
+// such as len or real gives zero for a zero argument too; unsafe.Sizeof and the like do not.
 func conversion(c *ast.CallExpr) bool {
-	if len(c.Args) != 1 || c.Ellipsis != token.NoPos {
+	if len(c.Args) != 1 {
 		return false
 	}
-	switch fn := c.Fun.(type) {
-	case *ast.Ident:
-		return fn.Name != "len" && fn.Name != "cap" && fn.Name != "real" && fn.Name != "imag"
-	case *ast.SelectorExpr:
-		x, ok := fn.X.(*ast.Ident)
-		return ok && x.Name != "unsafe"
+	if s, ok := c.Fun.(*ast.SelectorExpr); ok {
+		if x, ok := s.X.(*ast.Ident); ok && x.Name == "unsafe" {
+			return false
+		}
 	}
-	return false
+	return true
 }
