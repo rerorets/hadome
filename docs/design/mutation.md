@@ -156,9 +156,26 @@ A few kinds only. Each changes one place, and most tests can notice it.
 A break that gives back the same value is not made a mutant. It changes nothing, so no test can catch it, and it would be reported as a false survivor.
 
 - `return 0` is not broken by returning the zero value
-- In Go, a return of a constant whose value is the zero value is not broken either. For example, with `ExitOK = 0`, `return engine.ExitOK` is not broken
-- The constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. Only a literal, `false`, `iota` at the start of its block, and conversions of these are read
+- A return of a constant whose value is the zero value is not broken either. For example, with `ExitOK = 0`, `return engine.ExitOK` is not broken
+- In Go, the constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. Only a literal, `false`, `iota` at the start of its block, and conversions of these are read
+- In TypeScript, Python, Rust, Java and Kotlin, only declarations in the same file are read ([adapters-treesitter.md](adapters-treesitter.md), "Mutants")
 - A constant whose value cannot be read (one from another module, a value written as an expression, or one declared with different values in two files) is broken as before
+
+Go's zero value comes from the declared result type.
+
+| Result type | Zero value |
+|---|---|
+| Number types (`int`, `float64`, `byte`, and so on) | `0` |
+| `string` | `""` |
+| `bool` | `false` |
+| Pointers, slices, maps, channels, functions, interfaces (`error` and `any` included) | `nil` |
+| A named type (`type Code int`, and so on) | The zero value of its underlying type. When that is a struct, the type as written followed by `{}`, such as `status.Code{}` |
+
+- The underlying type of a named type is read, from syntax only, from its declaration in the same package or in a package of the same module. For example, when package `status` has `type Code int`, `return code` in `func Parse(s string) status.Code` becomes `return 0`
+- These functions get no mutant of this kind:
+  - functions with more than one result
+  - functions whose result type is a fixed-size array, a struct type itself (`struct{ … }`), a type parameter, or a type with type arguments (`Set[int]`)
+  - functions returning a type whose underlying type cannot be followed (a type of another module, or one declared in two files)
 
 A mutant's anchor is the function's name, the kind, and the normalised original line, with no line number. When a change moves the function, the mutant still matches.
 
