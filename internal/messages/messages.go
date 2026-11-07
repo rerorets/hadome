@@ -191,6 +191,16 @@ var Japanese = map[string]string{
 	"%d mutants beyond mutation.max-mutants were not tried, in %s":                                                                              "mutation.max-mutants を超えた %d 個の変異を試していない。対象: %s",
 	"split the change, or have a person decide whether to raise mutation.max-mutants":                                                           "変更を分けるか、mutation.max-mutants を上げるかどうかを人が決める",
 
+	// hadome mutate's progress lines.
+	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
+	"caught":                        "テストが気づいた",
+	"survived":                      "どのテストも気づかない",
+	"flip a comparison":             "比較を逆にする",
+	"negate a boolean":              "真偽を反転する",
+	"swap arithmetic":               "算術を入れ替える",
+	"return the zero value":         "ゼロの値を返す",
+	"remove a call statement":       "呼び出しの文を消す",
+
 	// Product-specific gates of kind measure.
 	"%s: %s is no longer guarded (was: %s)":                                               "%s: %s が守られなくなった（前は %s）",
 	"the product's own gate %s reported it in the base version":                           "製品自身の門番 %s が、base の版でこれを報告していた",

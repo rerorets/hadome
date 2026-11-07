@@ -76,6 +76,38 @@ func version(code, test string) map[string]string {
 	return map[string]string{"go.mod": mod, ".hadome.yml": cfg, "calc/calc.go": code, "calc/calc_test.go": test}
 }
 
+// viewpoint: external contract
+// target: mutation.Mutate.Run (its progress lines)
+// Each progress line says where the break is, so a person watching can open the line, and it is
+// written in the language the report uses: --lang, else messages in head's configuration.
+func TestProgressNamesTheLineInTheChosenLanguage(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Fatal("these cases run go test, and go is not on PATH")
+	}
+	touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
+	for _, tc := range []struct {
+		name, flag, messages, want string
+	}{
+		{"english by default", "", "", "calc/calc.go:5 calc.Sign, flip a comparison: caught"},
+		{"messages in the configuration", "", "messages: ja\n", "calc/calc.go:5 calc.Sign、比較を逆にする: テストが気づいた"},
+		{"--lang over the configuration", "en", "messages: ja\n", "calc/calc.go:5 calc.Sign, flip a comparison: caught"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			head := version(touched, strong)
+			head[".hadome.yml"] = cfg + tc.messages
+			var progress strings.Builder
+			an := adapter.New()
+			m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress, Lang: tc.flag}
+			if _, err := m.Run(source.Dirs{BaseDir: dir(t, version(calc, strong)), HeadDir: dir(t, head)}); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(progress.String(), tc.want+"\n") {
+				t.Errorf("want a line ending %q, got\n%s", tc.want, progress.String())
+			}
+		})
+	}
+}
+
 // viewpoint: behaviour
 // target: mutation.Mutate.Run
 // Integration: only real test runs show what the tests notice. A test weakened so that breaks of

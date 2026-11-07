@@ -29,7 +29,7 @@ func mutate(args []string, stdout, stderr io.Writer) int {
 		return engine.ExitConfig
 	}
 	an := adapter.New()
-	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: ".", Progress: stderr}
+	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: ".", Progress: stderr, Lang: *lang}
 	r, err := m.Run(src)
 	if err != nil {
 		fmt.Fprintln(stderr, "hadome: mutate could not run, so it does not pass:", err)
