@@ -109,3 +109,40 @@ func TestParentDirectoryIsNoUnreadDirectory(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// A path is tried as each target of an alias in turn, and the first that names a file wins. A
+// directory with no index names no file, so a test's call of a name taken from it is unresolved.
+// An external scoped package is named by its scope and name.
+func TestTypeScriptPathsResolveToFilesOnly(t *testing.T) {
+	a := analyzeWalked(t, "typescript", tree(
+		"tsconfig.json", `{ "compilerOptions": { "baseUrl": ".", "paths": { "@lib/*": ["gone/*", "src/lib/*"] } } }`,
+		"src/lib/calc.ts", "export const add = (a: number, b: number) => a + b;\n",
+		"src/widgets/a.ts", "export const a = 1;\n",
+		"src/app/main.ts", "import { add } from '@lib/calc';\nimport { get } from '@acme/client/sub';\nexport const run = () => add(get(), 1);\n",
+		"src/app/main.test.ts", "import { a } from '../widgets';\nit('reads', () => { expect(a()).toBe(1); });\n",
+	))
+	expect(t, unknownLines(a), `
+src/app -> @acme/client internal=false unknown=false unread=false io=false
+src/app -> src/lib internal=true unknown=false unread=false io=false`)
+	if len(a.Tests) != 1 || len(a.Tests[0].Calls) != 0 || a.Tests[0].Unresolved != 1 {
+		t.Errorf("want one test with one unresolved call and no target, got %+v", a.Tests)
+	}
+}
+
+// viewpoint: behaviour
+// target: the Python reader
+// A dynamic import named by a string is an ordinary import: of the repository's module, or of an
+// external one that performs input or output by the io table.
+func TestPythonDynamicImportByNameIsAnOrdinaryImport(t *testing.T) {
+	a := analyzeWalked(t, "python", tree(
+		"app/__init__.py", "",
+		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"app/main.py", "import importlib\n\n\ndef run():\n    importlib.import_module(\"socket\")\n    return importlib.import_module(\"app.calc\")\n",
+	))
+	expect(t, unknownLines(a), `
+app -> app internal=true unknown=false unread=false io=false
+app -> importlib internal=false unknown=false unread=false io=false
+app -> socket internal=false unknown=false unread=false io=true`)
+}
