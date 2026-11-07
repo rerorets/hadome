@@ -162,6 +162,13 @@ func diffInt(out *[]Change, b, h any, k Key, path string) {
 }
 
 func diffList(out *[]Change, base, head []any, k Key, path string) {
+	if k.Sequence {
+		if !reflect.DeepEqual(base, head) {
+			*out = append(*out, Change{Key: path, Removed: fmtSequence(base), Added: fmtSequence(head),
+				Looser: k.Looser != LooserNever})
+		}
+		return
+	}
 	ids := func(l []any) map[string]bool {
 		m := map[string]bool{}
 		for _, v := range l {
@@ -249,6 +256,19 @@ func diffPlanned(base, head *Diagram) []Change {
 		}
 	}
 	return out
+}
+
+// fmtSequence writes a sequence as YAML's flow style writes it, in its own order: [go, test, ./...].
+// An empty or missing one is "".
+func fmtSequence(l []any) string {
+	if len(l) == 0 {
+		return ""
+	}
+	parts := make([]string, len(l))
+	for i, v := range l {
+		parts[i] = fmt.Sprint(v)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func fmtValue(v any) string {

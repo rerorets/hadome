@@ -96,7 +96,7 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 			role = facts.RoleGenerated
 		}
 		a.Files = append(a.Files, facts.File{Path: f.path, Language: l.name, Role: role,
-			Lines: strings.Count(string(f.src), "\n") + 1, Unit: f.unit, UnitPath: f.unitPath})
+			Lines: facts.CountLines(f.src), Unit: f.unit, UnitPath: f.unitPath})
 		a.Comments = append(a.Comments, cs...)
 		if !f.test {
 			a.Imports = append(a.Imports, l.r.imports(f, t)...)

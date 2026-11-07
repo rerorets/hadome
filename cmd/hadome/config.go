@@ -28,7 +28,10 @@ const usage = `usage:
   hadome agents [--lang en|ja] [--write FILE...]    print, or write into each FILE, the block that tells agents about hadome
   hadome init                                       write a minimal .hadome.yml (never overwrites)
   hadome version                                    print the version
+  hadome help                                       print this usage
 
+--base-dir DIR --head-dir DIR, given to check or mutate in place of --base and --head, compare two
+directories instead of two git revisions.
 --lang of check, mutate and explain picks the language of the findings, a rule's description and the
 summary; without it, messages in .hadome.yml decides, else en.
 `

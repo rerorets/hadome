@@ -49,7 +49,7 @@ A finding carries a **fingerprint**:
 
 Two findings with the same fingerprint are the same finding. When fingerprints collide within one file (the same violation written twice in one function), they are matched by count: head may have as many as base without regressing.
 
-A finding about an amount (lines, parameters) also carries the measured value. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not.
+A finding about an amount (lines, parameters) also carries the measured value. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not. The wording of a violation that got worse adds its value in base. Example: `store/store.go: lines 840, limit 500; grew from 812`
 
 Line numbers are kept for display only.
 
@@ -106,6 +106,8 @@ Renames are detected by the engine, not by the source, so every source behaves t
 | `json` | Agents and CI | A versioned schema: regressions and reviews (rule, file, line, message, why it matters, how to fix, value), new exceptions with reasons, invariant candidates, for a change that introduces hadome the settings that differ from the built-in ones (`introduced`: key, file, line, the built-in value, the configured value, whether it is looser), the count of existing findings, the exit code |
 
 The JSON schema has its own version number and changes only by adding fields.
+
+A finding about a whole file has no line. Examples: `size/file-lines`, `tests/purity-lost`. `text` writes only the file as its place, and `json` sets `line` to `0`.
 
 | Exit code | Meaning |
 |---|---|

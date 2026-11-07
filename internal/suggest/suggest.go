@@ -115,7 +115,7 @@ func split(id string) (string, string) {
 
 // target writes a symbol ID the way configuration names it: the unit's last path element, then the name.
 func target(id string) string {
-	return id[strings.LastIndex(id, "/")+1:]
+	return facts.ShortName(id)
 }
 
 // beginsWith reports whether one of the words is the whole name or is followed by an upper-case

@@ -155,6 +155,8 @@ A few kinds only. Each changes one place, and most tests can notice it.
 
 A mutant's anchor is the function's name, the kind, and the normalised original line, with no line number. When a change moves the function, the mutant still matches.
 
+After each mutant it tries, it writes one progress line to standard error: which mutant it is, the file and line, the function, the kind of break, and whether a test noticed. The language is the report's: `--lang`, else `messages` in head's configuration. Example: `mutate 1/2 calc/calc.go:5 calc.Sign, flip a comparison: caught`
+
 ## How to compare
 
 Like the other rules, only what the change added is a regression.

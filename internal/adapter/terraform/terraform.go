@@ -93,7 +93,7 @@ func (pf parsed) dir() string { return path.Dir(pf.path) }
 // nothing more to read from it.
 func parse(p string, src []byte, c config.Config) (parsed, bool) {
 	dir := path.Dir(p)
-	f := facts.File{Path: p, Language: name, Lines: strings.Count(string(src), "\n") + 1, Unit: dir, UnitPath: dir}
+	f := facts.File{Path: p, Language: name, Lines: facts.CountLines(src), Unit: dir, UnitPath: dir}
 	if strings.HasSuffix(p, ".tfvars") { // values only: nothing to read
 		f.Role, f.Unit, f.UnitPath = facts.RoleOther, "", ""
 		return parsed{file: f}, false

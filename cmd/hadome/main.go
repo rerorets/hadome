@@ -80,6 +80,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return agents(args[1:], stdout, stderr)
 	case "init":
 		return initCmd(args[1:], stdout, stderr)
+	case "help", "--help", "-h":
+		fmt.Fprint(stdout, usage)
+		return engine.ExitOK
 	case "version", "--version":
 		info, ok := debug.ReadBuildInfo()
 		fmt.Fprintln(stdout, "hadome", versionOf(version, info, ok))

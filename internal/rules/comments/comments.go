@@ -49,7 +49,7 @@ func (todoFormat) Cases() []engine.Case { return todoCases() }
 func (todoFormat) About() engine.About {
 	return engine.About{Finds: engine.T("a new TODO, FIXME or XXX comment that does not match the configured form"),
 		Why:  engine.T("a note to do something later that does not say when is never done; it stays as noise and misleads readers about what is finished"),
-		Fix:  engine.T("write it in the configured form (for example TODO(stage 2): …), do it now, or delete it"),
+		Fix:  engine.T("write it in the configured form (rules.comments.todo), do it now, or delete it"),
 		Keys: []string{"rules.comments.todo"}}
 }
 
@@ -70,10 +70,29 @@ func (r todoFormat) Find(in engine.Input) ([]engine.Finding, error) {
 			Rule: r.ID(), File: l.path, Line: l.n, Anchor: strings.Join(strings.Fields(l.text), " "),
 			Message: engine.T("TODO without the required form: %s", l.text),
 			Why:     r.About().Why,
-			Fix:     engine.T("write it in the form %s (for example TODO(stage 2): …), do it now, or delete it", in.Config.TodoForm),
+			Fix:     todoFix(form, in.Config.TodoForm),
 		})
 	}
 	return out, nil
+}
+
+// todoExamples are TODOs in common forms. The fix shows the first one the configured form accepts,
+// so the example never contradicts the form it illustrates.
+var todoExamples = []string{
+	"TODO(stage 2): handle errors", "TODO(#123): handle errors", "TODO(ABC-123): handle errors",
+	"TODO(2030-01-31): handle errors", "TODO(alice): handle errors", "TODO: handle errors",
+}
+
+// todoFix says how to fix a TODO under the configured form, with an example when one of the
+// common forms matches it. A form none of them matches is shown alone rather than with an example
+// that would itself fail.
+func todoFix(form *regexp.Regexp, source string) engine.Text {
+	for _, ex := range todoExamples {
+		if form.MatchString(ex) {
+			return engine.T("write it in the form %s (for example %s), do it now, or delete it", source, ex)
+		}
+	}
+	return engine.T("write it in the form %s, do it now, or delete it", source)
 }
 
 // missingDoc is comments/missing-doc.
@@ -102,7 +121,7 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 		if !s.Exported || s.Doc {
 			continue
 		}
-		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
+		name := facts.ShortName(s.ID)
 		f := engine.Finding{Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
 			Message: engine.T("exported %s %s has no doc comment", string(s.Kind), name), Why: r.About().Why, Fix: r.About().Fix}
 		if s.Kind == facts.SymbolValue { // a Terraform variable or output, an Ansible default: a description is its doc
