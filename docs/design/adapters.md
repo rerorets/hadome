@@ -131,8 +131,8 @@ Test file conventions:
 | Language | Test files |
 |---|---|
 | Go | `*_test.go` |
-| TypeScript | `*.test.ts(x)`, `*.spec.ts(x)`, files under `__tests__/` |
-| Python | `test_*.py`, `*_test.py` |
+| TypeScript | `*.test.ts(x)`, `*.spec.ts(x)`, files under `__tests__/`, test support files (under `test/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
+| Python | `test_*.py`, `*_test.py`, test support files (`conftest.py`, under `tests/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
 | Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
 | Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
 | Kotlin | Same as Java |

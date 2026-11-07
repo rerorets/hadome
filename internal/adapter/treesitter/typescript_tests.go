@@ -13,12 +13,18 @@ import (
 // tsFile is what a TypeScript test file binds: names imported from the repository, helper
 // functions, file-level mocks and comments by line.
 type tsFile struct {
-	f       *file
-	r       *typescript
-	t       *tables
-	names   map[string]string // local name -> target ("src/store.append", or "src/store.Store" for a class)
-	spaces  map[string]string // namespace import -> unit
-	helpers map[string]*sitter.Node
+	f      *file
+	r      *typescript
+	t      *tables
+	names  map[string]string // local name -> target ("src/store.append", or "src/store.Store" for a class)
+	spaces map[string]string // namespace import -> the file it names
+	// via are the names imported from a test support file: local name -> the file and the name there.
+	// A test that calls one is followed into it.
+	via map[string][2]string
+	// unresolved are the names imported from what looks like the repository's own code but names
+	// no file of it. Calling one is a call hadome cannot identify.
+	unresolved map[string]bool
+	helpers    map[string]*sitter.Node
 	// loaders are the functions of the file that load one module of the repository with import():
 	// function name -> unit. A test that takes names from what they return calls that module.
 	loaders map[string]string
@@ -43,11 +49,7 @@ func (r *typescript) tests(f *file, t *tables) []facts.Test {
 	if !f.test {
 		return nil
 	}
-	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{},
-		helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{}, outer: map[string]string{}}
-	tf.bind()
-	tf.bindLoaders()
-	tf.bindOuter()
+	tf := r.testFile(f, t)
 	var out []facts.Test
 	tf.suite(f.root, "", false, &out)
 	return out
@@ -62,15 +64,18 @@ func (tf *tsFile) bind() {
 		switch top.Kind() {
 		case "import_statement":
 			spec := unquote(f.field(top, "source"))
-			unit, internal := tf.r.resolve(f.path, spec)
 			if tf.t.isMock(spec) {
 				tf.mocks = append(tf.mocks, top)
 			}
 			if spec == "supertest" {
 				tf.bindDriver(top)
 			}
-			if internal {
-				tf.bindImport(top, unit)
+			tf.bindImport(top, spec)
+		case "lexical_declaration", "variable_declaration":
+			for _, d := range named(top) {
+				if spec := tf.required(d.ChildByFieldName("value")); spec != "" {
+					tf.bindImport(d.ChildByFieldName("name"), spec)
+				}
 			}
 		case "expression_statement":
 			if call := top.NamedChild(0); call != nil && call.Kind() == "call_expression" {
@@ -80,29 +85,6 @@ func (tf *tsFile) bind() {
 			}
 		}
 	}
-}
-
-func (tf *tsFile) bindImport(n *sitter.Node, unit string) {
-	walk(n, func(x *sitter.Node) bool {
-		switch x.Kind() {
-		case "import_specifier":
-			name := tf.f.field(x, "name")
-			local := tf.f.field(x, "alias")
-			if local == "" {
-				local = name
-			}
-			tf.names[local] = unit + "." + name
-		case "namespace_import":
-			for _, id := range named(x) {
-				tf.spaces[tf.f.text(id)] = unit
-			}
-		case "import_clause":
-			if first := x.NamedChild(0); first != nil && first.Kind() == "identifier" {
-				tf.names[tf.f.text(first)] = unit + ".default"
-			}
-		}
-		return true
-	})
 }
 
 // suite finds the tests under n; prefix is the names of the enclosing describe blocks.
@@ -153,8 +135,8 @@ type tsWalk struct {
 	vars    map[string]string // local variable -> class target, for variables built with new
 	locals  map[string]bool
 	walking map[string]bool
-	// loaded and modules are the names a test takes from a module it loads with import(): a name
-	// -> its target, and a module object -> its unit.
+	// loaded and modules are the names a test takes from a module it loads with import() or
+	// require(): a name -> its target, and a module object -> its file.
 	loaded  map[string]string
 	modules map[string]string
 }
@@ -181,6 +163,8 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 			w.t.hazard(facts.HazardClock, n)
 		} else if target, ok := w.tf.names[f.field(n, "constructor")]; ok {
 			w.t.call(target, nil)
+		} else if w.tf.unresolved[f.field(n, "constructor")] || w.tf.via[f.field(n, "constructor")] != [2]string{} {
+			w.t.test.Unresolved++ // a class hadome cannot find, or one of a support file
 		}
 	case "call_expression":
 		w.call(n)
@@ -208,7 +192,7 @@ func (w *tsWalk) call(n *sitter.Node) {
 	callee := f.text(fn)
 	args := named(n.ChildByFieldName("arguments"))
 	w.t.assertion(callee, w.tf.t.asserts)
-	if w.tf.drivers[callee] {
+	if w.tf.drivers[callee] || w.appRequest(fn, args) {
 		w.t.test.Drives = true
 	}
 	if cat, ok := w.tf.t.calls[callee]; ok {
@@ -225,6 +209,10 @@ func (w *tsWalk) call(n *sitter.Node) {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		} else if target, ok := w.tf.names[callee]; ok {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
+		} else if v, ok := w.tf.via[callee]; ok {
+			w.followSupport(v[0], v[1])
+		} else if w.tf.unresolved[callee] {
+			w.t.test.Unresolved++
 		} else {
 			w.follow(callee)
 		}
@@ -240,7 +228,16 @@ func (w *tsWalk) call(n *sitter.Node) {
 // counts as unresolved.
 func (w *tsWalk) memberTarget(obj, prop string) string {
 	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
-	for _, owners := range []map[string]string{w.tf.spaces, w.modules, w.vars, w.tf.names} {
+	for _, files := range []map[string]string{w.tf.spaces, w.modules} {
+		if p, ok := files[obj]; ok {
+			if sf := w.tf.r.files[p]; sf != nil && sf.support {
+				w.followSupport(w.tf.r.declaring(p, prop))
+				return ""
+			}
+			return w.tf.r.target(p, prop)
+		}
+	}
+	for _, owners := range []map[string]string{w.vars, w.tf.names} {
 		if owner, ok := owners[obj]; ok {
 			return owner + "." + prop
 		}
@@ -248,7 +245,7 @@ func (w *tsWalk) memberTarget(obj, prop string) string {
 	if w.follow(obj + "." + prop) { // a function an object of the file holds
 		return ""
 	}
-	if w.locals[obj] {
+	if w.locals[obj] || w.tf.unresolved[obj] {
 		w.t.test.Unresolved++
 	}
 	return ""
@@ -288,10 +285,13 @@ func (w *tsWalk) element(n *sitter.Node) {
 	switch name.Kind() {
 	case "identifier":
 		target = w.tf.names[f.text(name)]
-	case "member_expression":
-		if unit, ok := w.tf.spaces[f.field(name, "object")]; ok {
-			target = unit + "." + f.field(name, "property")
+		if v, ok := w.tf.via[f.text(name)]; ok {
+			w.followSupport(v[0], v[1])
+		} else if w.tf.unresolved[f.text(name)] {
+			w.t.test.Unresolved++
 		}
+	case "member_expression":
+		target = w.memberTarget(f.field(name, "object"), f.field(name, "property"))
 	}
 	if target != "" {
 		w.t.call(target, nil)
@@ -305,10 +305,10 @@ func (w *tsWalk) follow(name string) bool {
 	if !ok {
 		return false
 	}
-	if !w.walking[name] {
-		w.walking[name] = true
+	if key := w.tf.f.path + "#" + name; !w.walking[key] {
+		w.walking[key] = true
 		w.walk(body)
-		delete(w.walking, name)
+		delete(w.walking, key)
 	}
 	return true
 }

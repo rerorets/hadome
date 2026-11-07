@@ -3,8 +3,6 @@
 package treesitter
 
 import (
-	"encoding/json"
-	"io/fs"
 	"path"
 	"regexp"
 	"strings"
@@ -18,9 +16,13 @@ import (
 
 // typescript reads TypeScript and JavaScript.
 type typescript struct {
-	exists  map[string]bool
-	aliases map[string]string // "@/" -> "src/", from tsconfig.json compilerOptions.paths
-	scopes  map[string]int    // target ID -> position of its scope parameter
+	project *tsProject
+	files   map[string]*file     // every file of the version, by path
+	modules map[string]*tsModule // what each file exports, read when first needed
+	collide map[string]bool      // "<dir>.<name>" declared by two or more files of the directory
+	scopes  map[string]int       // target ID -> position of its scope parameter
+	// supports are the test support files read as a test's helpers, by path.
+	supports map[string]*tsFile
 }
 
 // grammar parses .ts, .mts and .cts with the TypeScript grammar and every other file with the TSX
@@ -55,73 +57,32 @@ var tsDirective = regexp.MustCompile(`^(//\s*@ts-|//\s*eslint-|/\*\s*eslint|///\
 
 var tsTestFile = regexp.MustCompile(`(\.(test|spec)\.[cm]?[jt]sx?$)|(^|/)__tests__/`)
 
+// supportDirs hold files that exist for the tests, in TypeScript and Python alike.
+const supportDirs = `(^|/)(test|tests|e2e|__mocks__|__fixtures__|testutils?|test-utils|test_utils)/`
+
+// tsSupportFile matches the test support files: files under supportDirs, test_helpers.ts and the
+// like, and the setup files of the test runners.
+var tsSupportFile = regexp.MustCompile(supportDirs + `|(?i:test[_-]?helpers?\.[cm]?[jt]sx?$)|(^|/)(setupTests|jest\.setup|vitest\.setup)\.[cm]?[jt]sx?$`)
+
 func (r *typescript) index(v engine.Version, files []*file) {
-	r.exists, r.aliases, r.scopes = map[string]bool{}, tsAliases(v.FS), map[string]int{}
+	r.files, r.modules, r.scopes, r.supports = map[string]*file{}, map[string]*tsModule{}, map[string]int{}, map[string]*tsFile{}
+	r.project = newTSProject(v.FS, files)
 	for _, f := range files {
-		r.exists[f.path] = true
-		f.test = tsTestFile.MatchString(f.path) || f.testGlob
+		r.files[f.path] = f
+		f.support = tsSupportFile.MatchString(f.path) && !f.generatedGlob
+		f.test = tsTestFile.MatchString(f.path) || f.support || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}
+	r.collisions(files)
 }
 
-// tsAliases reads the path aliases of the root tsconfig.json: {"@/*": ["src/*"]} maps "@/" to "src/".
-func tsAliases(fsys fs.FS) map[string]string {
-	out := map[string]string{}
-	data, err := fs.ReadFile(fsys, "tsconfig.json")
-	if err != nil {
-		return out
-	}
-	var cfg struct {
-		CompilerOptions struct {
-			BaseURL string              `json:"baseUrl"`
-			Paths   map[string][]string `json:"paths"`
-		} `json:"compilerOptions"`
-	}
-	if json.Unmarshal(jsonComments.ReplaceAll(data, []byte("$1")), &cfg) != nil {
-		return out
-	}
-	for alias, targets := range cfg.CompilerOptions.Paths {
-		if len(targets) > 0 {
-			to := path.Join(cfg.CompilerOptions.BaseURL, strings.TrimSuffix(targets[0], "*"))
-			out[strings.TrimSuffix(alias, "*")] = strings.TrimPrefix(to+"/", "./")
-		}
-	}
-	return out
-}
-
-// jsonComments matches a // comment after anything that is not inside a string; tsconfig.json
-// allows them, encoding/json does not.
-var jsonComments = regexp.MustCompile(`(?m)^((?:[^"/\n]|"(?:[^"\\\n]|\\.)*")*)//.*$`)
-
-// resolve turns an import specifier into the imported unit, and whether it is the repository's.
+// resolve turns an import specifier into the imported unit, and whether it is the repository's. A
+// specifier that looks like the repository's own but names no file is internal too, and its unit is
+// the directory of the path it names.
 func (r *typescript) resolve(from, spec string) (string, bool) {
-	p, internal := "", false
-	switch {
-	case strings.HasPrefix(spec, "."):
-		p, internal = path.Join(path.Dir(from), spec), true
-	case strings.HasPrefix(spec, "/"):
-		p, internal = strings.TrimPrefix(spec, "/"), true
-	default:
-		for alias, to := range r.aliases {
-			if rest, ok := strings.CutPrefix(spec, alias); ok {
-				p, internal = path.Join(to, rest), true
-			}
-		}
-	}
-	if !internal {
-		parts := strings.SplitN(spec, "/", 3)
-		if strings.HasPrefix(spec, "@") && len(parts) > 1 {
-			return parts[0] + "/" + parts[1], false
-		}
-		return parts[0], false
-	}
-	for _, ext := range append([]string{""}, extensions["typescript"]...) {
-		if r.exists[p+ext] {
-			return path.Dir(p + ext), true
-		}
-		if r.exists[p+"/index"+ext] {
-			return p, true
-		}
+	p, kind := r.project.resolve(from, spec)
+	if kind == tsExternal {
+		return p, false
 	}
 	return path.Dir(p), true
 }
@@ -252,7 +213,7 @@ func (r *typescript) symbols(f *file) []facts.Symbol {
 }
 
 func (r *typescript) declaration(f *file, n *sitter.Node, exported, doc bool) []facts.Symbol {
-	id := f.unit + "." + f.field(n, "name")
+	id := r.symbolID(f.path, f.field(n, "name"))
 	typ := facts.Symbol{ID: id, Kind: facts.SymbolType, Path: f.path, Line: line(n), EndLine: endLine(n), Exported: exported, Doc: doc}
 	switch n.Kind() {
 	case "function_declaration", "generator_function_declaration":
@@ -262,7 +223,7 @@ func (r *typescript) declaration(f *file, n *sitter.Node, exported, doc bool) []
 		for _, d := range named(n) {
 			v := d.ChildByFieldName("value")
 			if d.Kind() == "variable_declarator" && v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
-				s := facts.Symbol{ID: f.unit + "." + f.field(d, "name"), Kind: facts.SymbolFunction, Exported: exported, Doc: doc}
+				s := facts.Symbol{ID: r.symbolID(f.path, f.field(d, "name")), Kind: facts.SymbolFunction, Exported: exported, Doc: doc}
 				out = append(out, r.function(f, d, v, s))
 			}
 		}

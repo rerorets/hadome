@@ -3,8 +3,10 @@
 package treesitter
 
 import (
+	"io/fs"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -20,6 +22,12 @@ type python struct {
 	exists map[string]bool // files
 	dirs   map[string]bool // directories holding files
 	scopes map[string]int
+	// roots are where top-level packages live: "", src/, and each directory holding a
+	// pyproject.toml, setup.cfg or setup.py with its src/. Each ends in "/" but the root.
+	roots []string
+	files map[string]*file
+	// supports are the test support files read as a test's helpers and fixtures, by path.
+	supports map[string]*pyFile
 }
 
 func (*python) grammar(string) *sitter.Language { return sitter.NewLanguage(py.Language()) }
@@ -48,16 +56,41 @@ var pyDirective = regexp.MustCompile(`^#\s*(type:|noqa|pylint:|fmt:|pragma|mypy:
 
 var pyTestFile = regexp.MustCompile(`(^|/)(test_[^/]*|[^/]*_test)\.py$`)
 
-func (r *python) index(_ engine.Version, files []*file) {
+// pySupportFile matches the test support files: files under supportDirs, conftest.py, and
+// test_helpers.py and the like.
+var pySupportFile = regexp.MustCompile(supportDirs + `|(^|/)conftest\.py$|(?i:test[_-]?helpers?\.py$)`)
+
+// pyProjectFiles mark the directory of a Python project, whose packages may sit beside them or in src/.
+var pyProjectFiles = []string{"pyproject.toml", "setup.cfg", "setup.py"}
+
+func (r *python) index(v engine.Version, files []*file) {
 	r.exists, r.dirs, r.scopes = map[string]bool{}, map[string]bool{}, map[string]int{}
+	r.files, r.supports = map[string]*file{}, map[string]*pyFile{}
+	roots := map[string]bool{"": true, "src/": true}
+	seen := map[string]bool{}
 	for _, f := range files {
 		r.exists[f.path] = true
+		r.files[f.path] = f
 		for d := path.Dir(f.path); d != "." && !r.dirs[d]; d = path.Dir(d) {
 			r.dirs[d] = true
 		}
-		f.test = pyTestFile.MatchString(f.path) || f.testGlob
+		for d := path.Dir(f.path); d != "." && !seen[d]; d = path.Dir(d) {
+			seen[d] = true
+			for _, name := range pyProjectFiles {
+				if st, err := fs.Stat(v.FS, path.Join(d, name)); err == nil && !st.IsDir() {
+					roots[d+"/"], roots[d+"/src/"] = true, true
+				}
+			}
+		}
+		f.support = pySupportFile.MatchString(f.path) && !f.generatedGlob
+		f.test = pyTestFile.MatchString(f.path) || f.support || f.testGlob
 		f.unit, f.unitPath = path.Dir(f.path), path.Dir(f.path)
 	}
+	r.roots = nil
+	for root := range roots {
+		r.roots = append(r.roots, root)
+	}
+	sort.Strings(r.roots)
 }
 
 // module returns the module path of a file: its path without .py, or its package for __init__.py.
@@ -68,11 +101,12 @@ func module(p string) string {
 	return strings.TrimSuffix(p, ".py")
 }
 
-// resolve finds a dotted module in the repository, from the root or from src/. It returns the
-// module's path ("app/store"), its unit (the package directory), and whether it was found.
-func (r *python) resolve(dotted string) (mod, unit string, ok bool) {
+// resolve finds a dotted module imported by the file from in the repository, from the package
+// roots holding from, deepest first, then from the others. It returns the module's path
+// ("app/store"), its unit (the package directory), and whether it was found.
+func (r *python) resolve(from, dotted string) (mod, unit string, ok bool) {
 	rel := strings.ReplaceAll(dotted, ".", "/")
-	for _, root := range []string{"", "src/"} {
+	for _, root := range r.searchOrder(from) {
 		p := root + rel
 		switch {
 		case r.exists[p+".py"]:
@@ -82,6 +116,34 @@ func (r *python) resolve(dotted string) (mod, unit string, ok bool) {
 		}
 	}
 	return "", "", false
+}
+
+// searchOrder lists the package roots: those of the projects holding the file first, deepest
+// first, then the rest in path order. A root's project is its directory without the src/.
+func (r *python) searchOrder(from string) []string {
+	project := func(root string) string { return strings.TrimSuffix(root, "src/") }
+	var near, far []string
+	for _, root := range r.roots {
+		if strings.HasPrefix(from, project(root)) {
+			near = append(near, root)
+		} else {
+			far = append(far, root)
+		}
+	}
+	sort.SliceStable(near, func(i, j int) bool { return len(project(near[i])) > len(project(near[j])) })
+	return append(near, far...)
+}
+
+// ownPackage reports whether the first element of a dotted module is a package under a package
+// root: an import of it that resolves to nothing looks like the repository's own.
+func (r *python) ownPackage(dotted string) bool {
+	first, _, _ := strings.Cut(dotted, ".")
+	for _, root := range r.roots {
+		if r.dirs[root+first] {
+			return true
+		}
+	}
+	return false
 }
 
 // relative resolves "from ..x import y": dots climb from the importing file's package.
@@ -104,7 +166,9 @@ type pyImport struct {
 	mod      string // the module's path when internal
 	unit     string
 	internal bool
-	names    map[string]string // local name -> name in the module ("" binds the module itself)
+	// missing is true for an import that looks like the repository's own but resolves to nothing.
+	missing bool
+	names   map[string]string // local name -> name in the module ("" binds the module itself)
 }
 
 func (r *python) parseImports(f *file) []pyImport {
@@ -118,7 +182,8 @@ func (r *python) parseImports(f *file) []pyImport {
 					name, local = f.field(c, "name"), f.field(c, "alias")
 				}
 				im := pyImport{at: n, dotted: name, names: map[string]string{local: ""}}
-				im.mod, im.unit, im.internal = r.resolve(name)
+				im.mod, im.unit, im.internal = r.resolve(f.path, name)
+				im.missing = !im.internal && r.ownPackage(name)
 				out = append(out, im)
 			}
 			return false
@@ -144,8 +209,10 @@ func (r *python) fromImport(f *file, n *sitter.Node) pyImport {
 			}
 		}
 		im.mod, im.unit, im.internal = r.relative(f.path, prefix, dotted)
+		im.missing = !im.internal
 	} else {
-		im.mod, im.unit, im.internal = r.resolve(im.dotted)
+		im.mod, im.unit, im.internal = r.resolve(f.path, im.dotted)
+		im.missing = !im.internal && r.ownPackage(im.dotted)
 	}
 	for i := uint(0); i < n.ChildCount(); i++ {
 		c := n.Child(i)
@@ -176,7 +243,7 @@ func (r *python) imports(f *file, t *tables) []facts.Import {
 			out = append(out, unknownImport(f, c.at))
 			continue
 		}
-		_, unit, internal := r.resolve(c.spec)
+		_, unit, internal := r.resolve(f.path, c.spec)
 		to := c.spec
 		if internal {
 			to = unit
