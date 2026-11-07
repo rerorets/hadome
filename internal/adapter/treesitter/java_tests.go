@@ -13,8 +13,9 @@ import (
 var (
 	jvmTestAnnotations = set("Test", "ParameterizedTest", "RepeatedTest", "TestFactory", "TestTemplate")
 	jvmSkipAnnotations = set("Disabled", "Ignore")
-	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK")
-	javaLoops          = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
+	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK",
+		"InjectMock", "InjectSpy")
+	javaLoops = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
 )
 
 // jvmFile is what a Java or Kotlin test file binds: class names it can use, helpers, and mocks.

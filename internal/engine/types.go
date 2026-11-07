@@ -89,6 +89,14 @@ type MeasureRule interface {
 	RemovedLegitimately(it Item, head Input) (bool, error)
 }
 
+// LossExplainer is a MeasureRule that says what head shows about an item it lost, such as what made
+// a unit stop being pure. Lost returns the item as the finding should report it: the base item with
+// its File, Line and Detail taken from head. Without it, the finding reports the base item as it is.
+type LossExplainer interface {
+	MeasureRule
+	Lost(it Item, head Input) Item
+}
+
 // Finding is one violation. Anchor must survive unrelated edits; it never contains a line number.
 // Its wording is never part of how it is matched across versions, so the language changes nothing
 // but what is written out. WriteJSON writes it with its wording as plain strings.
