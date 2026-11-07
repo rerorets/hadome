@@ -226,6 +226,50 @@ func TestInitOffersATestCommandOnlyWithItsManifest(t *testing.T) {
 
 // viewpoint: behaviour
 // target: hadome init
+// The mutation part of the file appears whenever there is something to say about running tests:
+// a command to offer, or a note that one is missing. It always points to where the keys are
+// described, and it explains which command to swap only when it offers more than one.
+func TestInitMutationCommentSaysWhatAPersonNeeds(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		tree  map[string]string
+		want  []string
+		avoid []string
+	}{
+		{"a note and no command", map[string]string{"web/app.ts": ""},
+			[]string{"hadome mutate", "hadome explain mutation", "No test command for typescript"}, []string{"mutation:", "another language"}},
+		{"one command", map[string]string{"go.mod": "module example.com/app\n", "main.go": "package main\n"},
+			[]string{"hadome explain mutation", "# mutation:\n#   test: [go, test, ./...]"}, []string{"another language"}},
+		{"two commands", map[string]string{"go.mod": "module example.com/app\n", "main.go": "package main\n", "package.json": "{}\n", "web/app.ts": ""},
+			[]string{"hadome explain mutation", "another language's tests"}, nil},
+		{"nothing to test", map[string]string{"infra/main.tf": "resource \"null_resource\" \"a\" {}\n"},
+			nil, []string{"mutate", "mutation"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir(writeTree(t, tc.tree))
+			if code, out := runIn(t, "init"); code != 0 {
+				t.Fatalf("exit %d: %s", code, out)
+			}
+			written, err := os.ReadFile(config.FileName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(string(written), w) {
+					t.Errorf("want %q in:\n%s", w, written)
+				}
+			}
+			for _, a := range tc.avoid {
+				if strings.Contains(string(written), a) {
+					t.Errorf("want no %q in:\n%s", a, written)
+				}
+			}
+		})
+	}
+}
+
+// viewpoint: behaviour
+// target: hadome init
 // Ansible's YAML has no extension of its own, so init finds it by the layout the Ansible adapter
 // claims, and not in YAML outside that layout.
 func TestInitDetectsAnsibleByLayout(t *testing.T) {

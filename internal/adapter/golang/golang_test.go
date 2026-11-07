@@ -467,6 +467,163 @@ func Short(s string) bool { return len(strings.TrimSpace(s)) < limit }
 }
 
 // viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// Returning the zero value in place of a constant whose value is already the zero value changes
+// nothing, and no test could catch it: no such mutant is made, wherever the constant is declared
+// in the module and however its zero value is written. Everything else is still broken: a
+// constant with another value, one hadome cannot read (another module's, an expression, one
+// declared with different values in two files), a variable or field, a local name shadowing a
+// zero constant, and a result whose zero value is nil.
+func TestGoMutantsSkipConstantsAlreadyZero(t *testing.T) {
+	const queue = `package worker
+
+import (
+	"example.com/app"
+	"example.com/app/status"
+	"example.com/other/codes"
+)
+
+const none = 0
+
+var count = 0
+
+type row struct{ n int }
+
+func Done() int { return status.OK }
+
+func Fail() int { return status.Failed }
+
+func Again() int { return status.Retry }
+
+func Root() int { return app.None }
+
+func Outside() int { return codes.Zero }
+
+func Idle() int64 { return idle }
+
+func Wrapped() int64 { return (idle) }
+
+func Busy() int64 { return busy }
+
+func Label() string { return empty }
+
+func Same() int { return none }
+
+func Counted() int { return count }
+
+func Inner() int {
+	const z = 0
+	return z
+}
+
+func Shadow() int64 {
+	idle := int64(4)
+	return idle
+}
+
+func Field() int {
+	r := row{}
+	return r.n
+}
+
+func Default() int { return defaults.n }
+
+func Boxed() any { return idle }
+
+func Parens() int { return parens }
+
+func Sum() int { return sum }
+
+func Larger() int { return larger }
+
+func Wait() int { return wait }
+
+func Size() uintptr { return size }
+
+func Length() int { return length }
+
+func Mode() int { return mode }
+`
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"app.go": {Data: []byte("package app\n\nconst None = 0\n")},
+		"status/status.go": {Data: []byte(`package status
+
+const (
+	OK = iota
+	Failed
+)
+
+const Retry = int(2)
+
+type Code = int
+`)},
+		"worker/names.go": {Data: []byte(`package worker
+
+import (
+	"unsafe"
+
+	"example.com/app/status"
+)
+
+const (
+	idle   = int64(0)
+	empty  = ""
+	busy   = 3
+	parens = (0)
+	sum    = 1 + 1
+	larger = max(0, 1)
+	wait   = status.Code(0)
+	size   = unsafe.Sizeof(0)
+	length = len("")
+)
+
+var defaults row
+`)},
+		"worker/mode_a.go": {Data: []byte("//go:build a\n\npackage worker\n\nconst mode = 1\n")},
+		"worker/mode_b.go": {Data: []byte("//go:build !a\n\npackage worker\n\nconst mode = 0\n")},
+		"worker/queue.go":  {Data: []byte(queue)},
+	}
+	var funcs []facts.Symbol
+	for i, line := range strings.Split(queue, "\n") {
+		if name, ok := strings.CutPrefix(line, "func "); ok {
+			name = name[:strings.Index(name, "(")]
+			funcs = append(funcs, facts.Symbol{ID: "example.com/app/worker." + name, Kind: facts.SymbolFunction,
+				Path: "worker/queue.go", Line: i + 1})
+		}
+	}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		if m.Operator == returnZero {
+			got = append(got, fmt.Sprintf("%s: %s -> %s", strings.TrimPrefix(m.Func, "example.com/app/worker."), m.Original, m.Replacement))
+		}
+	}
+	want := strings.Join([]string{
+		"Fail: status.Failed -> 0",
+		"Again: status.Retry -> 0",
+		"Outside: codes.Zero -> 0",
+		"Busy: busy -> 0",
+		"Counted: count -> 0",
+		"Inner: z -> 0",
+		"Shadow: idle -> 0",
+		"Field: r.n -> 0",
+		"Default: defaults.n -> 0",
+		"Boxed: idle -> nil",
+		"Sum: sum -> 0",
+		"Larger: larger -> 0",
+		"Size: size -> 0",
+		"Mode: mode -> 0",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A method a standard interface defines is documented by that interface, but only when its name
 // and its signature both match: a Len returning int64 is not sort.Interface's.
