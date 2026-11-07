@@ -124,6 +124,11 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 			diffTurnedOn(out, object(h), f, p)
 		case f.Kind == KindObject:
 			diffObject(out, object(b), object(h), f, p)
+		case f.Kind == KindList && f.Sequence:
+			if !reflect.DeepEqual(list(b), list(h)) {
+				*out = append(*out, Change{Key: p, Removed: fmtSequence(list(b)), Added: fmtSequence(list(h)),
+					Looser: f.Looser != LooserNever})
+			}
 		case f.Kind == KindList:
 			if h == nil && f.OmittedIsWidest {
 				continue
@@ -249,6 +254,19 @@ func diffPlanned(base, head *Diagram) []Change {
 		}
 	}
 	return out
+}
+
+// fmtSequence writes a sequence as YAML's flow style writes it, in its own order: [go, test, ./...].
+// An empty or missing one is "".
+func fmtSequence(l []any) string {
+	if len(l) == 0 {
+		return ""
+	}
+	parts := make([]string, len(l))
+	for i, v := range l {
+		parts[i] = fmt.Sprint(v)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func fmtValue(v any) string {

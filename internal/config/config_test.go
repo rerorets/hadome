@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -467,6 +468,20 @@ func TestChangesSayWhereTheyAre(t *testing.T) {
 	}
 }
 
+// A command is a sequence: its arguments mean something only in their order, so a change shows the
+// command whole, as written, and never sorts its arguments.
+func TestACommandChangeShowsTheCommandInItsOrder(t *testing.T) {
+	dir := t.TempDir()
+	changes := Diff(mustLoad(t, "schema: 1\n", dir), mustLoad(t, "schema: 1\nmutation:\n  test: [npm, run, test, --, --run]\n", dir))
+	var got []string
+	for _, c := range changes {
+		got = append(got, c.Key+" +"+c.Added)
+	}
+	if want := "mutation.test +[npm, run, test, --, --run]"; !slices.Contains(got, want) || len(got) != 1 {
+		t.Errorf("got %v, want only %q", got, want)
+	}
+}
+
 // Invariant 5 of docs/design/configuration.md: without a mutation section hadome mutate does not run,
 // so adding one never loosens anything; removing or weakening one that base has does.
 func TestAddingTheMutationSectionIsNotLoosening(t *testing.T) {
@@ -478,9 +493,10 @@ func TestAddingTheMutationSectionIsNotLoosening(t *testing.T) {
 		want             []string
 	}{
 		{"adding the section", without, with, nil},
-		{"removing the section", with, without, []string{"mutation.test -./...", "mutation.test -go", "mutation.test -test"}},
+		{"removing the section", with, without, []string{"mutation.test -[go, test, ./...]"}},
 		{"lowering the limit", with, strings.Replace(with, "30", "10", 1), []string{"mutation.max-mutants -30"}},
-		{"changing the command", with, strings.Replace(with, "./...", "./store", 1), []string{"mutation.test -", "mutation.test -./..."}},
+		{"changing the command", with, strings.Replace(with, "./...", "./store", 1), []string{"mutation.test -[go, test, ./...]"}},
+		{"reordering the arguments", with, strings.Replace(with, "test, ./...", "./..., test", 1), []string{"mutation.test -[go, test, ./...]"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

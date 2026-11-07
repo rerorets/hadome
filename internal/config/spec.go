@@ -75,7 +75,10 @@ type Key struct {
 	Min      int     // for ints: the smallest value accepted
 	MinItems int     // for lists
 	Elem     *Key    // for lists
-	Fields   []Key   // for objects with one shape
+	// Sequence means the list is one value whose order matters, such as a command and its
+	// arguments: it is compared and shown whole, never entry by entry.
+	Sequence bool
+	Fields   []Key // for objects with one shape
 	Variants []Variant
 	Looser   Direction
 	// Identity names the fields that identify an entry of a list of objects across versions.
@@ -185,7 +188,7 @@ var gateKey = Key{
 		{Name: "kind", Kind: KindString, Required: true,
 			Allowed: []Value{{"finding", "Reports violations."}, {"measure", "Reports guarded items."}},
 			Doc:     "What the gate reports.", Example: "kind: finding"},
-		{Name: "run", Kind: KindList, Required: true, MinItems: 1, Elem: &Key{Kind: KindString},
+		{Name: "run", Kind: KindList, Required: true, MinItems: 1, Sequence: true, Elem: &Key{Kind: KindString},
 			Doc: "The command and its arguments. A command containing / is a path from the repository root; " +
 				"otherwise it is looked up on PATH. It runs in the root of the version being checked.",
 			Example: "run: [scripts/gates/log-append-only]"},
@@ -294,7 +297,7 @@ var mutationKey = Key{Name: "mutation", Kind: KindObject, OmittedIsOff: true,
 		"Removing it or weakening it needs review.",
 	Example: "mutation:\n  test: [go, test, ./...]",
 	Fields: []Key{
-		{Name: "test", Kind: KindList, Required: true, Looser: LooserAlways, Elem: &Key{Kind: KindString},
+		{Name: "test", Kind: KindList, Required: true, Looser: LooserAlways, Sequence: true, Elem: &Key{Kind: KindString},
 			Doc: "The test command, run at the root of a copy of the version for every mutant. hadome never guesses it. " +
 				"An element holding {tests} gets the names of the tests that call the broken function; a survivor is then run " +
 				"again with all the tests. Any change needs review.",
