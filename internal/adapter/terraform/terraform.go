@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -343,7 +344,8 @@ func lexComments(p string, src []byte) []comment {
 				break
 			}
 		}
-		text = strings.TrimSpace(strings.TrimSuffix(text, "*/"))
+		// Line breaks before the text stay, so that its first line is the comment's first line.
+		text = strings.TrimRightFunc(strings.TrimLeft(strings.TrimSuffix(text, "*/"), " \t"), unicode.IsSpace)
 		directive := false
 		for _, d := range directives {
 			directive = directive || strings.HasPrefix(text, d)

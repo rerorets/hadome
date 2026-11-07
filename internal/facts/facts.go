@@ -125,6 +125,10 @@ type Symbol struct {
 	Exported bool
 	// Doc is true when the symbol has a doc comment.
 	Doc bool
+	// DocElsewhere is true when convention documents the symbol at another place: an override at
+	// the declaration it overrides, a Go method a standard interface defines (String() string,
+	// Error() string, …) at that interface, a TypeScript constructor at its class.
+	DocElsewhere bool
 	// Scoped is true when a parameter says whose data the symbol works on (a user, a tenant, …).
 	Scoped bool
 	// Params counts the parameters of a function or method, without the receiver.

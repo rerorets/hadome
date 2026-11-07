@@ -2,7 +2,6 @@ package tests
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/engine"
@@ -72,21 +71,24 @@ func (r noAssertion) Find(in engine.Input) ([]engine.Finding, error) {
 	return out, nil
 }
 
-// duplicate is tests/duplicate: tests with the same body. Like a size limit, there is one finding per
-// body and its Value is how many tests share it, so a third copy is a regression and renaming a copy
-// is not. The finding sits at the first test by file and line.
+// duplicate is tests/duplicate: tests with the same body. In one file the same tokens name the same
+// things, so the same body is enough. Across files they may not (each file's own constant, helper or
+// imported handler), so tests in different files are copies only when they also call the same known
+// targets and nothing unidentified. Like a size limit, there is one finding per group of copies and
+// its Value is how many tests are in it, so a third copy is a regression and renaming a copy is not.
+// The finding sits at the group's first test by file and line.
 type duplicate struct{}
 
 func (duplicate) ID() string           { return "tests/duplicate" }
 func (duplicate) Cases() []engine.Case { return duplicateCases() }
 func (duplicate) About() engine.About {
-	return engine.About{Finds: engine.T("tests with the same body, ignoring names, comments and whitespace; a new copy is a regression"),
+	return engine.About{Finds: engine.T("tests with the same body, ignoring names, comments and whitespace, and, in different files, the same known targets; a new copy is a regression"),
 		Why: engine.T("checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy"),
 		Fix: engine.T("delete all but one, or change the input if they were meant to check different cases")}
 }
 
 func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
-	same := map[string][]facts.Test{}
+	same := map[string][]facts.Test{} // in file and line order, as facts.Analysis lists tests
 	for _, t := range in.Facts.Tests {
 		if t.Body != "" && !t.Skip.Skipped {
 			same[t.Body] = append(same[t.Body], t)
@@ -97,22 +99,75 @@ func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
 		if len(ts) < 2 {
 			continue
 		}
-		sort.Slice(ts, func(i, j int) bool {
-			if ts[i].Path != ts[j].Path {
-				return ts[i].Path < ts[j].Path
+		for _, group := range copies(ts) {
+			var where []string
+			for _, t := range group {
+				where = append(where, fmt.Sprintf("%s (%s:%d)", t.Name, t.Path, t.Line))
 			}
-			return ts[i].Line < ts[j].Line
-		})
-		var where []string
-		for _, t := range ts {
-			where = append(where, fmt.Sprintf("%s (%s:%d)", t.Name, t.Path, t.Line))
+			// All of a file's tests with one body are in one group, so the first file tells groups apart.
+			out = append(out, engine.Finding{
+				Rule: r.ID(), File: group[0].Path, Line: group[0].Line, Anchor: body, Value: len(group),
+				Message: engine.T("%d tests have the same body: %s", len(group), strings.Join(where, ", ")),
+				Why:     r.About().Why,
+				Fix:     r.About().Fix,
+			})
 		}
-		out = append(out, engine.Finding{
-			Rule: r.ID(), File: ts[0].Path, Line: ts[0].Line, Anchor: body, Value: len(ts),
-			Message: engine.T("%d tests have the same body: %s", len(ts), strings.Join(where, ", ")),
-			Why:     r.About().Why,
-			Fix:     r.About().Fix,
-		})
 	}
 	return out, nil
+}
+
+// copies splits tests with the same body, in file and line order, into the groups of two or more
+// that are copies of one another: tests in the same file, and tests in different files with the
+// same known targets, joined as far as either links them.
+func copies(ts []facts.Test) [][]facts.Test {
+	parent := make([]int, len(ts))
+	for i := range parent {
+		parent[i] = i
+	}
+	root := func(i int) int {
+		for parent[i] != i {
+			i = parent[i]
+		}
+		return i
+	}
+	keys := make([]string, len(ts))
+	for i, t := range ts {
+		keys[i] = knownTargets(t)
+	}
+	for i := range ts {
+		for j := i + 1; j < len(ts); j++ {
+			if ts[i].Path == ts[j].Path || (keys[i] != "" && keys[i] == keys[j]) {
+				parent[root(j)] = root(i)
+			}
+		}
+	}
+	byRoot := map[int][]facts.Test{}
+	var order []int
+	for i, t := range ts {
+		r := root(i)
+		if byRoot[r] == nil {
+			order = append(order, r)
+		}
+		byRoot[r] = append(byRoot[r], t)
+	}
+	var out [][]facts.Test
+	for _, r := range order {
+		if len(byRoot[r]) > 1 {
+			out = append(out, byRoot[r])
+		}
+	}
+	return out
+}
+
+// knownTargets is the test's targets (Calls are sorted by target), joined, or "" when what it calls
+// is not all known: it has no target, or a call that could not be identified.
+func knownTargets(t facts.Test) string {
+	if len(t.Calls) == 0 || t.Unresolved > 0 {
+		return ""
+	}
+	targets := make([]string, len(t.Calls))
+	for i, c := range t.Calls {
+		targets[i] = c.Target
+	}
+	return strings.Join(targets, "\x00")
 }

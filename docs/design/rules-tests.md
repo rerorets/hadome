@@ -121,7 +121,13 @@ Adding tests does not always widen what they guard. These three rules stop tests
 - **Why it matters**: checking the same thing twice does not widen what is guarded, and changing the behaviour means making the same fix in two places
 - **Fix**: delete one. If it was meant to check another input, change the input
 - Tests that differ in even one literal are different tests
-- Like the quantity rules, there is one item per body fingerprint, and its value is the number of tests with that body. A higher number is a regression, and renaming a test does not make it new
+- **A pair in the same file**: the same body makes a copy. Within one file, the same name means the same thing
+- **A pair in different files**: the same body makes a copy only when both of these hold
+  - the sets of targets (what `Calls` names) are the same, and not empty
+  - neither test has a call that could not be identified (`Unresolved`)
+- Why pairs in different files need more: the same tokens can name different things in different files. For example, a `GET` imported from each file's own `route`, or a helper of the same name that does something else. Different targets mean the tests check different code. Unknown targets mean a copy cannot be said for certain
+- A test that only drives the app from outside with an HTTP test tool (it has no targets) is never a copy of a test in another file. For example, tests that GET different routes through helpers of the same name
+- Like the quantity rules, there is one item per group of copies, and its value is the number of tests in the group. The item sits at the group's first test by file and line. A higher number is a regression, and renaming a test does not make it new
 
 ## What the tests guard
 
@@ -211,7 +217,7 @@ Each rule ships with at least these cases.
 | `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) · an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · a helper called twice counts as two calls · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` · `durable` is not guarded without `guards:`, and is with it |
 | `tests/guards-nothing` | a new test that calls no product code fails · a test that calls product code through a helper passes · a test with a call that cannot be identified passes · a test that reads a product constant passes · a skipped test passes · a test already on the base branch is not reported · a test that drives the application through an HTTP test client passes · a test calling a function of the same name that is not a client fails · a test that hands a request in memory to the application passes · a test that calls product code through a helper of a test support file passes |
 | `tests/no-assertion` | a new test without an assertion fails · a test that asserts in a helper passes · a test that passes its testing handle to a function that cannot be read passes · a test that calls an assertion function added in configuration passes · a skipped test passes · a test already in base is not reported |
-| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name, comments and whitespace changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails |
+| `tests/duplicate` | adding a copy of an existing test fails · a copy with only its name, comments and whitespace changed fails · a test with one literal changed passes · deleting one of a pair of copies passes · renaming a copy does not make it new · adding a third copy to a pair already in base fails · a copy in another file with the same body and targets fails · a test in another file with the same body and other targets passes · a copy in another file of the same package fails |
 
 ## Invariants
 
@@ -227,3 +233,4 @@ Each rule ships with at least these cases.
 - Test speed (belongs to a separate rule group with its own design)
 - Stopping tests that do not widen the guarded scope. A test whose targets are all guarded already cannot be told apart from a legitimate test of another input or another aspect.
 - Treating tests that call the same way (the same targets, times and scopes) as duplicates. Legitimate tests that differ only in input, such as `TestAddPositive` and `TestAddNegative`, would be caught
+- Telling apart tests that differ only by a constant whose value each file sets differently. For example, two tests with the same body and targets whose files give `KEY` different values. The facts do not hold the values of a test file's constants, so they are reported as copies

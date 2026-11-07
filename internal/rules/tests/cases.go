@@ -192,7 +192,45 @@ func duplicateCases() []engine.Case {
 		Base: tree(testFile(pair)), Head: tree(testFile(plainTest + "\n" + copyOf("TestAppendTwice")))}
 	third := engine.Case{Name: "a third copy of a pair already on the base branch fails", WantFail: []string{"tests/duplicate"},
 		Base: tree(testFile(pair)), Head: tree(testFile(pair + "\n" + copyOf("TestAppendThird")))}
-	return []engine.Case{added, disguised, literal, removed, renamed, third}
+	elsewhere := engine.Case{Name: "a copy in another file with the same body and targets fails", WantFail: []string{"tests/duplicate"},
+		Base: tree(testFile(plainTest)),
+		Head: tree(withFile(testFile(plainTest), "store/more_test.go", testFile(copyOf("TestAppendElsewhere"))["store/store_test.go"]))}
+	otherTargets := engine.Case{Name: "a test in another file with the same body and other targets passes",
+		Base: lists(listTest("queue")), Head: lists(listTest("queue"), listTest("stack"))}
+	sameTargets := engine.Case{Name: "a copy in another file of the same package fails", WantFail: []string{"tests/duplicate"},
+		Base: lists(listTest("queue")),
+		Head: lists(listTest("queue"), map[string]string{"queue/more_test.go": listTest("queue")["queue/queue_test.go"]})}
+	return []engine.Case{added, disguised, literal, removed, renamed, third, elsewhere, otherTargets, sameTargets}
+}
+
+// withFile adds one file to a set of test files.
+func withFile(files map[string]string, path, src string) map[string]string {
+	files[path] = src
+	return files
+}
+
+// lists is a module with two lists, queue and stack, whose functions have the same names, and the
+// given test files.
+func lists(tests ...map[string]string) fstest.MapFS {
+	files := map[string]string{}
+	for _, list := range []string{"queue", "stack"} {
+		files[list+"/"+list+".go"] = "package " + list + "\n\n// List holds items.\ntype List struct{ items []string }\n\n" +
+			"// New returns an empty list.\nfunc New() *List { return &List{} }\n\n" +
+			"// Put adds an item.\nfunc Put(l *List, item string) { l.items = append(l.items, item) }\n\n" +
+			"// Size returns the number of items.\nfunc Size(l *List) int { return len(l.items) }\n"
+	}
+	for _, t := range tests {
+		for p, s := range t {
+			files[p] = s
+		}
+	}
+	return tree(files)
+}
+
+// listTest is a test in the list's own package, so its body names New, Put and Size unqualified.
+func listTest(list string) map[string]string {
+	return map[string]string{list + "/" + list + "_test.go": "package " + list + "\n\nimport \"testing\"\n\n" +
+		"func TestPut(t *testing.T) {\n\tl := New()\n\tPut(l, \"a\")\n\tif Size(l) != 1 {\n\t\tt.Fatal(\"want one item\")\n\t}\n}\n"}
 }
 
 func noAssertionCases() []engine.Case {

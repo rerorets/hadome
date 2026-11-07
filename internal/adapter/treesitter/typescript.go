@@ -254,10 +254,21 @@ func (r *typescript) methods(f *file, class *sitter.Node, id string, exported bo
 		}
 		name := f.field(m, "name")
 		private := strings.HasPrefix(name, "#") || strings.HasPrefix(f.text(m), "private ")
-		s := facts.Symbol{ID: id + "." + name, Kind: facts.SymbolMethod, Exported: exported && !private, Doc: docBefore(f, m, "/**")}
+		s := facts.Symbol{ID: id + "." + name, Kind: facts.SymbolMethod, Exported: exported && !private, Doc: docBefore(f, m, "/**"),
+			DocElsewhere: name == "constructor" || tsOverride(m)}
 		out = append(out, r.function(f, m, m, s))
 	}
 	return out
+}
+
+// tsOverride reports whether a method is marked override.
+func tsOverride(m *sitter.Node) bool {
+	for _, c := range named(m) {
+		if c.Kind() == "override_modifier" {
+			return true
+		}
+	}
+	return false
 }
 
 // function completes a function's symbol: at is where it is declared, fn holds its parameters and body.

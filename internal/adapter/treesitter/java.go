@@ -137,7 +137,7 @@ func (j *java) typeSymbols(f *file, n *sitter.Node, prefix string, visible bool)
 				out[0].Methods++
 			}
 			s := facts.Symbol{ID: id + "." + f.field(m, "name"), Kind: facts.SymbolMethod,
-				Exported: public && (iface || modifier(f, m, "public")), Doc: docBefore(f, m, "/**")}
+				Exported: public && (iface || modifier(f, m, "public")), Doc: docBefore(f, m, "/**"), DocElsewhere: modifier(f, m, "@Override")}
 			params := javaParams(f, m)
 			j.scopes[s.ID] = scopeOf(params)
 			out = append(out, funcSymbol(f, m, s, params, javaBranches.complexity(f, m.ChildByFieldName("body"))))
