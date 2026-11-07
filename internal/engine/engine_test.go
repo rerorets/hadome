@@ -2,11 +2,13 @@ package engine_test
 
 import (
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/rules/size"
 	"github.com/rerorets/hadome/internal/rules/tests"
 )
 
@@ -123,6 +125,36 @@ func TestExceptionNeedsReviewOnlyInTheChangeThatAddsIt(t *testing.T) {
 	reworded := module("\t// gate:allow tests/no-clock reason: something else\n\t_ = time.Now()\n")
 	if r := check(t, treeSource{base: excepted, head: reworded}); r.ExitCode() != engine.ExitReview {
 		t.Fatalf("a changed reason must be reviewed again, got exit %d", r.ExitCode())
+	}
+}
+
+// viewpoint: external contract
+// target: engine.Engine.Check with size/file-lines
+// A violation that was already in base and grew is reported with both values, so the reader sees
+// how much the change added, not only where the file stands now.
+func TestAGrownViolationShowsItsBaseValue(t *testing.T) {
+	file := func(n int) fstest.MapFS {
+		return fstest.MapFS{
+			"go.mod":         {Data: []byte("module example.com/app\n")},
+			".hadome.yml":    {Data: []byte("schema: 1\nrules:\n  size:\n    file-lines: 5\n")},
+			"store/store.go": {Data: []byte("package store\n" + strings.Repeat("// a row\n", n-1))},
+		}
+	}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: size.All()}
+	r, err := e.Check(treeSource{base: file(7), head: file(9)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Regressions) != 1 {
+		t.Fatalf("want one regression, got %+v", r.Regressions)
+	}
+	for lang, want := range map[string]string{
+		"en": "store/store.go: lines 9, limit 5; grew from 7",
+		"ja": "store/store.go: 行数 9（上限 5）。base の 7 から増えた",
+	} {
+		if got := r.Regressions[0].Message.In(lang); got != want {
+			t.Errorf("%s: got %q, want %q", lang, got, want)
+		}
 	}
 }
 

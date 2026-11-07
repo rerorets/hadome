@@ -115,6 +115,7 @@ var Japanese = map[string]string{
 
 	// size/.
 	"%s: %s %d, limit %d": "%s: %s %d（上限 %d）",
+	"%s; grew from %d":    "%s。base の %d から増えた",
 	"product code over the %s limit (%s); an existing one that grows is a regression too":                                "%s の上限（%s）を超えた製品のコード。既にあるものが大きくなるのも後退になる",
 	"past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it": "上限を超えると、コードは一度に読み切れなくなり、全体を分からないまま変更されるようになる",
 	"%s; raising the limit (rules.size.%s) is a change a person reviews":                                                 "%s。上限（rules.size.%s）を上げるのは、人が確かめる変更である",

@@ -195,8 +195,10 @@ func compareFindings(r *Report, base, head []Finding, renames map[string]string)
 			continue
 		}
 		if len(values[k]) > 0 { // the violation exists in base but grew: it used up the closest one
-			i := slices.Index(values[k], slices.Max(values[k]))
+			was := slices.Max(values[k])
+			i := slices.Index(values[k], was)
 			values[k] = append(values[k][:i], values[k][i+1:]...)
+			f.Message = T("%s; grew from %d", f.Message, was)
 		}
 		if f.Review {
 			r.Reviews = append(r.Reviews, f)

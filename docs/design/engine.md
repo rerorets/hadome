@@ -45,7 +45,7 @@ A finding carries a **fingerprint**:
 
 Two findings with the same fingerprint are the same finding. When fingerprints collide within one file (the same violation written twice in one function), they are matched by count: head may have as many as base without regressing.
 
-A finding about an amount (lines, parameters) also carries the measured value. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not.
+A finding about an amount (lines, parameters) also carries the measured value. A head finding that matches base but has a larger value is a regression: the violation got worse. One whose value stayed or shrank is not. The wording of a violation that got worse adds its value in base. Example: `store/store.go: lines 840, limit 500; grew from 812`
 
 Line numbers are kept for display only.
 
