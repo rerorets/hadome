@@ -73,3 +73,16 @@ go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices
 - It lists the modules the release build (with cgo) links on any of Linux, macOS and Windows
 - For each module it gives the version, where the source can be downloaded (the Go module proxy), and the license text the module ships
 - A module with no license file at its top fails the test. Find out its license before adding it as a dependency as a dependency
+
+## Actions the workflows use
+
+A workflow's `uses:` names a commit SHA, not a tag. A comment after it gives the version of that SHA.
+
+```yaml
+- uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+```
+
+- An action's owner can move a tag later. A SHA follows from the content, so moving the tag does not change the code hadome runs.
+- The release jobs can read the publishing credentials. Pinning keeps the code of a moved tag from reading them.
+- Dependabot raises the versions ([.github/dependabot.yml](../../.github/dependabot.yml)). Once a week it gathers the actions to raise into one PR. Merge it when its CI passes and the raised versions' changes look fine.
+- When you add an action, write it in the same SHA-and-comment form.
