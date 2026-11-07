@@ -216,7 +216,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 |---|---|
 | Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require`, testify suite checks (`s.Equal(…)`, `s.Require().…`) |
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
-| TypeScript | `expect(…)`, `assert` and `assert.…` |
+| TypeScript | `expect(…)` with a matcher called (`expect(x).toBe(1)`, `expect(x).not.toBe(1)`), chai's `expect(x).to.…`, `assert` and `assert.…`. `expect(x)` alone, and a matcher not called (`expect(x).toBeTruthy`), do not count |
 | Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, MockK's `verify…`, `coVerify…` and `confirmVerified`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like, including those after a helper whose body ends in `then()`), Spring MockMvc's `andExpect` |
 | Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
 

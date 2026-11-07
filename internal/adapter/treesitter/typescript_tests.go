@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"maps"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -36,14 +37,21 @@ type tsFile struct {
 	// whose calls drive the application from outside.
 	drivers  map[string]bool
 	comments map[int]string
+	// params are the parameter lists of the helpers, whose default values run on each call.
+	params map[string]*sitter.Node
+	// setups are what sets up each variable declared outside the tests (see bindSetups), and
+	// setupNodes the same nodes, by ID.
+	setups     map[string][]tsSetup
+	setupNodes map[uintptr]bool
+	// outerLoaded and outerModules are the names outside the tests taken from a module loaded with
+	// import(), like the walker's loaded and modules.
+	outerLoaded  map[string]string
+	outerModules map[string]string
+	// sideEffects are the units the file loads with a bare await import('./m') outside its tests.
+	sideEffects []string
 }
 
-var (
-	tsSuites = set("describe", "describe.only", "context", "suite")
-	tsTests  = set("it", "test", "it.only", "test.only", "it.concurrent", "test.concurrent")
-	tsSkips  = set("it.skip", "test.skip", "xit", "xtest", "it.todo", "test.todo", "describe.skip", "xdescribe")
-	tsLoops  = set("for_statement", "for_in_statement", "while_statement", "do_statement")
-)
+var tsLoops = set("for_statement", "for_in_statement", "while_statement", "do_statement")
 
 func (r *typescript) tests(f *file, t *tables) []facts.Test {
 	if !f.test {
@@ -51,7 +59,7 @@ func (r *typescript) tests(f *file, t *tables) []facts.Test {
 	}
 	tf := r.testFile(f, t)
 	var out []facts.Test
-	tf.suite(f.root, "", false, &out)
+	tf.suite(f.root, tsScope{}, &out)
 	return out
 }
 
@@ -87,51 +95,11 @@ func (tf *tsFile) bind() {
 	}
 }
 
-// suite finds the tests under n; prefix is the names of the enclosing describe blocks.
-func (tf *tsFile) suite(n *sitter.Node, prefix string, skipped bool, out *[]facts.Test) {
-	walk(n, func(x *sitter.Node) bool {
-		if x.Kind() != "call_expression" {
-			return true
-		}
-		callee := tf.f.field(x, "function")
-		args := named(x.ChildByFieldName("arguments"))
-		if len(args) < 2 || !(tsSuites[callee] || tsTests[callee] || tsSkips[callee]) {
-			return true
-		}
-		name := prefix + unquote(tf.f.text(args[0]))
-		isSkip := skipped || tsSkips[callee]
-		if tsSuites[callee] || strings.HasSuffix(callee, "describe") || callee == "describe.skip" {
-			tf.suite(args[1], name+" ", isSkip, out)
-			return false
-		}
-		*out = append(*out, tf.test(name, x, args[1], isSkip))
-		return false
-	})
-}
-
-func (tf *tsFile) test(name string, at, fn *sitter.Node, skipped bool) facts.Test {
-	t := newTest(tf.f, name, at)
-	t.fingerprint([]*sitter.Node{at}, named(at.ChildByFieldName("arguments"))[0])
-	if skipped {
-		reason := tf.comments[line(at)]
-		if reason == "" {
-			reason = tf.comments[line(at)-1]
-		}
-		t.skip(reason, at)
-	}
-	for _, m := range tf.mocks {
-		t.hazard(facts.HazardMock, m)
-	}
-	w := &tsWalk{tf: tf, t: t, vars: tf.outerVars(), locals: map[string]bool{}, walking: map[string]bool{},
-		loaded: map[string]string{}, modules: map[string]string{}}
-	w.walk(fn.ChildByFieldName("body"))
-	return t.done()
-}
-
 // tsWalk walks one test body, following helpers of the file.
 type tsWalk struct {
 	tf      *tsFile
 	t       *testFacts
+	at      *sitter.Node      // the call that declares the test
 	vars    map[string]string // local variable -> class target, for variables built with new
 	locals  map[string]bool
 	walking map[string]bool
@@ -139,6 +107,15 @@ type tsWalk struct {
 	// require(): a name -> its target, and a module object -> its file.
 	loaded  map[string]string
 	modules map[string]string
+	// used are the outer names whose setup the test has walked, and done the setup nodes walked,
+	// so that a value set up once is counted once however often the test uses it.
+	used map[string]bool
+	done map[uintptr]bool
+	// setup is above zero while a setup is walked: functions an object of it holds run only when
+	// called, and are followed as helpers then.
+	setup int
+	// fake is true after the test turned on fake timers: Date and setTimeout then read the fake clock.
+	fake bool
 }
 
 func (w *tsWalk) walk(body *sitter.Node) {
@@ -146,38 +123,79 @@ func (w *tsWalk) walk(body *sitter.Node) {
 }
 
 func (w *tsWalk) visit(n *sitter.Node) bool {
-	f := w.tf.f
+	if w.walked(n) {
+		return false
+	}
 	switch n.Kind() {
+	case "pair", "method_definition":
+		return w.setup == 0 || !tsHeldFunction(n)
 	case "variable_declarator":
-		name := f.field(n, "name")
-		w.locals[name] = true
-		delete(w.vars, name) // a local shadows a variable of the same name outside the test
-		w.bindLoaded(n)
-		if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
-			if target, ok := w.tf.names[f.field(v, "constructor")]; ok {
-				w.vars[name] = target
-			}
-		}
+		w.declare(n)
+	case "assignment_expression":
+		w.tf.bindLoad(n.ChildByFieldName("left"), n.ChildByFieldName("right"), w.modules, w.loaded)
 	case "new_expression":
-		if f.text(n) == "new Date()" {
-			w.t.hazard(facts.HazardClock, n)
-		} else if target, ok := w.tf.names[f.field(n, "constructor")]; ok {
-			w.t.call(target, nil)
-		} else if w.tf.unresolved[f.field(n, "constructor")] || w.tf.via[f.field(n, "constructor")] != [2]string{} {
-			w.t.test.Unresolved++ // a class hadome cannot find, or one of a support file
-		}
+		w.construct(n)
 	case "call_expression":
 		w.call(n)
 	case "jsx_opening_element", "jsx_self_closing_element":
 		w.element(n)
-	case "identifier": // a name in a type is a type_identifier, never an identifier
-		if _, ok := w.tf.names[f.text(n)]; ok {
-			w.t.readName(n, tsUses)
-		} else if _, ok := w.tf.spaces[f.text(n)]; ok {
-			w.t.readName(n, tsUses)
-		}
+	case "identifier", "shorthand_property_identifier": // a name in a type is a type_identifier, never an identifier
+		w.name(n)
 	}
 	return true
+}
+
+// walked reports whether n sets up an outer variable and the test has walked it already.
+func (w *tsWalk) walked(n *sitter.Node) bool {
+	if !w.tf.setupNodes[n.Id()] {
+		return false
+	}
+	if w.done[n.Id()] {
+		return true
+	}
+	w.done[n.Id()] = true
+	return false
+}
+
+// declare records a local of the test, which shadows a variable of the same name outside it.
+func (w *tsWalk) declare(n *sitter.Node) {
+	f := w.tf.f
+	name := f.field(n, "name")
+	w.locals[name] = true
+	delete(w.vars, name)
+	delete(w.loaded, name)
+	delete(w.modules, name)
+	w.bindLoaded(n)
+	if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
+		if target, ok := w.tf.names[f.field(v, "constructor")]; ok {
+			w.vars[name] = target
+		}
+	}
+}
+
+func (w *tsWalk) construct(n *sitter.Node) {
+	f := w.tf.f
+	if f.text(n) == "new Date()" {
+		if !w.fake {
+			w.t.hazard(facts.HazardClock, n)
+		}
+	} else if target, ok := w.tf.names[f.field(n, "constructor")]; ok {
+		w.t.call(target, nil)
+	} else if w.tf.unresolved[f.field(n, "constructor")] || w.tf.via[f.field(n, "constructor")] != [2]string{} {
+		w.t.test.Unresolved++ // a class hadome cannot find, or one of a support file
+	}
+}
+
+// name records a read of a name of the repository, or runs the setup of an outer variable.
+func (w *tsWalk) name(n *sitter.Node) {
+	text := w.tf.f.text(n)
+	_, imported := w.tf.names[text]
+	_, space := w.tf.spaces[text]
+	if imported || space {
+		w.t.readName(n, tsUses)
+	} else {
+		w.useOuter(text)
+	}
 }
 
 var tsUses = useGrammar{
@@ -191,12 +209,7 @@ func (w *tsWalk) call(n *sitter.Node) {
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
 	args := named(n.ChildByFieldName("arguments"))
-	w.t.assertion(callee, w.tf.t.asserts)
-	if w.tf.drivers[callee] || w.appRequest(fn, args) {
-		w.t.test.Drives = true
-	}
-	if cat, ok := w.tf.t.calls[callee]; ok {
-		w.t.hazard(cat, n)
+	if w.tool(n, fn, callee, args) {
 		return
 	}
 	if w.alwaysTrue(fn, args) {
@@ -221,6 +234,29 @@ func (w *tsWalk) call(n *sitter.Node) {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		}
 	}
+}
+
+// tool records a call of the testing tools: an assertion, an HTTP test client, a skip, fake
+// timers, loading a module for what it does, or a hazard. It reports whether the call is done with.
+func (w *tsWalk) tool(n, fn *sitter.Node, callee string, args []*sitter.Node) bool {
+	if (callee != "expect" && callee != "expect.soft") || w.matched(n) {
+		w.t.assertion(callee, w.tf.t.asserts)
+	}
+	if w.tf.drivers[callee] || w.appRequest(fn, args) {
+		w.t.test.Drives = true
+	}
+	if w.skips(n, callee, args) || w.timers(callee) {
+		return true
+	}
+	if unit := w.tf.dynamicImport(n); unit != "" && tsDiscarded(n) {
+		w.t.call(w.tf.unitOf(unit), nil) // await import('./setup'): the module runs for what it does when loaded
+		return true
+	}
+	cat, ok := w.tf.t.calls[callee]
+	if ok && (!w.fake || (cat != facts.HazardClock && cat != facts.HazardSleep)) {
+		w.t.hazard(cat, n)
+	}
+	return ok
 }
 
 // memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
@@ -289,6 +325,8 @@ func (w *tsWalk) element(n *sitter.Node) {
 			w.followSupport(v[0], v[1])
 		} else if w.tf.unresolved[f.text(name)] {
 			w.t.test.Unresolved++
+		} else if target == "" {
+			w.follow(f.text(name)) // a component the file declares: function Harness() { return <Form /> }
 		}
 	case "member_expression":
 		target = w.memberTarget(f.field(name, "object"), f.field(name, "property"))
@@ -307,7 +345,11 @@ func (w *tsWalk) follow(name string) bool {
 	}
 	if key := w.tf.f.path + "#" + name; !w.walking[key] {
 		w.walking[key] = true
+		locals := maps.Clone(w.locals)
+		w.params(w.tf.params[name])
+		w.defaults(w.tf.params[name])
 		w.walk(body)
+		w.locals = locals
 		delete(w.walking, key)
 	}
 	return true

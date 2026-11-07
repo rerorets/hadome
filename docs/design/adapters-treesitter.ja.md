@@ -163,11 +163,19 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 
 | 言語 | テストのファイル | テストとは | スキップ | 理由 |
 |---|---|---|---|---|
-| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下、テストの補助のファイル | 名前と関数を渡す `it` か `test` の呼び出し | `.skip`、`xit`、`xtest`、`.todo`、または `describe.skip`・`xdescribe` の中 | スキップの行かその前の行のコメント |
+| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下、テストの補助のファイル | 名前と関数を渡す `it` か `test` の呼び出し（下の注） | `.skip`、`xit`、`xtest`、`.todo`、`.fixme`、または `describe.skip`・`xdescribe` の中。一部の場合だけのスキップは `.skipIf(条件)`・`.runIf(条件)` と、Playwright の `test.skip(条件, 説明)`・`test.fixme(条件, 説明)` | スキップの行かその前の行のコメント。Playwright の `test.skip` は条件の後の説明 |
 | Python | `test_*.py`、`*_test.py` | モジュールの直下か `Test*` クラスの中の、名前が `test` で始まる関数 | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
 | Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 | Kotlin | Java と同じ | Java と同じアノテーションの付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
+
+TypeScript のテストの宣言は、次のように読みます。
+
+- **先に表か条件を渡す形**: `it.each(表)(名前, 関数)`、`` test.each`表`(名前, 関数) ``、`test.concurrent.each`、`describe.each`、`it.skipIf(条件)(名前, 関数)`、`it.runIf(条件)(名前, 関数)` もテストか `describe` です
+  - `describe.each` の名前は中のテストの名前に入ります
+  - 表はテストと一緒に動くので、表の中の呼び出しもテストの呼び出しに数えます
+- **関数の位置**: テストの関数は最後の関数の引数です。vitest は名前と関数の間にオプションを取り（`it(名前, { retry: 2 }, 関数)`）、jest は関数の後にタイムアウトを取るからです。名前の文字列の後に関数の名前を渡したとき（`it('adds', checkAdd)`）は、ファイルの中のその関数をたどります
+- **Playwright の条件つきのスキップ**: 関数を渡さない `test.skip(条件, 説明)` と `test.fixme(条件, 説明)` は、テストではありません。テストの中で呼ぶとそのテストを、`describe` の直下で呼ぶとその中のテストを、一部の場合だけスキップします。引数の無い `test.skip()` をテストの中で呼ぶと、そのテストは常にスキップします
 
 テストが何を呼ぶかは、import した名前と、テストの中で作ったオブジェクトから読みます。言語ごとに、次のものも読みます。
 
@@ -192,11 +200,19 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 - **Kotlin の型引数とラムダを取る呼び出し**: `assertThrows<E> { … }` と `assertThrows<E>({ … })` は、文法の上では比べる式が2つ並んだ形（`(assertThrows < E) > { … }`）として読まれます。これも呼び出しとして読みます。`mockk<T> { … }` や、製品のコードの関数でも同じです。型引数は値として読みません
 - **初期値で製品のコードの値を使うフィールド**: テストが `private val sql = QUERY.trim()` のようなフィールドを読むと、製品のコードの値を読んだと数えます（`Reads`）。製品のコードの値が変われば、テストの結果も変わり得るからです
 - **TypeScript の動的な import**: テストが文字列で名指した `import('./x')` で読み込んだモジュールから取り出した名前も読みます。ファイルの中の関数が1つのモジュールだけを読み込んで返すとき（モジュールを読み直すヘルパー）は、その関数の結果から取り出した名前も読みます
-- **TypeScript の `require`**: 文字列で名指した `require('./x')` は、ファイルの直下でもテストの中でも、import と同じに読みます。例: `const { send } = require('./mail')`、`const mail = require('./mail')`
-- **TypeScript の JSX とヘルパー**: テストが呼ぶものには、JSX の要素（`<Page />`）で描いたリポジトリの部品も入ります。ファイルの中のヘルパーは、`function` の宣言でも、`const` に入れた関数（`const renderPage = () => …`）でもたどります。`describe` の中で宣言したものも同じです。オブジェクトに入れた関数（`const helpers = { twice: (n) => … }` の `helpers.twice`）もたどります
-- **TypeScript のテストの外の変数**: `describe` の中などで宣言した変数は、次のものから型を読みます。`new` で作ったクラス、型の注釈（`let store: Store`）、`beforeEach` などでの代入（`store = new Store()`）
+- **TypeScript の `require`**: 文字列で名指した `require('./x')` は、ファイルの直下でも `describe` の中でもテストの中でも、import と同じに読みます。例: `const { send } = require('./mail')`、`const mail = require('./mail')`
+- **TypeScript の JSX とヘルパー**: テストが呼ぶものには、JSX の要素（`<Page />`）で描いたリポジトリの部品も入ります。ファイルの中のヘルパーは、`function` の宣言でも、`const` に入れた関数（`const renderPage = () => …`）でもたどります。`describe` の中で宣言したものも同じです。オブジェクトに入れた関数（`const helpers = { twice: (n) => … }` の `helpers.twice`）もたどります。テストのファイルの中で宣言した部品（`function Harness() { return <Field /> }`、`const Wrapper = () => <Field />`）を要素で描いたときも、ヘルパーと同じにたどります。ヘルパーを呼ぶと、引数の既定の値（`function make(store = createStore())`）も動くので、それも数えます
+- **TypeScript のテストの外の変数の型**: `describe` の中などで宣言した変数は、次のものから型を読みます。`new` で作ったクラス、型の注釈（`let store: Store`）、`beforeEach` などでの代入（`store = new Store()`）
   - テストの中の同じ名前のローカルは外の変数を隠します
   - ファイルが同じ名前に2つのクラスを当てる変数は読みません
+- **TypeScript のテストの前に動くもの**: テストは次のものの呼び出しと読み取りも自分のものとして数えます
+  - そのテストを囲む `describe` とファイルの直下の `beforeEach`・`beforeAll` の本体（`beforeEach(() => render(<Page />))`）
+  - テストが使う外の変数を用意するもの。ファイルの直下か `describe` の直下で宣言した変数の初期値（`const shared = createStore()`、`const KEYS = Object.keys(words)`）、そこかフックの中での代入（`store = createStore()`）、そこでその変数を使う文（`register(app)`）です。変数を宣言した `describe` の中のテストだけが数えます
+  - テストの補助のファイルのヘルパーが、そのファイルの直下で用意した値を使うときも、同じに数えます
+  - テストが読む外のオブジェクトの getter。オブジェクトに入れたほかの関数は呼んだときだけ数えます
+  - ファイルの直下の `const { add } = await import('./m')` と、`beforeAll` での `mod = await import('./m')`（`(await import('./m')) as T` も）で取った名前は、そのモジュールのものとして読みます
+  - 値を使わずに `await import('./m')` だけをするファイルでは、どのテストもそのモジュール（ユニット）を呼ぶと数えます。読み込むだけで動くモジュールだからです
+  - 一度だけ用意する値は、テストが何度使っても一度と数えます
 - **Python のテストが受け取るもの**: 次のものを読みます
   - テストの引数と同じ名前の pytest の fixture（`@pytest.fixture` の付いた関数）が、`return` か `yield` で返すクラス
   - クラスの `setUp`・`setup_method` などで `self` に入れたクラス（`self.store = Store()`）
@@ -248,6 +264,8 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 表の項目は抜粋です。すべての項目は、コードの表にあります。
 
 グローバルの API は名前だけで見ます。同じ名前のローカルの変数を呼んでも数えます。数えると、ユニットは純粋でなくなります。そのため、取り違えたときは、`tests/no-mock` が報告を出さない側に間違えます。見つけた API は、`Global` を真にした import として一覧に載せます（[adapters.ja.md](adapters.ja.md)）。1つのファイルで同じ API は1回だけ載せます。
+
+TypeScript のテストが偽の時計に切り替えた後は、`Date.now`・`new Date()`・`setTimeout` を `clock`・`sleep` に数えません。偽の時計に切り替えるのは `vi.useFakeTimers()`・`jest.useFakeTimers()`・`vi.setSystemTime()`・`jest.setSystemTime()`・`sinon.useFakeTimers()` です。テストの中で呼んだときは、呼んだ後から数えません。`beforeEach` か `describe` の直下で呼んだときは、その中のテストのどこでも数えません。`vi.useRealTimers()`・`jest.useRealTimers()` の後は、また数えます。
 
 Java と Kotlin では、各テストの前に走るコードの `clock` と `sleep` も、そのクラスの各テストの危険とします。
 

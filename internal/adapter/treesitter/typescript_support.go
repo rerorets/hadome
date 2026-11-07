@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"maps"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -15,10 +16,12 @@ import (
 func (r *typescript) testFile(f *file, t *tables) *tsFile {
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, via: map[string][2]string{},
 		unresolved: map[string]bool{}, helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{},
-		outer: map[string]string{}}
+		outer: map[string]string{}, params: map[string]*sitter.Node{}, setups: map[string][]tsSetup{},
+		setupNodes: map[uintptr]bool{}, outerLoaded: map[string]string{}, outerModules: map[string]string{}}
 	tf.bind()
 	tf.bindLoaders()
 	tf.bindOuter()
+	tf.bindSetups()
 	return tf
 }
 
@@ -122,7 +125,8 @@ func (w *tsWalk) followSupport(p, name string) {
 		return
 	}
 	sub := &tsWalk{tf: sf, t: w.t, vars: sf.outerVars(), locals: map[string]bool{}, walking: w.walking,
-		loaded: map[string]string{}, modules: map[string]string{}}
+		loaded: maps.Clone(sf.outerLoaded), modules: maps.Clone(sf.outerModules), used: map[string]bool{},
+		done: map[uintptr]bool{}, fake: w.fake}
 	prev := w.t.f
 	w.t.f = sf.f
 	sub.follow(name)
