@@ -209,7 +209,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 | Go | the testing handle's `Error`, `Errorf`, `Fatal`, `Fatalf`, `Fail`, `FailNow`; testify's `assert` and `require`, testify suite checks (`s.Equal(…)`, `s.Require().…`) |
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
 | TypeScript | `expect(…)`, `assert` and `assert.…` |
-| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like), Spring MockMvc's `andExpect` |
+| Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, MockK's `verify…`, `coVerify…` and `confirmVerified`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like, including those after a helper whose body ends in `then()`), Spring MockMvc's `andExpect` |
 | Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
 
 As with hazard categories, these are examples; each adapter holds the full table. In languages other than Go, a function whose name starts with `assert`, `expect` or `verify` counts too (`assertEquals`, `assert_called_once`, `expectValid`). A checking helper in another file cannot be read by the adapter, but its name says that it checks.
@@ -230,7 +230,7 @@ For `tests/guards-nothing`, the adapter stores in `Test.Reads` how many product 
 | Go | Package variables and constants (`store.Limit`, or `limit` in the same package), and functions passed as values without being called (`sort.Slice(rows, store.Less)`) |
 | Python | A name imported from product code and used in an expression without being called (comparing with `MAX_ROWS`, passing `normalize` to `map`, `isinstance(x, Store)`) |
 | TypeScript | A name imported from product code and used in an expression without being called |
-| Java / Kotlin | Static fields and constants of a class (`Store.LIMIT`), method references (`Store::normalize`), Kotlin top-level `val`s |
+| Java / Kotlin | Static fields and constants of a class (`Store.LIMIT`), method references (`Store::normalize`), Kotlin top-level `val`s, properties of a product object (`cache.ttl`) |
 | Rust | Product `const`s and `static`s, and functions passed as values without being called. A product name inside a macro's arguments also counts (the parser does not read macro arguments as expressions, so a call there cannot be told from a read) |
 
 Names in type positions (type annotations, TypeScript's `import type`, generic type arguments) do not count. Types do not run, so a test whose only mention of product code is in types runs no product code.

@@ -84,7 +84,15 @@ func (t *testFacts) call(target string, scope *sitter.Node) {
 }
 
 func (t *testFacts) hazard(cat facts.HazardCategory, n *sitter.Node) {
-	hz := facts.Hazard{Category: cat, Path: t.f.path, Line: line(n), Evidence: t.f.text(n)}
+	t.hazardIn(t.f, cat, n)
+}
+
+// hazardIn records a hazard at n in f, a file other than the test's when the test inherits it.
+func (t *testFacts) hazardIn(f *file, cat facts.HazardCategory, n *sitter.Node) {
+	t.addHazard(facts.Hazard{Category: cat, Path: f.path, Line: line(n), Evidence: f.text(n)})
+}
+
+func (t *testFacts) addHazard(hz facts.Hazard) {
 	for _, h := range t.test.Hazards {
 		if h == hz {
 			return

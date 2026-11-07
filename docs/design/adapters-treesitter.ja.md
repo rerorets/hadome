@@ -150,7 +150,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 | Python | モジュールの直下とクラスの中の `def` | `class` | 名前が `_` で始まらない | docstring（本体の最初の文が文字列） |
 | Rust | `fn` の項目と `impl` のメソッド | `struct`、`enum`、`trait`（インターフェースとして）、`type` | `pub` | 直前の `///` の行 |
 | Java | メソッドとコンストラクタ | クラス、インターフェース、enum、record | `public` | 直前の `/** */` コメント |
-| Kotlin | トップレベルとクラスの中の `fun` | クラス、インターフェース、object | `private`、`internal`、`protected` でない | 直前の `/** */` コメント |
+| Kotlin | トップレベルとクラスの中の `fun` | クラス、インターフェース、object | `private`、`internal`、`protected` でない | 直前の `/** */` コメント。間に引数のあるアノテーションの行（`@Suppress("x")`）があっても、その上のコメント |
 
 テストだけの領域（Rust の `#[cfg(test)]` モジュール）の中のコードは、製品のコードではなくテストのコードです。循環的複雑度は各言語の次のものを数えます。
 
@@ -176,6 +176,20 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
   - 初期値の無いフィールド（`lateinit`、注入、コンストラクタのプロパティ）は、宣言した型として読みます
   - モックなど、ほかの方法で作ったフィールドは読みません
   - Kotlin の `companion object` の中のフィールドとヘルパーも、クラスのものと同じに読みます
+  - `@Nested` などの内側のクラスのテストは外側のクラスのフィールドとヘルパーも使います
+  - Kotlin のテストのクラスがテストのファイルにある別のクラスを継承するとき（`class StoreTest : StoreTestSupport()`）は、継承元のフィールド、ヘルパー、モックのフィールド、各テストの前に走るコードも、そのクラスのものと同じに読みます。継承元が別のクラスを継承していれば、それもたどります
+  - 継承元は名前で探します。同じパッケージのものを先に探し、無ければ、その名前のクラスが1つだけのときに使います
+  - 継承元のヘルパーの中の名前は継承元のファイルの import で読みます
+- **Kotlin の変数の型**: 次の変数とフィールドも、製品のクラスとして読みます
+  - `apply` か `also` で作ったもの（`Queue().apply { limit = 3 }`）。この2つは受け取ったオブジェクトを返すからです
+  - enum の定数を入れたもの（`val kind = Kind.DAILY`）。その enum のクラスとして読みます
+  - 作ったオブジェクトにそのまま続けた呼び出し（`Store().append(1)`）も、そのクラスのメソッドの呼び出しとして読みます
+- **製品のクラスのメンバーの上の呼び出し**: Java と Kotlin で、`クラス.メンバー.メソッド()` の形の呼び出しは次のように読みます
+  - メンバーが enum の定数なら、その enum のクラスのメソッドの呼び出しです（`Kind.ORDERS.toTable()` は `Kind.toTable`）
+  - メンバーが内側のクラスなら、そのクラスのメソッドの呼び出しです（`Outer.Inner.build()`）
+  - それ以外（`object` のプロパティなど）は、値のクラスが分かりません。そのため、製品のコードの値を読んだと数えます（`Reads`）
+- **製品のオブジェクトのプロパティ**: Java と Kotlin で、製品のクラスとして読んだ変数のプロパティを読むと（`cache.ttl`）、製品のコードの値を読んだと数えます。メソッドを呼ぶ（`cache.clear()`）のは呼び出しで、読んだとは数えません
+- **Kotlin の型引数とラムダを取る呼び出し**: `assertThrows<E> { … }` と `assertThrows<E>({ … })` は、文法の上では比べる式が2つ並んだ形（`(assertThrows < E) > { … }`）として読まれます。これも呼び出しとして読みます。`mockk<T> { … }` や、製品のコードの関数でも同じです。型引数は値として読みません
 - **初期値で製品のコードの値を使うフィールド**: テストが `private val sql = QUERY.trim()` のようなフィールドを読むと、製品のコードの値を読んだと数えます（`Reads`）。製品のコードの値が変われば、テストの結果も変わり得るからです
 - **TypeScript の動的な import**: テストが文字列で名指した `import('./x')` で読み込んだモジュールから取り出した名前も読みます。ファイルの中の関数が1つのモジュールだけを読み込んで返すとき（モジュールを読み直すヘルパー）は、その関数の結果から取り出した名前も読みます
 - **TypeScript の `require`**: 文字列で名指した `require('./x')` は、ファイルの直下でもテストの中でも、import と同じに読みます。例: `const { send } = require('./mail')`、`const mail = require('./mail')`
@@ -224,7 +238,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 
 | | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
-| `clock` | `Date.now`、`new Date()`、`performance.now` | `datetime.now`、`datetime.utcnow`、`date.today`、`time.time` | `SystemTime::now`、`Instant::now`、`Utc::now`、`Local::now` | `Instant.now`、`LocalDate(Time).now`、`System.currentTimeMillis`、`System.nanoTime` | Java と同じ、`Clock.System.now` |
+| `clock` | `Date.now`、`new Date()`、`performance.now` | `datetime.now`、`datetime.utcnow`、`date.today`、`time.time` | `SystemTime::now`、`Instant::now`、`Utc::now`、`Local::now` | `Instant.now`、`LocalDate(Time).now`、`System.currentTimeMillis`、`System.nanoTime` | Java と同じ、`Clock.System.now`、`measureTimeMillis`、`measureNanoTime`、`measureTime`、`measureTimedValue`、`TimeSource.Monotonic.markNow` |
 | `sleep` | `setTimeout` | `time.sleep`、`asyncio.sleep` | `thread::sleep`、`tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`、`delay` |
 | `mock` | `jest.mock`、`vi.mock`、`mock.module`（bun）、`vi.spyOn`、`jest.spyOn`、`vi.stubGlobal`、`sinon` の import | `unittest.mock`、`mock` の import。`mocker`。`monkeypatch.setattr`、`monkeypatch.delattr` | `mock!`、`#[automock]` が作る `Mock<名前>` の型を使うこと、`mockall` の import | `org.mockito` の import。`@Mock`、`@Spy`、`@MockBean`、Quarkus の `@InjectMock`・`@InjectSpy` を付けたフィールド | `io.mockk`、`org.mockito` の import。Java と同じ注釈、`@MockK`、`@SpyK` |
 | `always-true` | `expect(true).toBe(true)`、`expect(x).toBe(x)` | `assert True`、`assert x == x` | `assert!(true)`、`assert_eq!(x, x)` | `assertTrue(true)`、`assertEquals(x, x)` | Java と同じ |
@@ -234,6 +248,13 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 表の項目は抜粋です。すべての項目は、コードの表にあります。
 
 グローバルの API は名前だけで見ます。同じ名前のローカルの変数を呼んでも数えます。数えると、ユニットは純粋でなくなります。そのため、取り違えたときは、`tests/no-mock` が報告を出さない側に間違えます。見つけた API は、`Global` を真にした import として一覧に載せます（[adapters.ja.md](adapters.ja.md)）。1つのファイルで同じ API は1回だけ載せます。
+
+Java と Kotlin では、各テストの前に走るコードの `clock` と `sleep` も、そのクラスの各テストの危険とします。
+
+- 各テストの前に走るコードとは、`@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロックです
+- 外側のクラスと継承元のクラスのものも入ります
+- 危険の場所はそのコードのある行です。継承元が別のファイルにあれば、そのファイルの行です
+- そのコードの中の呼び出しや確かめは、テストのものとは数えません。テストが何を守るかは、テストの本体で決まるからです
 
 設定での項目の足し方は Go と同じです。
 
