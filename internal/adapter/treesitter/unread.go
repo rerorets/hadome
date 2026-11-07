@@ -4,7 +4,6 @@ package treesitter
 
 import (
 	"io/fs"
-	"strings"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
@@ -38,7 +37,7 @@ func (u unread) Analyze(v engine.Version, _ config.Config, paths []string) (*fac
 			return nil, err
 		}
 		a.Files = append(a.Files, facts.File{Path: p, Language: u.lang, Role: facts.RoleOther,
-			Lines: strings.Count(string(src), "\n") + 1, Unread: true})
+			Lines: facts.CountLines(src), Unread: true})
 	}
 	return a, nil
 }

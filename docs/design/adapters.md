@@ -125,6 +125,14 @@ classDiagram
 | `generated` | Generated code; size and comment rules skip it | Standard headers (e.g. Go's `Code generated … DO NOT EDIT.`), or a `files.generated` glob in configuration |
 | `other` | A language hadome does not know, or not code | Still listed, so file-level rules can see it |
 
+Directories that are not read:
+
+- Nothing under these directories is listed or read. They hold copies of dependencies, build outputs and tools' working files, not the product's code
+  - `vendor`, `node_modules`, `testdata`, `target`, `build`, `dist`, `__pycache__`
+  - Anything starting with `.`. Example: `.git`
+- Directories starting with `_` are read. Frameworks keep the product's code and tests there. Examples: jest's `__tests__`, Next.js's `_components`, Python's `_internal`
+- Only Go lists the `.go` files under a directory starting with `_` with role `other`. The go command does not treat it as a package and does not run its tests
+
 Test file conventions:
 
 | Language | Test files |
