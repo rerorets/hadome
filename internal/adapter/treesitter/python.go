@@ -28,6 +28,8 @@ type python struct {
 	files map[string]*file
 	// supports are the test support files read as a test's helpers and fixtures, by path.
 	supports map[string]*pyFile
+	// modules are the other files read for the classes a test class extends, by path.
+	modules map[string]*pyFile
 }
 
 func (*python) grammar(string) *sitter.Language { return sitter.NewLanguage(py.Language()) }
@@ -65,7 +67,7 @@ var pyProjectFiles = []string{"pyproject.toml", "setup.cfg", "setup.py"}
 
 func (r *python) index(v engine.Version, files []*file) {
 	r.exists, r.dirs, r.scopes = map[string]bool{}, map[string]bool{}, map[string]int{}
-	r.files, r.supports = map[string]*file{}, map[string]*pyFile{}
+	r.files, r.supports, r.modules = map[string]*file{}, map[string]*pyFile{}, map[string]*pyFile{}
 	roots := map[string]bool{"": true, "src/": true}
 	seen := map[string]bool{}
 	for _, f := range files {

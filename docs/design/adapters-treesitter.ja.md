@@ -217,7 +217,7 @@ TypeScript のテストの宣言は、次のように読みます。
   - 一度だけ用意する値は、テストが何度使っても一度と数えます
 - **Python のテストが受け取るもの**: 次のものを読みます
   - テストの引数と同じ名前の pytest の fixture（`@pytest.fixture` の付いた関数）が、`return` か `yield` で返すクラス
-  - クラスの `setUp`・`setup_method` などで `self` に入れたクラス（`self.store = Store()`）
+  - クラスの `setUp`・`setup_method` などで `self` に入れたクラス（`self.store = Store()`）。継承元のクラスのメソッドも、走るものなら読みます（「危険と io」の「Python の継承元の準備」）
   - ファイルの直下で名前に入れた lambda（`twice = lambda n: double(n)`）は、ヘルパーとしてたどります
   - テストの中で同じ名前に代入し直すと、fixture から受け取った型は消えます
   - fixture が同じファイルに無ければ、テストのディレクトリとその上のディレクトリの `conftest.py` から探します。近いものが先です
@@ -276,12 +276,22 @@ TypeScript のテストが偽の時計に切り替えた後は、`Date.now`・`n
 |---|---|
 | Java、Kotlin | `@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロック。外側のクラスと継承元のクラスのものも入ります |
 | TypeScript | テストを囲む `describe` と、ファイルの直下の `beforeEach`・`beforeAll` の本体。偽の時計に切り替えた後のものは数えません（前の段落） |
-| Python | `autouse=True` の付いた pytest の fixture。同じファイル、テストのディレクトリとその上の `conftest.py`、テストのクラスの中のものです。クラスの `setUp`・`setUpClass`・`asyncSetUp`・`setup_method`・`setup_class`。ファイルの `setup_module`。クラスの外のテストには `setup_function` も入ります |
+| Python | `autouse=True` の付いた pytest の fixture。同じファイル、テストのディレクトリとその上の `conftest.py`、テストのクラスとその継承元のクラスの中のものです。クラスの `setUp`・`setUpClass`・`asyncSetUp`・`setup_method`・`setup_class`。継承元のクラスのものも入ります（下の「Python の継承元の準備」）。ファイルの `setup_module`。クラスの外のテストには `setup_function` も入ります |
 
 - 危険の場所はそのコードのある行です。継承元のクラスや `conftest.py` のように別のファイルにあれば、そのファイルの行です
 - Java、Kotlin、Python では、そのコードの中の呼び出しや確かめは、テストのものとは数えません。テストが何を守るかは、テストの本体で決まるからです
 - TypeScript のフックの中の呼び出しは、テストのものと数えます（前述の「TypeScript のテストの前に動くもの」）
 - Python のテストが引数で受け取る fixture は、これまでどおり本体をたどります。中の呼び出しも危険も、そのテストのものです
+
+**Python の継承元の準備**: Python のテストのクラスは、継承元のクラスの準備も走らせます。たとえば `class TestOrders(BaseCase)` のテストは、`BaseCase.setUp` を走らせます。次のように読みます。
+
+- 継承元は、同じファイルのクラスと、テストのファイルが import したクラスから探します。`from tests.base import BaseCase` の `BaseCase` も、`import tests.base as base` の `base.BaseCase` も読みます。継承元のファイルの中の名前は、そのファイルの import で読みます
+- 継承元が別のクラスを継承していれば、それもたどります
+- `setUp` などのメソッドは、名前ごとに1つだけ走ります。Python がメソッドを探す順（MRO。テストのクラス、継承元、その継承元の順）で、最初に見つかったクラスのものです。テストのクラスが自分で `setUp` を書けば、継承元の `setUp` は走りません
+- 見つかったメソッドが同じ名前のメソッドを `super()` で呼ぶとき（`super().setUp()`）は、MRO で次に見つかるクラスのものも走ります。継承元を名指して呼ぶとき（`BaseCase.setUp(self)`）も同じに扱います
+- 継承元のクラスの中の `autouse=True` の fixture も走ります。同じ名前の fixture がテストのクラスか MRO で先のクラスにあれば、先のものだけが走ります。pytest は fixture を名前で上書きするからです
+- 継承元のファイルの `setup_module` と `setup_function` は走りません。pytest は、テストのあるモジュールのものだけを走らせるからです
+- 見つからない継承元は、何も足しません。`unittest.TestCase` のような外のクラス、定義の無い名前、自分自身を継承するクラスがそうです。テストはこれまでどおり読みます
 
 設定での項目の足し方は Go と同じです。
 

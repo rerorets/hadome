@@ -92,3 +92,61 @@ test_plain calls=[] unresolved=0
 test_reassigned calls=[src/app/store.Store] unresolved=1
 test_yield calls=[src/app/store.Store src/app/store.Store.add] unresolved=0`)
 }
+
+// viewpoint: behaviour
+// target: the Python reader
+// What a base class's setUp or setup_method stores on self types what the test of a class that
+// inherits it calls, across files. A setUp the class writes itself replaces the base's, and when it
+// calls the base's through super() first, what it stores itself wins.
+func TestPythonTestsReachTheCodeThroughInheritedSetup(t *testing.T) {
+	expect(t, calls(t, "python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "class Store:\n    def add(self, row):\n        return len(row)\n\n\nclass Ledger:\n    def add(self, row):\n        return 1\n",
+		"tests/base.py", `import unittest
+
+from app.store import Store
+
+
+class StoreCase(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+
+
+class StorePlain:
+    def setup_method(self):
+        self.store = Store()
+`,
+		"tests/test_store.py", `from app.store import Ledger
+from tests.base import StoreCase, StorePlain
+
+
+class TestInherited(StoreCase):
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class TestPlain(StorePlain):
+    def test_add(self):
+        assert self.store.add("x") == 1
+
+
+class TestOwn(StoreCase):
+    def setUp(self):
+        self.store = object()
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class TestSuper(StoreCase):
+    def setUp(self):
+        super().setUp()
+        self.store = Ledger()
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+`), `TestInherited.test_add calls=[src/app/store.Store.add] unresolved=0
+TestOwn.test_add calls=[] unresolved=0
+TestPlain.test_add calls=[src/app/store.Store.add] unresolved=0
+TestSuper.test_add calls=[src/app/store.Ledger.add] unresolved=0`)
+}
