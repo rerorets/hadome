@@ -249,6 +249,23 @@ var commentsKey = Key{
 		Doc: "A regular expression every comment line starting with TODO, FIXME or XXX must match. Default " +
 			"`" + DefaultTodo + "`, that is TODO(<when or who>): <what>. Changing it needs a person's review.",
 		Example: "todo: '^TODO\\(stage[0-9]+\\): \\S'",
+	}, entryPointsKey},
+}
+
+// entryPointsKey lists the functions a framework calls by name, which comments/missing-doc lets off.
+var entryPointsKey = Key{
+	Name: "entry-points", Kind: KindList, Looser: LooserWhenAdded, Identity: []string{"names", "paths"},
+	Doc: "Framework entry points that comments/missing-doc asks no doc comment of: functions a framework calls by " +
+		"their name, which its documentation describes, such as load in SvelteKit's +page.ts. A symbol matching one of " +
+		"an entry's names and one of its paths is let off. Adding an entry, or changing one, needs a person's review.",
+	Example: "entry-points:\n  - names: [load]\n    paths: [\"**/+page*.ts\"]\n  - names: [\"onRequest*\"]\n    paths: [\"functions/**\"]",
+	Elem: &Key{Kind: KindObject, Fields: []Key{
+		{Name: "names", Kind: KindList, Required: true, MinItems: 1, Elem: &globs,
+			Doc: "Globs of the symbol's name without its unit: load for a function, Store.Append for a method. " +
+				"* matches any name.", Example: `names: [load, "onRequest*"]`},
+		{Name: "paths", Kind: KindList, Elem: &globs,
+			Doc:     "Globs of the files the names are entry points in; ** is directories at any depth. Omitted: every file.",
+			Example: `paths: ["**/+page*.ts"]`},
 	}},
 }
 
@@ -315,8 +332,8 @@ var mutationKey = Key{Name: "mutation", Kind: KindObject, OmittedIsOff: true,
 // filesKey gives files roles that the languages' conventions and headers do not.
 var filesKey = Key{Name: "files", Kind: KindObject,
 	Doc: "Roles for files laid out against the languages' conventions, and Ansible playbooks outside Ansible's layout. " +
-		"Globs only add a role or a file; `**` is directories at any depth.",
-	Example: "files:\n  tests: [\"checks/**\"]\n  generated: [\"gen/**\"]\n  ansible: [\"deploy/*.yml\"]",
+		"Globs add a role or a file, except product, which only takes away the test support role; `**` is directories at any depth.",
+	Example: "files:\n  tests: [\"checks/**\"]\n  generated: [\"gen/**\"]\n  ansible: [\"deploy/*.yml\"]\n  product: [\"e2e/server/**\"]",
 	Fields: []Key{
 		stringList("tests", "Globs of files read as test files, in every language but Go, Terraform and Ansible, whose own tools decide "+
 			"what a test is (_test.go, .tftest.hcl, Molecule's scenarios). "+
@@ -328,4 +345,9 @@ var filesKey = Key{Name: "files", Kind: KindObject,
 		stringList("ansible", "Globs of extra Ansible playbooks laid out outside roles/, playbooks/, site.yml and playbook.yml. "+
 			"They are read as playbooks. Removing an entry takes files out of every rule, so it needs review.",
 			`ansible: ["deploy/*.yml"]`, LooserWhenRemoved, globs),
+		stringList("product", "Globs of files read as product code although a test support directory or name would make "+
+			"them test support (test/, e2e/, testutil/, a Go package such as storetest), in TypeScript, Python and Go. "+
+			"It never turns a test file (_test.go, *.test.ts, test_*.py, files.tests) into product code. "+
+			"Which files are product code moves what the rules cover both ways, so any change needs review.",
+			`product: ["e2e/server/**"]`, LooserAlways, globs),
 	}}

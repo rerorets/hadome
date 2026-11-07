@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -28,10 +29,15 @@ type Config struct {
 	GeneratedFiles []string
 	// AnsibleFiles are globs of playbooks the Ansible adapter reads outside its layout.
 	AnsibleFiles []string
+	// ProductFiles are globs of files that are product code although their directory or name would
+	// make them test support files. They never make a test file product code.
+	ProductFiles []string
 	// Mutation configures hadome mutate; nil when it is not configured.
 	Mutation *Mutation
 	Size     Limits // limits of the size/ rules, defaults filled in
 	TodoForm string // the regular expression a TODO comment must match
+	// EntryPoints are the framework entry points comments/missing-doc asks no doc comment of.
+	EntryPoints []EntryPoint
 	// Messages is the language of the wording hadome writes: en (the default) or ja.
 	Messages string
 	// Diagram is the dependency diagram that judges imports: head's, for both versions. Nil when none
@@ -75,6 +81,26 @@ func (i Invariant) Key() string {
 // ("example.com/app/store.Append"): the ID is the target, or ends with it after a path separator.
 func TargetNames(target, id string) bool {
 	return id == target || strings.HasSuffix(id, "/"+target)
+}
+
+// EntryPoint names symbols a framework calls by name: a symbol whose name without its unit matches
+// one of Names, in a file matching one of Paths (any file when Paths is empty).
+type EntryPoint struct {
+	Names []string
+	Paths []string
+}
+
+// Matches reports whether the entry point covers a symbol named name in the file at p.
+func (e EntryPoint) Matches(name, p string) bool {
+	if len(e.Paths) > 0 && !MatchesAny(e.Paths, p) {
+		return false
+	}
+	for _, n := range e.Names {
+		if ok, err := path.Match(n, name); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Gate is one product-specific gate.

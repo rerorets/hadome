@@ -195,7 +195,7 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 
 | Language | Test support files |
 |---|---|
-| TypeScript | Files under one of these directories: `test/`, `tests/`, `e2e/`, `__mocks__/`, `__fixtures__/`, `testutil/`, `testutils/`, `test-utils/`, `test_utils/`. Files whose name ends in test joined to helper(s) (`test_helpers.ts`, `test-helpers.ts`, `testHelpers.ts`). `setupTests.*`, `jest.setup.*`, `vitest.setup.*` |
+| TypeScript | Files under one of these directories: `test/`, `tests/`, `e2e/`, `__mocks__/`, `__fixtures__/`, `testutil/`, `testutils/`, `test-utils/`, `test_utils/`, `testhelper/`, `testhelpers/`. Files whose name ends in test joined to helper(s) (`test_helpers.ts`, `test-helpers.ts`, `testHelpers.ts`). `setupTests.*`, `jest.setup.*`, `vitest.setup.*` |
 | Python | Files under the same directories as TypeScript; `conftest.py`; files whose name ends in test joined to helper(s) (`test_helpers.py`) |
 
 - **Role**: `test`. They are therefore not targets, `comments/missing-doc` asks nothing of them, and they are not in the dependency diagram
@@ -203,7 +203,8 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 - **Following**: when a test calls a function of a support file, the function is followed. The calls inside are resolved through the support file's own imports, so a test that calls the product through a helper guards that product code
   - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
   - Calling a name the support file does not hold as a function (a value, say) counts as unresolved
-- **Other role settings**: files matching the `files.tests` globs are test files, as before
+- **Other role settings**: files matching the `files.tests` globs are test files, as before. Files matching the `files.product` globs are not support files; they are read as product code ([adapters.md](adapters.md))
+- **The list of directories**: the list is `walk.SupportDir`. The Go adapter uses it without `test/`, `tests/` and `e2e/` ([adapters.md](adapters.md))
 
 ## Hazards and io
 

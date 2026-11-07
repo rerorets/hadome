@@ -215,7 +215,8 @@ func (w *walker) passesTool(c *ast.CallExpr) bool {
 }
 
 // readable reports whether the adapter sees what a call that is given the testing tool does with
-// it: a helper of the test files, the tool's own methods, an assertion library or a configured one.
+// it: a helper of the test files or of a test support package, the tool's own methods, an assertion
+// library or a configured one.
 func (w *walker) readable(c *ast.CallExpr) bool {
 	switch fun := c.Fun.(type) {
 	case *ast.Ident:
@@ -224,7 +225,8 @@ func (w *walker) readable(c *ast.CallExpr) bool {
 	case *ast.SelectorExpr:
 		if x, ok := fun.X.(*ast.Ident); ok {
 			p, imported := w.imports[x.Name]
-			return w.tParams[x.Name] || imported && (assertImports[p] || w.tables.asserts[p+"."+fun.Sel.Name])
+			_, support := w.idx.support[p][fun.Sel.Name]
+			return w.tParams[x.Name] || imported && (assertImports[p] || w.tables.asserts[p+"."+fun.Sel.Name] || support)
 		}
 	}
 	return false
@@ -270,9 +272,12 @@ func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 			w.hazard(facts.HazardAlwaysTrue, c)
 		}
 	case w.idx.internal(p):
+		h, support := w.idx.support[p][name]
 		switch _, fn := w.idx.funcs[p+"."+name]; {
 		case fn:
 			w.record(p+"."+name, c)
+		case support:
+			w.followSupport(p+"."+name, h, c)
 		case w.idx.types[p+"."+name]: // a conversion runs no code of the package
 		default: // a function variable, or a package hadome did not read
 			w.test.Unresolved++

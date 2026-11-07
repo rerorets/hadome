@@ -61,12 +61,14 @@ var assertImports = map[string]bool{
 	"github.com/stretchr/testify/require": true,
 }
 
-// helper is a function declared in a test file that is not itself a test. Tests often reach the
-// code under test only through helpers, so the walker follows calls into them.
+// helper is a function declared in a test file that is not itself a test, or a function of a test
+// support package. Tests often reach the code under test only through helpers, so the walker
+// follows calls into them.
 type helper struct {
 	decl    *ast.FuncDecl
 	path    string
 	imports map[string]string // the imports of the helper's file
+	pkgPath string            // the support package's import path; empty for a test file's helper
 }
 
 func helperKey(pf parsedFile) string { return path.Dir(pf.path) + "\x00" + pf.file.Name.Name }

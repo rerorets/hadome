@@ -98,6 +98,9 @@ rules:                         # 任意。既定と違うものだけ
     file-lines: 300            # 上限。上げるには人の確認が要る
   comments:
     todo: '^TODO\(stage[0-9]+\): \S' # TODO が取るべき形
+    entry-points:              # doc コメントを求めないフレームワークの入口（comments/missing-doc）。足すには人の確認が要る
+      - names: [load]
+        paths: ["**/+page*.ts"]
   deps:
     diagram: docs/conventions/dependencies.md  # Mermaid の flowchart。矢印を足すには人の確認が要る
 
@@ -105,6 +108,7 @@ files:                         # 任意。言語の慣習から外れた配置�
   tests: ["checks/**"]         # テストのファイルとして読む（Go、Terraform、Ansible のファイルには当てない）。変えるには人の確認が要る
   generated: ["gen/**"]        # 生成されたコードとして扱う。足すには人の確認が要る
   ansible: ["deploy/*.yml"]    # 配置から外れた Ansible のプレイブック。消すには人の確認が要る
+  product: ["e2e/server/**"]   # テストの補助の既定から外し、製品のコードとして読む。変えるには人の確認が要る
 
 mutation:                      # 任意。hadome mutate（mutation.ja.md）
   test: [go, test, ./...]      # 必須。テストのコマンド。推測はしない。変えるには人の確認が要る
@@ -184,6 +188,8 @@ gates:                         # 任意。製品固有の門番
 | `files.generated` | 項目を足すこと | `LooserWhenAdded` | 合うファイルが、大きさとコメントのルールから外れる |
 | `files.tests` | 項目を足すことも消すことも | `LooserAlways` | どのファイルがテストかが変わると、ルールの当たる範囲がどちらの向きにも動く。hadome にはどちらが厳しいかを決められない |
 | `files.ansible` | 項目を消すこと | `LooserWhenRemoved` | 合うファイルが読まれなくなり、すべてのルールから外れる |
+| `files.product` | 項目を足すことも消すことも | `LooserAlways` | 消すと、合っていたファイルが製品のコードから外れる。足すと、ファイルは対象や大きさとコメントのルールに入る一方で、テストはそのファイルの中の危険を自分のものとして数えなくなる。どちらが厳しいかを hadome には決められない |
+| `rules.comments.entry-points` | 項目を足すこと。項目の中身を変えることも、足したものとして数える | `LooserWhenAdded` | 合うシンボルに doc コメントを求めなくなる |
 
 **hadome を入れる変更**: base に `.hadome.yml` が無く head で足す変更は、hadome を入れる変更とみなします。この変更では `config/loosened` を出しません。
 
@@ -247,8 +253,10 @@ classDiagram
     +Assertions []string
     +TestFiles []string
     +GeneratedFiles []string
+    +ProductFiles []string
     +Size Limits
     +TodoForm string
+    +EntryPoints []EntryPoint
     +Diagram *Diagram
     +OwnDiagram *Diagram
     +Layers []string
@@ -260,6 +268,10 @@ classDiagram
     +ID string
     +Says string
     +Key() string
+  }
+  class EntryPoint {
+    +Names []string
+    +Paths []string
   }
   class Gate {
     +ID string
@@ -298,6 +310,7 @@ classDiagram
   Variant --> Key
   Config --> Invariant
   Config --> Gate
+  Config --> EntryPoint
   functions ..> Key : Spec をたどる
   functions ..> Config
   functions ..> Error : Load が Error を返す
@@ -307,7 +320,7 @@ classDiagram
 - **読み込み**: YAML を位置付きの構文木に解析し、`Spec` に照らしてたどります。そのため、どの誤りもファイル、行、キー、許される値、例を持ちます。知らないキー、型の誤り、知らない不変条件の種類は誤りです
 - **誤りの報告**: 1つのファイルの誤りは、最初の1つだけでなくまとめて報告します
 - **公開したスキーマ**: リポジトリの `schema/hadome.schema.json` は `JSONSchema()` の出力です。両者が違うとテストが落ちるので、公開したスキーマはずれません
-- **glob**: glob を取る値（`files.tests`、`files.generated`、`files.ansible`、門番の `paths`）は、glob として読めなければ誤りにします。読めない glob は何にも合わず、黙って効かなくなるためです
+- **glob**: glob を取る値（`files.tests`、`files.generated`、`files.ansible`、`files.product`、`rules.comments.entry-points` の `names` と `paths`、門番の `paths`）は、glob として読めなければ誤りにします。読めない glob は何にも合わず、黙って効かなくなるためです
 - **綴りの誤り**: 綴りを誤ったキーに、2文字以内の編集で届く既知のキーがあれば、その候補を出します。例には、候補のキーの書き方を出します（`did you mean invariants?`）。候補が無ければ、囲んでいる階層の書き方を出します。仕様のすべてのキーが例を持つことは、テストで確かめます
 - **層の合わせ方**: 仕様に沿って、値の形ごとに次のように合わせます
   - mapping はキーごとに合わせる

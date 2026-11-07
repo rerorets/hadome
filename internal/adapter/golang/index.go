@@ -33,6 +33,9 @@ type index struct {
 	varDecls map[string]declRef
 	// consts holds "<import path>.<Name>" for every package-level constant.
 	consts map[string]bool
+	// support maps the import path of a test support package to its functions by name. They are
+	// not targets; a test that calls one is followed into it.
+	support map[string]map[string]helper
 	// scopes maps a function or method ID to the position of its scope parameter among the call's
 	// arguments, or -1 when it takes none (docs/design/rules-tests.md defines the scope).
 	scopes map[string]int
@@ -41,7 +44,8 @@ type index struct {
 func buildIndex(files []parsedFile, modules map[string]string) *index {
 	idx := &index{funcs: map[string]bool{}, results: map[string]declRef{}, types: map[string]bool{},
 		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, values: map[string]bool{},
-		varDecls: map[string]declRef{}, consts: map[string]bool{}, scopes: map[string]int{}}
+		varDecls: map[string]declRef{}, consts: map[string]bool{}, scopes: map[string]int{},
+		support: map[string]map[string]helper{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
@@ -51,6 +55,10 @@ func buildIndex(files []parsedFile, modules map[string]string) *index {
 			in.samePkg = !strings.HasSuffix(pf.file.Name.Name, "_test")
 			in.testKey = helperKey(pf)
 			idx.addTestTypes(pf.file, in)
+			continue
+		}
+		if pf.support {
+			idx.addSupport(pf)
 			continue
 		}
 		for _, decl := range pf.file.Decls {

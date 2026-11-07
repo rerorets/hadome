@@ -46,6 +46,12 @@ All are on by default. Generated files are never checked.
 - For a value (a symbol of kind `value`), the description is checked instead of a doc comment ([adapters-iac.md](adapters-iac.md)). The why and the fix are the ones for values
   - **Why**: whoever sets or reads the value reads its description instead of the code that uses it. Without one, each of them reads that code and guesses what the value is for
   - **Fix**: write in the description what the value is for and what a caller would otherwise get wrong: Terraform's `description` argument, or the variable's `description` in the role's `meta/argument_specs.yml`
+- **Framework entry points**: a function a framework calls by its name can be let off the doc comment too. For example, `load` in SvelteKit's `+page.ts`, or `onRequest…` under `functions/` of a function host. The framework's documentation describes them, and no product code calls them.
+  - The setting `rules.comments.entry-points` lists pairs of names and paths (see Configuration below)
+  - An entry's `names` are globs of the symbol's name. The name is the one without its unit: `load` for a function, `Store.Append` for a method
+  - An entry's `paths` are globs of file paths. Omitted, the entry applies to every file
+  - A symbol that matches one of an entry's `names` and one of its `paths` needs no doc comment
+  - Adding an entry lets more symbols go without a doc comment, so it needs a person's review (`config/loosened`, exit code `3`). Changing an entry counts as adding it
 - Test code is not checked: tests are not called by anyone
 - The anchor is the symbol's ID
 
@@ -62,6 +68,7 @@ All are on by default. Generated files are never checked.
 
   - A reference by file name only usually means a document nearby. Which one cannot be decided, so any file of that name will do.
   - When looking for a file name only, the directories the adapters do not read (`vendor`, `node_modules`, those starting with `.`, and so on) are not searched.
+  - The list of directories not read is a copy of the adapters' list (`walk.Skip`). Rules may not import the adapters, so they keep a copy. When the two lists differ, a test (`TestBrokenReferenceSkipsTheDirectoriesTheAdaptersSkip` in `internal/adapter`) fails.
 - **Where a reference starts**: at the start of a line, or after a space, a bracket or a quote. The same holds after Japanese separators (`・`, `、`, `（`, `「`, `『`, `【`, `：`, and the full-width space). For example, the reference in `設計（docs/design/store.md）` is found.
 - **Why**: when a comment refers to a design document, readers assume the reasoning is written there. If the document is missing, they cannot read it
 - **Fix**: point at the document's current path, or remove the reference
@@ -74,23 +81,30 @@ All are on by default. Generated files are never checked.
 rules:
   comments:
     todo: '^TODO\(stage[0-9]+\): \S'   # the form a TODO must have
+    entry-points:                      # framework entry points that need no doc comment
+      - names: [load]
+        paths: ["**/+page*.ts"]
+      - names: ["onRequest*"]
+        paths: ["functions/**"]
 ```
 
 `todo` must be a valid regular expression; an invalid one is a configuration error (exit code `2`).
+
+The `names` and `paths` of `entry-points` must be valid globs; an invalid one is a configuration error (exit code `2`). `names` needs at least one entry.
 
 ## Facts
 
 | Fact | Used for |
 |---|---|
 | `Comment` (path, line, text) and `File.Role` | `todo-format`, `broken-reference`. Comments marked `Directive` (`//go:embed`, `//line`) are instructions to a tool, not prose, and are skipped |
-| `Symbol.Exported`, `Symbol.Doc`, `Symbol.DocElsewhere`, `Symbol.Kind` (including `type`) | `missing-doc` |
+| `Symbol.Exported`, `Symbol.Doc`, `Symbol.DocElsewhere`, `Symbol.Kind` (including `type`), `File.Unit` | `missing-doc`. `File.Unit` takes the unit off a name for entry points |
 
 ## Self-test cases
 
 | Rule | Cases |
 |---|---|
 | `comments/todo-format` | a new bare TODO fails · a TODO with the form passes · a FIXME fails · an existing bare TODO that moved passes · "TODO" in the middle of a sentence passes · a product's own form is applied |
-| `comments/missing-doc` | a new exported function without a doc comment fails · an unexported one passes · a method on an unexported type passes · an exported type without one fails · a test file is not checked · a Go `String() string` method passes · a method with the same name but another shape fails · a new Terraform `variable` without a `description` fails · a new `output` with one passes · a new Ansible default `argument_specs` does not describe fails · one it describes passes · one starting with `_` passes |
+| `comments/missing-doc` | a new exported function without a doc comment fails · an unexported one passes · a method on an unexported type passes · an exported type without one fails · a test file is not checked · a Go `String() string` method passes · a method with the same name but another shape fails · a new Terraform `variable` without a `description` fails · a new `output` with one passes · a new Ansible default `argument_specs` does not describe fails · one it describes passes · one starting with `_` passes · a function matching a configured entry point's name and paths passes · a function with a configured name outside its paths fails |
 | `comments/broken-reference` | a reference to a missing file fails · a reference to an existing file passes · a relative reference resolves from the file · deleting a document that a comment names fails · a directive is not a reference · a URL is not a reference · a file name only, of a file elsewhere, passes · a file name only, of a file nowhere, fails · a file name only does not count a file in a skipped directory (`node_modules`, one starting with `.`) · a reference after a Japanese bracket is found |
 
 ## Invariants

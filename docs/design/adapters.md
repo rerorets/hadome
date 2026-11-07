@@ -139,7 +139,7 @@ Test file conventions:
 
 | Language | Test files |
 |---|---|
-| Go | `*_test.go` |
+| Go | `*_test.go`, test support packages (note below) |
 | TypeScript | `*.test.ts(x)`, `*.spec.ts(x)`, files under `__tests__/`, test support files (under `test/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
 | Python | `test_*.py`, `*_test.py`, test support files (`conftest.py`, under `tests/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
 | Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
@@ -154,8 +154,25 @@ For repositories laid out against the conventions, configuration can add roles.
 - A file matching a `files.generated` glob is treated as generated code even without a header
 - A file matching both is generated code
 - Globs are written as in a gate's `paths` (`**` is directories at any depth)
-- Globs only add roles; they never take away a role the conventions or a header gave
+- A file matching a `files.product` glob is not a test support file. It is read as product code
+  - It takes away only the test support role that directories and names give by default. Example: a repository that keeps, under `e2e/server/`, the product's server the tests run against
+  - Test files by convention (`*_test.go`, `*.test.ts`, under `__tests__/`, `test_*.py` and the like) and files matching `files.tests` stay test files
+  - It applies to TypeScript, Python and Go files, the languages with test support files
+- Except for `files.product`, globs only add roles; they never take away a role the conventions or a header gave
 - The role is decided before the language reads the file, because whether a file is a test changes which facts are read from it (tests, or symbols)
+
+Go test support packages:
+
+- The files that are not `_test.go` in the following packages are test support files with role `test`. They exist only for the tests and are not product code
+  - A package under a directory whose name says it holds test helpers: `testutil/`, `testutils/`, `test-utils/`, `test_utils/`, `testhelper/`, `testhelpers/`, `__mocks__/`, `__fixtures__/`. Example: `internal/testutil`
+  - Unlike TypeScript and Python, packages under `test/`, `tests/` and `e2e/` are not support. In Go a directory's name is its package's name, and a product package can be called `tests` (for example, one holding rules about tests)
+  - A package whose name ends in `test` and that imports a package named like the part before `test`, or sits in a directory of that name. Examples: `storetest` importing `store`, `store/storetest`. It is the convention of the standard library's `httptest` and `fstest`
+  - A package whose name happens to end in `test`, such as `latest`, imports no package named like the part before it (`la`), so it stays product code
+- The functions of a support package are not targets, need no doc comment for `comments/missing-doc`, and are not in the dependency diagram
+- When a test calls a function of a support package, the walk follows into it. Its calls resolve through the support package's own imports. For example, if `storetest.New(t)` calls `store.Open()`, a test calling `storetest.New(t)` guards `store.Open`
+  - A support function's result is read by its declared type. If `s := storetest.New(t)` gives a `*store.Store`, `s.Append()` calls `store.Store.Append`
+  - Methods of types declared in a support package are not followed. A call of one counts as unresolved
+  - Hazards inside (clock, sleep, mock) are the test's, reported at the lines of the support package's file
 
 ### Units (for dependency rules)
 

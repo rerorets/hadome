@@ -8,8 +8,10 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
+	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
@@ -105,7 +107,8 @@ func (missingDoc) About() engine.About {
 		"or a new Terraform variable or output or Ansible role default without a description"),
 		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
 		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong; " +
-			"in TypeScript, JavaScript, Java and Kotlin write it as /** */, since a // line comment is not a doc comment")}
+			"in TypeScript, JavaScript, Java and Kotlin write it as /** */, since a // line comment is not a doc comment"),
+		Keys: []string{"rules.comments.entry-points"}}
 }
 
 var (
@@ -115,11 +118,16 @@ var (
 		"Terraform's description argument, or the variable's description in the role's meta/argument_specs.yml")
 )
 
-// Find reports exported symbols of product code without a doc comment.
+// Find reports exported symbols of product code without a doc comment, other than the configured
+// framework entry points.
 func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
+	units := map[string]string{}
+	for _, f := range in.Facts.Files {
+		units[f.Path] = f.Unit
+	}
 	var out []engine.Finding
 	for _, s := range in.Facts.Symbols {
-		if !s.Exported || s.Doc || s.DocElsewhere {
+		if !s.Exported || s.Doc || s.DocElsewhere || entryPoint(in.Config.EntryPoints, s, units[s.Path]) {
 			continue
 		}
 		name := facts.ShortName(s.ID)
@@ -131,6 +139,24 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 		out = append(out, f)
 	}
 	return out, nil
+}
+
+// entryPoint reports whether a configured entry point covers the symbol. Its name is its ID
+// without the unit: load, or Store.Append for a method. An ID that does not start with its file's
+// unit (Python's start with the module, tests/helpers.build) loses its last path element's first
+// part instead.
+func entryPoint(eps []config.EntryPoint, s facts.Symbol, unit string) bool {
+	name := strings.TrimPrefix(s.ID, unit+".")
+	if unit == "" || name == s.ID {
+		name = facts.ShortName(s.ID)
+		name = name[strings.Index(name, ".")+1:]
+	}
+	for _, e := range eps {
+		if e.Matches(name, s.Path) {
+			return true
+		}
+	}
+	return false
 }
 
 // brokenReference is comments/broken-reference.
@@ -184,8 +210,7 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 	return out, nil
 }
 
-// fileNames returns the names of the files outside the directories the adapters skip. The list
-// repeats internal/adapter/walk.Skip, which rules may not import.
+// fileNames returns the names of the files outside the directories the adapters skip.
 func fileNames(fsys fs.FS) (map[string]bool, error) {
 	names := map[string]bool{}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
@@ -204,12 +229,16 @@ func fileNames(fsys fs.FS) (map[string]bool, error) {
 	return names, err
 }
 
+// skippedDirs repeats internal/adapter/walk.SkippedDirs, which rules may not import. A test in
+// internal/adapter fails when the two differ.
+var skippedDirs = []string{"vendor", "testdata", "node_modules", "target", "build", "dist", "__pycache__"}
+
+// SkippedDirs lists the directories, besides those starting with a dot, whose files a reference by
+// file name only never finds.
+func SkippedDirs() []string { return slices.Clone(skippedDirs) }
+
 func skipped(dir string) bool {
-	switch dir {
-	case "vendor", "testdata", "node_modules", "target", "build", "dist", "__pycache__":
-		return true
-	}
-	return strings.HasPrefix(dir, ".")
+	return slices.Contains(skippedDirs, dir) || strings.HasPrefix(dir, ".")
 }
 
 // All returns the comments/ rules.
