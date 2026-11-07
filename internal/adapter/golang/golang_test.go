@@ -467,6 +467,92 @@ func Short(s string) bool { return len(strings.TrimSpace(s)) < limit }
 }
 
 // viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// Returning the zero value in place of a constant whose value is already the zero value changes
+// nothing, and no test could catch it: no such mutant is made. A constant with another value, one
+// hadome cannot read (from another module), a local variable shadowing a zero constant, and a
+// result whose zero value is nil are still broken.
+func TestGoMutantsSkipConstantsAlreadyZero(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"status/status.go": {Data: []byte(`package status
+
+const (
+	OK = iota
+	Failed
+)
+
+const Retry = int(2)
+`)},
+		"worker/names.go": {Data: []byte(`package worker
+
+const (
+	idle  = int64(0)
+	empty = ""
+	busy  = 3
+)
+`)},
+		"worker/queue.go": {Data: []byte(`package worker
+
+import (
+	"example.com/app/status"
+	"example.com/other/codes"
+)
+
+func Done() int { return status.OK }
+
+func Fail() int { return status.Failed }
+
+func Again() int { return status.Retry }
+
+func Idle() int64 { return idle }
+
+func Busy() int64 { return busy }
+
+func Label() string { return empty }
+
+func Outside() int { return codes.Zero }
+
+func Shadow() int64 {
+	idle := int64(4)
+	return idle
+}
+
+func Boxed() any { return idle }
+`)},
+	}
+	var funcs []facts.Symbol
+	for _, fn := range []struct {
+		name string
+		line int
+	}{{"Done", 8}, {"Fail", 10}, {"Again", 12}, {"Idle", 14}, {"Busy", 16}, {"Label", 18}, {"Outside", 20}, {"Shadow", 22}, {"Boxed", 27}} {
+		funcs = append(funcs, facts.Symbol{ID: "example.com/app/worker." + fn.name, Kind: facts.SymbolFunction,
+			Path: "worker/queue.go", Line: fn.line})
+	}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		if m.Operator == returnZero {
+			got = append(got, fmt.Sprintf("%s: %s -> %s", strings.TrimPrefix(m.Func, "example.com/app/worker."), m.Original, m.Replacement))
+		}
+	}
+	want := strings.Join([]string{
+		"Fail: status.Failed -> 0",
+		"Again: status.Retry -> 0",
+		"Busy: busy -> 0",
+		"Outside: codes.Zero -> 0",
+		"Shadow: idle -> 0",
+		"Boxed: idle -> nil",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A method a standard interface defines is documented by that interface, but only when its name
 // and its signature both match: a Len returning int64 is not sort.Interface's.

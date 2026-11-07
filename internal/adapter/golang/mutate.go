@@ -50,6 +50,7 @@ func (Adapter) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 	}
 	sort.Strings(paths)
 	var out []facts.Mutant
+	consts := &zeroConsts{fsys: v.FS}
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {
@@ -66,7 +67,7 @@ func (Adapter) Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, 
 				continue
 			}
 			if id, wanted := byPath[p][fset.Position(fn.Pos()).Line]; wanted {
-				m := mutator{fset: fset, src: src, path: p, fn: id, seen: map[string]int{}}
+				m := mutator{fset: fset, src: src, path: p, file: f, consts: consts, fn: id, seen: map[string]int{}}
 				m.function(fn)
 				out = append(out, m.out...)
 			}
@@ -80,9 +81,13 @@ type mutator struct {
 	fset *token.FileSet
 	src  []byte
 	path string
-	fn   string
-	seen map[string]int // anchor without its index -> how many so far
-	out  []facts.Mutant
+	file *ast.File
+	// consts finds constants whose value is the zero value, which returning the zero value leaves
+	// unchanged.
+	consts *zeroConsts
+	fn     string
+	seen   map[string]int // anchor without its index -> how many so far
+	out    []facts.Mutant
 }
 
 func (m *mutator) function(fn *ast.FuncDecl) {
@@ -102,7 +107,8 @@ func (m *mutator) function(fn *ast.FuncDecl) {
 				m.add(negateBoolean, n.Pos(), n.End(), map[string]string{"true": "false", "false": "true"}[n.Name])
 			}
 		case *ast.ReturnStmt:
-			if zero != "" && len(n.Results) == 1 && !boolLiteral(n.Results[0]) && m.text(n.Results[0].Pos(), n.Results[0].End()) != zero {
+			if zero != "" && len(n.Results) == 1 && !boolLiteral(n.Results[0]) && m.text(n.Results[0].Pos(), n.Results[0].End()) != zero &&
+				(zero == "nil" || !m.consts.zero(m.file, m.path, n.Results[0])) {
 				m.add(returnZero, n.Results[0].Pos(), n.Results[0].End(), zero)
 			}
 		case *ast.ExprStmt:

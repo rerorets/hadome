@@ -153,6 +153,13 @@ A few kinds only. Each changes one place, and most tests can notice it.
 | Return the zero value | `return total` → `return 0` (each language's zero value) |
 | Remove a call statement | remove the line `store.Append(row)` |
 
+A break that gives back the same value is not made a mutant. It changes nothing, so no test can catch it, and it would be reported as a false survivor.
+
+- `return 0` is not broken by returning the zero value
+- In Go, a return of a constant whose value is the zero value is not broken either. For example, with `ExitOK = 0`, `return engine.ExitOK` is not broken
+- The constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. Only a literal, `false`, `iota` at the start of its block, and conversions of these are read
+- A constant whose value cannot be read (one from another module, or a value written as an expression) is broken as before
+
 A mutant's anchor is the function's name, the kind, and the normalised original line, with no line number. When a change moves the function, the mutant still matches.
 
 After each mutant it tries, it writes one progress line to standard error: which mutant it is, the file and line, the function, the kind of break, and whether a test noticed. The language is the report's: `--lang`, else `messages` in head's configuration. Example: `mutate 1/2 calc/calc.go:5 calc.Sign, flip a comparison: caught`
