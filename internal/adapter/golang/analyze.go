@@ -12,6 +12,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/config"
@@ -114,7 +115,9 @@ func comments(fset *token.FileSet, p string, f *ast.File) []facts.Comment {
 		for _, c := range g.List {
 			text := strings.TrimPrefix(strings.TrimPrefix(c.Text, "//"), "/*")
 			text = strings.TrimSuffix(text, "*/")
-			out = append(out, facts.Comment{Path: p, Line: fset.Position(c.Pos()).Line, Text: strings.TrimSpace(text),
+			// Line breaks before the text stay, so that its first line is the comment's first line.
+			text = strings.TrimRightFunc(strings.TrimLeft(text, " \t"), unicode.IsSpace)
+			out = append(out, facts.Comment{Path: p, Line: fset.Position(c.Pos()).Line, Text: text,
 				Directive: directive.MatchString(c.Text)})
 		}
 	}

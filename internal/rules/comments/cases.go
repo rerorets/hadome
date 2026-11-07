@@ -94,5 +94,15 @@ func referenceCases() []engine.Case {
 			Head: module("store/store.go", store(appendFunc+"\n//go:embed rows.md\nvar rows string\n"))},
 		{Name: "a URL is not a reference", Base: module("store/store.go", store(appendFunc)),
 			Head: module("store/store.go", refers("https://example.com/guide.md"))},
+		{Name: "a file name only, of a file elsewhere, passes", Base: module("store/store.go", store(appendFunc), doc, "# Store\n"),
+			Head: module("store/store.go", refers("store.md"), doc, "# Store\n")},
+		{Name: "a file name only, of a file nowhere, fails", Base: module("store/store.go", store(appendFunc), doc, "# Store\n"),
+			Head: module("store/store.go", refers("rows.md"), doc, "# Store\n"), WantFail: []string{"comments/broken-reference"}},
+		{Name: "a file name only does not count a file in a skipped directory",
+			Base: module("store/store.go", store(appendFunc), "node_modules/lib/rows.md", ""),
+			Head: module("store/store.go", refers("rows.md"), "node_modules/lib/rows.md", ""), WantFail: []string{"comments/broken-reference"}},
+		{Name: "a reference after a Japanese bracket is found", Base: module("store/store.go", store(appendFunc)),
+			Head: module("store/store.go", store("// Append adds a row（docs/design/stroe.md）.\nfunc Append() {}\n")),
+			WantFail: []string{"comments/broken-reference"}},
 	}
 }
