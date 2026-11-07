@@ -30,7 +30,7 @@
           "type": "array"
         },
         "product": {
-          "description": "Globs of files read as product code although a test support directory or name would make them test support (test/, e2e/, testutil/, a Go package such as storetest), in TypeScript, Python and Go. It never turns a test file (_test.go, *.test.ts, test_*.py, files.tests) into product code. Which files are product code moves what the rules cover both ways, so any change needs review.",
+          "description": "Globs of files read as product code although a test support directory or name would make them test support (test/, e2e/, testutil/, tests/ outside Go, a Go package such as storetest), in TypeScript, Python and Go. It never turns a test file (_test.go, *.test.ts, test_*.py, files.tests) into product code. Which files are product code moves what the rules cover both ways, so any change needs review.",
           "items": {
             "type": "string"
           },

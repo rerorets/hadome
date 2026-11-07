@@ -168,8 +168,11 @@ classDiagram
 Go のテストの補助のパッケージ:
 
 - 次のパッケージの `_test.go` でないファイルは、テストの補助のファイルとして役割 `test` にします。テストのためだけにあるコードで、製品のコードではないからです
-  - 名前がテストのヘルパーを表すディレクトリの下にあるパッケージ: `testutil/`、`testutils/`、`test-utils/`、`test_utils/`、`testhelper/`、`testhelpers/`、`__mocks__/`、`__fixtures__/`。例: `internal/testutil`
-  - TypeScript・Python と違い、`test/`、`tests/`、`e2e/` の下は補助にしません。Go ではディレクトリの名前がパッケージの名前になり、`tests` という名前の製品のパッケージもあるからです（例: テストについてのルールを持つパッケージ）
+  - 次のディレクトリの下にあるパッケージ: `test/`、`e2e/`、`testutil/`、`testutils/`、`test-utils/`、`test_utils/`、`testhelper/`、`testhelpers/`、`__mocks__/`、`__fixtures__/`。深さは問いません。例: `internal/testutil`、`test/helpers`、`e2e/client`、`worker/e2e/client`
+  - `tests/` の下は補助にせず、製品のコードのままにします。TypeScript・Python では補助にするので、ここだけ違います
+    - 理由: Go ではディレクトリの名前がパッケージの名前になるので、`tests` という名前の製品のパッケージがあるからです
+    - 例: hadome 自身の `internal/rules/tests` は、テストについてのルールを持つ製品のパッケージです
+  - `test/` や `e2e/` の下に製品のコードを置くリポジトリは、`files.product` で製品のコードに戻せます。例: テストの相手として動かす製品のサーバを `e2e/server/` に置くなら、`files.product: ["e2e/server/**"]` と書きます
   - 名前が `test` で終わり、`test` の前の部分と同じ名前のパッケージを import するか、その名前のディレクトリの中にあるパッケージ。例: `store` を import する `storetest`、`store/storetest`。標準ライブラリの `httptest`・`fstest` と同じ慣習です
   - `latest` のように、たまたま `test` で終わる名前のパッケージは、前の部分（`la`）のパッケージを import しないので、製品のコードのままです
 - 補助のパッケージの関数は、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません

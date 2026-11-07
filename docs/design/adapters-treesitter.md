@@ -206,7 +206,7 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
   - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
   - Calling a name the support file does not hold as a function (a value, say) counts as unresolved
 - **Other role settings**: files matching the `files.tests` globs are test files, as before. Files matching the `files.product` globs are not support files; they are read as product code ([adapters.md](adapters.md))
-- **The list of directories**: the list is `walk.SupportDir`. The Go adapter uses it without `test/`, `tests/` and `e2e/` ([adapters.md](adapters.md))
+- **The list of directories**: the list is `walk.SupportDir`. The Go adapter uses it without `tests/` (`walk.GoSupportDir`), because product packages called `tests` exist in Go ([adapters.md](adapters.md))
 
 ## Hazards and io
 

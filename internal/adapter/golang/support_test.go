@@ -2,6 +2,8 @@ package golang
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -188,5 +190,180 @@ func TestGoProductFilesAreNotTestSupport(t *testing.T) {
 	}, "\n")
 	if g := strings.Join(got, "\n"); g != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// dirSupportTree is a module whose tests reach the store through packages under test/ and e2e/, at
+// the root and deeper, beside a product server under e2e/ and a product package named tests.
+func dirSupportTree() fstest.MapFS {
+	return fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(`// Package store keeps rows.
+package store
+
+// Store keeps rows.
+type Store struct{ rows []string }
+
+// Open makes a Store.
+func Open() *Store { return &Store{} }
+
+// Append adds a row.
+func (s *Store) Append(row string) int { s.rows = append(s.rows, row); return len(s.rows) }
+`)},
+		"test/helpers/helpers.go": {Data: []byte(`package helpers
+
+import "example.com/app/store"
+
+func NewStore() *store.Store { return store.Open() }
+`)},
+		"worker/e2e/client/client.go": {Data: []byte(`package client
+
+func Hello() string { return "hi" }
+`)},
+		"e2e/server/server.go": {Data: []byte(`package server
+
+func Serve() int { return 1 }
+`)},
+		"internal/rules/tests/tests.go": {Data: []byte(`package tests
+
+func Check() int { return 1 }
+`)},
+		"store/store_test.go": {Data: []byte(`package store_test
+
+import (
+	"testing"
+
+	"example.com/app/e2e/server"
+	"example.com/app/internal/rules/tests"
+	"example.com/app/test/helpers"
+	"example.com/app/worker/e2e/client"
+)
+
+func TestAppend(t *testing.T) {
+	if helpers.NewStore().Append("x") != 1 {
+		t.Fatal("want 1")
+	}
+}
+
+func TestHello(t *testing.T) {
+	if client.Hello() != "hi" {
+		t.Fatal("want hi")
+	}
+}
+
+func TestServe(t *testing.T) {
+	if server.Serve()+tests.Check() != 2 {
+		t.Fatal("want 2")
+	}
+}
+`)},
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A package under test/ or e2e/, at any depth, is test support as testutil/ is: its functions are no
+// symbols, and a test that calls one is followed into it, so a test calling only a helper that calls
+// no product code targets nothing. A package under tests/ stays product code, since Go names a
+// package after its directory. files.product keeps a product server under e2e/ product code.
+func TestGoTestAndE2EDirectoriesAreTestSupport(t *testing.T) {
+	tree := dirSupportTree()
+	var paths []string
+	for p := range tree {
+		if strings.HasSuffix(p, ".go") {
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	for _, c := range []struct {
+		name string
+		cfg  config.Config
+		want []string
+	}{
+		{"default", config.Config{}, []string{
+			"file e2e/server/server.go test",
+			"file internal/rules/tests/tests.go source",
+			"file store/store.go source",
+			"file store/store_test.go test",
+			"file test/helpers/helpers.go test",
+			"file worker/e2e/client/client.go test",
+			"symbol example.com/app/internal/rules/tests.Check",
+			"symbol example.com/app/store.Open",
+			"symbol example.com/app/store.Store",
+			"symbol example.com/app/store.Store.Append",
+			"test TestAppend calls=[example.com/app/store.Open example.com/app/store.Store.Append]",
+			"test TestHello calls=[]",
+			"test TestServe calls=[example.com/app/internal/rules/tests.Check]",
+		}},
+		{"files.product", config.Config{ProductFiles: []string{"e2e/server/**"}}, []string{
+			"file e2e/server/server.go source",
+			"file internal/rules/tests/tests.go source",
+			"file store/store.go source",
+			"file store/store_test.go test",
+			"file test/helpers/helpers.go test",
+			"file worker/e2e/client/client.go test",
+			"symbol example.com/app/e2e/server.Serve",
+			"symbol example.com/app/internal/rules/tests.Check",
+			"symbol example.com/app/store.Open",
+			"symbol example.com/app/store.Store",
+			"symbol example.com/app/store.Store.Append",
+			"test TestAppend calls=[example.com/app/store.Open example.com/app/store.Store.Append]",
+			"test TestHello calls=[]",
+			"test TestServe calls=[example.com/app/e2e/server.Serve example.com/app/internal/rules/tests.Check]",
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c.cfg, paths)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, f := range a.Files {
+				got = append(got, fmt.Sprintf("file %s %s", f.Path, f.Role))
+			}
+			for _, s := range a.Symbols {
+				got = append(got, "symbol "+s.ID)
+			}
+			for _, ts := range a.Tests {
+				var calls []string
+				for _, cl := range ts.Calls {
+					calls = append(calls, cl.Target)
+				}
+				sort.Strings(calls)
+				got = append(got, fmt.Sprintf("test %s calls=%v", ts.Name, calls))
+			}
+			sort.Strings(got)
+			if g, w := strings.Join(got, "\n"), strings.Join(c.want, "\n"); g != w {
+				t.Errorf("got:\n%s\n\nwant:\n%s", g, w)
+			}
+		})
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze on hadome's own internal/rules/tests
+// hadome's own package named tests, the reason tests/ is no Go support directory, is product code:
+// its files are source and its functions are symbols.
+func TestHadomeRulesTestsPackageIsProduct(t *testing.T) {
+	fsys := os.DirFS("../../..")
+	paths, err := fs.Glob(fsys, "internal/rules/tests/*.go")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no files under internal/rules/tests: %v", err)
+	}
+	a, err := Adapter{}.Analyze(engine.Version{FS: fsys}, config.Config{}, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range a.Files {
+		want := facts.RoleSource
+		if strings.HasSuffix(f.Path, "_test.go") {
+			want = facts.RoleTest
+		}
+		if f.Role != want {
+			t.Errorf("%s is %s, want %s", f.Path, f.Role, want)
+		}
+	}
+	if len(a.Symbols) == 0 {
+		t.Error("internal/rules/tests has no symbols")
 	}
 }

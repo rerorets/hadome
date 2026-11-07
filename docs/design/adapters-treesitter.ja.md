@@ -251,7 +251,7 @@ TypeScript のテストの宣言は、次のように読みます。
   - 例: `test/helpers.ts` の `createApp()` が `src/app.ts` の `buildApp()` を呼ぶなら、`createApp()` を呼ぶテストは `buildApp` を守ります
   - 補助のファイルの中で関数として見つからない名前（関数でない値など）を呼ぶと、未解決と数えます
 - **ほかの役割の指定**: `files.tests` の glob に合うファイルは、これまでどおりテストのファイルです。`files.product` の glob に合うファイルは、テストの補助のファイルにせず、製品のコードとして読みます（[adapters.ja.md](adapters.ja.md)）
-- **ディレクトリの一覧**: 一覧は `walk.SupportDir` にあります。Go のアダプタは、このうち `test/`、`tests/`、`e2e/` を除いたものを使います（[adapters.ja.md](adapters.ja.md)）
+- **ディレクトリの一覧**: 一覧は `walk.SupportDir` にあります。Go のアダプタは、このうち `tests/` を除いたもの（`walk.GoSupportDir`）を使います。Go では `tests` という名前の製品のパッケージがあるからです（[adapters.ja.md](adapters.ja.md)）
 
 ## 危険と io
 
