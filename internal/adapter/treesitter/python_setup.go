@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"path"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -17,6 +18,7 @@ func (pf *pyFile) bindSetup() {
 	for _, n := range named(f.root) {
 		switch def := definition(n); {
 		case n.Kind() == "decorated_definition" && def.Kind() == "function_definition" && pyFixture(f, n):
+			pf.fixtureDefs[f.field(def, "name")] = def
 			if class := pf.built(def.ChildByFieldName("body")); class != "" {
 				pf.fixtures[f.field(def, "name")] = class
 			}
@@ -74,8 +76,8 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	f := pf.f
 	out := map[string]string{}
 	for _, p := range pyParams(f, def) {
-		if c := pf.fixtures[p]; c != "" {
-			out[p] = c
+		if owner, _ := pf.fixtureDef(p); owner != nil && owner.fixtures[p] != "" {
+			out[p] = owner.fixtures[p]
 		}
 	}
 	if class == nil {
@@ -101,6 +103,25 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 		})
 	}
 	return out
+}
+
+// fixtureDef finds the pytest fixture a name stands for: in the file, or else in the conftest.py of
+// its directory and the directories above, nearest first. It returns the file that holds it.
+func (pf *pyFile) fixtureDef(name string) (*pyFile, *sitter.Node) {
+	if d := pf.fixtureDefs[name]; d != nil {
+		return pf, d
+	}
+	for dir := path.Dir(pf.f.path); ; dir = path.Dir(dir) {
+		conftest := path.Join(dir, "conftest")
+		if conftest != module(pf.f.path) {
+			if cf := pf.r.supportFile(conftest, pf.t); cf != nil && cf.fixtureDefs[name] != nil {
+				return cf, cf.fixtureDefs[name]
+			}
+		}
+		if dir == "." {
+			return nil, nil
+		}
+	}
 }
 
 // pySetups are the methods of a test class that run before each test or once for the class.

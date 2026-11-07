@@ -20,6 +20,9 @@ type file struct {
 	src  []byte
 	root *sitter.Node
 	test bool // a test file: every function in it is test code
+	// support is a test support file (test/helpers.ts, conftest.py): test code too, and a test that
+	// calls one of its functions is followed into it.
+	support bool
 	// testGlob and generatedGlob are set from configuration before the language indexes the file.
 	testGlob, generatedGlob bool
 	unit                    string // the unit's ID, as imports name it

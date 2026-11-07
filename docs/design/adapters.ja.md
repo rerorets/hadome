@@ -131,8 +131,8 @@ classDiagram
 | 言語 | テストのファイル |
 |---|---|
 | Go | `*_test.go` |
-| TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル |
-| Python | `test_*.py`、`*_test.py` |
+| TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル、テストの補助のファイル（`test/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
+| Python | `test_*.py`、`*_test.py`、テストの補助のファイル（`conftest.py`、`tests/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
 | Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
 | Kotlin | Java と同じ |

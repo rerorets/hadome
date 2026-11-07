@@ -8,7 +8,64 @@ import (
 	"github.com/rerorets/hadome/internal/engine"
 )
 
-func init() { languageGuardsCases = driveCases() }
+func init() {
+	languageGuardsCases = append(driveCases(), supportCases()...)
+	languageScopeCases = collidingCases()
+	languageUnknownCases = missingImportCases()
+}
+
+// supportCases are tests that reach the product through a helper of a test support file, which
+// is test code and no target of its own.
+func supportCases() []engine.Case {
+	tr := func(test string) fstest.MapFS {
+		return fstest.MapFS{
+			"src/rows.ts":      {Data: []byte("export function rows(): number[] { return [1, 2] }\n")},
+			"test/helpers.ts":  {Data: []byte("import { rows } from '../src/rows'\n\nexport function firstRow() { return rows()[0] }\n")},
+			"src/rows.test.ts": {Data: []byte(test)},
+		}
+	}
+	const base = "import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n"
+	const helper = "import { firstRow } from '../test/helpers'\n\nit('starts at one', () => { expect(firstRow()).toBe(1) })\n"
+	return []engine.Case{
+		{Name: "a test that reaches the code through a helper of a test support file passes", Base: tr(base), Head: tr(base + "\n" + helper)},
+	}
+}
+
+// collidingCases are two files of one TypeScript directory that declare the same name: each is a
+// target of its own, so the tests of one are not covered by the tests of the other.
+func collidingCases() []engine.Case {
+	tr := func(withB bool) fstest.MapFS {
+		t := fstest.MapFS{
+			"src/store/a.ts":      {Data: []byte("export function load(): string { return 'a' }\n")},
+			"src/store/b.ts":      {Data: []byte("export function load(): string { return 'b' }\n")},
+			"src/store/a.test.ts": {Data: []byte("import { load } from './a'\n\nit('loads a', () => { expect(load()).toBe('a') })\n")},
+		}
+		if withB {
+			t["src/store/b.test.ts"] = &fstest.MapFile{Data: []byte("import { load } from './b'\n\nit('loads b', () => { expect(load()).toBe('b') })\n")}
+		}
+		return t
+	}
+	return []engine.Case{
+		{Name: "deleting the only test of one of two same-named functions of a directory fails", Base: tr(true), Head: tr(false),
+			WantFail: []string{"tests/scope-shrunk"}},
+	}
+}
+
+// missingImportCases are tests whose import looks like the repository's own but names no file.
+func missingImportCases() []engine.Case {
+	tr := func(test string) fstest.MapFS {
+		return fstest.MapFS{
+			"src/rows.ts":      {Data: []byte("export function rows(): number[] { return [1, 2] }\n")},
+			"src/rows.test.ts": {Data: []byte(test)},
+		}
+	}
+	const base = "import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n"
+	const missing = "import { cells } from './cells'\n\nit('lists cells', () => { expect(cells()).toHaveLength(2) })\n"
+	return []engine.Case{
+		{Name: "a test that calls only names of a local import naming no file needs review", Base: tr(base),
+			Head: tr(base + "\n" + missing), WantReview: []string{"tests/target-unknown"}},
+	}
+}
 
 // driveCases are tests that drive the application through an HTTP test client: they call no
 // function of the repository, but exercise it.
@@ -23,8 +80,15 @@ func driveCases() []engine.Case {
 	const base = "import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n"
 	const drive = "import request from 'supertest'\n\nit('serves rows', async () => {\n  await request('http://localhost:3000').get('/rows').expect(200)\n})\n"
 	const notDrive = "import { request } from 'undici'\n\nit('serves rows', async () => {\n  await request('http://localhost:3000')\n})\n"
+	const hono = "import { app } from './app'\n\nit('serves rows in memory', async () => {\n  expect((await app.request('/rows')).status).toBe(200)\n})\n"
+	withApp := func(test string) fstest.MapFS {
+		t := ts(test)
+		t["src/app.ts"] = &fstest.MapFile{Data: []byte("export const app = { request: async (path: string) => ({ status: 200, path }) }\n")}
+		return t
+	}
 	return []engine.Case{
 		{Name: "a test that drives the application through an HTTP test client passes", Base: ts(base), Head: ts(base + "\n" + drive)},
+		{Name: "a test that hands a request in memory to the application passes", Base: withApp(base), Head: withApp(base + "\n" + hono)},
 		{Name: "a call that is only named like a client is not one", Base: ts(base), Head: ts(base + "\n" + notDrive),
 			WantFail: []string{"tests/guards-nothing"}},
 	}
