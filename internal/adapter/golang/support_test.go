@@ -367,3 +367,54 @@ func TestHadomeRulesTestsPackageIsProduct(t *testing.T) {
 		t.Error("internal/rules/tests has no symbols")
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A function of a test support package reads its parameters by the types they are declared with,
+// through the imports of its own file, even when the test passes a nil, which has no type. A
+// variadic parameter is a slice of its type.
+func TestGoTestSupportParametersHaveTheirDeclaredTypes(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(storeSource)},
+		"store/storetest/storetest.go": {Data: []byte(`package storetest
+
+import (
+	"testing"
+
+	st "example.com/app/store"
+)
+
+func MustAppend(t *testing.T, s *st.Store) {
+	t.Helper()
+	_ = s.Append()
+}
+
+func AppendAll(t *testing.T, stores ...*st.Store) {
+	for _, s := range stores {
+		_ = s.Append()
+	}
+}
+`)},
+		"worker/queue_test.go": {Data: []byte(`package worker_test
+
+import (
+	"testing"
+
+	"example.com/app/store/storetest"
+)
+
+func TestNil(t *testing.T) { storetest.MustAppend(t, nil) }
+
+func TestAll(t *testing.T) { storetest.AppendAll(t, nil) }
+`)},
+	}
+	want := strings.Join([]string{
+		// A call inside a loop counts as two: it may run more than once.
+		"TestAll calls=[example.com/app/store.Store.Append×2] unresolved=0",
+		"TestNil calls=[example.com/app/store.Store.Append×1] unresolved=0",
+	}, "\n")
+	if got := callsByTest(t, tree); got != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}

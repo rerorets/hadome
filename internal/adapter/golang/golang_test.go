@@ -624,6 +624,163 @@ var defaults row
 }
 
 // viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// A function returning a named type declared in the module returns the zero value of its
+// underlying type: 0, "", false, nil, or the type as written followed by {} for a struct, however
+// many names lead to it. A constant of that type whose value is zero is still not broken. No such
+// mutant is made where the underlying type cannot be told: a fixed-size array, a type with type
+// arguments, a type declared in two files, another module's type, or a type parameter (of the
+// function or of its receiver) that hides a package type of the same name. Types that name each
+// other in a cycle do not compile; reading them stops, with no mutant.
+func TestGoMutantsReturnTheZeroValueOfNamedTypes(t *testing.T) {
+	const queue = `package worker
+
+import (
+	"example.com/app/status"
+	"example.com/other/codes"
+)
+
+type local uint8
+
+type wrapped struct{ s string }
+
+type T string
+
+func Parse(s string) status.Code { return code(s) }
+
+func Label() status.Name { return name }
+
+func Ready() status.Flag { return flag }
+
+func First() status.Row { return row }
+
+func Point() status.Ptr { return p }
+
+func All() status.Rows { return rows }
+
+func Table() status.Lookup { return table }
+
+func Handle() status.Handler { return h }
+
+func Open() status.Reader { return r }
+
+func Stream() status.Ch { return ch }
+
+func Count() status.Alias { return n }
+
+func Nested() status.Deep { return deep }
+
+func Small() local { return l }
+
+func Wrap() wrapped { return w }
+
+func Named() T { return name }
+
+func Done() status.Code { return status.OK }
+
+func Two() status.Pair { return pair }
+
+func Of() status.Set[int] { return set }
+
+func Again() status.Twice { return tw }
+
+func Outside() codes.Code { return c }
+
+func Get[T any]() T { return v }
+
+func Cycle() status.Loop { return loop }
+
+type box[T any] struct{ v T }
+
+func (b box[T]) Take() T { return b.v }
+`
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"status/status.go": {Data: []byte(`package status
+
+type Code int
+
+type Name string
+
+type Flag bool
+
+type Row struct{ N int }
+
+type Ptr *Row
+
+type Rows []Row
+
+type Lookup map[string]int
+
+type Handler func()
+
+type Reader interface{ Read() }
+
+type Ch chan int
+
+type Alias = int
+
+type Deep Code
+
+type Pair [2]int
+
+type Set[K comparable] map[K]bool
+
+type Twice int
+
+type Loop Back
+
+type Back Loop
+
+const OK Code = 0
+`)},
+		"status/twice.go": {Data: []byte("package status\n\ntype Twice string\n")},
+		"worker/queue.go": {Data: []byte(queue)},
+	}
+	var funcs []facts.Symbol
+	for i, line := range strings.Split(queue, "\n") {
+		if name, ok := strings.CutPrefix(line, "func "); ok {
+			if _, method, ok := strings.Cut(name, ") "); ok && strings.HasPrefix(name, "(") {
+				name = method
+			}
+			name = name[:strings.IndexAny(name, "([")]
+			funcs = append(funcs, facts.Symbol{ID: "example.com/app/worker." + name, Kind: facts.SymbolFunction,
+				Path: "worker/queue.go", Line: i + 1})
+		}
+	}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		if m.Operator == returnZero {
+			got = append(got, fmt.Sprintf("%s: %s -> %s", strings.TrimPrefix(m.Func, "example.com/app/worker."), m.Original, m.Replacement))
+		}
+	}
+	want := strings.Join([]string{
+		"Parse: code(s) -> 0",
+		`Label: name -> ""`,
+		"Ready: flag -> false",
+		"First: row -> status.Row{}",
+		"Point: p -> nil",
+		"All: rows -> nil",
+		"Table: table -> nil",
+		"Handle: h -> nil",
+		"Open: r -> nil",
+		"Stream: ch -> nil",
+		"Count: n -> 0",
+		"Nested: deep -> 0",
+		"Small: l -> 0",
+		"Wrap: w -> wrapped{}",
+		`Named: name -> ""`,
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A method a standard interface defines is documented by that interface, but only when its name
 // and its signature both match: a Len returning int64 is not sort.Interface's.

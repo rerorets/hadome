@@ -257,3 +257,238 @@ b.late flip a comparison: < -> >=
 b.early flip a comparison: > -> <=
 `+strings.Join(more, "\n"))
 }
+
+// viewpoint: behaviour
+// target: lang.Mutants
+// Returning the zero value in place of a constant of the same file whose value is already that
+// zero value changes nothing, and no test could catch it: no such mutant is made. Everything else
+// is still broken: a constant with another value, a name that can be reassigned, a name declared
+// twice with different values or once in a way hadome does not read, a parameter or local of the
+// same name, and (in Python, where 0 and 0.0 differ) an integer returned where a float is declared.
+func TestMutantsSkipConstantsAlreadyZero(t *testing.T) {
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"typescript", "src/calc.ts", `export const OK = 0;
+const EMPTY = '';
+const HEX = 0x0;
+const NONE = null;
+const FAILED = 1;
+let count = 0;
+export function done(): number { return OK; }
+export function label(): string { return EMPTY; }
+export function hex(): number { return HEX; }
+export function nothing(): string | null { return NONE; }
+export function fail(): number { return FAILED; }
+export function counted(): number { return count; }
+export function shadow(OK: number): number { return OK; }
+export function local(): string { const EMPTY = 'x'; return EMPTY; }
+`, []string{
+			"fail: FAILED -> 0",
+			"counted: count -> 0",
+			"shadow: OK -> 0",
+			`local: EMPTY -> ""`,
+		}},
+		{"python", "src/calc.py", `OK = 0
+EMPTY = ""
+NOTHING = None
+RATE = 0
+FAILED = 1
+COUNT = 0
+COUNT = 1
+MOVED = 0
+
+
+def bump():
+    global MOVED
+    MOVED = 2
+
+
+def done() -> int:
+    return OK
+
+
+def label() -> str:
+    return EMPTY
+
+
+def nothing() -> Optional[int]:
+    return NOTHING
+
+
+def rate() -> float:
+    return RATE
+
+
+def fail() -> int:
+    return FAILED
+
+
+def counted() -> int:
+    return COUNT
+
+
+def moved() -> int:
+    return MOVED
+
+
+def shadow(OK) -> int:
+    return OK
+
+
+def local() -> int:
+    OK = 3
+    return OK
+`, []string{
+			"rate: RATE -> 0.0",
+			"fail: FAILED -> 0",
+			"counted: COUNT -> 0",
+			"moved: MOVED -> 0",
+			"shadow: OK -> 0",
+			"local: OK -> 0",
+		}},
+		{"rust", "src/calc.rs", `const OK: i32 = 0;
+static EMPTY: &str = "";
+const WIDE: u64 = 0_u64;
+static mut COUNT: i32 = 0;
+const FAILED: i32 = 1;
+mod inner {
+    pub const TWICE: i32 = 1;
+}
+const TWICE: i32 = 0;
+fn done() -> i32 { OK }
+fn label() -> &'static str { return EMPTY; }
+fn wide() -> u64 { WIDE }
+fn counted() -> i32 { return COUNT; }
+fn fail() -> i32 { FAILED }
+fn twice() -> i32 { TWICE }
+fn shadow(OK: i32) -> i32 { OK }
+fn local() -> i32 { let OK = 2; OK }
+`, []string{
+			"counted: COUNT -> 0",
+			"fail: FAILED -> 0",
+			"twice: TWICE -> 0",
+			"shadow: OK -> 0",
+			"local: OK -> 0",
+		}},
+		{"java", "src/main/java/calc/Calc.java", `class Calc {
+    static final int OK = 0;
+    static final String EMPTY = "";
+    static final long BIG = 0L;
+    final Object none = null;
+    static final int FAILED = 1;
+    static int count = 0;
+    static final int TWICE = 0;
+    static class Inner { static final int TWICE = 1; }
+    int done() { return OK; }
+    String label() { return EMPTY; }
+    long big() { return BIG; }
+    Object nothing() { return none; }
+    int fail() { return FAILED; }
+    int counted() { return count; }
+    int twice() { return TWICE; }
+    int shadow(int OK) { return OK; }
+    int local() { int OK = 2; return OK; }
+}
+`, []string{
+			"fail: FAILED -> 0",
+			"counted: count -> 0",
+			"twice: TWICE -> 0",
+			"shadow: OK -> 0",
+			"local: OK -> 0",
+		}},
+		{"kotlin", "src/main/kotlin/calc/Calc.kt", `const val OK = 0
+val EMPTY = ""
+val BIG = 0L
+const val FAILED = 1
+var count = 0
+const val LIMIT = 0
+open class Base {
+    open val LIMIT = 0
+}
+fun done(): Int { return OK }
+fun label(): String { return EMPTY }
+fun big(): Long { return BIG }
+fun fail(): Int { return FAILED }
+fun counted(): Int { return count }
+fun limit(): Int { return LIMIT }
+fun shadow(OK: Int): Int { return OK }
+fun local(): Int {
+    val OK = 2
+    return OK
+}
+`, []string{
+			"fail: FAILED -> 0",
+			"counted: count -> 0",
+			"limit: LIMIT -> 0",
+			"shadow: OK -> 0",
+			"local: OK -> 0",
+		}},
+	}
+	names := []string{"done", "label", "hex", "wide", "big", "nothing", "rate", "fail", "counted", "moved", "twice",
+		"limit", "shadow", "local"}
+	runZeroConstantCases(t, cases, names)
+}
+
+// viewpoint: behaviour
+// target: lang.Mutants
+// A number constant is zero however its literal spells zero: a fraction, an exponent, another
+// base, underscores, a type suffix. A literal whose value is not zero, or that is not a number of
+// the declared type (a TypeScript bigint, a Python complex), is broken.
+func TestMutantsReadZeroInEverySpellingOfANumber(t *testing.T) {
+	source := func(declare, function string, spellings []string) string {
+		var b strings.Builder
+		for i, s := range spellings {
+			fmt.Fprintf(&b, declare+"\n", i, s)
+		}
+		for i := range spellings {
+			fmt.Fprintf(&b, function+"\n", i, i)
+		}
+		return b.String()
+	}
+	ts := []string{"0.0", ".0", "0e5", "0E+2", "0b0", "0o0", "0x00", "0.0e-3", "0x10", "0n", "1e0", "10", "0.5"}
+	py := []string{"0.", "0e0", "0.0", "0j", "1.0", "0"}
+	rust := []string{"0f64", "0_0.0", "0.0e0f64", "1f64"}
+	kt := []string{"0L", "0x0L", "0b0L", "1L"}
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"typescript", "src/calc.ts", source("const C%d = %s;", "function f%d(): number { return C%d; }", ts), []string{
+			"f8: C8 -> 0", "f9: C9 -> 0", "f10: C10 -> 0", "f11: C11 -> 0", "f12: C12 -> 0",
+		}},
+		{"python", "src/calc.py", source("C%d = %s", "def f%d() -> float:\n    return C%d\n", py), []string{
+			"f3: C3 -> 0.0", "f4: C4 -> 0.0", "f5: C5 -> 0.0",
+		}},
+		{"rust", "src/calc.rs", source("const C%d: f64 = %s;", "fn f%d() -> f64 { C%d }", rust), []string{
+			"f3: C3 -> 0.0",
+		}},
+		{"kotlin", "src/main/kotlin/calc/Calc.kt", source("const val C%d = %s", "fun f%d(): Long { return C%d }", kt),
+			[]string{"f3: C3 -> 0L"}},
+	}
+	var names []string
+	for i := range ts {
+		names = append(names, fmt.Sprintf("f%d", i))
+	}
+	runZeroConstantCases(t, cases, names)
+}
+
+func runZeroConstantCases(t *testing.T, cases []struct {
+	lang, path, src string
+	want            []string
+}, names []string) {
+	t.Helper()
+	for _, c := range cases {
+		t.Run(c.lang, func(t *testing.T) {
+			_, ms := mutantsOf(t, c.lang, c.path, c.src, names...)
+			var got []string
+			for _, m := range ms {
+				if m.Operator == returnZero {
+					got = append(got, fmt.Sprintf("%s: %s -> %s", strings.TrimPrefix(m.Func, "calc."), m.Original, m.Replacement))
+				}
+			}
+			expect(t, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+		})
+	}
+}

@@ -86,8 +86,8 @@ type mutator struct {
 	src  []byte
 	path string
 	file *ast.File
-	// consts finds constants whose value is the zero value, which returning the zero value leaves
-	// unchanged.
+	// consts reads the zero value of a named result type, and finds constants whose value is the
+	// zero value, which returning the zero value leaves unchanged.
 	consts *zeroConsts
 	fn     string
 	seen   map[string]int // anchor without its index -> how many so far
@@ -95,7 +95,7 @@ type mutator struct {
 }
 
 func (m *mutator) function(fn *ast.FuncDecl) {
-	zero := zeroOf(fn.Type)
+	zero := m.consts.result(m.file, m.path, fn, func(e ast.Expr) string { return m.text(e.Pos(), e.End()) })
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.FuncLit:
@@ -199,32 +199,4 @@ func normalisedLine(src []byte, offset int) string {
 		toks = append(toks, lit)
 	}
 	return strings.Join(toks, " ")
-}
-
-// zeroOf returns the zero value of a function's single result when it is a basic type or one whose
-// zero value is nil; empty otherwise (several results, or a struct).
-func zeroOf(t *ast.FuncType) string {
-	if t.Results == nil || len(t.Results.List) != 1 || len(t.Results.List[0].Names) > 1 {
-		return ""
-	}
-	switch r := t.Results.List[0].Type.(type) {
-	case *ast.Ident:
-		switch r.Name {
-		case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
-			"float32", "float64", "byte", "rune":
-			return "0"
-		case "string":
-			return `""`
-		case "bool":
-			return "false"
-		case "error", "any":
-			return "nil"
-		}
-	case *ast.StarExpr, *ast.ArrayType, *ast.MapType, *ast.ChanType, *ast.FuncType, *ast.InterfaceType:
-		if a, ok := r.(*ast.ArrayType); ok && a.Len != nil {
-			return "" // a fixed-size array is not nil
-		}
-		return "nil"
-	}
-	return ""
 }
