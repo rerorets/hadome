@@ -11,18 +11,21 @@ import (
 // What a TypeScript test file sets up outside its tests: helpers, modules loaded with import(),
 // variables of describe blocks, and HTTP test clients.
 
-// dynamicImport returns the unit a call loads when it is import() of a module of the repository,
-// named by a string.
+// dynamicImport returns the file a call loads when it is import() or require() of a file of the
+// repository, named by a string.
 func (tf *tsFile) dynamicImport(call *sitter.Node) string {
-	if call == nil || call.Kind() != "call_expression" || tf.f.field(call, "function") != "import" {
+	if call == nil || call.Kind() != "call_expression" {
+		return ""
+	}
+	if fn := tf.f.field(call, "function"); fn != "import" && fn != "require" {
 		return ""
 	}
 	args := arguments(call.ChildByFieldName("arguments"))
 	if len(args) != 1 || args[0].Kind() != "string" {
 		return ""
 	}
-	if unit, internal := tf.r.resolve(tf.f.path, unquote(tf.f.text(args[0]))); internal {
-		return unit
+	if p, kind := tf.r.project.resolve(tf.f.path, unquote(tf.f.text(args[0]))); kind == tsFound {
+		return p
 	}
 	return ""
 }
@@ -74,8 +77,8 @@ func (tf *tsFile) loaderOf(name string, body *sitter.Node) {
 	}
 }
 
-// bindLoaded records the names a declaration takes from a module loaded with import(), directly or
-// through a loader: const { send } = await import('./mail'), or const mail = await fresh().
+// bindLoaded records the names a declaration takes from a module loaded with import() or require(),
+// directly or through a loader: const { send } = await import('./mail'), or const mail = await fresh().
 func (w *tsWalk) bindLoaded(n *sitter.Node) {
 	f := w.tf.f
 	v := n.ChildByFieldName("value")
@@ -97,9 +100,9 @@ func (w *tsWalk) bindLoaded(n *sitter.Node) {
 		for _, p := range named(pattern) {
 			switch p.Kind() {
 			case "shorthand_property_identifier_pattern":
-				w.loaded[f.text(p)] = unit + "." + f.text(p)
+				w.loaded[f.text(p)] = w.tf.r.target(unit, f.text(p))
 			case "pair_pattern":
-				w.loaded[f.field(p, "value")] = unit + "." + f.field(p, "key")
+				w.loaded[f.field(p, "value")] = w.tf.r.target(unit, f.field(p, "key"))
 			}
 		}
 	}

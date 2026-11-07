@@ -10,7 +10,7 @@ import (
 type scopeShrunk struct{}
 
 func (scopeShrunk) ID() string           { return "tests/scope-shrunk" }
-func (scopeShrunk) Cases() []engine.Case { return scopeCases() }
+func (scopeShrunk) Cases() []engine.Case { return append(scopeCases(), languageScopeCases...) }
 func (scopeShrunk) About() engine.About {
 	return engine.About{Finds: engine.T("code that an active test called in base and no active test calls in head, while the code is still there"),
 		Why: engine.T("the behaviour of that code can now change without any test noticing"),
@@ -41,6 +41,10 @@ func (r scopeShrunk) Measure(in engine.Input) ([]engine.Item, error) {
 	return out, nil
 }
 
+// languageScopeCases and languageUnknownCases are cases in languages only a cgo build reads; see
+// guards_cases_cgo.go.
+var languageScopeCases, languageUnknownCases []engine.Case
+
 // RemovedLegitimately is true when the target no longer exists in head: the code was removed or renamed.
 func (scopeShrunk) RemovedLegitimately(it engine.Item, head engine.Input) (bool, error) {
 	return !head.Facts.HasTarget(it.Key), nil
@@ -51,7 +55,7 @@ func (scopeShrunk) RemovedLegitimately(it engine.Item, head engine.Input) (bool,
 type targetUnknown struct{}
 
 func (targetUnknown) ID() string           { return "tests/target-unknown" }
-func (targetUnknown) Cases() []engine.Case { return unknownCases() }
+func (targetUnknown) Cases() []engine.Case { return append(unknownCases(), languageUnknownCases...) }
 func (targetUnknown) About() engine.About {
 	return engine.About{Finds: engine.T("a new test none of whose calls hadome can identify"),
 		Why:    engine.T("hadome cannot tell whether removing this test would shrink what the suite guards"),

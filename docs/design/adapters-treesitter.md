@@ -58,25 +58,80 @@ A unit has an **ID**, which imports name, and a **location**, a path in the repo
 | Language | Unit | ID | Location | Symbol IDs |
 |---|---|---|---|---|
 | Go | Package | Import path | Directory | `<import path>.<Name>` |
-| TypeScript | Directory | The directory | The directory | `<directory>.<name>` |
+| TypeScript | Directory | The directory | The directory | `<directory>.<name>`; when two or more files of one directory declare the same name at top level, `<file path without extension>.<name>` (`src/store/a.append`) |
 | Python | Package (directory) | The directory | The directory | `<module path>.<name>`, the module path being the file's path without `.py` (`src/app/store.create_post`), so that two modules of one package never collide |
 | Rust | Module | Its location | `src/a/b` for `src/a/b.rs` or `src/a/b/mod.rs`; `src` for `lib.rs` and `main.rs` | `<location>.<name>` |
 | Java, Kotlin | Package | The `package` declaration | The directory | `<package>.<Class>.<member>`; Kotlin's top-level functions `<package>.<name>` |
 
 Every symbol ID ends in the unit's last path element and the name, so a configured target such as `store.append` names it in every language ([rules-tests.md](rules-tests.md)).
 
+TypeScript alone uses the file's path in the ID of a name that collides.
+
+- **Why**: a TypeScript unit is a directory. When two files of one directory declare the same name, an ID made of the directory alone folds them into one target, and deleting the tests of one does not report `tests/scope-shrunk`
+- **Scope**: only colliding names use the file's path. Every other name keeps `<directory>.<name>`, and the unit the dependency rules see stays the directory
+- **Naming from tests**: a name a test imports is looked up from the file the import resolves to, to the file that declares it, and takes that file's ID. `export { x } from './a'` and `export * from './a'` are followed. `export default` takes the declaration's name (`Page` for `export default function Page`)
+- **When an ID changes**: when a file declaring the same name is added later, the older one's ID changes. The base target is then gone from head, so `tests/scope-shrunk` treats it as a legitimate removal and does not fail
+
 ## Imports
 
 | Language | Internal when | Resolution |
 |---|---|---|
-| TypeScript | The specifier starts with `.` or `/`, or matches a `compilerOptions.paths` alias of the root `tsconfig.json` | To a file by trying the path, then `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, then `/index.*`; the unit is its directory. Anything else is an external package, named by its first path element (two for `@scope/name`) |
-| Python | The module exists in the repository (as a directory or a `.py` file, from the root or from `src/`) | Relative imports from the file's package. The unit is the module's package. `from a import b` where `b` is a module binds the module |
+| TypeScript | The specifier starts with `.` or `/`; or an alias or the `baseUrl` of the `tsconfig.json` nearest the file resolves it to a file of the repository; or it starts with the name of a package of the repository | See "Resolving TypeScript" below. Anything else is an external package, named by its first path element (two for `@scope/name`) |
+| Python | The module exists in the repository (as a directory or a `.py` file, from a package root) | The package roots are the root, `src/`, each directory holding a `pyproject.toml`, `setup.cfg` or `setup.py`, and that directory's `src/`. The roots of the directories holding the importing file (with their `src/`) are searched first, deepest directory first, then the others in path order. Relative imports from the file's package. The unit is the module's package. `from a import b` where `b` is a module binds the module |
 | Rust | A path starting with `crate`, `self`, `super`, or the name of the file's crate (`[lib] name` in `Cargo.toml`, else `[package] name` with `-` read as `_`). The crate's name is how integration tests under `tests/` and binaries call the library | To the longest prefix that is a module file; the rest names an item |
 | Java, Kotlin | Some file of the repository declares the package | `import a.b.C` is the package `a.b`; `a.b.*` too |
 
 External imports keep their name as `ToUnit` and are checked against the `io` table.
 
 TypeScript imports and exports that bring in types only are not in the list of imports: `import type …`, `export type { … } from …`, and `import { type A, type B } from …` where every name is marked `type`. They disappear when compiled, so they are no dependency of the running code. One that brings in any value is in the list. Examples: `import { type A, b } from …`, `import d, { type A } from …`.
+
+### Resolving TypeScript
+
+A specifier is tried in this order.
+
+1. A specifier starting with `.` or `/` is resolved as a file path
+2. When it matches a `paths` alias of the `tsconfig.json` nearest the file, it is resolved to the alias's destinations, tried in order. When two aliases match, the one with the longer prefix is used
+3. When that `tsconfig.json` has a `baseUrl` and the specifier resolves to a file under it, that file
+4. When it starts with the `name` of any `package.json` of the repository, it is resolved to that package's source. `package.json` files under `node_modules` are not read
+5. Otherwise it is an external package
+
+A path becomes a file by trying, in order:
+
+- the path itself
+- the path with an extension added (`.ts`, `.tsx`, `.js` and the like)
+- `/index.*`
+- for a path ending in `.js`, `.mjs` or `.cjs`, the path with the extension replaced by `.ts`, `.tsx`, `.mts` or `.cts`. ESM TypeScript writes `./a.js` to load `a.ts`
+
+The unit is the directory of the resolved file.
+
+`tsconfig.json` is read as follows.
+
+- `extends` is followed: relative paths, and files inside a package of the repository (`@acme/tsconfig/base.json`). When `extends` is an array, later entries override earlier ones
+- `baseUrl` is resolved from the location of the config file that sets it
+- `paths` are resolved from `baseUrl`; without a `baseUrl`, from the location of the config file that sets `paths`
+- When the nearest `tsconfig.json` has no `paths` but has `references`, the aliases of the first referenced config with `paths` are used. Example: Vite's `tsconfig.app.json`
+- Comments and trailing commas are skipped
+
+An import of a repository package by its name alone (`@acme/shared`) resolves to the first of these files in the package's directory.
+
+1. `src/index.*`
+2. `index.*`
+3. The file `exports["."]`, `module`, `main` or `types` names. When it is under `dist/`, `lib/`, `build/` or `out/`, the source of the same name under `src/` is tried too
+
+When a path follows the name, as in `@acme/shared/sub`, the path is resolved in the package's directory and in its `src/`.
+
+### Imports that cannot be resolved
+
+Some imports look like the repository's own but resolve to no file.
+
+| Language | Imports that look like the repository's |
+|---|---|
+| TypeScript | Starts with `.` or `/`; matches a `paths` alias; starts with the name of a package of the repository |
+| Python | Relative imports; imports whose first element is a package under a package root (`app.missing` when `app` exists) |
+
+- When a test file calls a name taken from such an import, the call counts as unresolved (`Test.Unresolved`)
+- Treating it as an external package and counting nothing would fail a test that may well call the product with `tests/guards-nothing`. What cannot be identified goes to a person's review through `tests/target-unknown`
+- Imports of non-test files are treated as before: in TypeScript, an internal import whose unit is the directory of the named path; in Python, an external import
 
 ## Symbols
 
@@ -86,7 +141,7 @@ TypeScript imports and exports that bring in types only are not in the list of i
 | Python | `def` at module level and in classes | `class` | Name does not start with `_` | A docstring: the body's first statement is a string |
 | Rust | `fn` items and `impl` methods | `struct`, `enum`, `trait` (as interface), `type` | `pub` | `///` lines right before it |
 | Java | Methods and constructors | Classes, interfaces, enums, records | `public` | A `/** */` comment right before it |
-| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it |
+| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when a line with an annotation with arguments (`@Suppress("x")`) stands between them |
 
 Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not product code. Cyclomatic complexity counts each language's `if`, loops, `case`/match arms (not the default one), `catch`, `&&`, `||`, and the ternary operator.
 
@@ -94,7 +149,7 @@ Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not pr
 
 | Language | Test files | A test is | Skipped | Reason |
 |---|---|---|---|---|
-| TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/` | A call to `it` or `test` with a name and a function | `.skip`, `xit`, `xtest`, `.todo`, or inside `describe.skip` or `xdescribe` | A comment on the skip's line or the line before |
+| TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/`, test support files | A call to `it` or `test` with a name and a function | `.skip`, `xit`, `xtest`, `.todo`, or inside `describe.skip` or `xdescribe` | A comment on the skip's line or the line before |
 | Python | `test_*.py`, `*_test.py` | A function whose name starts with `test`, at module level or in a `Test*` class | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
 | Rust | Files under `tests/` and `benches/`; `#[cfg(test)]` modules in any file | A function with `#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[sqlx::test]`, `#[test_log::test]` or `#[rstest]` | `#[ignore]` | `#[ignore = "…"]` |
 | Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/` and the like) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
@@ -102,20 +157,43 @@ Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not pr
 
 - What a test calls is read from the names it imports and the objects it builds
 - In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read. In Kotlin, the fields and helpers of a `companion object` are read as the class's own
+- The tests of an inner class (`@Nested` and the like) use the fields and helpers of the class around it too
+- When a Kotlin test class extends another class of the test files (`class StoreTest : StoreTestSupport()`), the fields, helpers, mock fields and the code run before each test of the class it extends are read as its own, and so are those of the class that one extends in turn. The class it extends is found by name: one of the same package first, otherwise the only class of that name. Names in an inherited helper are read through the imports of the helper's own file
+- In Kotlin, a variable or field built with `apply` or `also` (`Queue().apply { limit = 3 }`) is of the class of the object built, since these two return the object they receive. One that holds an enum constant (`val kind = Kind.DAILY`) is of that enum class. A call chained right on a built object (`Store().append(1)`) calls that class's method
+- In Java and Kotlin, a call of the form `Class.member.method()` is read as follows. When the member is an enum constant, it calls the enum class's method (`Kind.ORDERS.toTable()` calls `Kind.toTable`). When the member is an inner class, it calls that class's method (`Outer.Inner.build()`). Any other member (a property of an `object` and the like) holds a value whose class is unknown, so the test counts as reading product code (`Reads`)
+- In Java and Kotlin, reading a property of a variable read as a product class (`cache.ttl`) counts as reading product code. Calling a method on it (`cache.clear()`) is a call, not a read
+- In Kotlin, `assertThrows<E> { … }` and `assertThrows<E>({ … })` are parsed by the grammar as two comparisons in a row (`(assertThrows < E) > { … }`). They are read as calls, and so are `mockk<T> { … }` and product functions written the same way. The type argument is not read as a value
 - A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change
 - In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
+- In TypeScript, `require('./x')` named by a string is read like an import, at the top of the file and inside a test: `const { send } = require('./mail')`, `const mail = require('./mail')`
 - What a TypeScript test calls includes the repository's components it renders as JSX elements (`<Page />`). Helpers of the file are followed whether declared with `function` or held by a `const` (`const renderPage = () => …`), including those declared inside a `describe` block. Functions an object holds (`helpers.twice` in `const helpers = { twice: (n) => … }`) are followed too
 - Variables declared outside a TypeScript test (in a `describe` block and the like) are typed by the class built with `new`, a type annotation (`let store: Store`), or an assignment such as one in `beforeEach` (`store = new Store()`). A local of the same name inside the test hides the outer variable. A variable the file gives two classes is not read
-- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
-- A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()`. Python's and Rust's clients are not read yet
+- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. A fixture not in the file is looked up in the `conftest.py` of the test's directory and the directories above it, nearest first. The body of a fixture a test receives is followed like a helper, since the test runs the product code the fixture calls. Lambdas held in a dict or the like are not read
+- A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()` (`supertest`); Hono's `app.request(…)` when its first argument is a string starting with `/` or `new Request(…)`, or its object is a name imported from the repository; and `app.fetch(new Request(…))`, which hands a request in memory to an application that serves HTTP the fetch way. The last two are recognised by the shape of the call, without an import. Python's and Rust's clients are not read yet
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
+
+### Test support files
+
+Some files are not test files but exist only for the tests: `test/helpers.ts`, `e2e/fixtures.ts`, `conftest.py`. They are not product code, so they are treated as test support files.
+
+| Language | Test support files |
+|---|---|
+| TypeScript | Files under one of these directories: `test/`, `tests/`, `e2e/`, `__mocks__/`, `__fixtures__/`, `testutil/`, `testutils/`, `test-utils/`, `test_utils/`. Files whose name ends in test joined to helper(s) (`test_helpers.ts`, `test-helpers.ts`, `testHelpers.ts`). `setupTests.*`, `jest.setup.*`, `vitest.setup.*` |
+| Python | Files under the same directories as TypeScript; `conftest.py`; files whose name ends in test joined to helper(s) (`test_helpers.py`) |
+
+- **Role**: `test`. They are therefore not targets, `comments/missing-doc` asks nothing of them, and they are not in the dependency diagram
+- **Tests inside**: in TypeScript, `it` and `test` in a support file are read as tests, since mocha runs the files under `test/` as tests. In Python, only files named like test files (`test_*.py`, `*_test.py`) are read for tests, since that is what pytest collects
+- **Following**: when a test calls a function of a support file, the function is followed. The calls inside are resolved through the support file's own imports, so a test that calls the product through a helper guards that product code
+  - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
+  - Calling a name the support file does not hold as a function (a value, say) counts as unresolved
+- **Other role settings**: files matching the `files.tests` globs are test files, as before
 
 ## Hazards and io
 
 | | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
-| `clock` | `Date.now`, `new Date()`, `performance.now` | `datetime.now`, `datetime.utcnow`, `date.today`, `time.time` | `SystemTime::now`, `Instant::now`, `Utc::now`, `Local::now` | `Instant.now`, `LocalDate(Time).now`, `System.currentTimeMillis`, `System.nanoTime` | as Java, `Clock.System.now` |
+| `clock` | `Date.now`, `new Date()`, `performance.now` | `datetime.now`, `datetime.utcnow`, `date.today`, `time.time` | `SystemTime::now`, `Instant::now`, `Utc::now`, `Local::now` | `Instant.now`, `LocalDate(Time).now`, `System.currentTimeMillis`, `System.nanoTime` | as Java, `Clock.System.now`, `measureTimeMillis`, `measureNanoTime`, `measureTime`, `measureTimedValue`, `TimeSource.Monotonic.markNow` |
 | `sleep` | `setTimeout` | `time.sleep`, `asyncio.sleep` | `thread::sleep`, `tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`, `delay` |
 | `mock` | `jest.mock`, `vi.mock`, `mock.module` (bun), `vi.spyOn`, `jest.spyOn`, `vi.stubGlobal`, importing `sinon` | importing `unittest.mock`, `mock`; `mocker`; `monkeypatch.setattr`, `monkeypatch.delattr` | `mock!`, using a `Mock<Name>` type that `#[automock]` generates, importing `mockall` | importing `org.mockito`; fields annotated `@Mock`, `@Spy`, `@MockBean`, Quarkus's `@InjectMock`, `@InjectSpy` | importing `io.mockk`, `org.mockito`; the Java annotations, `@MockK`, `@SpyK` |
 | `always-true` | `expect(true).toBe(true)`, `expect(x).toBe(x)` | `assert True`, `assert x == x` | `assert!(true)`, `assert_eq!(x, x)` | `assertTrue(true)`, `assertEquals(x, x)` | as Java |
@@ -125,6 +203,13 @@ Calls from tests are resolved to targets through the names each file imports fro
 The entries in the table are a selection. All of them are in the code's tables.
 
 Global APIs are recognised by name only: calling a local variable of the same name counts too. Counting one makes the unit impure, so when a name is mistaken, `tests/no-mock` errs by not reporting. Each API found is in the list of imports as an import with `Global` true ([adapters.md](adapters.md)), once per file.
+
+In Java and Kotlin, the `clock` and `sleep` hazards of the code that runs before each test are hazards of every test of the class.
+
+- The code that runs before each test is a method annotated `@BeforeEach`, `@BeforeAll`, `@Before` or `@BeforeClass`, and a Kotlin `init` block
+- That of the enclosing classes and of the class extended counts too
+- The hazard is placed on the line of that code, in another file when the class extended is there
+- The calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 
@@ -198,7 +283,9 @@ Such files count as read and are not listed under `unknown/unread` (see "Deliber
 ## Deliberately left out
 
 - Type inference beyond "a variable built by a constructor". Calls on anything else are unresolved
-- Every module system's corner cases: dynamic imports other than a test's `import()` named by a string, Python path manipulation, Rust `#[path]`, TypeScript project references. They resolve as external or unresolved
+- Every module system's corner cases: dynamic imports other than a test's `import()` named by a string, Python path manipulation, Rust `#[path]`, the parts of TypeScript project references other than aliases. They resolve as external or unresolved
+- A TypeScript `extends` naming a package in `node_modules` (`@tsconfig/node20/tsconfig.json`), and the subpath table of `exports` in `package.json`. Both rarely decide an alias or a package's source
+- Treating a file imported only from test files as a test support file. A file's role is decided before its imports are read, and changing roles after reading the imports would split each language's reading in two
 - Zero values that need type inference (functions without a written result type, and user-defined types)
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`

@@ -67,25 +67,80 @@ classDiagram
 | 言語 | ユニット | ID | 場所 | シンボルの ID |
 |---|---|---|---|---|
 | Go | パッケージ | import のパス | ディレクトリ | `<import path>.<Name>` |
-| TypeScript | ディレクトリ | そのディレクトリ | そのディレクトリ | `<directory>.<name>` |
+| TypeScript | ディレクトリ | そのディレクトリ | そのディレクトリ | `<directory>.<name>`。同じディレクトリの2つ以上のファイルが同じ名前をトップレベルで宣言するときは `<拡張子を除いたファイルのパス>.<name>`（`src/store/a.append`） |
 | Python | パッケージ（ディレクトリ） | そのディレクトリ | そのディレクトリ | `<module path>.<name>`。モジュールのパスはファイルのパスから `.py` を除いたもの（`src/app/store.create_post`）で、1つのパッケージの2つのモジュールがぶつからないようにする |
 | Rust | モジュール | その場所 | `src/a/b.rs` や `src/a/b/mod.rs` なら `src/a/b`。`lib.rs` と `main.rs` なら `src` | `<location>.<name>` |
 | Java、Kotlin | パッケージ | `package` の宣言 | ディレクトリ | `<package>.<Class>.<member>`。Kotlin のトップレベルの関数は `<package>.<name>` |
 
 どのシンボルの ID もユニットのパスの最後の要素と名前で終わります。だから、`store.append` のように設定した対象は、どの言語でもそのシンボルを名指せます（[rules-tests.ja.md](rules-tests.ja.md)）。
 
+TypeScript だけは、ぶつかる名前の ID にファイルのパスを使います。
+
+- **理由**: TypeScript のユニットはディレクトリです。同じディレクトリの2つのファイルが同じ名前を宣言すると、ディレクトリだけの ID では1つの対象にまとまります。そうなると、片方のテストを消しても `tests/scope-shrunk` が出ません
+- **範囲**: ファイルのパスを使うのは、ぶつかる名前だけです。ぶつからない名前の ID は `<directory>.<name>` のままです。依存のルールが見るユニットも、ディレクトリのままです
+- **テストからの名指し**: テストが import した名前は、import が解決したファイルから宣言したファイルを探して、その ID にします。`export { x } from './a'` と `export * from './a'` はたどります。`export default` は、宣言の名前（`export default function Page` なら `Page`）にします
+- **ID が変わるとき**: あとから同じ名前を宣言するファイルが増えると、前からあった方の ID が変わります。base の対象は head に無くなるので、`tests/scope-shrunk` は正当な削除として扱い、落としません
+
 ## import
 
 | 言語 | 内部になるとき | 解決 |
 |---|---|---|
-| TypeScript | 指定子が `.` か `/` で始まるか、ルートの `tsconfig.json` の `compilerOptions.paths` の別名に当たる | パスそのもの、次に `.ts`、`.tsx`、`.js`、`.jsx`、`.mjs`、次に `/index.*` を試してファイルに解決する。ユニットはそのディレクトリ。それ以外は外部のパッケージで、パスの最初の要素（`@scope/name` なら2つ）で名指す |
-| Python | モジュールがリポジトリにある（ディレクトリか `.py` ファイルとして、ルートか `src/` から） | 相対 import はファイルのパッケージから解決する。ユニットはモジュールのパッケージ。`b` がモジュールである `from a import b` はモジュールを束縛する |
+| TypeScript | 指定子が `.` か `/` で始まる。ファイルに最も近い `tsconfig.json` の別名か `baseUrl` で、リポジトリのファイルに解決できる。リポジトリのパッケージの名前で始まる | 下の「TypeScript の解決」。それ以外は外部のパッケージで、パスの最初の要素（`@scope/name` なら2つ）で名指す |
+| Python | モジュールがリポジトリにある（ディレクトリか `.py` ファイルとして、パッケージの根から） | パッケージの根は、ルート、`src/`、`pyproject.toml`・`setup.cfg`・`setup.py` のあるディレクトリ、そのディレクトリの `src/` です。import するファイルを含むディレクトリの根（その `src/` を含む）を、深いディレクトリのものから先に探します。そのあと、残りの根をパスの順に探します。相対 import はファイルのパッケージから解決する。ユニットはモジュールのパッケージ。`b` がモジュールである `from a import b` はモジュールを束縛する |
 | Rust | パスが `crate`、`self`、`super`、またはそのファイルのクレートの名前（`Cargo.toml` の `[lib] name`、無ければ `[package] name` の `-` を `_` にしたもの）で始まる。クレートの名前は、`tests/` の結合テストやバイナリがライブラリを呼ぶときに使う | モジュールのファイルである最長の接頭辞に解決し、残りは項目を名指す |
 | Java、Kotlin | リポジトリのどれかのファイルがそのパッケージを宣言している | `import a.b.C` はパッケージ `a.b`。`a.b.*` も同じ |
 
 外部の import は名前をそのまま `ToUnit` に持ち、`io` の表と照らし合わせます。
 
 TypeScript で型だけを持ち込む import と export は、import の一覧に載せません。`import type …`、`export type { … } from …`、名前がすべて `type` 付きの `import { type A, type B } from …` の3つです。コンパイルすると消えるので、実行するコードの依存ではないからです。値を1つでも持ち込むものは載せます。例: `import { type A, b } from …`、`import d, { type A } from …`。
+
+### TypeScript の解決
+
+指定子は次の順に試します。
+
+1. `.` か `/` で始まる指定子は、ファイルのパスとして解決します
+2. ファイルに最も近い `tsconfig.json` の `paths` の別名に当たれば、その行き先として解決します。行き先が複数あれば順に試します。2つの別名に当たるときは、接頭辞の長い方を使います
+3. 同じ `tsconfig.json` に `baseUrl` があり、その下のファイルに解決できれば、それにします
+4. リポジトリのどれかの `package.json` の `name` で始まれば、そのパッケージのソースとして解決します。`node_modules` の下の `package.json` は読みません
+5. どれにも当たらなければ、外部のパッケージです
+
+パスをファイルにするときは、次の順に試します。
+
+- パスそのもの
+- 拡張子（`.ts`、`.tsx`、`.js` など）を足したもの
+- `/index.*`
+- `.js`・`.mjs`・`.cjs` で終わるパスは、拡張子を `.ts`・`.tsx`・`.mts`・`.cts` に替えたもの。ESM の TypeScript は `./a.js` と書いて `a.ts` を読み込むからです
+
+ユニットは解決したファイルのディレクトリです。
+
+`tsconfig.json` は次のように読みます。
+
+- `extends` をたどります。たどるのは、相対パスと、リポジトリのパッケージの中のファイル（`@acme/tsconfig/base.json`）です。`extends` が配列なら、後のものが前のものを上書きします
+- `baseUrl` は、それを書いた設定ファイルの場所から解決します
+- `paths` は `baseUrl` から解決します。`baseUrl` が無ければ、`paths` を書いた設定ファイルの場所から解決します
+- 最も近い `tsconfig.json` に `paths` が無く、`references` があれば、`paths` を持つ最初の参照先の別名を使います。例: Vite の `tsconfig.app.json`
+- コメントと、末尾のカンマは読み飛ばします
+
+リポジトリのパッケージの名前だけの import（`@acme/shared`）は、パッケージのディレクトリの中の次のファイルに、この順で解決します。
+
+1. `src/index.*`
+2. `index.*`
+3. `exports["."]`、`module`、`main`、`types` が名指すファイル。`dist/`・`lib/`・`build/`・`out/` の下を名指すときは、`src/` の下の同じ名前のソースも試します
+
+`@acme/shared/sub` のようにパスが続くときは、パッケージのディレクトリと、その `src/` の下でパスを解決します。
+
+### 解決できない import
+
+リポジトリのものに見えるのに、どのファイルにも解決できない import があります。
+
+| 言語 | リポジトリのものに見える import |
+|---|---|
+| TypeScript | `.` か `/` で始まる。`paths` の別名に当たる。リポジトリのパッケージの名前で始まる |
+| Python | 相対 import。最初の要素がパッケージの根の下のパッケージである import（`app` があるときの `app.missing`） |
+
+- テストのファイルがこうした import から取り出した名前を呼ぶと、その呼び出しを未解決（`Test.Unresolved`）と数えます
+- 外部のパッケージとして扱って何も数えないと、製品のコードを呼んでいるかもしれないテストが `tests/guards-nothing` で落ちます。特定できないものは、`tests/target-unknown` で人の確認に回します
+- テストでないファイルの import は、これまでどおり扱います。TypeScript では、名指したパスのディレクトリをユニットとする内部の import です。Python では外部の import です
 
 ## シンボル
 
@@ -95,7 +150,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 | Python | モジュールの直下とクラスの中の `def` | `class` | 名前が `_` で始まらない | docstring（本体の最初の文が文字列） |
 | Rust | `fn` の項目と `impl` のメソッド | `struct`、`enum`、`trait`（インターフェースとして）、`type` | `pub` | 直前の `///` の行 |
 | Java | メソッドとコンストラクタ | クラス、インターフェース、enum、record | `public` | 直前の `/** */` コメント |
-| Kotlin | トップレベルとクラスの中の `fun` | クラス、インターフェース、object | `private`、`internal`、`protected` でない | 直前の `/** */` コメント |
+| Kotlin | トップレベルとクラスの中の `fun` | クラス、インターフェース、object | `private`、`internal`、`protected` でない | 直前の `/** */` コメント。間に引数のあるアノテーションの行（`@Suppress("x")`）があっても、その上のコメント |
 
 テストだけの領域（Rust の `#[cfg(test)]` モジュール）の中のコードは、製品のコードではなくテストのコードです。循環的複雑度は各言語の次のものを数えます。
 
@@ -108,7 +163,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 
 | 言語 | テストのファイル | テストとは | スキップ | 理由 |
 |---|---|---|---|---|
-| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下 | 名前と関数を渡す `it` か `test` の呼び出し | `.skip`、`xit`、`xtest`、`.todo`、または `describe.skip`・`xdescribe` の中 | スキップの行かその前の行のコメント |
+| TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下、テストの補助のファイル | 名前と関数を渡す `it` か `test` の呼び出し | `.skip`、`xit`、`xtest`、`.todo`、または `describe.skip`・`xdescribe` の中 | スキップの行かその前の行のコメント |
 | Python | `test_*.py`、`*_test.py` | モジュールの直下か `Test*` クラスの中の、名前が `test` で始まる関数 | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
 | Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
@@ -121,8 +176,23 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
   - 初期値の無いフィールド（`lateinit`、注入、コンストラクタのプロパティ）は、宣言した型として読みます
   - モックなど、ほかの方法で作ったフィールドは読みません
   - Kotlin の `companion object` の中のフィールドとヘルパーも、クラスのものと同じに読みます
+  - `@Nested` などの内側のクラスのテストは外側のクラスのフィールドとヘルパーも使います
+  - Kotlin のテストのクラスがテストのファイルにある別のクラスを継承するとき（`class StoreTest : StoreTestSupport()`）は、継承元のフィールド、ヘルパー、モックのフィールド、各テストの前に走るコードも、そのクラスのものと同じに読みます。継承元が別のクラスを継承していれば、それもたどります
+  - 継承元は名前で探します。同じパッケージのものを先に探し、無ければ、その名前のクラスが1つだけのときに使います
+  - 継承元のヘルパーの中の名前は継承元のファイルの import で読みます
+- **Kotlin の変数の型**: 次の変数とフィールドも、製品のクラスとして読みます
+  - `apply` か `also` で作ったもの（`Queue().apply { limit = 3 }`）。この2つは受け取ったオブジェクトを返すからです
+  - enum の定数を入れたもの（`val kind = Kind.DAILY`）。その enum のクラスとして読みます
+  - 作ったオブジェクトにそのまま続けた呼び出し（`Store().append(1)`）も、そのクラスのメソッドの呼び出しとして読みます
+- **製品のクラスのメンバーの上の呼び出し**: Java と Kotlin で、`クラス.メンバー.メソッド()` の形の呼び出しは次のように読みます
+  - メンバーが enum の定数なら、その enum のクラスのメソッドの呼び出しです（`Kind.ORDERS.toTable()` は `Kind.toTable`）
+  - メンバーが内側のクラスなら、そのクラスのメソッドの呼び出しです（`Outer.Inner.build()`）
+  - それ以外（`object` のプロパティなど）は、値のクラスが分かりません。そのため、製品のコードの値を読んだと数えます（`Reads`）
+- **製品のオブジェクトのプロパティ**: Java と Kotlin で、製品のクラスとして読んだ変数のプロパティを読むと（`cache.ttl`）、製品のコードの値を読んだと数えます。メソッドを呼ぶ（`cache.clear()`）のは呼び出しで、読んだとは数えません
+- **Kotlin の型引数とラムダを取る呼び出し**: `assertThrows<E> { … }` と `assertThrows<E>({ … })` は、文法の上では比べる式が2つ並んだ形（`(assertThrows < E) > { … }`）として読まれます。これも呼び出しとして読みます。`mockk<T> { … }` や、製品のコードの関数でも同じです。型引数は値として読みません
 - **初期値で製品のコードの値を使うフィールド**: テストが `private val sql = QUERY.trim()` のようなフィールドを読むと、製品のコードの値を読んだと数えます（`Reads`）。製品のコードの値が変われば、テストの結果も変わり得るからです
 - **TypeScript の動的な import**: テストが文字列で名指した `import('./x')` で読み込んだモジュールから取り出した名前も読みます。ファイルの中の関数が1つのモジュールだけを読み込んで返すとき（モジュールを読み直すヘルパー）は、その関数の結果から取り出した名前も読みます
+- **TypeScript の `require`**: 文字列で名指した `require('./x')` は、ファイルの直下でもテストの中でも、import と同じに読みます。例: `const { send } = require('./mail')`、`const mail = require('./mail')`
 - **TypeScript の JSX とヘルパー**: テストが呼ぶものには、JSX の要素（`<Page />`）で描いたリポジトリの部品も入ります。ファイルの中のヘルパーは、`function` の宣言でも、`const` に入れた関数（`const renderPage = () => …`）でもたどります。`describe` の中で宣言したものも同じです。オブジェクトに入れた関数（`const helpers = { twice: (n) => … }` の `helpers.twice`）もたどります
 - **TypeScript のテストの外の変数**: `describe` の中などで宣言した変数は、次のものから型を読みます。`new` で作ったクラス、型の注釈（`let store: Store`）、`beforeEach` などでの代入（`store = new Store()`）
   - テストの中の同じ名前のローカルは外の変数を隠します
@@ -132,7 +202,9 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
   - クラスの `setUp`・`setup_method` などで `self` に入れたクラス（`self.store = Store()`）
   - ファイルの直下で名前に入れた lambda（`twice = lambda n: double(n)`）は、ヘルパーとしてたどります
   - テストの中で同じ名前に代入し直すと、fixture から受け取った型は消えます
-  - ほかのファイルの fixture（`conftest.py`）と、辞書などに入れた lambda は読みません
+  - fixture が同じファイルに無ければ、テストのディレクトリとその上のディレクトリの `conftest.py` から探します。近いものが先です
+  - テストが受け取る fixture の本体は、ヘルパーと同じようにたどります。fixture の中で呼んだ製品のコードも、テストが動かすからです
+  - 辞書などに入れた lambda は読みません
 - **HTTP のテストの道具**: 道具の入口を呼ぶテストは、アプリを外から動かすテスト（`Test.Drives`）とします。道具は、ファイルがその道具を import していることで見分けます。Python と Rust の道具は読みません
 
 | 言語 | 道具の入口 | import |
@@ -140,15 +212,33 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 | Java、Kotlin | REST Assured の `given()` | `io.restassured` |
 | Java、Kotlin | MockMvc の `perform()` | `org.springframework.test.web.servlet` |
 | Java、Kotlin | WebTestClient の `exchange()` | `org.springframework.test.web.reactive.server` |
-| TypeScript | supertest の `request()` | |
+| TypeScript | supertest の `request()` | `supertest` |
+| TypeScript | Hono の `app.request(…)`。最初の引数が `/` で始まる文字列か `new Request(…)` のとき、またはオブジェクトがリポジトリから import した名前のとき | 要らない（呼び出しの形で見分ける） |
+| TypeScript | `app.fetch(new Request(…))`。fetch の形で HTTP を受けるアプリに、メモリの中で要求を渡す | 要らない（呼び出しの形で見分ける） |
 
 テストからの呼び出しは Go のアダプタと同じように対象に解決します。たどるのは、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数です。解決できない呼び出しは未解決として数えます。
+
+### テストの補助のファイル
+
+テストのファイルではないのに、テストのためだけにあるファイルがあります。例: `test/helpers.ts`、`e2e/fixtures.ts`、`conftest.py`。これらは製品のコードではないので、テストの補助のファイルとして扱います。
+
+| 言語 | テストの補助のファイル |
+|---|---|
+| TypeScript | 次のディレクトリの下のファイル: `test/`、`tests/`、`e2e/`、`__mocks__/`、`__fixtures__/`、`testutil/`、`testutils/`、`test-utils/`、`test_utils/`。名前が test と helper(s) をつないだもので終わるファイル（`test_helpers.ts`、`test-helpers.ts`、`testHelpers.ts`）。`setupTests.*`、`jest.setup.*`、`vitest.setup.*` |
+| Python | TypeScript と同じディレクトリの下のファイル。`conftest.py`。名前が test と helper(s) をつないだもので終わるファイル（`test_helpers.py`） |
+
+- **役割**: `test` です。そのため、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません
+- **中のテスト**: TypeScript では、補助のファイルの中の `it` や `test` もテストとして読みます。mocha は `test/` の下のファイルをテストとして読むからです。Python では、テストのファイルの名前（`test_*.py`、`*_test.py`）のものだけをテストとして読みます。pytest がそう集めるからです
+- **たどり方**: テストが補助のファイルの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のファイル自身の import で解決します。そのため、ヘルパーを通して製品のコードを呼ぶテストは、その製品のコードを守ります
+  - 例: `test/helpers.ts` の `createApp()` が `src/app.ts` の `buildApp()` を呼ぶなら、`createApp()` を呼ぶテストは `buildApp` を守ります
+  - 補助のファイルの中で関数として見つからない名前（関数でない値など）を呼ぶと、未解決と数えます
+- **ほかの役割の指定**: `files.tests` の glob に合うファイルは、これまでどおりテストのファイルです
 
 ## 危険と io
 
 | | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
-| `clock` | `Date.now`、`new Date()`、`performance.now` | `datetime.now`、`datetime.utcnow`、`date.today`、`time.time` | `SystemTime::now`、`Instant::now`、`Utc::now`、`Local::now` | `Instant.now`、`LocalDate(Time).now`、`System.currentTimeMillis`、`System.nanoTime` | Java と同じ、`Clock.System.now` |
+| `clock` | `Date.now`、`new Date()`、`performance.now` | `datetime.now`、`datetime.utcnow`、`date.today`、`time.time` | `SystemTime::now`、`Instant::now`、`Utc::now`、`Local::now` | `Instant.now`、`LocalDate(Time).now`、`System.currentTimeMillis`、`System.nanoTime` | Java と同じ、`Clock.System.now`、`measureTimeMillis`、`measureNanoTime`、`measureTime`、`measureTimedValue`、`TimeSource.Monotonic.markNow` |
 | `sleep` | `setTimeout` | `time.sleep`、`asyncio.sleep` | `thread::sleep`、`tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`、`delay` |
 | `mock` | `jest.mock`、`vi.mock`、`mock.module`（bun）、`vi.spyOn`、`jest.spyOn`、`vi.stubGlobal`、`sinon` の import | `unittest.mock`、`mock` の import。`mocker`。`monkeypatch.setattr`、`monkeypatch.delattr` | `mock!`、`#[automock]` が作る `Mock<名前>` の型を使うこと、`mockall` の import | `org.mockito` の import。`@Mock`、`@Spy`、`@MockBean`、Quarkus の `@InjectMock`・`@InjectSpy` を付けたフィールド | `io.mockk`、`org.mockito` の import。Java と同じ注釈、`@MockK`、`@SpyK` |
 | `always-true` | `expect(true).toBe(true)`、`expect(x).toBe(x)` | `assert True`、`assert x == x` | `assert!(true)`、`assert_eq!(x, x)` | `assertTrue(true)`、`assertEquals(x, x)` | Java と同じ |
@@ -158,6 +248,13 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 表の項目は抜粋です。すべての項目は、コードの表にあります。
 
 グローバルの API は名前だけで見ます。同じ名前のローカルの変数を呼んでも数えます。数えると、ユニットは純粋でなくなります。そのため、取り違えたときは、`tests/no-mock` が報告を出さない側に間違えます。見つけた API は、`Global` を真にした import として一覧に載せます（[adapters.ja.md](adapters.ja.md)）。1つのファイルで同じ API は1回だけ載せます。
+
+Java と Kotlin では、各テストの前に走るコードの `clock` と `sleep` も、そのクラスの各テストの危険とします。
+
+- 各テストの前に走るコードとは、`@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロックです
+- 外側のクラスと継承元のクラスのものも入ります
+- 危険の場所はそのコードのある行です。継承元が別のファイルにあれば、そのファイルの行です
+- そのコードの中の呼び出しや確かめは、テストのものとは数えません。テストが何を守るかは、テストの本体で決まるからです
 
 設定での項目の足し方は Go と同じです。
 
@@ -240,7 +337,9 @@ TypeScript は拡張子で文法を分けます。どちらの文法も、もう
 ## 意図して入れなかったもの
 
 - 「コンストラクタで作った変数」を超える型の推定。それ以外のものへの呼び出しは未解決になる
-- 各モジュールの仕組みの隅の場合（テストの中で文字列で名指した `import()` のほかの動的な import、Python のパスの操作、Rust の `#[path]`、TypeScript の project references）。外部か未解決として扱う
+- 各モジュールの仕組みの隅の場合（テストの中で文字列で名指した `import()` のほかの動的な import、Python のパスの操作、Rust の `#[path]`、TypeScript の project references の別名のほかの部分）。外部か未解決として扱う
+- TypeScript の `node_modules` のパッケージを名指す `extends`（`@tsconfig/node20/tsconfig.json`）と、`package.json` の `exports` の部分パスの表。どちらも、別名やパッケージのソースを決めることがまれだからです
+- テストのファイルからしか import されないファイルを、テストの補助のファイルとみなすこと。役割は import を読む前に決めるので、import を読んでから役割を変えると、言語の読み方を2回に分けることになるからです
 - 型を推定して決めるゼロの値（戻り値の型を書いていない関数や、利用者が定義した型）
 - Rust のマクロの呼び出し（`println!` など）を消すこと。マクロは、宣言や制御の流れを含むことがある
 - Python の `is` と `in` を反転すること

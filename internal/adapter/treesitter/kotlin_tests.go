@@ -16,8 +16,23 @@ func (k *kotlin) tests(f *file, t *tables) []facts.Test {
 	if !f.test {
 		return nil
 	}
-	// kotest's matchers: x.shouldBe(3), and x shouldBe 3 as an infix call.
-	jf := &jvmFile{f: f, j: &k.jvm, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{}, assertPrefixes: []string{"should"}}
+	jf := k.testFile(f, t)
+	var out []facts.Test
+	for _, n := range named(f.root) {
+		if ktTypes[n.Kind()] {
+			out = append(out, jf.ktClass(n, "", nil, jvmScope{fields: map[string]string{}})...)
+		}
+	}
+	return out
+}
+
+// testFile binds the names a Kotlin test file can use.
+func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
+	// kotest's matchers: x.shouldBe(3), and x shouldBe 3 as an infix call. MockK's checks of
+	// suspending calls (coVerify, coVerifyOrder) and confirmVerified start with neither verify nor
+	// assert.
+	jf := &jvmFile{f: f, j: &k.jvm, kt: k, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{},
+		assertPrefixes: []string{"should", "coverify", "confirmverified"}}
 	for _, fn := range k.functions[f.unit] {
 		jf.names[fn] = f.unit + "." + fn
 	}
@@ -25,13 +40,7 @@ func (k *kotlin) tests(f *file, t *tables) []facts.Test {
 		jf.names[v] = f.unit + "." + v
 	}
 	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
-	var out []facts.Test
-	for _, n := range named(f.root) {
-		if ktTypes[n.Kind()] {
-			out = append(out, jf.ktClass(n, "", nil)...)
-		}
-	}
-	return out
+	return jf
 }
 
 // ktAnnotations returns a declaration's annotations by name.
@@ -57,42 +66,30 @@ func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
 	return out
 }
 
-func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node) []facts.Test {
+func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node, outer jvmScope) []facts.Test {
 	f := jf.f
 	name := prefix + f.field(n, "name")
-	for k, a := range ktAnnotations(f, n) {
+	anns := ktAnnotations(f, n)
+	leading, _ := ktLeading(f, n)
+	for k, a := range leading {
+		anns[k] = a
+	}
+	for k, a := range anns {
 		if jvmSkipAnnotations[k] {
 			classSkip = a
 		}
 	}
-	var tests []*sitter.Node
-	fields := jf.ktConstructorFields(n)
-	for _, m := range ktClassMembers(n) {
-		switch m.Kind() {
-		case "property_declaration":
-			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
-				jf.mocks = append(jf.mocks, m)
-			} else {
-				if name, class := jf.ktFieldType(m); class != "" {
-					fields[name] = class
-				}
-				jf.ktNoteValueField(m)
-			}
-		case "function_declaration":
-			if hasAny(ktAnnotations(f, m), jvmTestAnnotations) {
-				tests = append(tests, m)
-			} else {
-				jf.helpers[f.field(m, "name")] = ktBody(m)
-			}
-		}
-	}
+	scope := outer.nested()
+	jf.ktInherit(n, &scope, 0)
+	tests, mocks := jf.ktCollect(n, &scope)
+	jf.mocks = append(jf.mocks, mocks...)
 	var out []facts.Test
 	for _, m := range tests {
-		out = append(out, jf.ktTest(name+"."+f.field(m, "name"), m, classSkip, fields))
+		out = append(out, jf.ktTest(name+"."+f.field(m, "name"), m, classSkip, scope))
 	}
 	for _, m := range ktMembers(n) {
 		if ktTypes[m.Kind()] {
-			out = append(out, jf.ktClass(m, name+".", classSkip)...)
+			out = append(out, jf.ktClass(m, name+".", classSkip, scope)...)
 		}
 	}
 	return out
@@ -107,7 +104,7 @@ func ktBody(fn *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, fields map[string]string) facts.Test {
+func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
 	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
 	skip := classSkip
@@ -119,10 +116,7 @@ func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, fields map[str
 	if skip != nil {
 		t.skip(annotationReason(jf.f, skip), skip)
 	}
-	for _, mk := range jf.mocks {
-		t.hazard(facts.HazardMock, mk)
-	}
-	w := &jvmWalk{jf: jf, t: t, vars: copyMap(fields), locals: map[string]bool{}, walking: map[string]bool{}}
+	w := jf.startTest(t, scope, func(w *jvmWalk, n *sitter.Node) { w.walk(n, ktLoops, w.ktVisit) })
 	w.walk(ktBody(m), ktLoops, w.ktVisit)
 	return t.done()
 }
@@ -133,6 +127,12 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 		w.ktProperty(n)
 	case "call_expression":
 		w.ktCall(n)
+	case "binary_expression":
+		if callee, arg := ktTypedCall(n); callee != nil {
+			w.ktInvoke(n, callee, []*sitter.Node{arg})
+			w.walk(arg, ktLoops, w.ktVisit) // not the type argument, which is no value the test reads
+			return false
+		}
 	case "infix_expression":
 		if ops := named(n); len(ops) == 3 {
 			w.t.assertion(w.jf.f.text(ops[1]), w.jf.t.asserts, w.jf.assertPrefixes...)
@@ -140,7 +140,7 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 	case "identifier":
 		if _, ok := w.jf.names[w.jf.f.text(n)]; ok {
 			w.t.readName(n, ktUses)
-		} else if w.readsValueField(n) {
+		} else if w.readsValueField(n) || w.ktReadsProperty(n) {
 			w.t.test.Reads++
 		}
 	}
@@ -154,26 +154,34 @@ var ktUses = useGrammar{
 	types:   set("user_type", "type_arguments"),
 }
 
-// ktProperty records a local variable, typed when a constructor of a known class builds it.
+// ktProperty records a local variable, typed when it holds an object of a known class (ktBuilt).
 func (w *jvmWalk) ktProperty(n *sitter.Node) {
 	f := w.jf.f
 	name := ""
 	for _, c := range named(n) {
-		switch c.Kind() {
-		case "variable_declaration":
+		switch {
+		case c.Kind() == "variable_declaration":
 			name = f.text(c.NamedChild(0))
 			w.locals[name] = true
-		case "call_expression":
-			if class, ok := w.jf.names[f.text(c.NamedChild(0))]; ok && name != "" {
+		case name != "" && !strings.Contains(c.Kind(), "comment"):
+			if class := w.jf.ktBuilt(c); class != "" {
 				w.vars[name] = class
 			}
 		}
 	}
 }
 
+var (
+	ktReturnsReceiver = set("apply", "also")
+	// ktScopeFunctions are the standard library's functions every object has, not the product's.
+	ktScopeFunctions = set("apply", "also", "let", "run", "takeIf", "takeUnless")
+)
+
 func (w *jvmWalk) ktCall(n *sitter.Node) {
-	f := w.jf.f
 	callee := n.NamedChild(0)
+	if callee.Kind() == "call_expression" {
+		return // f(x) { … }: the call is the inner f(x), visited on its own
+	}
 	var args []*sitter.Node
 	for _, c := range named(n) {
 		if c.Kind() == "value_arguments" {
@@ -184,15 +192,27 @@ func (w *jvmWalk) ktCall(n *sitter.Node) {
 			}
 		}
 	}
-	obj, name := "", f.text(callee)
+	w.ktInvoke(n, callee, args)
+}
+
+// ktInvoke handles the call n of callee: a constructor of the product, or what invoke handles.
+func (w *jvmWalk) ktInvoke(n, callee *sitter.Node, args []*sitter.Node) {
+	f := w.jf.f
+	obj, name, built := "", f.text(callee), ""
 	if callee.Kind() == "navigation_expression" && callee.NamedChildCount() == 2 {
 		obj, name = f.text(callee.NamedChild(0)), f.text(callee.NamedChild(1))
+		if callee.NamedChild(0).Kind() == "call_expression" && !ktScopeFunctions[name] {
+			built = w.jf.ktBuilt(callee.NamedChild(0)) // Store().append(1)
+		}
 	}
 	if obj == "" && w.jf.names[name] != "" && w.jf.j.classes[packageOf(w.jf.names[name])][name] {
 		w.t.call(w.jf.names[name], nil) // a constructor call: Store()
 		return
 	}
 	w.invoke(n, obj, name, args, func(body *sitter.Node) { w.walk(body, ktLoops, w.ktVisit) })
+	if built != "" {
+		w.t.call(built+"."+name, scopeArg(w.jf.j.scopes, built+"."+name, args))
+	}
 }
 
 // packageOf returns the package of a class target ("a.b.Store" -> "a.b").
@@ -201,8 +221,9 @@ func packageOf(class string) string {
 }
 
 // ktFieldType types a property of a test class, so that calls through it reach the product: by the
-// constructor that builds it, or, with no initializer (lateinit, injected), by its declared type. A
-// property built some other way (mockk(), a factory) is left untyped: what it holds is unknown.
+// object its initializer builds (ktBuilt), or, with no initializer (lateinit, injected), by its
+// declared type. A property built some other way (mockk(), a factory) is left untyped: what it holds
+// is unknown.
 func (jf *jvmFile) ktFieldType(n *sitter.Node) (string, string) {
 	f := jf.f
 	name, declared, init := "", "", (*sitter.Node)(nil)
@@ -226,10 +247,8 @@ func (jf *jvmFile) ktFieldType(n *sitter.Node) (string, string) {
 		return "", ""
 	case init == nil:
 		return name, jf.names[declared]
-	case init.Kind() == "call_expression":
-		return name, jf.names[f.text(init.NamedChild(0))]
 	}
-	return name, ""
+	return name, jf.ktBuilt(init)
 }
 
 // ktConstructorFields types the val and var parameters of a test class's primary constructor

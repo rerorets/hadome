@@ -139,8 +139,8 @@ classDiagram
 | 言語 | テストのファイル |
 |---|---|
 | Go | `*_test.go` |
-| TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル |
-| Python | `test_*.py`、`*_test.py` |
+| TypeScript | `*.test.ts(x)`、`*.spec.ts(x)`、`__tests__/` の下のファイル、テストの補助のファイル（`test/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
+| Python | `test_*.py`、`*_test.py`、テストの補助のファイル（`conftest.py`、`tests/` の下など。[adapters-treesitter.ja.md](adapters-treesitter.ja.md)） |
 | Rust | 任意のファイル内の `#[cfg(test)]` モジュール、`tests/`・`benches/` の下のファイル |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/` など）のファイル |
 | Kotlin | Java と同じ |
@@ -230,7 +230,7 @@ base にある行き先の分からない import を持つユニットは、純�
 | Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require`、testify の suite の確かめ（`s.Equal(…)`、`s.Require().…`） |
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
 | TypeScript | `expect(…)`、`assert` と `assert.…` |
-| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など）、Spring MockMvc の `andExpect` |
+| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、MockK の `verify…`・`coVerify…`・`confirmVerified`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など。本体が `then()` で終わるヘルパーに続くものも入る）、Spring MockMvc の `andExpect` |
 | Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
 
 危険の分類と同じく、この表は例で、全体の表は各アダプタにあります。Go 以外の言語では、名前が `assert`・`expect`・`verify` で始まる関数も assert とみなします。例: `assertEquals`、`assert_called_once`、`expectValid`。ほかのファイルにある確かめるためのヘルパーは、アダプタが中を読めませんが、名前から確かめていると分かるからです。
@@ -251,7 +251,7 @@ base にある行き先の分からない import を持つユニットは、純�
 | Go | パッケージ変数と定数（`store.Limit`、同じパッケージの `limit`）と、呼ばずに値として渡す関数（`sort.Slice(rows, store.Less)`） |
 | Python | 製品のコードから import した名前を、呼ばずに式の中で使う（`MAX_ROWS` を比べる、`normalize` を `map` に渡す、`isinstance(x, Store)`） |
 | TypeScript | 製品のコードから import した名前を、呼ばずに式の中で使う |
-| Java / Kotlin | クラスの静的フィールドと定数（`Store.LIMIT`）、メソッド参照（`Store::normalize`）、Kotlin のトップレベルの `val` |
+| Java / Kotlin | クラスの静的フィールドと定数（`Store.LIMIT`）、メソッド参照（`Store::normalize`）、Kotlin のトップレベルの `val`、製品のオブジェクトのプロパティ（`cache.ttl`） |
 | Rust | 製品のコードの `const`・`static` と、呼ばずに値として渡す関数。マクロの引数に出てくる製品のコードの名前も数える（パーサがマクロの引数を式として読まないので、呼び出しと見分けられない） |
 
 型の位置に出てくる名前は数えません。例: 型注釈、TypeScript の `import type`、ジェネリクスの型引数。型は実行されないので、型にしか製品のコードの名前が出てこないテストは、製品のコードを動かしません。
