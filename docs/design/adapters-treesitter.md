@@ -267,6 +267,25 @@ The zero value comes from the declared result type.
 - Functions whose result type is not in the table, or is not written (TypeScript functions without one, Python functions without an annotation, Kotlin expression bodies), get no mutant of this kind
 - What is replaced is the value of a `return`. In Rust, the last expression of a function's body (one without `;`) is replaced too, since Rust usually returns a value without writing `return`
 - As in Go, a statement that returns a boolean literal (negating a boolean breaks it) or already returns the zero value gets none
+- Nor does a statement that returns a constant whose value is the zero value. For example, with `export const OK = 0`, `return OK` in a function returning `number` is not broken
+
+Constants are read from syntax, only from declarations in the same file. Of the declarations below, those whose value is a literal are read.
+
+| Language | Declarations read |
+|---|---|
+| TypeScript | `const` at the top of the file (`export const` included) |
+| Python | `NAME = value` at the top of the module, only when the file has no other assignment to that name and no `global` of it |
+| Rust | `const` and `static` outside functions and `impl`. `static mut` is not read |
+| Java | fields with `final`, and interface constants |
+| Kotlin | `val` and `const val` outside functions. Those with `open` or `abstract`, and those with a getter, are not read |
+
+- Whether the value is the zero value is decided by comparing it with the zero value of the result type. A number counts as the same whichever way it is written, `0`, `0.0`, `0x0`, `0L` or `0_u64`, when its value is zero
+- Only Python tells `int` from `float`, since a test can tell `0` from `0.0`. For example, `return RATE` in a function returning `float` is broken into `0.0` even when `RATE = 0`
+- These names are broken as before:
+  - names that can be reassigned. For example, TypeScript's `let`, Rust's `static mut`, Java fields without `final`, Kotlin's `var`
+  - names declared more than once in the file, with different values or in a form that is not read
+  - names declared as a parameter or a local variable in the function being broken
+  - constants declared in another file
 
 The other rules are Go's too.
 
@@ -320,6 +339,7 @@ At the top level of a file, the Kotlin grammar may read annotations with argumen
 - A TypeScript `extends` naming a package in `node_modules` (`@tsconfig/node20/tsconfig.json`), and the subpath table of `exports` in `package.json`. Both rarely decide an alias or a package's source
 - Treating a file imported only from test files as a test support file. A file's role is decided before its imports are read, and changing roles after reading the imports would split each language's reading in two
 - Zero values that need type inference (functions without a written result type, and user-defined types)
+- Reading constants of other files to tell constants whose value is the zero value. Following imports needs each language's way of reading modules, which `Mutants` does not have. A constant it cannot read is broken as before, so no test gap goes unseen
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`
 - Reporting a file with a syntax error as unread. Almost every such error comes from a grammar failing on correct code, so it would ask for a review that changing the code cannot clear

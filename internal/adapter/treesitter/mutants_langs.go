@@ -21,17 +21,21 @@ func statementOf(statement string, calls ...string) func(f *file, n *sitter.Node
 var tsBreaks = &breaks{
 	functions: set("function_declaration", "generator_function_declaration", "method_definition", "arrow_function",
 		"function_expression", "generator_function"),
-	nested:   set("class_declaration", "class"),
-	binary:   set("binary_expression"),
-	strings:  set("string", "template_string"),
-	not:      set("unary_expression"),
-	bools:    set("true", "false"),
-	literals: lowerBools,
-	returns:  set("return_statement"),
-	call:     statementOf("expression_statement", "call_expression"),
-	removed:  ";",
-	body:     bodyField,
-	zero:     tsZero,
+	nested:    set("class_declaration", "class"),
+	binary:    set("binary_expression"),
+	strings:   set("string", "template_string"),
+	not:       set("unary_expression"),
+	bools:     set("true", "false"),
+	literals:  lowerBools,
+	returns:   set("return_statement"),
+	call:      statementOf("expression_statement", "call_expression"),
+	removed:   ";",
+	body:      bodyField,
+	zero:      tsZero,
+	constants: tsConstants,
+	binders: map[string]string{"variable_declarator": "name", "required_parameter": "pattern",
+		"optional_parameter": "pattern", "arrow_function": "parameter", "catch_clause": "parameter",
+		"for_in_statement": "left", "function_declaration": "name", "class_declaration": "name"},
 }
 
 func tsZero(f *file, fn *sitter.Node) string {
@@ -61,19 +65,27 @@ func tsZero(f *file, fn *sitter.Node) string {
 }
 
 var pyBreaks = &breaks{
-	functions: set("function_definition"),
-	nested:    set("lambda", "class_definition"),
-	binary:    set("comparison_operator", "binary_operator"),
-	strings:   set("string", "concatenated_string"),
-	not:       set("not_operator"),
-	bools:     set("true", "false"),
-	literals:  map[string]string{"True": "False", "False": "True"},
-	returns:   set("return_statement"),
-	call:      statementOf("expression_statement", "call"),
-	removed:   "pass",
-	body:      bodyField,
-	zero:      pyZero,
+	functions:     set("function_definition"),
+	nested:        set("lambda", "class_definition"),
+	binary:        set("comparison_operator", "binary_operator"),
+	strings:       set("string", "concatenated_string"),
+	not:           set("not_operator"),
+	bools:         set("true", "false"),
+	literals:      map[string]string{"True": "False", "False": "True"},
+	returns:       set("return_statement"),
+	call:          statementOf("expression_statement", "call"),
+	removed:       "pass",
+	body:          bodyField,
+	zero:          pyZero,
+	constants:     pyConstants,
+	binders:       pyBinders,
+	strictNumbers: true,
 }
+
+var pyBinders = map[string]string{"parameters": "", "assignment": "left", "augmented_assignment": "left",
+	"for_statement": "left", "as_pattern_target": "", "named_expression": "name", "global_statement": "",
+	"nonlocal_statement": "", "import_statement": "", "import_from_statement": "", "function_definition": "name",
+	"class_definition": "name"}
 
 func pyZero(f *file, fn *sitter.Node) string {
 	t := fn.ChildByFieldName("return_type")
@@ -110,6 +122,10 @@ var rustBreaks = &breaks{
 	tail:      rustTail,
 	body:      bodyField,
 	zero:      rustZero,
+	constants: rustConstants,
+	binders: map[string]string{"let_declaration": "pattern", "parameter": "pattern", "for_expression": "pattern",
+		"match_arm": "pattern", "let_condition": "pattern", "closure_parameters": "", "const_item": "name",
+		"static_item": "name", "function_item": "name"},
 }
 
 // rustTail returns the last expression of a block, the value it gives without a return.
@@ -167,6 +183,10 @@ var javaBreaks = &breaks{
 	removed:   ";",
 	body:      bodyField,
 	zero:      javaZero,
+	constants: javaConstants,
+	binders: map[string]string{"variable_declarator": "name", "formal_parameter": "name",
+		"catch_formal_parameter": "name", "enhanced_for_statement": "name", "inferred_parameters": "",
+		"lambda_expression": "parameters", "resource": "name"},
 }
 
 func javaZero(f *file, fn *sitter.Node) string {
@@ -214,7 +234,10 @@ var ktBreaks = &breaks{
 		}
 		return nil
 	},
-	zero: ktZero,
+	zero:      ktZero,
+	constants: ktConstants,
+	binders: map[string]string{"variable_declaration": "", "function_value_parameters": "",
+		"lambda_parameters": ""},
 }
 
 var ktZeros = map[string]string{"Int": "0", "Short": "0", "Byte": "0", "Long": "0L", "Double": "0.0", "Float": "0f",

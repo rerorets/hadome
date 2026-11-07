@@ -52,6 +52,13 @@ type breaks struct {
 	// zero returns the zero value of a function's declared result type, or "" when it has none
 	// that hadome mutate knows.
 	zero func(f *file, fn *sitter.Node) string
+	// constants reads the names a file declares outside functions, for zeroConstant.
+	constants func(f *file) consts
+	// binders are the nodes that declare names inside a function, each with the field that holds
+	// the names, or "" when any identifier inside the node is one.
+	binders map[string]string
+	// strictNumbers tells an integer zero from a float zero, where a test can see the difference.
+	strictNumbers bool
 }
 
 func bodyField(fn *sitter.Node) *sitter.Node { return fn.ChildByFieldName("body") }
@@ -95,6 +102,10 @@ func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms
 	}
 	defer done()
 	sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
+	var declared consts
+	if l.breaks.constants != nil {
+		declared = l.breaks.constants(f)
+	}
 	var out []facts.Mutant
 	for _, s := range syms {
 		fn := l.functionAt(f, s.Line)
@@ -105,7 +116,8 @@ func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms
 		if body == nil {
 			continue
 		}
-		m := mutator{b: l.breaks, f: f, fn: s.ID, zero: l.breaks.zero(f, fn), seen: map[string]int{}}
+		m := mutator{b: l.breaks, f: f, fn: s.ID, decl: fn, zero: l.breaks.zero(f, fn), consts: declared,
+			seen: map[string]int{}}
 		m.function(body)
 		out = append(out, m.out...)
 	}
@@ -130,12 +142,14 @@ func (l *lang) functionAt(f *file, at int) *sitter.Node {
 
 // mutator collects the mutants of one function.
 type mutator struct {
-	b    *breaks
-	f    *file
-	fn   string
-	zero string
-	seen map[string]int // anchor without its index -> how many so far
-	out  []facts.Mutant
+	b      *breaks
+	f      *file
+	fn     string
+	decl   *sitter.Node // the function's declaration
+	zero   string
+	consts consts
+	seen   map[string]int // anchor without its index -> how many so far
+	out    []facts.Mutant
 }
 
 func (m *mutator) function(body *sitter.Node) {
@@ -180,13 +194,13 @@ func (m *mutator) negation(n *sitter.Node) {
 }
 
 // returned breaks a returned value into the zero value, unless negating a boolean already breaks it
-// or it is the zero value already.
+// or it is the zero value already, written out or as a constant.
 func (m *mutator) returned(v *sitter.Node) {
 	if v == nil || m.zero == "" {
 		return
 	}
 	text := m.f.text(v)
-	if _, boolean := m.b.literals[text]; boolean || text == m.zero {
+	if _, boolean := m.b.literals[text]; boolean || text == m.zero || m.zeroConstant(v) {
 		return
 	}
 	m.add(returnZero, v.StartByte(), v.EndByte(), m.zero)
