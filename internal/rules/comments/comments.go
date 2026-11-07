@@ -121,7 +121,7 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 		if !s.Exported || s.Doc {
 			continue
 		}
-		name := s.ID[strings.LastIndex(s.ID, "/")+1:]
+		name := facts.ShortName(s.ID)
 		f := engine.Finding{Rule: r.ID(), File: s.Path, Line: s.Line, Anchor: s.ID,
 			Message: engine.T("exported %s %s has no doc comment", string(s.Kind), name), Why: r.About().Why, Fix: r.About().Fix}
 		if s.Kind == facts.SymbolValue { // a Terraform variable or output, an Ansible default: a description is its doc

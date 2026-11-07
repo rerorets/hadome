@@ -48,6 +48,13 @@ type File struct {
 	Unread bool
 }
 
+// ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
+// unit's last path element, then the name. example.com/app/store.Append is store.Append, and
+// web/src/lib.getSession is lib.getSession. The ID itself stays whole wherever findings are matched.
+func ShortName(id string) string {
+	return id[strings.LastIndex(id, "/")+1:]
+}
+
 // CountLines returns the number of lines of a file's content, as an editor shows them: the newline
 // that ends the last line does not start another one. "a\nb\n" and "a\nb" both have 2; "" has 0.
 func CountLines(src []byte) int {

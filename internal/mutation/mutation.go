@@ -264,7 +264,7 @@ func untried(rest []facts.Mutant) engine.Finding {
 }
 
 // short drops the import path of a symbol ID: example.com/app/store.Append is store.Append.
-func short(id string) string { return id[strings.LastIndex(id, "/")+1:] }
+func short(id string) string { return facts.ShortName(id) }
 
 // progress is the line written after trying the n-th of total mutants: where the break is, what it
 // broke, and whether a test noticed.

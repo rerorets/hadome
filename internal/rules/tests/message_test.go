@@ -55,3 +55,34 @@ func TestAHazardMessageIsOneShortLine(t *testing.T) {
 		})
 	}
 }
+
+// viewpoint: external contract
+// target: tests/scope-shrunk through engine.Engine.Check
+// Every rule shows a symbol the way configuration names it (store.Append), as size/ and
+// comments/missing-doc do, not with the unit's whole path.
+func TestScopeShrunkNamesTheSymbolAsConfigurationDoes(t *testing.T) {
+	product := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("package store\n\n// Append adds a row.\nfunc Append(row string) {}\n")},
+	}
+	base := fstest.MapFS{"store/store_test.go": {Data: []byte("package store_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/app/store\"\n)\n\n" +
+		"func TestAppend(t *testing.T) {\n\tstore.Append(\"a\")\n}\n")}}
+	for p, f := range product {
+		base[p] = f
+	}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
+	r, err := e.Check(trees{base: base, head: product})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Regressions {
+		if f.Rule == "tests/scope-shrunk" {
+			msg := f.Message.In("en") + " " + f.Fix.In("en")
+			if strings.Contains(msg, "example.com") || !strings.Contains(msg, "store.Append") {
+				t.Errorf("want store.Append without the module path, got %q", msg)
+			}
+			return
+		}
+	}
+	t.Fatalf("no tests/scope-shrunk among %+v", r.Regressions)
+}
