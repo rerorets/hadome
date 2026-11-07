@@ -77,7 +77,8 @@ func TestHelperDoesNotSeeTheCaller(t *testing.T) {
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A package-level variable declared in one test file is typed in every test file of the same
-// package, whether declared with a type or made by a helper. A test file of the external _test
+// package, whether declared with a type or made by a helper; with one call on the right, the first
+// name takes the call's first result. A test file of the external _test
 // package does not see the variables of the internal test files.
 func TestGoTestPackageVariablesAreSharedAcrossFiles(t *testing.T) {
 	tree := fstest.MapFS{
@@ -95,7 +96,11 @@ var shared *store.Store
 
 var built = newStore()
 
+var opened, openErr = openStore()
+
 func newStore() *store.Store { return &store.Store{} }
+
+func openStore() (*store.Store, error) { return &store.Store{}, nil }
 
 func TestMain(m *testing.M) { shared = newStore(); m.Run() }
 `)},
@@ -106,6 +111,11 @@ import "testing"
 func TestDeclaredElsewhere(t *testing.T) { _ = shared.Append() }
 
 func TestBuiltElsewhere(t *testing.T) { _ = built.Append() }
+
+func TestOpenedElsewhere(t *testing.T) {
+	_ = opened.Append()
+	_ = openErr.Error()
+}
 `)},
 		"store/internal_test.go": {Data: []byte(`package store
 
@@ -122,6 +132,8 @@ func TestInternalVarIsNotSeen(t *testing.T) { _ = other.Validate() }
 		"TestBuiltElsewhere calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestDeclaredElsewhere calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestInternalVarIsNotSeen calls=[] unresolved=1",
+		// error is not a type of the repository, so openErr.Error() names no target.
+		"TestOpenedElsewhere calls=[example.com/app/store.Store.Append×1] unresolved=1",
 	}, "\n")
 	if got := callsByTest(t, tree); got != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
@@ -133,7 +145,8 @@ func TestInternalVarIsNotSeen(t *testing.T) { _ = other.Validate() }
 // A function literal sees the variables around it: a subtest reaches the test's variable and a
 // table case's field, and = inside it types the variable around it. Its parameters and its :=
 // declarations hide a variable of the same name only inside it. = with a value of unknown type
-// keeps the declared type. A helper given to t.Run is walked with the test.
+// keeps the declared type. A helper given to t.Run is walked with the test. The body of a for loop is
+// read once, as a loop.
 func TestGoFunctionLiteralsSeeTheVariablesAroundThem(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
@@ -181,6 +194,13 @@ func TestAssignOfUnknownKeepsTheDeclaredType(t *testing.T) {
 	_ = s.Append()
 }
 
+func TestForLoop(t *testing.T) {
+	s := &store.Store{}
+	for i := 0; i < 2; i++ {
+		_ = s.Append()
+	}
+}
+
 func TestRunHelper(t *testing.T) { t.Run("x", appendShared) }
 
 func appendShared(t *testing.T) { _ = shared.Append() }
@@ -198,6 +218,7 @@ func TestDefineHidesOnlyInside(t *testing.T) {
 		"TestAssignInsideReachesOutside calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestAssignOfUnknownKeepsTheDeclaredType calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestDefineHidesOnlyInside calls=[example.com/app/store.Store.Append×1] unresolved=1",
+		"TestForLoop calls=[example.com/app/store.Store.Append×2] unresolved=0",
 		"TestParamHidesOnlyInside calls=[example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 		"TestRunHelper calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestSubtest calls=[example.com/app/store.Store.Append×1] unresolved=0",

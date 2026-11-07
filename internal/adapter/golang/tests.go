@@ -145,7 +145,6 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 				Body: body(fset, pf.src, fn)},
 		}
 		w.collectTParams(fn.Type, fn.Body)
-		w.bindParams(fn.Type)
 		ast.Inspect(fn.Body, w.visit)
 		w.test.Calls = w.callFacts()
 		out = append(out, w.test)
