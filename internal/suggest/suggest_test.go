@@ -18,6 +18,7 @@ type Store struct{}
 
 func CreatePost() {}
 func Address() {}
+func Deleted() bool { return false }
 func createDraft() {}
 func DeleteRow(id string) {}
 func (s *Store) ExportRows() []string { return nil }
