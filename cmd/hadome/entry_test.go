@@ -18,6 +18,24 @@ func runIn(t *testing.T, args ...string) (int, string) {
 }
 
 // viewpoint: external contract
+// target: hadome help, --help, -h
+// Asking for help is not a mistake: it prints the usage to standard output and exits 0, and the
+// usage names every flag a person needs to compare, including the two directories.
+func TestHelpPrintsTheUsage(t *testing.T) {
+	for _, arg := range []string{"help", "--help", "-h"} {
+		var out, errOut bytes.Buffer
+		if code := run([]string{arg}, &out, &errOut); code != 0 || errOut.Len() != 0 {
+			t.Errorf("%s: exit %d, stderr %q", arg, code, errOut.String())
+		}
+		for _, want := range []string{"hadome check", "hadome mutate", "--base-dir", "--head-dir"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("%s: the usage does not mention %s:\n%s", arg, want, out.String())
+			}
+		}
+	}
+}
+
+// viewpoint: external contract
 // target: hadome agents
 // People copy the block from the README; agents get it from hadome. Both must say the same.
 func TestTheAgentBlockIsTheREADMEs(t *testing.T) {
