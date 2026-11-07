@@ -132,6 +132,7 @@ Some imports look like the repository's own but resolve to no file.
 - When a test file calls a name taken from such an import, the call counts as unresolved (`Test.Unresolved`)
 - Treating it as an external package and counting nothing would fail a test that may well call the product with `tests/guards-nothing`. What cannot be identified goes to a person's review through `tests/target-unknown`
 - Imports of non-test files are treated as before: in TypeScript, an internal import whose unit is the directory of the named path; in Python, an external import
+- An import that names something inside a directory hadome does not read (`dist/`, `build/`, `.generated/` and so on) is an exception: it is an import whose destination is unknown (`Import.Unknown` and `Import.Unread`), whether the file exists or not. In a test file, a call of a name taken from it counts as unresolved ("Imports whose destination is unknown" in [adapters.md](adapters.md))
 
 ## Symbols
 

@@ -66,6 +66,7 @@ classDiagram
     +Internal bool
     +IO bool
     +Unknown bool
+    +Unread bool
     +Text string
     +Global bool
   }
@@ -132,6 +133,7 @@ classDiagram
 - 次のディレクトリの下は、一覧に載せず、読みません。依存のコピー、ビルドの出力、ツールの作業場所で、製品のコードではないからです
   - `vendor`、`node_modules`、`testdata`、`target`、`build`、`dist`、`__pycache__`
   - `.` で始まるもの。例: `.git`
+- 読まないディレクトリの中を名指す import は、行き先の分からない import として扱います（後述の「行き先の分からない import」）
 - `_` で始まるディレクトリは読みます。フレームワークが製品のコードやテストを置く場所だからです。例: jest の `__tests__`、Next.js の `_components`、Python の `_internal`
 - Go だけは、`_` で始まるディレクトリの下の `.go` ファイルを役割 `other` で載せます。go コマンドがそこをパッケージとして扱わず、テストも動かさないためです
 
@@ -211,13 +213,21 @@ Go のテストの補助のパッケージ:
 
 引数が文字列なら、ふつうの import と同じく行き先を解決します。
 
+hadome が読まないディレクトリ（前述の「読まないディレクトリ」）の中を名指す import も、行き先の分からない import です。例: `import { client } from '../dist/client'`、`from .build import gen`。
+
+- そのディレクトリのファイルを読まないので、どのユニットに当たるかを決められません
+- `Unknown` と `Unread` を真にし、`ToUnit` を空にします。`Text` には指定子を書いたとおりに入れます
+- 入出力をする import としては数えません。届く先を読んでいないので、入出力をするかどうかも分からないからです
+- 対象は、TypeScript でパスとして解決する指定子（`.` か `/` で始まるもの、`paths` の別名）と、Python の相対 import です
+- パスの `..` は `.` で始まりますが、読まないディレクトリに数えません。リポジトリの外を指す import は、これまでどおり解決できない import です
+
 `unknown/import` は、変更で増えた行き先の分からない import を人の確認（終了コード `3`）に回します。チェックを落とさないのは、行き先を確かめられないものでチェックを落とすことはしないからです。アンカーはファイルと、正規化した呼び出しの文字列です。そのため、import を動かしても新しいものにはなりません。
 
 | ルール | 事例 |
 |---|---|
-| `unknown/import` | 新しい行き先の分からない import は `3` を返す · base にあるものは返さない · 引数が文字列の動的な import はふつうの import になる · テストのファイルの中のものは返さない · `{{ }}` で名指す Ansible のロールは `3` を返す · 名前で書いたロールは返さない |
+| `unknown/import` | 新しい行き先の分からない import は `3` を返す · base にあるものは返さない · 引数が文字列の動的な import はふつうの import になる · テストのファイルの中のものは返さない · `{{ }}` で名指す Ansible のロールは `3` を返す · 名前で書いたロールは返さない · 読まないディレクトリを名指す新しい import は `3` を返す · base にあるものは返さない · Python の相対 import でも `3` を返す |
 
-base にある行き先の分からない import を持つユニットは、純粋さが `unknown` になります。`unknown` は純粋ではありません（[rules-tests.ja.md](rules-tests.ja.md) の「純粋なユニット」）。
+行き先の分からない import を持つユニットは、純粋さが `unknown` になります。`unknown` は純粋ではありません（[rules-tests.ja.md](rules-tests.ja.md) の「純粋なユニット」）。そのため、純粋だったユニットに行き先の分からない import が増えると、`unknown/import` と `tests/purity-lost` の両方が人の確認を求めます。前者は import そのものを、後者はユニットが純粋でなくなったことを指します。
 
 ### 危険の分類
 

@@ -3,10 +3,12 @@
 package treesitter
 
 import (
+	"path"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
+	fswalk "github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -45,6 +47,23 @@ func dynamicCalls(f *file, kinds, callees map[string]bool, interpolates func(str
 func unknownImport(f *file, at *sitter.Node) facts.Import {
 	return facts.Import{Path: f.path, Line: line(at), FromUnit: f.unit, Unknown: true,
 		Text: strings.Join(strings.Fields(f.text(at)), " ")}
+}
+
+// unreadImport is the fact for an import naming a path in a directory hadome does not read.
+func unreadImport(f *file, at *sitter.Node, spec string) facts.Import {
+	return facts.Import{Path: f.path, Line: line(at), FromUnit: f.unit, Unknown: true, Unread: true, Text: spec}
+}
+
+// inUnreadDir reports whether a path of the repository that names no file hadome read is, or lies
+// inside, a directory the walk skips. ".." starts with a dot but leads out of the repository, not
+// into a hidden directory.
+func inUnreadDir(p string) bool {
+	for _, seg := range strings.Split(path.Clean(p), "/") {
+		if seg != "." && seg != ".." && fswalk.Skip(seg) {
+			return true
+		}
+	}
+	return false
 }
 
 // firstArgument returns the first argument of a call in any of the five grammars.

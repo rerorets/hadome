@@ -284,6 +284,8 @@ func reasonOf(im facts.Import) engine.Text {
 	switch {
 	case im.Global:
 		return engine.T("uses the global %s, which performs input or output", im.ToUnit)
+	case im.Unread:
+		return engine.T("imports %s, inside a directory hadome does not read", im.Text)
 	case im.Unknown:
 		return engine.T("has an import whose destination is decided only at run time: %s", im.Text)
 	case im.IO:

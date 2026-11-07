@@ -91,7 +91,7 @@ hadome decides purity from imports, on every check:
 - **Treatment**: returns exit code `3` (a person reviews it), never `1`
 - **Legitimate removal**: the unit no longer exists in head
 - The `io` table comes from head's configuration for both versions, so adding an entry never asks for a review of units that were already importing it
-- The report points at the import in head that made the unit impure, and its wording says what that import reaches. Example: "`src/ui` is no longer pure: it imports `src/lib`, which imports `node:fs`, which performs input or output". What it reaches is one of: an import that performs input or output, a global API, an import whose destination is unknown, or a unit hadome cannot find among the repository's files
+- The report points at the import in head that made the unit impure, and its wording says what that import reaches. Example: "`src/ui` is no longer pure: it imports `src/lib`, which imports `node:fs`, which performs input or output". What it reaches is one of: an import that performs input or output, a global API, an import whose destination is unknown, an import naming a directory hadome does not read, or a unit hadome cannot find among the repository's files
 
 ## Tests that are not needed
 
