@@ -124,11 +124,6 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 			diffTurnedOn(out, object(h), f, p)
 		case f.Kind == KindObject:
 			diffObject(out, object(b), object(h), f, p)
-		case f.Kind == KindList && f.Sequence:
-			if !reflect.DeepEqual(list(b), list(h)) {
-				*out = append(*out, Change{Key: p, Removed: fmtSequence(list(b)), Added: fmtSequence(list(h)),
-					Looser: f.Looser != LooserNever})
-			}
 		case f.Kind == KindList:
 			if h == nil && f.OmittedIsWidest {
 				continue
@@ -167,6 +162,13 @@ func diffInt(out *[]Change, b, h any, k Key, path string) {
 }
 
 func diffList(out *[]Change, base, head []any, k Key, path string) {
+	if k.Sequence {
+		if !reflect.DeepEqual(base, head) {
+			*out = append(*out, Change{Key: path, Removed: fmtSequence(base), Added: fmtSequence(head),
+				Looser: k.Looser != LooserNever})
+		}
+		return
+	}
 	ids := func(l []any) map[string]bool {
 		m := map[string]bool{}
 		for _, v := range l {
