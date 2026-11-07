@@ -116,6 +116,21 @@ func ktPublic(f *file, n *sitter.Node) bool {
 	return true
 }
 
+// ktOverride reports whether a declaration has the override modifier.
+func ktOverride(f *file, n *sitter.Node) bool {
+	for _, c := range named(n) {
+		if c.Kind() != "modifiers" {
+			continue
+		}
+		for _, m := range named(c) {
+			if f.text(m) == "override" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ktInterface reports whether a class declaration is an interface.
 func ktInterface(f *file, n *sitter.Node) bool {
 	for i := uint(0); i < n.ChildCount(); i++ {
@@ -265,7 +280,8 @@ func ktMembers(n *sitter.Node) []*sitter.Node {
 }
 
 func (k *kotlin) function(f *file, n *sitter.Node, prefix string, kind facts.SymbolKind, visible bool) facts.Symbol {
-	s := facts.Symbol{ID: prefix + "." + f.field(n, "name"), Kind: kind, Exported: visible && ktPublic(f, n), Doc: ktDoc(f, n)}
+	s := facts.Symbol{ID: prefix + "." + f.field(n, "name"), Kind: kind, Exported: visible && ktPublic(f, n), Doc: ktDoc(f, n),
+		DocElsewhere: ktOverride(f, n)}
 	params := ktParams(f, n)
 	k.scopes[s.ID] = scopeOf(params)
 	var body *sitter.Node

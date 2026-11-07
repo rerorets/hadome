@@ -52,6 +52,7 @@ classDiagram
     +EndLine int
     +Exported bool
     +Doc bool
+    +DocElsewhere bool
     +Scoped bool
     +Params int
     +Complexity int

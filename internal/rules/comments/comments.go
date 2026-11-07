@@ -104,7 +104,8 @@ func (missingDoc) About() engine.About {
 	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment, " +
 		"or a new Terraform variable or output or Ansible role default without a description"),
 		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
-		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong")}
+		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong; " +
+			"in TypeScript, JavaScript, Java and Kotlin write it as /** */, since a // line comment is not a doc comment")}
 }
 
 var (
@@ -118,7 +119,7 @@ var (
 func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
 	for _, s := range in.Facts.Symbols {
-		if !s.Exported || s.Doc {
+		if !s.Exported || s.Doc || s.DocElsewhere {
 			continue
 		}
 		name := facts.ShortName(s.ID)
