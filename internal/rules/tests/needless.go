@@ -2,7 +2,6 @@ package tests
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/engine"
@@ -89,7 +88,7 @@ func (duplicate) About() engine.About {
 }
 
 func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
-	same := map[string][]facts.Test{}
+	same := map[string][]facts.Test{} // in file and line order, as facts.Analysis lists tests
 	for _, t := range in.Facts.Tests {
 		if t.Body != "" && !t.Skip.Skipped {
 			same[t.Body] = append(same[t.Body], t)
@@ -100,12 +99,6 @@ func (r duplicate) Find(in engine.Input) ([]engine.Finding, error) {
 		if len(ts) < 2 {
 			continue
 		}
-		sort.Slice(ts, func(i, j int) bool {
-			if ts[i].Path != ts[j].Path {
-				return ts[i].Path < ts[j].Path
-			}
-			return ts[i].Line < ts[j].Line
-		})
 		for _, group := range copies(ts) {
 			var where []string
 			for _, t := range group {
@@ -166,8 +159,8 @@ func copies(ts []facts.Test) [][]facts.Test {
 	return out
 }
 
-// knownTargets is the test's targets, sorted and joined, or "" when what it calls is not all known:
-// it has no target, or a call that could not be identified.
+// knownTargets is the test's targets (Calls are sorted by target), joined, or "" when what it calls
+// is not all known: it has no target, or a call that could not be identified.
 func knownTargets(t facts.Test) string {
 	if len(t.Calls) == 0 || t.Unresolved > 0 {
 		return ""
@@ -176,6 +169,5 @@ func knownTargets(t facts.Test) string {
 	for i, c := range t.Calls {
 		targets[i] = c.Target
 	}
-	sort.Strings(targets)
 	return strings.Join(targets, "\x00")
 }

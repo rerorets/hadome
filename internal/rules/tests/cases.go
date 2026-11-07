@@ -197,7 +197,10 @@ func duplicateCases() []engine.Case {
 		Head: tree(withFile(testFile(plainTest), "store/more_test.go", testFile(copyOf("TestAppendElsewhere"))["store/store_test.go"]))}
 	otherTargets := engine.Case{Name: "a test in another file with the same body and other targets passes",
 		Base: lists(listTest("queue")), Head: lists(listTest("queue"), listTest("stack"))}
-	return []engine.Case{added, disguised, literal, removed, renamed, third, elsewhere, otherTargets}
+	sameTargets := engine.Case{Name: "a copy in another file of the same package fails", WantFail: []string{"tests/duplicate"},
+		Base: lists(listTest("queue")),
+		Head: lists(listTest("queue"), map[string]string{"queue/more_test.go": listTest("queue")["queue/queue_test.go"]})}
+	return []engine.Case{added, disguised, literal, removed, renamed, third, elsewhere, otherTargets, sameTargets}
 }
 
 // withFile adds one file to a set of test files.
