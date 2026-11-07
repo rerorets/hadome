@@ -142,7 +142,7 @@ Some imports look like the repository's own but resolve to no file.
 | Python | `def` at module level and in classes | `class` | Name does not start with `_` | A docstring: the body's first statement is a string |
 | Rust | `fn` items and `impl` methods | `struct`, `enum`, `trait` (as interface), `type` | `pub` | `///` lines right before it |
 | Java | Methods and constructors | Classes, interfaces, enums, records | `public` | A `/** */` comment right before it |
-| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when a line with an annotation with arguments (`@Suppress("x")`) stands between them |
+| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when lines with annotations with arguments (`@Suppress("x")`) stand between them, however many |
 
 Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not product code. Cyclomatic complexity counts each language's `if`, loops, `case`/match arms (not the default one), `catch`, `&&`, `||`, and the ternary operator.
 
@@ -172,7 +172,8 @@ TypeScript test declarations are read as follows.
 - In Java and Kotlin, a call of the form `Class.member.method()` is read as follows. When the member is an enum constant, it calls the enum class's method (`Kind.ORDERS.toTable()` calls `Kind.toTable`). When the member is an inner class, it calls that class's method (`Outer.Inner.build()`). Any other member (a property of an `object` and the like) holds a value whose class is unknown, so the test counts as reading product code (`Reads`)
 - In Java and Kotlin, reading a property of a variable read as a product class (`cache.ttl`) counts as reading product code. Calling a method on it (`cache.clear()`) is a call, not a read
 - In Kotlin, `assertThrows<E> { … }` and `assertThrows<E>({ … })` are parsed by the grammar as two comparisons in a row (`(assertThrows < E) > { … }`). They are read as calls, and so are `mockk<T> { … }` and product functions written the same way. The type argument is not read as a value
-- A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change
+- A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change. In Kotlin, so does a field of the class the test class extends
+- In Kotlin, a product value put into a string template (`"IN ($COUNTED)"`, `"${Kind.ORDERS.table}"`) counts as read too. One that starts with `\$` is not put in. A field whose initializer is such a string counts like the fields above
 - In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
 - In TypeScript, `require('./x')` named by a string is read like an import, at the top of the file, in a `describe` block and inside a test: `const { send } = require('./mail')`, `const mail = require('./mail')`
 - What a TypeScript test calls includes the repository's components it renders as JSX elements (`<Page />`). Helpers of the file are followed whether declared with `function` or held by a `const` (`const renderPage = () => …`), including those declared inside a `describe` block. Functions an object holds (`helpers.twice` in `const helpers = { twice: (n) => … }`) are followed too. A component the test file declares (`function Harness() { return <Field /> }`, `const Wrapper = () => <Field />`) and renders as an element is followed like a helper. Calling a helper runs the default values of its parameters (`function make(store = createStore())`), so they count too
@@ -293,6 +294,12 @@ A grammar cannot read some correct code. tree-sitter does not stop there: it put
 | Kotlin | An array literal in an annotation argument (`[]`) |
 
 Such files count as read and are not listed under `unknown/unread` (see "Deliberately left out"). Upgrading the grammars makes them fewer.
+
+At the top level of a file, the Kotlin grammar may read annotations with arguments (`@Suppress("x")`) on the lines before a declaration as an expression. With two or more of them, it takes the declaration after them into that expression, and the declaration and its tests are missed. So hadome replaces such annotations with spaces and reads the file again.
+
+- The replacement keeps the number of bytes and the line breaks, so line numbers and positions stay those of the file
+- The replaced annotations are kept aside and read as the next declaration's. Example: `@Disabled("reason")` on a test class skips its tests
+- A `/** */` comment above the annotations is the declaration's doc comment
 
 ## Unread files
 

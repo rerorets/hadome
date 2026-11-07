@@ -208,6 +208,8 @@ type jvmWalk struct {
 	walking map[string]bool
 	// inherited are the helpers of a test class of another file that the test's class extends.
 	inherited map[string]jvmCode
+	// values are the value fields of that class.
+	values map[string]bool
 }
 
 func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
@@ -361,39 +363,4 @@ func (jf *jvmFile) javaFieldTypes(n *sitter.Node, into map[string]string) {
 			}
 		}
 	}
-}
-
-// noteValueField records a field of a test class whose initializer names something of the product.
-func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
-	if name == "" || init == nil {
-		return
-	}
-	uses := false
-	walk(init, func(n *sitter.Node) bool {
-		uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
-		return !uses
-	})
-	if uses {
-		if jf.valueFields == nil {
-			jf.valueFields = map[string]bool{}
-		}
-		jf.valueFields[name] = true
-	}
-}
-
-// readsValueField reports whether an identifier in a test reads a value field of its class: not a
-// local of the same name, and not the member side of a.b.
-func (w *jvmWalk) readsValueField(n *sitter.Node) bool {
-	name := w.jf.f.text(n)
-	if !w.jf.valueFields[name] || w.locals[name] {
-		return false
-	}
-	// The member side of a.b names a's field, unless a is this.
-	switch p := n.Parent(); p.Kind() {
-	case "navigation_expression":
-		return !isField(p, "-", n) || w.jf.f.text(p.NamedChild(0)) == "this"
-	case "field_access":
-		return !isField(p, "field", n) || w.jf.f.field(p, "object") == "this"
-	}
-	return true
 }

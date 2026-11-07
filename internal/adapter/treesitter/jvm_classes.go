@@ -26,16 +26,22 @@ type jvmCode struct {
 type jvmScope struct {
 	fields    map[string]string
 	inherited map[string]jvmCode
-	mocks     []jvmCode
-	setups    []jvmCode
+	// values are the value fields (jvmFile.valueFields) of a test class of another file that the
+	// class extends.
+	values map[string]bool
+	mocks  []jvmCode
+	setups []jvmCode
 }
 
 // nested is the scope a class declared inside this one starts from: a JUnit @Nested class sees the
 // fields and helpers of its enclosing class, and its tests run that class's setup first.
 func (s jvmScope) nested() jvmScope {
-	out := jvmScope{fields: copyMap(s.fields), inherited: map[string]jvmCode{}}
+	out := jvmScope{fields: copyMap(s.fields), inherited: map[string]jvmCode{}, values: map[string]bool{}}
 	for k, v := range s.inherited {
 		out.inherited[k] = v
+	}
+	for k := range s.values {
+		out.values[k] = true
 	}
 	out.mocks = append(out.mocks, s.mocks...)
 	out.setups = append(out.setups, s.setups...)
@@ -52,7 +58,7 @@ func (jf *jvmFile) startTest(t *testFacts, scope jvmScope, walk func(*jvmWalk, *
 		t.hazardIn(mk.jf.f, facts.HazardMock, mk.n)
 	}
 	w := &jvmWalk{jf: jf, t: t, vars: copyMap(scope.fields), locals: map[string]bool{}, walking: map[string]bool{},
-		inherited: scope.inherited}
+		inherited: scope.inherited, values: scope.values}
 	// The setup runs before each test of the class, so reading the clock or sleeping there makes
 	// every one of them depend on time. Only those hazards are its test's: what the setup calls or
 	// checks is not what the test guards.
@@ -141,4 +147,49 @@ var jvmDrivers = map[string][]string{
 	"io.restassured":                               {"given"},
 	"org.springframework.test.web.servlet":         {"perform"},
 	"org.springframework.test.web.reactive.server": {"exchange"},
+}
+
+// noteValueField records a field of a test class whose initializer names something of the product.
+func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
+	if name == "" || init == nil {
+		return
+	}
+	uses := false
+	walk(init, func(n *sitter.Node) bool {
+		uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
+		return !uses
+	})
+	if uses {
+		jf.markValueField(name)
+	}
+}
+
+// markValueField records name as a value field of the file's test classes.
+func (jf *jvmFile) markValueField(name string) {
+	if jf.valueFields == nil {
+		jf.valueFields = map[string]bool{}
+	}
+	jf.valueFields[name] = true
+}
+
+// valueField reports whether name is a value field of the test's class, or one it inherits, and not
+// a local of the same name.
+func (w *jvmWalk) valueField(name string) bool {
+	return (w.jf.valueFields[name] || w.values[name]) && !w.locals[name]
+}
+
+// readsValueField reports whether an identifier in a test reads a value field of its class: not a
+// local of the same name, and not the member side of a.b.
+func (w *jvmWalk) readsValueField(n *sitter.Node) bool {
+	if !w.valueField(w.jf.f.text(n)) {
+		return false
+	}
+	// The member side of a.b names a's field, unless a is this.
+	switch p := n.Parent(); p.Kind() {
+	case "navigation_expression":
+		return !isField(p, "-", n) || w.jf.f.text(p.NamedChild(0)) == "this"
+	case "field_access":
+		return !isField(p, "field", n) || w.jf.f.field(p, "object") == "this"
+	}
+	return true
 }

@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 
@@ -178,84 +179,89 @@ func (k *kotlin) typeSymbols(f *file, n *sitter.Node, prefix string, visible boo
 }
 
 // ktDoc reports whether a declaration has a /** */ comment right before it, or before the
-// annotations ktLeading finds split off it.
+// annotations repair lifted off it.
 func ktDoc(f *file, n *sitter.Node) bool {
 	_, doc := ktLeading(f, n)
 	return doc || docBefore(f, n, "/**")
 }
 
-// ktLeading reads what this grammar splits off a top-level declaration. An annotation with
-// arguments on a line of its own (@Suppress("x")) is read as an expression of its own
-// (annotated_expression) before the declaration, and the declaration's doc comment sits before or
-// inside that expression. It returns those annotations by name, each as the node holding its
-// arguments, and whether a /** */ comment ends on the line before the first of them.
+// repair blanks out the annotations this grammar reads as an expression of their own
+// (annotated_expression) at the top level of a file. An annotation with arguments on a line of its
+// own (@Suppress("x")) before a declaration may be read so, and with two of them the declaration
+// after them is read as part of that expression and lost. Without them, the declaration reads as
+// it should, and ktLeading finds them again.
+func (*kotlin) repair(src []byte, root *sitter.Node) ([]byte, []*sitter.Node) {
+	var lifted []*sitter.Node
+	var lift func(x *sitter.Node)
+	lift = func(x *sitter.Node) {
+		for i, c := range named(x) {
+			switch c.Kind() {
+			case "annotation":
+				lifted = append(lifted, c)
+				if next := x.NamedChild(uint(i) + 1); next != nil && next.Kind() == "parenthesized_expression" {
+					lifted = append(lifted, next) // the annotation's arguments, read apart from it
+				}
+			case "annotated_expression":
+				lift(c)
+			}
+		}
+	}
+	for _, n := range named(root) {
+		if n.Kind() == "annotated_expression" {
+			lift(n)
+		}
+	}
+	if len(lifted) == 0 {
+		return nil, nil
+	}
+	out := bytes.Clone(src)
+	for _, n := range lifted {
+		for i := n.StartByte(); i < n.EndByte(); i++ {
+			if out[i] != '\n' && out[i] != '\r' {
+				out[i] = ' '
+			}
+		}
+	}
+	return out, lifted
+}
+
+// ktLeading returns the annotations repair lifted off a declaration, by name, each as the node
+// holding its arguments, and whether a /** */ comment ends on the line before the first of them.
+// They are the ones between the declaration and the code or comment before it.
 func ktLeading(f *file, n *sitter.Node) (map[string]*sitter.Node, bool) {
-	prev := n.PrevSibling()
-	if prev == nil || prev.Kind() != "annotated_expression" {
-		return map[string]*sitter.Node{}, false
+	anns := map[string]*sitter.Node{}
+	prev, from := n.PrevNamedSibling(), uint(0)
+	switch {
+	case prev != nil:
+		from = prev.EndByte()
+	case n.Parent() != nil:
+		from = n.Parent().StartByte()
 	}
-	r := &ktLead{f: f}
-	r.restart(nil, false)
-	r.read(prev)
-	if r.comment == nil && !r.other {
-		if c := prev.PrevSibling(); c != nil && strings.Contains(c.Kind(), "comment") {
-			r.comment = c
+	var first *sitter.Node
+	for _, a := range f.lifted {
+		if a.Kind() != "annotation" || a.StartByte() < from || a.EndByte() > n.StartByte() {
+			continue
+		}
+		anns[ktAnnotationName(f, a)] = ktAnnotationHolder(a)
+		if first == nil || a.StartByte() < first.StartByte() {
+			first = a
 		}
 	}
-	doc := r.comment != nil && r.first != nil && strings.HasPrefix(strings.TrimSpace(f.text(r.comment)), "/**") &&
-		endLine(r.comment) >= line(r.first)-1
-	return r.anns, doc
+	doc := first != nil && prev != nil && strings.Contains(prev.Kind(), "comment") &&
+		strings.HasPrefix(strings.TrimSpace(f.text(prev)), "/**") && endLine(prev) >= line(first)-1
+	return anns, doc
 }
 
-// ktLead reads the annotations at the end of an annotated_expression. A comment before them may be
-// the doc; any other code before them belongs to something else, and so do annotations before it.
-type ktLead struct {
-	f              *file
-	anns           map[string]*sitter.Node
-	comment, first *sitter.Node
-	other          bool
-}
-
-// restart forgets what came before a comment or other code.
-func (r *ktLead) restart(comment *sitter.Node, other bool) {
-	r.anns, r.first, r.comment, r.other = map[string]*sitter.Node{}, nil, comment, other
-}
-
-func (r *ktLead) read(x *sitter.Node) {
-	for i, c := range named(x) {
-		switch {
-		case c.Kind() == "annotation":
-			r.annotation(c, x.NamedChild(uint(i)+1))
-		case c.Kind() == "parenthesized_expression" && i > 0 && x.NamedChild(uint(i)-1).Kind() == "annotation":
-			// the arguments of the annotation before it
-		case strings.Contains(c.Kind(), "comment"):
-			r.restart(c, false)
-		case c.Kind() == "annotated_expression":
-			r.read(c)
-		default:
-			r.restart(nil, true)
-			r.read(c)
-		}
-	}
-}
-
-// annotation records an annotation by name, as the node holding its arguments when they follow it.
-func (r *ktLead) annotation(a, next *sitter.Node) {
+// ktAnnotationName is the simple name of an annotation's type.
+func ktAnnotationName(f *file, a *sitter.Node) string {
 	name := ""
 	walk(a, func(t *sitter.Node) bool {
 		if name == "" && t.Kind() == "user_type" {
-			name = lastElem(r.f.text(t))
+			name = lastElem(f.text(t))
 		}
 		return name == ""
 	})
-	holder := a
-	if next != nil && next.Kind() == "parenthesized_expression" {
-		holder = next
-	}
-	r.anns[name] = holder
-	if r.first == nil {
-		r.first = a
-	}
+	return name
 }
 
 // ktEntries are the constants of an enum class.
@@ -311,3 +317,12 @@ func ktParams(f *file, n *sitter.Node) []string {
 // ktTemplate finds a value substituted into a Kotlin string ($name or ${…}); this grammar keeps it
 // in the string's text. An escaped \$ is a dollar sign.
 var ktTemplate = regexp.MustCompile(`(^|[^\\])\$[A-Za-z_{]`)
+
+// ktAnnotationHolder is the node holding a lifted annotation's arguments: the annotation, or the
+// parenthesized expression this grammar may read them as after it.
+func ktAnnotationHolder(a *sitter.Node) *sitter.Node {
+	if next := a.NextNamedSibling(); next != nil && next.Kind() == "parenthesized_expression" {
+		return next
+	}
+	return a
+}

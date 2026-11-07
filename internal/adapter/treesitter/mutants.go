@@ -89,12 +89,11 @@ func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms
 	if err != nil {
 		return nil, err
 	}
-	tree, err := l.parse(parser, p, src)
+	f, done, err := l.parse(parser, p, src)
 	if err != nil {
 		return nil, err
 	}
-	defer tree.Close()
-	f := &file{path: p, src: src, root: tree.RootNode()}
+	defer done()
 	sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
 	var out []facts.Mutant
 	for _, s := range syms {

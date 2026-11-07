@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"regexp"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -137,6 +138,8 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 		if ops := named(n); len(ops) == 3 {
 			w.t.assertion(w.jf.f.text(ops[1]), w.jf.t.asserts, w.jf.assertPrefixes...)
 		}
+	case "string_literal":
+		w.ktTemplateReads(n)
 	case "identifier":
 		if _, ok := w.jf.names[w.jf.f.text(n)]; ok {
 			w.t.readName(n, ktUses)
@@ -146,6 +149,40 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 	}
 	return true
 }
+
+// ktTemplateReads counts the product values and value fields a string substitutes by name
+// ("IN ($COUNTED)").
+func (w *jvmWalk) ktTemplateReads(n *sitter.Node) {
+	for _, name := range ktTemplateNames(w.jf.f, n) {
+		if !w.locals[name] && (w.jf.names[name] != "" || w.valueField(name)) {
+			w.t.test.Reads++
+		}
+	}
+}
+
+// ktTemplateNames lists the names a one-line string substitutes as $name. This grammar keeps them
+// in the string's text, though it reads ${…}, and the $name of a multi-line string, as code of their
+// own. An escaped \$ is a dollar sign.
+func ktTemplateNames(f *file, n *sitter.Node) []string {
+	text := []byte(f.text(n))
+	for _, c := range named(n) {
+		if c.Kind() == "interpolation" {
+			for i := c.StartByte(); i < c.EndByte(); i++ {
+				text[i-n.StartByte()] = ' '
+			}
+		}
+	}
+	var out []string
+	for _, m := range ktTemplateName.FindAllSubmatch(text, -1) {
+		if len(m[1])%2 == 0 {
+			out = append(out, string(m[2]))
+		}
+	}
+	return out
+}
+
+// ktTemplateName finds $name in a string's text, with the backslashes before it.
+var ktTemplateName = regexp.MustCompile(`(\\*)\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 var ktUses = useGrammar{
 	members: map[string]string{"navigation_expression": ""},
@@ -328,6 +365,17 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
 			name = jf.f.text(c.NamedChild(0))
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
 			jf.noteValueField(name, c)
+			walk(c, func(x *sitter.Node) bool {
+				if x.Kind() != "string_literal" {
+					return true
+				}
+				for _, used := range ktTemplateNames(jf.f, x) {
+					if jf.names[used] != "" {
+						jf.markValueField(name)
+					}
+				}
+				return true
+			})
 		}
 	}
 }
