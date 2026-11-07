@@ -20,12 +20,25 @@ A candidate is found from the symbols of non-test, non-generated code. Only expo
 
 | Type | A symbol is a candidate when |
 |---|---|
-| `idempotent` | Its name begins with `Create`, `Add`, `Insert`, `Register`, `Submit` or `Enqueue` |
+| `idempotent` | Its name begins with `Create`, `Insert`, `Submit` or `Enqueue`. Or its name begins with `Add` or `Register`, and the symbol's unit has an import that does input or output (`Import.IO`) |
 | `erasable` | Its name begins with `Delete`, `Remove`, `Erase` or `Purge` |
 | `isolated` | Its name begins with `Get`, `List`, `Find`, `Search`, `Read`, `Load`, `Fetch` or `Query`, and it has a scope parameter (a parameter whose name says user, tenant, owner, account, org, team, workspace, customer or project; see [rules-tests.md](rules-tests.md)) |
 | `round-trip` | It is the first of a pair in the same unit and receiver: `Export`/`Import`, `Encode`/`Decode`, `Marshal`/`Unmarshal`, `Serialize`/`Deserialize` or `Save`/`Load`, followed by the same rest of the name (`ExportRows` and `ImportRows`) |
 
-"Begins with" means the word is the whole name or is followed by an upper-case letter or digit, so `Address` is not an `Add`.
+- **"Begins with"**: decided by how the name is spelled. The word may also be the whole name.
+
+  | Spelling | Example | What follows the word |
+  |---|---|---|
+  | PascalCase | `DeleteRow` | an upper-case letter or digit |
+  | camelCase | `deleteRow` | an upper-case letter or digit |
+  | snake_case | `delete_row` | `_` |
+
+  - In camelCase and snake_case the word is compared with its first letter in lower case. For example, both `deleteRow` and `delete_row` begin with `Delete`
+  - `Address` and `address` do not begin with `Add`
+  - The pairs of `round-trip` are looked for in the same spelling. For example, `exportRows` and `importRows`, `export_rows` and `import_rows`
+- **Why `Add` and `Register` have a condition**: these two words also name many functions that only return a value, such as `AddDays` or `Add(a, b)`. Idempotency matters only for functions that change state. Among the facts, only an import that does input or output says that code changes state, so that is the condition
+  - The other four words (`Create`, `Insert`, `Submit`, `Enqueue`) almost always change state, so they have no condition
+- **UI components**: a function in a `.tsx` or `.jsx` file whose name starts with an upper-case letter is not a candidate. In React, such a function is a component. A component is a part of a screen, not an operation. For example, `DeleteRowDialog`
 
 A symbol already named by a configured invariant of the same type is not a candidate. The target of a candidate is written the way configuration writes it: the unit's last path element, then the name (`api.CreatePost`, `store.Store.Delete`).
 

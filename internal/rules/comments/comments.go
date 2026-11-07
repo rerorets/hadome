@@ -104,7 +104,8 @@ func (missingDoc) About() engine.About {
 	return engine.About{Finds: engine.T("a new exported function, method or type of product code without a doc comment, " +
 		"or a new Terraform variable or output or Ansible role default without a description"),
 		Why: engine.T("callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses"),
-		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong")}
+		Fix: engine.T("write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong; " +
+			"in TypeScript, JavaScript, Java and Kotlin write it as /** */, since a // line comment is not a doc comment")}
 }
 
 var (
@@ -118,7 +119,7 @@ var (
 func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
 	for _, s := range in.Facts.Symbols {
-		if !s.Exported || s.Doc {
+		if !s.Exported || s.Doc || s.DocElsewhere {
 			continue
 		}
 		name := facts.ShortName(s.ID)
@@ -143,11 +144,13 @@ func (brokenReference) About() engine.About {
 		Fix: engine.T("point at the document's current path, or remove the reference")}
 }
 
-// reference is a word ending in .md, optionally followed by a section.
-var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'])((?:\\.{1,2}/)*[A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.md)(?:#[A-Za-z0-9_-]*)?")
+// reference is a word ending in .md, optionally followed by a section. It starts a line or follows
+// a space, a bracket, a quote, or a Japanese separator such as ・ or （.
+var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'・、（「『【：　])((?:\\.{1,2}/)*[A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.md)(?:#[A-Za-z0-9_-]*)?")
 
 // Find reports references to Markdown files that do not exist in the version.
 func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
+	var names map[string]bool // the version's file names, read at the first bare name that is not at the root
 	var out []engine.Finding
 	for _, l := range lines(in.Facts) {
 		for _, m := range reference.FindAllStringSubmatch(l.text, -1) {
@@ -159,6 +162,17 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 			if _, err := fs.Stat(in.Version.FS, target); err == nil {
 				continue
 			}
+			if !strings.Contains(ref, "/") {
+				if names == nil {
+					var err error
+					if names, err = fileNames(in.Version.FS); err != nil {
+						return nil, err
+					}
+				}
+				if names[ref] {
+					continue
+				}
+			}
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: l.path, Line: l.n, Anchor: ref,
 				Message: engine.T("comment refers to %s, which does not exist", ref),
@@ -168,6 +182,34 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 	}
 	return out, nil
+}
+
+// fileNames returns the names of the files outside the directories the adapters skip. The list
+// repeats internal/adapter/walk.Skip, which rules may not import.
+func fileNames(fsys fs.FS) (map[string]bool, error) {
+	names := map[string]bool{}
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p != "." && skipped(d.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		names[d.Name()] = true
+		return nil
+	})
+	return names, err
+}
+
+func skipped(dir string) bool {
+	switch dir {
+	case "vendor", "testdata", "node_modules", "target", "build", "dist", "__pycache__":
+		return true
+	}
+	return strings.HasPrefix(dir, ".")
 }
 
 // All returns the comments/ rules.

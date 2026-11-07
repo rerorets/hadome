@@ -462,3 +462,60 @@ func Short(s string) bool { return len(strings.TrimSpace(s)) < limit }
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A method a standard interface defines is documented by that interface, but only when its name
+// and its signature both match: a Len returning int64 is not sort.Interface's.
+func TestStandardMethodsAreDocumentedElsewhere(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(`package store
+
+import (
+	"fmt"
+	"net/http"
+)
+
+type Rows []string
+
+func (r Rows) String() string                                  { return "" }
+func (r Rows) Error() string                                   { return "" }
+func (r Rows) Len() int                                        { return 0 }
+func (r Rows) Less(i, j int) bool                              { return false }
+func (r Rows) Swap(i, j int)                                   {}
+func (r Rows) Format(f fmt.State, verb rune)                   {}
+func (r Rows) MarshalJSON() ([]byte, error)                    { return nil, nil }
+func (r *Rows) UnmarshalText(b []byte) error                   { return nil }
+func (r Rows) ServeHTTP(w http.ResponseWriter, q *http.Request) {}
+func (r Rows) Is(err error) bool                               { return false }
+func (r Rows) As(target any) bool                              { return false }
+func (r Rows) Unwrap() []error                                 { return nil }
+
+type Counter struct{}
+
+func (c Counter) Len() int64           { return 0 }
+func (c Counter) String(n int) string  { return "" }
+func (c Counter) Swap(i, j int) bool   { return false }
+func Error() string                    { return "" }
+`)},
+	}
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range a.Symbols {
+		if s.DocElsewhere {
+			got = append(got, s.ID)
+		}
+	}
+	sort.Strings(got)
+	want := "example.com/app/store.Rows.As example.com/app/store.Rows.Error example.com/app/store.Rows.Format " +
+		"example.com/app/store.Rows.Is example.com/app/store.Rows.Len example.com/app/store.Rows.Less " +
+		"example.com/app/store.Rows.MarshalJSON example.com/app/store.Rows.ServeHTTP example.com/app/store.Rows.String " +
+		"example.com/app/store.Rows.Swap example.com/app/store.Rows.UnmarshalText example.com/app/store.Rows.Unwrap"
+	if strings.Join(got, " ") != want {
+		t.Errorf("documented elsewhere:\n got %v\nwant %s", got, want)
+	}
+}

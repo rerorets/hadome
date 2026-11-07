@@ -25,12 +25,25 @@
 
 | 種類 | シンボルが候補になる条件 |
 |---|---|
-| `idempotent` | 名前が `Create`、`Add`、`Insert`、`Register`、`Submit`、`Enqueue` で始まる |
+| `idempotent` | 名前が `Create`、`Insert`、`Submit`、`Enqueue` で始まる。または、名前が `Add`、`Register` で始まり、シンボルのユニットが入出力をする import（`Import.IO`）を持つ |
 | `erasable` | 名前が `Delete`、`Remove`、`Erase`、`Purge` で始まる |
 | `isolated` | 名前が `Get`、`List`、`Find`、`Search`、`Read`、`Load`、`Fetch`、`Query` で始まり、範囲の引数を持つ。範囲の引数は、名前が user、tenant、owner、account、org、team、workspace、customer、project を表す引数（[rules-tests.ja.md](rules-tests.ja.md) を参照） |
 | `round-trip` | 同じユニット・同じレシーバにある組の1つ目である。組は `Export`/`Import`、`Encode`/`Decode`、`Marshal`/`Unmarshal`、`Serialize`/`Deserialize`、`Save`/`Load` の後に、同じ残りの名前が続くもの。例: `ExportRows` と `ImportRows` |
 
-- **「で始まる」**: その語が名前全体であるか、後に大文字か数字が続くことを指します。例: `Address` は `Add` で始まるとはみなしません
+- **「で始まる」**: 名前の書き方ごとに、次のように決めます。語が名前全体である場合も含みます。
+
+  | 書き方 | 例 | 語の後に続くもの |
+  |---|---|---|
+  | PascalCase | `DeleteRow` | 大文字か数字 |
+  | camelCase | `deleteRow` | 大文字か数字 |
+  | snake_case | `delete_row` | `_` |
+
+  - camelCase と snake_case では、語の最初の文字を小文字にして比べます。例: `deleteRow` も `delete_row` も `Delete` で始まります
+  - `Address` と `address` は `Add` で始まるとはみなしません
+  - `round-trip` の組は、同じ書き方で探します。例: `exportRows` と `importRows`、`export_rows` と `import_rows`
+- **`Add` と `Register` に条件を付ける理由**: この2つの語は、値を返すだけの関数にもよく使われます。例: `AddDays`、`Add(a, b)`。冪等かどうかが問題になるのは、状態を変える関数だけです。事実のうち状態を変えることを示すのは、入出力をする import だけなので、それを条件にします
+  - ほかの4つの語（`Create`、`Insert`、`Submit`、`Enqueue`）は、ほとんどの場合、状態を変えます。そのため、条件を付けません
+- **UI のコンポーネント**: `.tsx` か `.jsx` のファイルにある、名前が大文字で始まる関数は候補にしません。React では、大文字で始まる関数がコンポーネントです。コンポーネントは画面の部品で、操作ではありません。例: `DeleteRowDialog`
 - **候補から外すもの**: 同じ種類の設定済みの不変条件がすでに名指ししているシンボルは、候補になりません
 - **対象の書き方**: 候補の対象は設定と同じ書き方で書きます。ユニットのパスの最後の要素に、名前を続けます。例: `api.CreatePost`、`store.Store.Delete`
 

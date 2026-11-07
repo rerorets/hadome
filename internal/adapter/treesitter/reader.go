@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"regexp"
 	"strings"
+	"unicode"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
@@ -155,7 +156,13 @@ func stripDelimiters(s string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(strings.TrimSuffix(s, "*/"))
+	return trimComment(strings.TrimSuffix(s, "*/"))
+}
+
+// trimComment trims the spaces around a comment's text, but not the line breaks before it: the
+// text's first line must stay the comment's first line, so that line numbers counted from it hold.
+func trimComment(s string) string {
+	return strings.TrimRightFunc(strings.TrimLeft(s, " \t"), unicode.IsSpace)
 }
 
 // walk visits n and its descendants depth first; visit returns false to skip a node's children.

@@ -5,6 +5,8 @@
 package suggest
 
 import (
+	"path"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -14,18 +16,21 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// byPrefix maps an invariant type to the name prefixes that suggest it, and why.
+// byPrefix maps an invariant type to the name prefixes that suggest it, and why. A prefix listed in
+// io suggests it only in a unit that does input or output: the word also names many functions that
+// only compute a value (AddDays, Add(a, b)).
 var byPrefix = []struct {
 	typ, why string
 	prefixes []string
+	io       []string
 	scoped   bool
 }{
 	{"idempotent", "creates things; a retried request must not create them twice",
-		[]string{"Create", "Add", "Insert", "Register", "Submit", "Enqueue"}, false},
+		[]string{"Create", "Add", "Insert", "Register", "Submit", "Enqueue"}, []string{"Add", "Register"}, false},
 	{"erasable", "deletes things; what is deleted must remain nowhere",
-		[]string{"Delete", "Remove", "Erase", "Purge"}, false},
+		[]string{"Delete", "Remove", "Erase", "Purge"}, nil, false},
 	{"isolated", "reads data for a user or tenant; nobody else's data may come back",
-		[]string{"Get", "List", "Find", "Search", "Read", "Load", "Fetch", "Query"}, true},
+		[]string{"Get", "List", "Find", "Search", "Read", "Load", "Fetch", "Query"}, nil, true},
 }
 
 // pairs are the operations whose round trip must give back the original.
@@ -35,6 +40,7 @@ var pairs = [][2]string{{"Export", "Import"}, {"Encode", "Decode"}, {"Marshal", 
 // Candidates returns the candidates of one version that its configuration does not already name.
 func Candidates(in engine.Input) []engine.Candidate {
 	syms := candidateSymbols(in.Facts)
+	io := ioFiles(in.Facts)
 	byID := map[string]facts.Symbol{}
 	for _, s := range syms {
 		byID[s.ID] = s
@@ -53,13 +59,16 @@ func Candidates(in engine.Input) []engine.Candidate {
 	for _, s := range syms {
 		prefix, name := split(s.ID)
 		for _, p := range byPrefix {
-			if (!p.scoped || s.Scoped) && beginsWith(name, p.prefixes) {
-				add(p.typ, p.why, s, s.ID)
+			for _, w := range p.prefixes {
+				if _, _, ok := begins(name, w); ok && (!p.scoped || s.Scoped) && (!slices.Contains(p.io, w) || io[s.Path]) {
+					add(p.typ, p.why, s, s.ID)
+					break
+				}
 			}
 		}
 		for _, pair := range pairs {
-			if rest, ok := strings.CutPrefix(name, pair[0]); ok && (rest == "" || startsUpper(rest)) {
-				if other, ok := byID[prefix+pair[1]+rest]; ok {
+			if rest, spell, ok := begins(name, pair[0]); ok {
+				if other, ok := byID[prefix+spell(pair[1])+rest]; ok {
 					add("round-trip", "writes out and reads back; reading back must give the original", s, s.ID, other.ID)
 				}
 			}
@@ -95,13 +104,37 @@ func configured(invs []config.Invariant, typ string, ids []string) bool {
 	return false
 }
 
-// candidateSymbols are the exported functions and methods. Symbols never come from test or generated code.
+// candidateSymbols are the exported functions and methods, without UI components. Symbols never
+// come from test or generated code.
 func candidateSymbols(a *facts.Analysis) []facts.Symbol {
 	var out []facts.Symbol
 	for _, s := range a.Symbols {
-		if s.Exported && (s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod) {
+		if s.Exported && (s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod) && !component(s) {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// component reports a React component: in .tsx and .jsx files, a function whose name starts with an
+// upper-case letter is one. It is a part of a screen, not an operation (DeleteRowDialog).
+func component(s facts.Symbol) bool {
+	ext := path.Ext(s.Path)
+	_, name := split(s.ID)
+	return (ext == ".tsx" || ext == ".jsx") && s.Kind == facts.SymbolFunction && name != "" && unicode.IsUpper([]rune(name)[0])
+}
+
+// ioFiles are the files of units that import something that does input or output.
+func ioFiles(a *facts.Analysis) map[string]bool {
+	units := map[string]bool{}
+	for _, im := range a.Imports {
+		if im.IO {
+			units[im.FromUnit] = true
+		}
+	}
+	out := map[string]bool{}
+	for _, f := range a.Files {
+		out[f.Path] = f.Unit != "" && units[f.Unit]
 	}
 	return out
 }
@@ -118,15 +151,25 @@ func target(id string) string {
 	return facts.ShortName(id)
 }
 
-// beginsWith reports whether one of the words is the whole name or is followed by an upper-case
-// letter or digit, so that Address is not an Add.
-func beginsWith(name string, words []string) bool {
-	for _, w := range words {
-		if rest, ok := strings.CutPrefix(name, w); ok && (rest == "" || startsUpper(rest)) {
-			return true
-		}
+// begins reports whether name begins with word, a PascalCase word such as Delete, in any of three
+// spellings: DeleteRow, deleteRow or delete_row. The word must be the whole name or be followed by
+// what starts the next word in that spelling, so that Address is not an Add. It returns the rest of
+// the name and how to spell another word the same way.
+func begins(name, word string) (string, func(string) string, bool) {
+	same := func(w string) string { return w }
+	if rest, ok := strings.CutPrefix(name, word); ok && (rest == "" || startsUpper(rest)) {
+		return rest, same, true
 	}
-	return false
+	if rest, ok := strings.CutPrefix(name, lowerFirst(word)); ok && (rest == "" || startsUpper(rest) || strings.HasPrefix(rest, "_")) {
+		return rest, lowerFirst, true
+	}
+	return "", nil, false
+}
+
+func lowerFirst(w string) string {
+	r := []rune(w)
+	r[0] = unicode.ToLower(r[0])
+	return string(r)
 }
 
 func startsUpper(s string) bool {

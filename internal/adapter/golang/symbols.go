@@ -3,6 +3,8 @@ package golang
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
+	"strings"
 
 	"github.com/rerorets/hadome/internal/facts"
 )
@@ -32,9 +34,66 @@ func funcSymbol(fset *token.FileSet, pf parsedFile, id string, d *ast.FuncDecl) 
 	}
 	return facts.Symbol{
 		ID: id, Kind: kind, Path: pf.path, Line: fset.Position(d.Pos()).Line, EndLine: fset.Position(d.End()).Line,
-		Exported: exported(d), Doc: d.Doc != nil, Scoped: scopeWordParam(d.Type) >= 0,
-		Params: len(params(d.Type)), Complexity: complexity(d.Body),
+		Exported: exported(d), Doc: d.Doc != nil, DocElsewhere: d.Recv != nil && standardMethod(d),
+		Scoped: scopeWordParam(d.Type) >= 0, Params: len(params(d.Type)), Complexity: complexity(d.Body),
 	}
+}
+
+// standardMethods are the methods standard library interfaces define (fmt.Stringer, error,
+// http.Handler, json.Marshaler, sort.Interface, …), by name and signature. Their interface
+// documents them, so they need no doc comment of their own.
+var standardMethods = map[string][]string{
+	"Error":         {"() string"},
+	"String":        {"() string"},
+	"ServeHTTP":     {"(http.ResponseWriter, *http.Request)"},
+	"Unwrap":        {"() error", "() []error"},
+	"Is":            {"(error) bool"},
+	"As":            {"(any) bool", "(interface{}) bool"},
+	"Format":        {"(fmt.State, rune)"},
+	"MarshalJSON":   {"() ([]byte, error)"},
+	"UnmarshalJSON": {"([]byte) error"},
+	"MarshalText":   {"() ([]byte, error)"},
+	"UnmarshalText": {"([]byte) error"},
+	"Len":           {"() int"},
+	"Less":          {"(int, int) bool"},
+	"Swap":          {"(int, int)"},
+}
+
+// standardMethod reports whether a method has the name and the signature of a standard method.
+func standardMethod(d *ast.FuncDecl) bool {
+	sig := signature(d.Type)
+	for _, want := range standardMethods[d.Name.Name] {
+		if sig == want {
+			return true
+		}
+	}
+	return false
+}
+
+// signature writes a function type's parameter and result types without names: "(int, int) bool".
+func signature(ft *ast.FuncType) string {
+	list := func(fl *ast.FieldList) []string {
+		var out []string
+		if fl == nil {
+			return out
+		}
+		for _, f := range fl.List {
+			n := max(len(f.Names), 1)
+			for range n {
+				out = append(out, types.ExprString(f.Type))
+			}
+		}
+		return out
+	}
+	s := "(" + strings.Join(list(ft.Params), ", ") + ")"
+	switch rs := list(ft.Results); len(rs) {
+	case 0:
+	case 1:
+		s += " " + rs[0]
+	default:
+		s += " (" + strings.Join(rs, ", ") + ")"
+	}
+	return s
 }
 
 // namedTypes lists the named types of a declaration. A type's doc comment is on its spec, or on the
