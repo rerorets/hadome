@@ -35,15 +35,28 @@ func (j *java) index(_ engine.Version, files []*file) {
 	for _, f := range files {
 		pkg := ""
 		var classes []string
+		var types []*sitter.Node
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_declaration" && n.NamedChildCount() > 0:
 				pkg = f.text(n.NamedChild(0))
 			case javaTypes[n.Kind()]:
 				classes = append(classes, f.field(n, "name"))
+				types = append(types, n)
 			}
 		}
 		j.place(f, pkg, classes)
+		for _, n := range types {
+			var entries []string
+			if n.Kind() == "enum_declaration" {
+				for _, c := range named(n.ChildByFieldName("body")) {
+					if c.Kind() == "enum_constant" {
+						entries = append(entries, f.field(c, "name"))
+					}
+				}
+			}
+			j.noteType(f, n, f.field(n, "name"), entries)
+		}
 	}
 }
 
