@@ -489,8 +489,6 @@ var count = 0
 
 type row struct{ n int }
 
-var defaults row
-
 func Done() int { return status.OK }
 
 func Fail() int { return status.Failed }
@@ -579,6 +577,8 @@ const (
 	size   = unsafe.Sizeof(0)
 	length = len("")
 )
+
+var defaults row
 `)},
 		"worker/mode_a.go": {Data: []byte("//go:build a\n\npackage worker\n\nconst mode = 1\n")},
 		"worker/mode_b.go": {Data: []byte("//go:build !a\n\npackage worker\n\nconst mode = 0\n")},
