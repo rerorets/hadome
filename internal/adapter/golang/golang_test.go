@@ -317,13 +317,15 @@ func TestUnreadable(t *testing.T) { check.Same(t, Add(1, 2), 3) }
 
 func TestNamedSubtest(t *testing.T) { t.Run("one", runOne) }
 
+func TestFieldSubtest(t *testing.T) { t.Run("one", subs.one) }
+
 func equal(tb testing.TB, a, b int) {
 	if a != b {
 		tb.Errorf("%d != %d", a, b)
 	}
 }
 `)},
-		"store/sub_test.go": {Data: []byte("package store\n\nimport \"testing\"\n\nvar runOne = func(t *testing.T) {}\n")},
+		"store/sub_test.go": {Data: []byte("package store\n\nimport \"testing\"\n\nvar runOne = func(t *testing.T) {}\n\nvar subs struct{ one func(*testing.T) }\n")},
 	}
 	c := config.Config{Assertions: []string{"example.com/app/check.Equal"}}
 	paths := []string{"check/check.go", "store/store.go", "store/store_test.go", "store/sub_test.go"}
@@ -338,6 +340,7 @@ func equal(tb testing.TB, a, b int) {
 	sort.Strings(got)
 	want := `TestConfigured asserts=1 unknown=false
 TestFatal asserts=1 unknown=false
+TestFieldSubtest asserts=0 unknown=true
 TestHelper asserts=1 unknown=false
 TestNamedSubtest asserts=0 unknown=true
 TestNone asserts=0 unknown=false

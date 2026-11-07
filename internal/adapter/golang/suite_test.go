@@ -14,7 +14,8 @@ import (
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A test that runs a testify suite with suite.Run reaches the code through the suite's setup and
-// test methods: through the suite's fields, and checking with its assertions.
+// test methods: through the suite's fields and its helper methods' declared parameters, and
+// checking with its assertions.
 func TestGoTestsReachTheCodeThroughTheirSuite(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod": {Data: []byte("module example.com/app\n")},
@@ -52,6 +53,10 @@ func (x *StoreSuite) TestTwice() { x.Require().Equal(2, x.twice()) }
 
 func (x *StoreSuite) twice() int { x.s.Add("a"); return x.s.Add("b") }
 
+func (x *StoreSuite) TestParam() { x.addTo(store.New()) }
+
+func (x *StoreSuite) addTo(s *store.Store) { s.Add("p") }
+
 func TestStoreSuite(t *testing.T) { suite.Run(t, new(StoreSuite)) }
 
 func TestStoreSuiteLiteral(t *testing.T) { suite.Run(t, &StoreSuite{}) }
@@ -72,8 +77,8 @@ func TestStoreSuiteLiteral(t *testing.T) { suite.Run(t, &StoreSuite{}) }
 	}
 	sort.Strings(got)
 	want := strings.Join([]string{
-		"TestStoreSuite calls=[example.com/app/store.New×1 example.com/app/store.Store.Add×3] unresolved=0 asserts=2",
-		"TestStoreSuiteLiteral calls=[example.com/app/store.New×1 example.com/app/store.Store.Add×3] unresolved=0 asserts=2",
+		"TestStoreSuite calls=[example.com/app/store.New×2 example.com/app/store.Store.Add×4] unresolved=0 asserts=2",
+		"TestStoreSuiteLiteral calls=[example.com/app/store.New×2 example.com/app/store.Store.Add×4] unresolved=0 asserts=2",
 	}, "\n")
 	if g := strings.Join(got, "\n"); g != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)

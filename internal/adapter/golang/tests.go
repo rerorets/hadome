@@ -137,7 +137,7 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 		}
 		w := &walker{
 			scope: scope{idx: idx, pkgPath: pf.pkgPath, imports: imports, samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
-				testKey: helperKey(pf), frame: &frame{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, helpers: helpers}},
+				testKey: helperKey(pf), helpers: helpers, local: newBlock(nil)},
 			fset: fset, tables: tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
 			walking: map[string]bool{}, curPath: pf.path,
 			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
@@ -145,7 +145,6 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 				Body: body(fset, pf.src, fn)},
 		}
 		w.collectTParams(fn.Type, fn.Body)
-		w.packageVars()
 		ast.Inspect(fn.Body, w.visit)
 		w.test.Calls = w.callFacts()
 		out = append(out, w.test)
@@ -242,6 +241,9 @@ func (w *walker) visit(n ast.Node) bool {
 		w.recordVars(n)
 	case *ast.GenDecl: // var and type declarations inside the test
 		w.recordDecl(n)
+	case *ast.FuncLit:
+		w.funcLit(n)
+		return false
 	case *ast.CallExpr:
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
@@ -324,12 +326,20 @@ func (w *walker) followHelper(name string, c *ast.CallExpr) {
 		return
 	}
 	w.walking[name] = true
-	w.collectTParams(h.decl.Type, h.decl.Body)
-	prevPath, prevArgs := w.curPath, w.args
-	w.curPath, w.args = h.path, w.bindArgs(h.decl.Type, c)
-	ast.Inspect(h.decl.Body, w.visit)
-	w.curPath, w.args = prevPath, prevArgs
+	w.walkHelper(h, w.bindArgs(h.decl.Type, c))
 	delete(w.walking, name)
+}
+
+// walkHelper walks a helper's body in the helper's own file and block: it sees its parameters,
+// typed as declared, and not the variables of the function that calls it.
+func (w *walker) walkHelper(h helper, args map[string]string) {
+	prevPath, prevArgs, prevScope := w.curPath, w.args, w.scope
+	w.curPath, w.args, w.scope = h.path, args, h.scope(w.scope)
+	w.local = newBlock(nil)
+	w.collectTParams(h.decl.Type, h.decl.Body)
+	w.bindParams(h.decl.Type)
+	ast.Inspect(h.decl.Body, w.visit)
+	w.curPath, w.args, w.scope = prevPath, prevArgs, prevScope
 }
 
 // bindArgs maps the helper's parameters to the caller's arguments, as the caller wrote them.

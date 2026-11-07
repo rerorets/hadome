@@ -324,11 +324,14 @@ What decides whether a fact can block is whether the adapter identified it, not 
 
 A Go test reads the type of a value it calls a method on from declarations. It runs no type checker and reads no other module. These values have a known type:
 
-- package-level variables of the code (`store.Default.Validate()`) and of the test's file (`var shared = store.New()`, `var shared *store.Store`)
+- package-level variables of the code (`store.Default.Validate()`) and of the test package (`var shared = store.New()`, `var shared *store.Store`). Those of the test package are read from every `_test.go` file of the same package
 - a composite literal in parentheses (`(Config{}).Validate()`)
 - the result of a function, a method or a test helper, read by its declared result type (`newStore(t).Append()`)
 - range elements (`for _, s := range stores`) and fields of a declared struct (`tc.store.Append()`, `f.w.Drain()`)
 - variables made by `var c Config` or `:=`
+- parameters of helpers and function literals, read by their declared types (`func check(t *testing.T, s *store.Store)`)
+
+Variables are read per function. A variable or parameter declared in a helper or a function literal hides one of the same name outside it. A function literal also sees the variables of the function around it (`t.Run("x", func(t *testing.T) { tc.store.Append() })`). A helper does not see the variables of the test that calls it. Calls inside a helper are read with the imports of the helper's file.
 
 A method of a value whose type is unknown is `unknown`.
 

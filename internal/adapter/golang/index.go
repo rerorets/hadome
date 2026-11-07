@@ -25,6 +25,9 @@ type index struct {
 	// testTypes maps "<helperKey>.<Type>" to the declaration of a type in a test file. Its methods
 	// are not targets, but its fields lead to them.
 	testTypes map[string]declRef
+	// testVars maps "<helperKey>.<Name>" to the declaration of a package-level variable of a test
+	// file, which every test file of the same package can use.
+	testVars map[string]declRef
 	// values holds "<import path>.<Name>" for every package-level variable. Calling one runs code
 	// hadome cannot name, so the call counts as unresolved rather than as no call at all.
 	values map[string]bool
@@ -41,11 +44,11 @@ type index struct {
 	scopes map[string]int
 }
 
-func buildIndex(files []parsedFile, modules map[string]string) *index {
+func buildIndex(files []parsedFile, modules map[string]string, helpers map[string]map[string]helper) *index {
 	idx := &index{funcs: map[string]bool{}, results: map[string]declRef{}, types: map[string]bool{},
-		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, values: map[string]bool{},
-		varDecls: map[string]declRef{}, consts: map[string]bool{}, scopes: map[string]int{},
-		support: map[string]map[string]helper{}}
+		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, testVars: map[string]declRef{},
+		values: map[string]bool{}, varDecls: map[string]declRef{}, consts: map[string]bool{},
+		scopes: map[string]int{}, support: map[string]map[string]helper{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
@@ -54,7 +57,8 @@ func buildIndex(files []parsedFile, modules map[string]string) *index {
 		if pf.test {
 			in.samePkg = !strings.HasSuffix(pf.file.Name.Name, "_test")
 			in.testKey = helperKey(pf)
-			idx.addTestTypes(pf.file, in)
+			in.helpers = helpers[in.testKey]
+			idx.addTestDecls(pf.file, in)
 			continue
 		}
 		if pf.support {
@@ -104,23 +108,43 @@ func (idx *index) addValues(pkgPath string, tok token.Token, s *ast.ValueSpec, i
 			continue
 		}
 		idx.values[id] = true
-		ref := declRef{typ: s.Type, in: in}
-		if len(s.Values) == len(s.Names) {
-			ref.value = s.Values[i]
-		}
-		idx.varDecls[id] = ref
+		idx.varDecls[id] = specRef(s, i, in)
 	}
 }
 
-func (idx *index) addTestTypes(f *ast.File, in scope) {
+// addTestDecls indexes the package-level types and variables of a test file.
+func (idx *index) addTestDecls(f *ast.File, in scope) {
 	for _, decl := range f.Decls {
-		if d, ok := decl.(*ast.GenDecl); ok && d.Tok == token.TYPE {
-			for _, s := range d.Specs {
-				ts := s.(*ast.TypeSpec)
-				idx.testTypes[in.testKey+"."+ts.Name.Name] = declRef{typ: ts.Type, in: in}
+		d, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, s := range d.Specs {
+			switch s := s.(type) {
+			case *ast.TypeSpec:
+				idx.testTypes[in.testKey+"."+s.Name.Name] = declRef{typ: s.Type, in: in}
+			case *ast.ValueSpec:
+				if d.Tok != token.VAR {
+					continue
+				}
+				for i, n := range s.Names {
+					idx.testVars[in.testKey+"."+n.Name] = specRef(s, i, in)
+				}
 			}
 		}
 	}
+}
+
+// specRef is the declaration of the i-th variable of var a, b T or var a, b = x, y.
+func specRef(s *ast.ValueSpec, i int, in scope) declRef {
+	ref := declRef{typ: s.Type, in: in}
+	switch {
+	case len(s.Values) == len(s.Names):
+		ref.value = s.Values[i]
+	case i == 0 && len(s.Values) == 1: // var s, err = store.Open()
+		ref.value = s.Values[0]
+	}
+	return ref
 }
 
 // result returns the type of a function's or method's first result.
@@ -132,10 +156,12 @@ func (idx *index) result(id string) *vtype {
 	return d.in.resolve(d.typ)
 }
 
-// varType returns the type of a package-level variable: the one it is declared with, or else the
-// type of its initial value.
-func (idx *index) varType(id string, depth int) *vtype {
-	d := idx.varDecls[id]
+// varType returns the type of a package-level variable of the code.
+func (idx *index) varType(id string, depth int) *vtype { return idx.varDecls[id].typeAt(depth) }
+
+// typeAt returns the type of a declared variable: the one it is declared with, or else the type of
+// its initial value.
+func (d declRef) typeAt(depth int) *vtype {
 	if d.typ != nil {
 		return d.in.resolve(d.typ)
 	}

@@ -90,8 +90,8 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	for _, pf := range files {
 		a.Files[at[pf.path]].Role = role(pf)
 	}
-	idx := buildIndex(files, modules)
 	helpers := collectHelpers(files)
+	idx := buildIndex(files, modules, helpers)
 	tb := newTables(c)
 	for _, pf := range files {
 		if pf.test {
