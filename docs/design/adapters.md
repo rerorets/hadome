@@ -263,7 +263,7 @@ People never classify tests. What a test guards is mostly worked out by machine,
 
 | Piece | Who provides it | How |
 |---|---|---|
-| Target (the entry point the test exercises) | Inferred by the adapter | The public functions and methods the test body calls in non-test code, each as a `Call` with how many times it is called and with how many distinct scopes (the argument where the user or tenant goes; [rules-tests.md](rules-tests.md) defines both). When the call target cannot be identified (a method on a value whose type is unknown, a variable holding a function, a function of a package that could not be read), it is `unknown`. A declaration overrides the inference only when it is wrong |
+| Target (the entry point the test exercises) | Inferred by the adapter | The functions and methods the test body calls in non-test code. Unexported ones are targets too when a test can call them (for example `limiter.batch`, called by a Go test in the same package). Each is a `Call` with how many times it is called and with how many distinct scopes (the argument where the user or tenant goes; [rules-tests.md](rules-tests.md) defines both). When the call target cannot be identified (a method on a value whose type is unknown, a variable holding a function, a function of a package that could not be read), it is `unknown`. A declaration overrides the inference only when it is wrong |
 | Viewpoint | Not declared | Hard to infer and costly to write. The guarded scope is the set of inferred targets |
 | Invariant link | Mostly inferred from the shape of the test's calls. The test's author writes one line only for product-specific invariants and for types without a shape | `guards: <invariant>` in the doc comment |
 
@@ -294,7 +294,17 @@ What decides whether a fact can block is whether the adapter identified it, not 
 | Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
 | Ansible | The YAML parser that reads the configuration (`goccy/go-yaml`). No dependency on C |
 
-A Go test also reads its file's package-level variables by type (`var shared = store.New()`, `var shared *store.Store`). For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
+A Go test reads the type of a value it calls a method on from declarations. It runs no type checker and reads no other module. These values have a known type:
+
+- package-level variables of the code (`store.Default.Validate()`) and of the test's file (`var shared = store.New()`, `var shared *store.Store`)
+- a composite literal in parentheses (`(Config{}).Validate()`)
+- the result of a function, a method or a test helper, read by its declared result type (`newStore(t).Append()`)
+- range elements (`for _, s := range stores`) and fields of a declared struct (`tc.store.Append()`, `f.w.Drain()`)
+- variables made by `var c Config` or `:=`
+
+A method of a value whose type is unknown is `unknown`.
+
+For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
 

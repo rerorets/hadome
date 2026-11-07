@@ -127,7 +127,7 @@ Adding tests does not always widen what they guard. These three rules stop tests
 
 ### The guarded scope
 
-The guarded scope is the set of **targets** that at least one active test exercises. A target is a public function or method in non-test code that a test calls, as inferred by the adapter.
+The guarded scope is the set of **targets** that at least one active test exercises. A target is a function or method in non-test code that a test calls, as inferred by the adapter.
 
 A test counts only when it is active: skipped tests (with or without a reason) do not guard anything.
 

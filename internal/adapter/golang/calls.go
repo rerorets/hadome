@@ -2,60 +2,86 @@ package golang
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// recordVars remembers the type of variables created from the repository's own constructors or
-// composite literals, so that later method calls on them resolve to a target.
+// recordVars types the variables an assignment sets, so that later method calls on them resolve to
+// a target. := declares a variable, which hides one of the same name even when its type is not
+// known; = keeps the type the variable was declared with.
 func (w *walker) recordVars(as *ast.AssignStmt) {
-	if len(as.Lhs) == 0 || len(as.Rhs) == 0 {
+	for i, l := range as.Lhs {
+		name, ok := l.(*ast.Ident)
+		if !ok || name.Name == "_" {
+			continue
+		}
+		var t *vtype
+		switch {
+		case len(as.Rhs) == len(as.Lhs):
+			t = w.valueType(as.Rhs[i])
+		case i == 0 && len(as.Rhs) == 1: // s, err := store.Open(), v, ok := m[k]
+			t = w.valueType(as.Rhs[0])
+		}
+		if as.Tok == token.DEFINE || t != nil {
+			w.vars[name.Name] = t
+		}
+	}
+}
+
+// recordRange types the variables of a range over a typed slice, map or channel.
+func (w *walker) recordRange(r *ast.RangeStmt) {
+	if r.Tok != token.DEFINE {
 		return
 	}
-	name, ok := as.Lhs[0].(*ast.Ident)
-	if !ok {
+	x := w.valueType(r.X)
+	key, value := (*vtype)(nil), x.elem()
+	if x.isChan() {
+		key, value = value, nil
+	}
+	for _, v := range []struct {
+		e ast.Expr
+		t *vtype
+	}{{r.Key, key}, {r.Value, value}} {
+		if id, ok := v.e.(*ast.Ident); ok && id.Name != "_" {
+			w.vars[id.Name] = v.t
+		}
+	}
+}
+
+// recordDecl types the variables and records the types a declaration inside a test declares.
+func (w *walker) recordDecl(d *ast.GenDecl) {
+	if d.Tok != token.VAR && d.Tok != token.TYPE {
 		return
 	}
-	if t := w.typeOf(as.Rhs[0]); t != "" {
+	for _, spec := range d.Specs {
+		switch s := spec.(type) {
+		case *ast.ValueSpec:
+			w.recordSpec(s)
+		case *ast.TypeSpec:
+			w.types[s.Name.Name] = s.Type
+		}
+	}
+}
+
+// recordSpec types the variables of var x T or var x = v.
+func (w *walker) recordSpec(vs *ast.ValueSpec) {
+	for i, name := range vs.Names {
+		var t *vtype
+		switch {
+		case vs.Type != nil:
+			t = w.resolve(vs.Type)
+		case len(vs.Values) == len(vs.Names):
+			t = w.valueType(vs.Values[i])
+		case i == 0 && len(vs.Values) == 1:
+			t = w.valueType(vs.Values[0])
+		}
 		w.vars[name.Name] = t
-	} else {
-		delete(w.vars, name.Name) // a local of the same name hides a package-level variable
 	}
-}
-
-func (w *walker) typeOf(e ast.Expr) string {
-	if u, ok := e.(*ast.UnaryExpr); ok {
-		e = u.X
-	}
-	switch e := e.(type) {
-	case *ast.CompositeLit:
-		return w.qualify(e.Type, func(id string) bool { return w.idx.types[id] })
-	case *ast.CallExpr:
-		if fn := w.qualify(e.Fun, func(id string) bool { _, ok := w.idx.funcs[id]; return ok }); fn != "" {
-			return w.idx.funcs[fn]
-		}
-	}
-	return ""
-}
-
-// qualify turns pkg.Name (or Name in the same package) into "<import path>.<Name>" when known.
-func (w *walker) qualify(e ast.Expr, known func(string) bool) string {
-	switch e := e.(type) {
-	case *ast.SelectorExpr:
-		if pkg, ok := e.X.(*ast.Ident); ok {
-			if p, ok := w.imports[pkg.Name]; ok && known(p+"."+e.Sel.Name) {
-				return p + "." + e.Sel.Name
-			}
-		}
-	case *ast.Ident:
-		if w.samePkg && known(w.pkgPath+"."+e.Name) {
-			return w.pkgPath + "." + e.Name
-		}
-	}
-	return ""
 }
 
 func (w *walker) call(c *ast.CallExpr) {
@@ -83,30 +109,31 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 	if w.suiteCall(c, sel) {
 		return
 	}
-	x, ok := sel.X.(*ast.Ident)
-	if !ok {
-		// A method on the result of a call or literal, for example store.New().Len().
-		if t := w.typeOf(sel.X); t != "" && ast.IsExported(sel.Sel.Name) {
-			w.record(t+"."+sel.Sel.Name, c)
-		} else {
-			w.test.Unresolved++
-		}
-		return
-	}
 	name := sel.Sel.Name
-	if p, ok := w.imports[x.Name]; ok && !w.shadowed(x.Name) {
-		w.packageCall(c, p, name)
-		return
+	if x, ok := sel.X.(*ast.Ident); ok {
+		if p, ok := w.imports[x.Name]; ok && !w.shadowed(x.Name) {
+			w.packageCall(c, p, name)
+			return
+		}
+		if w.tParams[x.Name] {
+			w.toolCall(c, name)
+			return
+		}
 	}
-	if w.tParams[x.Name] {
-		w.toolCall(c, name)
-		return
-	}
-	if t, ok := w.vars[x.Name]; ok && ast.IsExported(name) {
-		w.record(t+"."+name, c)
+	// A method of a value whose type is declared: a variable, a field (tc.store.Append()), the
+	// result of a call (store.New().Len()) or a literal ((Config{}).Validate()).
+	if t := w.valueType(sel.X); t != nil && t.id != "" && (ast.IsExported(name) || w.ownType(t.id)) {
+		w.record(t.id+"."+name, c)
 		return
 	}
 	w.test.Unresolved++
+}
+
+// ownType reports whether a type belongs to the package the test is in, so that the test may call
+// its unexported methods.
+func (w *walker) ownType(id string) bool {
+	rest, ok := strings.CutPrefix(id, w.pkgPath+".")
+	return ok && w.samePkg && !strings.Contains(rest, ".")
 }
 
 // toolCall reads a call on the testing tool: t.Skip, t.Fatal and the like, or t.Run.
@@ -169,6 +196,14 @@ func (w *walker) readSelector(sel *ast.SelectorExpr) {
 	}
 }
 
+// readIdent counts Name as a read when it names a value of the same package that is not being
+// called, and is not the name after a dot.
+func (w *walker) readIdent(n *ast.Ident) {
+	if !w.fields[n] && !w.callees[n] && w.qualify(n, w.idx.value) != "" {
+		w.test.Reads++
+	}
+}
+
 // passesTool reports whether the call hands the testing tool to the function it calls.
 func (w *walker) passesTool(c *ast.CallExpr) bool {
 	for _, a := range c.Args {
@@ -216,8 +251,6 @@ func (w *walker) subtest(fn ast.Expr) {
 		w.test.AssertsUnknown = true
 	}
 }
-
-func (w *walker) shadowed(name string) bool { _, ok := w.vars[name]; return ok }
 
 func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 	if assertImports[p] || w.tables.asserts[p+"."+name] {
