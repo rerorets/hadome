@@ -64,8 +64,9 @@ var assertImports = map[string]bool{
 // helper is a function declared in a test file that is not itself a test. Tests often reach the
 // code under test only through helpers, so the walker follows calls into them.
 type helper struct {
-	decl *ast.FuncDecl
-	path string
+	decl    *ast.FuncDecl
+	path    string
+	imports map[string]string // the imports of the helper's file
 }
 
 func helperKey(pf parsedFile) string { return path.Dir(pf.path) + "\x00" + pf.file.Name.Name }
@@ -81,9 +82,10 @@ func collectHelpers(files []parsedFile) map[string]map[string]helper {
 		if out[k] == nil {
 			out[k] = map[string]helper{}
 		}
+		imports := fileImports(pf.file)
 		for _, decl := range pf.file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Body != nil && !strings.HasPrefix(fn.Name.Name, "Test") {
-				out[k][fn.Name.Name] = helper{decl: fn, path: pf.path}
+				out[k][fn.Name.Name] = helper{decl: fn, path: pf.path, imports: imports}
 			}
 		}
 	}
@@ -92,17 +94,12 @@ func collectHelpers(files []parsedFile) map[string]map[string]helper {
 
 // walker collects the facts of one test function.
 type walker struct {
+	scope   // the test's file, and the names the test declares
 	fset    *token.FileSet
-	idx     *index
 	tables  *tables
-	pkgPath string
-	samePkg bool
-	imports map[string]string // local name -> import path
-	tParams map[string]bool   // names bound to *testing.T anywhere in the test
-	vars    map[string]string // local variable -> "<import path>.<Type>"
+	tParams map[string]bool // names bound to *testing.T anywhere in the test
 	test    facts.Test
 	calls   map[string]*callCount
-	helpers map[string]helper
 	// walking holds the helpers being walked, so recursion stops; a helper called twice is walked
 	// twice, so the calls inside it count twice.
 	walking map[string]bool
@@ -137,10 +134,10 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 			continue
 		}
 		w := &walker{
-			fset: fset, idx: idx, tables: tb, pkgPath: pf.pkgPath, imports: imports,
-			samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
-			tParams: map[string]bool{}, vars: map[string]string{}, calls: map[string]*callCount{},
-			helpers: helpers, walking: map[string]bool{}, curPath: pf.path,
+			scope: scope{idx: idx, pkgPath: pf.pkgPath, imports: imports, samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
+				testKey: helperKey(pf), frame: &frame{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, helpers: helpers}},
+			fset: fset, tables: tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
+			walking: map[string]bool{}, curPath: pf.path,
 			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
 			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
 				Body: body(fset, pf.src, fn)},
@@ -241,6 +238,8 @@ func (w *walker) visit(n ast.Node) bool {
 	switch n := n.(type) {
 	case *ast.AssignStmt:
 		w.recordVars(n)
+	case *ast.GenDecl: // var and type declarations inside the test
+		w.recordDecl(n)
 	case *ast.CallExpr:
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
@@ -250,15 +249,14 @@ func (w *walker) visit(n ast.Node) bool {
 			w.readSelector(n)
 		}
 	case *ast.Ident:
-		if !w.fields[n] && !w.callees[n] && w.qualify(n, w.idx.value) != "" {
-			w.test.Reads++
-		}
+		w.readIdent(n)
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)
 		return false
 	case *ast.RangeStmt:
 		w.inspect(n.X)
+		w.recordRange(n)
 		w.inLoop(n.Body)
 		return false
 	case *ast.IfStmt:

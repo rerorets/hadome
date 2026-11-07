@@ -85,7 +85,7 @@ func TestStoreSuiteLiteral(t *testing.T) { suite.Run(t, &StoreSuite{}) }
 // Inside a suite, only the receiver's assertions count as checks: s.Run and s.T() do not, nor do a
 // chain from s.T(), from another value's Require(), or from a function's result. A suite helper is followed
 // each time it is called, once per chain when helpers call each other. A call on a field that is
-// not of a repository type, or of an unexported method, is not identified.
+// not of a repository type, or of an unexported method from outside its package, is not identified.
 func TestGoSuiteMethodsAreReadPrecisely(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},

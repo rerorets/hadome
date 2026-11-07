@@ -33,24 +33,24 @@ func (w *walker) suite(arg ast.Expr) {
 	if name == "" || w.suiteType != "" {
 		return
 	}
-	fields := w.suiteFields(name)
 	for _, m := range w.suiteMethods(name) {
 		if !strings.HasPrefix(m.Name.Name, "Test") && !strings.HasPrefix(m.Name.Name, "Setup") && m.Name.Name != "BeforeTest" {
 			continue
 		}
-		w.walkMethod(name, m, fields)
+		w.walkMethod(name, m)
 	}
 }
 
-// walkMethod walks one method of a suite, with the receiver's fields typed.
-func (w *walker) walkMethod(suite string, m *ast.FuncDecl, fields map[string]string) {
+// walkMethod walks one method of a suite, with the receiver typed as the suite, so that s.store.Add()
+// reads the suite's declared field.
+func (w *walker) walkMethod(suite string, m *ast.FuncDecl) {
 	recv := ""
 	if names := m.Recv.List[0].Names; len(names) == 1 {
 		recv = names[0].Name
 	}
 	w.recv, w.suiteType = recv, suite
-	for f, t := range fields {
-		w.vars[recv+"."+f] = t
+	if recv != "" {
+		w.vars[recv] = w.resolve(ast.NewIdent(suite))
 	}
 	ast.Inspect(m.Body, w.visit)
 	w.recv, w.suiteType = "", ""
@@ -75,38 +75,12 @@ func (w *walker) suiteMethods(name string) []*ast.FuncDecl {
 	return out
 }
 
-// suiteFields types the fields of a suite's struct that hold repository types.
-func (w *walker) suiteFields(name string) map[string]string {
-	out := map[string]string{}
-	ast.Inspect(w.file, func(n ast.Node) bool {
-		ts, ok := n.(*ast.TypeSpec)
-		if !ok || ts.Name.Name != name {
-			return true
-		}
-		if st, ok := ts.Type.(*ast.StructType); ok {
-			for _, f := range st.Fields.List {
-				t := w.declaredType(f.Type)
-				for _, fn := range f.Names {
-					if t != "" {
-						out[fn.Name] = t
-					}
-				}
-			}
-		}
-		return false
-	})
-	return out
-}
-
-// suiteCall reads a call on a suite method's receiver: s.store.Add() through a typed field,
-// s.Equal(…) or s.Require().Equal(…) from the embedded assertions, or s.helper() of the suite.
+// suiteCall reads a call on a suite method's receiver: s.Equal(…) or s.Require().Equal(…) from the embedded assertions, or s.helper() of the suite.
 func (w *walker) suiteCall(c *ast.CallExpr, sel *ast.SelectorExpr) bool {
 	if w.recv == "" {
 		return false
 	}
 	switch x := sel.X.(type) {
-	case *ast.SelectorExpr: // s.store.Add()
-		return w.fieldCall(c, x, sel.Sel.Name)
 	case *ast.CallExpr: // s.Require().Equal()
 		if w.onReceiver(x.Fun, "Require", "Assert") {
 			w.test.Asserts++
@@ -119,19 +93,6 @@ func (w *walker) suiteCall(c *ast.CallExpr, sel *ast.SelectorExpr) bool {
 		}
 	}
 	return false
-}
-
-// fieldCall records s.field.Method() when the suite's field has a repository type.
-func (w *walker) fieldCall(c *ast.CallExpr, field *ast.SelectorExpr, method string) bool {
-	id, ok := field.X.(*ast.Ident)
-	if !ok || id.Name != w.recv || !ast.IsExported(method) {
-		return false
-	}
-	t, ok := w.vars[w.recv+"."+field.Sel.Name]
-	if ok {
-		w.record(t+"."+method, c)
-	}
-	return ok
 }
 
 // onReceiver reports whether e is s.<one of names> on the suite's receiver.

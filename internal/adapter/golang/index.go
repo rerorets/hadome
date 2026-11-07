@@ -1,26 +1,36 @@
 package golang
 
 import (
-	"github.com/rerorets/hadome/internal/facts"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"strings"
+
+	"github.com/rerorets/hadome/internal/facts"
 )
 
-// index knows the public API of the repository's own packages, so that calls from tests can be
+// index knows the declarations of the repository's own packages, so that calls from tests can be
 // turned into target IDs ("<import path>.<Func>" or "<import path>.<Type>.<Method>").
 type index struct {
 	modules []string
-	// funcs maps "<import path>.<Func>" to the type it returns, "<import path>.<Type>", or "" when
-	// the result is not a type of the same package. Unexported functions are included because tests
-	// in the same package call them.
-	funcs map[string]string
-	// types holds "<import path>.<Type>" for every exported type.
-	types map[string]bool
+	// funcs holds "<import path>.<Func>" for every function. Unexported functions are included
+	// because tests in the same package call them.
+	funcs map[string]bool
+	// results maps a function or method ID to the declaration of its first result.
+	results map[string]declRef
+	// types holds "<import path>.<Type>" for every type, and typeDecls their declarations.
+	// Unexported types are included because tests in the same package call their methods.
+	types     map[string]bool
+	typeDecls map[string]declRef
+	// testTypes maps "<helperKey>.<Type>" to the declaration of a type in a test file. Its methods
+	// are not targets, but its fields lead to them.
+	testTypes map[string]declRef
 	// values holds "<import path>.<Name>" for every package-level variable. Calling one runs code
 	// hadome cannot name, so the call counts as unresolved rather than as no call at all.
 	values map[string]bool
+	// varDecls maps each package-level variable to its declaration, so that Default.Validate() is a
+	// call of a method of Default's type.
+	varDecls map[string]declRef
 	// consts holds "<import path>.<Name>" for every package-level constant.
 	consts map[string]bool
 	// scopes maps a function or method ID to the position of its scope parameter among the call's
@@ -29,38 +39,33 @@ type index struct {
 }
 
 func buildIndex(files []parsedFile, modules map[string]string) *index {
-	idx := &index{funcs: map[string]string{}, types: map[string]bool{}, values: map[string]bool{}, consts: map[string]bool{}, scopes: map[string]int{}}
+	idx := &index{funcs: map[string]bool{}, results: map[string]declRef{}, types: map[string]bool{},
+		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, values: map[string]bool{},
+		varDecls: map[string]declRef{}, consts: map[string]bool{}, scopes: map[string]int{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
 	for _, pf := range files {
+		in := scope{idx: idx, pkgPath: pf.pkgPath, imports: fileImports(pf.file), samePkg: true}
 		if pf.test {
+			in.samePkg = !strings.HasSuffix(pf.file.Name.Name, "_test")
+			in.testKey = helperKey(pf)
+			idx.addTestTypes(pf.file, in)
 			continue
 		}
 		for _, decl := range pf.file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				if id := funcID(pf.pkgPath, d); id != "" {
-					idx.scopes[id] = scopeParam(d.Type)
-				}
-				if d.Recv == nil {
-					idx.funcs[pf.pkgPath+"."+d.Name.Name] = resultType(pf.pkgPath, d.Type)
-				}
+				idx.addFunc(pf.pkgPath, d, in)
 			case *ast.GenDecl:
 				for _, s := range d.Specs {
 					switch s := s.(type) {
 					case *ast.TypeSpec:
-						if s.Name.IsExported() {
-							idx.types[pf.pkgPath+"."+s.Name.Name] = true
-						}
+						id := pf.pkgPath + "." + s.Name.Name
+						idx.types[id] = true
+						idx.typeDecls[id] = declRef{typ: s.Type, in: in}
 					case *ast.ValueSpec:
-						for _, n := range s.Names {
-							if d.Tok == token.VAR {
-								idx.values[pf.pkgPath+"."+n.Name] = true
-							} else {
-								idx.consts[pf.pkgPath+"."+n.Name] = true
-							}
-						}
+						idx.addValues(pf.pkgPath, d.Tok, s, in)
 					}
 				}
 			}
@@ -69,11 +74,73 @@ func buildIndex(files []parsedFile, modules map[string]string) *index {
 	return idx
 }
 
+func (idx *index) addFunc(pkgPath string, d *ast.FuncDecl, in scope) {
+	id := funcID(pkgPath, d)
+	if id == "" {
+		return
+	}
+	idx.scopes[id] = scopeParam(d.Type)
+	if r := d.Type.Results; r != nil && len(r.List) > 0 {
+		idx.results[id] = declRef{typ: r.List[0].Type, in: in}
+	}
+	if d.Recv == nil {
+		idx.funcs[id] = true
+	}
+}
+
+func (idx *index) addValues(pkgPath string, tok token.Token, s *ast.ValueSpec, in scope) {
+	for i, n := range s.Names {
+		id := pkgPath + "." + n.Name
+		if tok != token.VAR {
+			idx.consts[id] = true
+			continue
+		}
+		idx.values[id] = true
+		ref := declRef{typ: s.Type, in: in}
+		if len(s.Values) == len(s.Names) {
+			ref.value = s.Values[i]
+		}
+		idx.varDecls[id] = ref
+	}
+}
+
+func (idx *index) addTestTypes(f *ast.File, in scope) {
+	for _, decl := range f.Decls {
+		if d, ok := decl.(*ast.GenDecl); ok && d.Tok == token.TYPE {
+			for _, s := range d.Specs {
+				ts := s.(*ast.TypeSpec)
+				idx.testTypes[in.testKey+"."+ts.Name.Name] = declRef{typ: ts.Type, in: in}
+			}
+		}
+	}
+}
+
+// result returns the type of a function's or method's first result.
+func (idx *index) result(id string) *vtype {
+	d, ok := idx.results[id]
+	if !ok {
+		return nil
+	}
+	return d.in.resolve(d.typ)
+}
+
+// varType returns the type of a package-level variable: the one it is declared with, or else the
+// type of its initial value.
+func (idx *index) varType(id string, depth int) *vtype {
+	d := idx.varDecls[id]
+	if d.typ != nil {
+		return d.in.resolve(d.typ)
+	}
+	if d.value == nil {
+		return nil
+	}
+	return d.in.valueTypeAt(d.value, depth)
+}
+
 // value reports whether id names something a test can use as a value: a function, a variable or
 // a constant. Types are not values.
 func (idx *index) value(id string) bool {
-	_, fn := idx.funcs[id]
-	return fn || idx.values[id] || idx.consts[id]
+	return idx.funcs[id] || idx.values[id] || idx.consts[id]
 }
 
 // internal reports whether an import path belongs to the repository.
@@ -84,21 +151,6 @@ func (idx *index) internal(importPath string) bool {
 		}
 	}
 	return false
-}
-
-// resultType returns "<pkg>.<Type>" when the first result is T or *T of the same package.
-func resultType(pkgPath string, ft *ast.FuncType) string {
-	if ft.Results == nil || len(ft.Results.List) == 0 {
-		return ""
-	}
-	t := ft.Results.List[0].Type
-	if star, ok := t.(*ast.StarExpr); ok {
-		t = star.X
-	}
-	if id, ok := t.(*ast.Ident); ok && id.IsExported() {
-		return pkgPath + "." + id.Name
-	}
-	return ""
 }
 
 // funcID returns "<pkg>.<Func>" or "<pkg>.<Type>.<Method>", or "" for a receiver it cannot name.
