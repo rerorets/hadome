@@ -20,6 +20,7 @@ All are on by default. Generated files are never checked.
 - **Default form**: `TODO(<when or who>): <what>` — the regular expression `^TODO\([^)]+\): \S`. `FIXME` and `XXX` never match it, so they are always findings: one word for "later" is enough
 - **Why**: a TODO that does not say when tends to stay in the code with nobody working on it. A TODO left in the code misleads readers about what is finished
 - **Fix**: say when or by whom (`TODO(stage 2): …`), or do it now, or delete it
+  - The fix of a finding shows the configured form and an example that matches it. The example is the first of some common forms (`TODO(stage 2): …`, `TODO(#123): …`, `TODO(alice): …` and so on) that the configured form accepts. When none does, the fix shows no example
 - A product sets its own form, such as `^TODO\(stage[0-9]+\): \S`. Changing the form needs a person's review, because hadome cannot tell whether the new one is stricter
 - The anchor is the comment line's text, so moving the comment does not make it new
 
