@@ -120,20 +120,29 @@ func zeroNumber(t string) (isZero, float bool) {
 	}
 	float = strings.Contains(mantissa, ".")
 	if digits != "0123456789abcdef" && strings.HasPrefix(suffix, "e") {
-		exp := strings.TrimLeft(suffix[1:], "+-")
-		j := strings.IndexFunc(exp, func(r rune) bool { return r < '0' || r > '9' })
-		if j < 0 {
-			j = len(exp)
-		}
-		if j == 0 {
+		var ok bool
+		if suffix, ok = afterExponent(suffix); !ok {
 			return false, false
 		}
-		float, suffix = true, exp[j:]
+		float = true
 	}
 	if !numberSuffixes[suffix] {
 		return false, false
 	}
-	return true, float || suffix == "f" || suffix == "d" || suffix == "f32" || suffix == "f64"
+	return true, float || floatSuffixes[suffix]
+}
+
+var floatSuffixes = set("f", "d", "f32", "f64")
+
+// afterExponent returns what follows the exponent that starts a suffix, such as "f64" after
+// "e-3f64", and false when the exponent has no digits.
+func afterExponent(suffix string) (string, bool) {
+	exp := strings.TrimLeft(suffix[1:], "+-")
+	j := strings.IndexFunc(exp, func(r rune) bool { return r < '0' || r > '9' })
+	if j < 0 {
+		j = len(exp)
+	}
+	return exp[j:], j > 0
 }
 
 // valueAfterEquals returns the named child after a declaration's "=", for grammars without a field.
@@ -288,38 +297,50 @@ func ktConstants(f *file) consts {
 			}
 			return false
 		case "property_declaration":
-			readable, final := false, true
-			for i := uint(0); i < n.ChildCount(); i++ {
-				c := n.Child(i)
-				switch {
-				case !c.IsNamed() && c.Kind() == "val":
-					readable = true
-				case c.Kind() == "modifiers":
-					words := strings.Fields(f.text(c))
-					final = !slices.Contains(words, "open") && !slices.Contains(words, "abstract") &&
-						!slices.Contains(words, "override")
-				case c.Kind() == "getter" || c.Kind() == "setter" || c.Kind() == "property_delegate":
-					final = false
-				}
-			}
-			for _, c := range named(n) {
-				switch c.Kind() {
-				case "variable_declaration":
-					name := identifiers(f, c)
-					value := ""
-					if readable && final {
-						value = textOr(f, valueAfterEquals(n))
-					}
-					if len(name) > 0 {
-						out.add(name[0], value)
-					}
-				case "multi_variable_declaration":
-					out.unread(f, c)
-				}
-			}
+			ktProperty(f, n, out)
 			return false
 		}
 		return true
 	})
 	return out
+}
+
+// ktProperty records a property: its literal value when it is a val nothing can override or
+// compute, and as not read otherwise.
+func ktProperty(f *file, n *sitter.Node, out consts) {
+	value := ""
+	if ktReadable(f, n) {
+		value = textOr(f, valueAfterEquals(n))
+	}
+	for _, c := range named(n) {
+		switch c.Kind() {
+		case "variable_declaration":
+			if name := identifiers(f, c); len(name) > 0 {
+				out.add(name[0], value)
+			}
+		case "multi_variable_declaration":
+			out.unread(f, c)
+		}
+	}
+}
+
+// ktReadable reports a val without open, abstract or override, and without a getter, a setter or
+// a delegate.
+func ktReadable(f *file, n *sitter.Node) bool {
+	val := false
+	for i := uint(0); i < n.ChildCount(); i++ {
+		c := n.Child(i)
+		switch {
+		case !c.IsNamed() && c.Kind() == "val":
+			val = true
+		case c.Kind() == "modifiers":
+			words := strings.Fields(f.text(c))
+			if slices.Contains(words, "open") || slices.Contains(words, "abstract") || slices.Contains(words, "override") {
+				return false
+			}
+		case c.Kind() == "getter" || c.Kind() == "setter" || c.Kind() == "property_delegate":
+			return false
+		}
+	}
+	return val
 }
