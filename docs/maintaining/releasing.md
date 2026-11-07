@@ -2,10 +2,24 @@
 
 A release starts by pushing a version tag. The `release` workflow ([.github/workflows/release.yml](../../.github/workflows/release.yml)) does everything after that. [distribution.md](../design/distribution.md) explains the design.
 
+## Release steps
+
+1. Check that CI on main passes.
+2. Run `hadome mutate` on the change since the previous tag, and check that it reports no `mutation/survived` regression. If it does, merge a PR that adds the tests first.
+   - When the change exceeds `mutation.max-mutants`, the mutants not tried are reported as a review (exit 3). That review does not hold back a release.
+3. Open a PR that raises the version written in `README.md` and `README.ja.md`, and merge it. Title it like `The README pins 1.2.0`.
+4. Put a signed tag on that PR's merge commit, and push it.
+5. Check the workflow's results. Fix the cause of a failed job, then rerun only that job.
+
 ```sh
-git tag -s v1.2.0 -m "hadome 1.2.0"
+git fetch origin
+git tag -s v1.2.0 -m "hadome 1.2.0" <merge commit of the version PR>
 git push origin v1.2.0
 ```
+
+- Tag the merge commit of the version PR. The version in the README at the tagged commit then matches the release. Naming the commit keeps them matched even when another PR is merged before you tag.
+- Never delete or move a tag once it is pushed. Fix a mistake in the next patch release. The Go module proxy keeps serving the first content it saw for a tag, and npm, PyPI and crates.io cannot replace a published version. A moved tag leaves each channel with different content.
+- GitHub writes the release notes from the titles of the PRs merged since the previous tag. Write each PR title as one sentence a user can read to see what changed.
 
 Sign the tag. GitHub then marks it Verified, which shows who tagged the release. The workflow does not check the signature, so an unsigned tag behaves the same.
 
