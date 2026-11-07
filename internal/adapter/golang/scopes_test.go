@@ -131,8 +131,9 @@ func TestInternalVarIsNotSeen(t *testing.T) { _ = other.Validate() }
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A function literal sees the variables around it: a subtest reaches the test's variable and a
-// table case's field. Its parameters and its := declarations hide a variable of the same name only
-// inside it.
+// table case's field, and = inside it types the variable around it. Its parameters and its :=
+// declarations hide a variable of the same name only inside it. = with a value of unknown type
+// keeps the declared type. A helper given to t.Run is walked with the test.
 func TestGoFunctionLiteralsSeeTheVariablesAroundThem(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
@@ -168,6 +169,22 @@ func TestParamHidesOnlyInside(t *testing.T) {
 	_ = c.Validate()
 }
 
+func TestAssignInsideReachesOutside(t *testing.T) {
+	var s interface{ Append() int }
+	func() { s = &store.Store{} }()
+	_ = s.Append()
+}
+
+func TestAssignOfUnknownKeepsTheDeclaredType(t *testing.T) {
+	var s *store.Store
+	s = fake()
+	_ = s.Append()
+}
+
+func TestRunHelper(t *testing.T) { t.Run("x", appendShared) }
+
+func appendShared(t *testing.T) { _ = shared.Append() }
+
 func TestDefineHidesOnlyInside(t *testing.T) {
 	t.Run("x", func(t *testing.T) {
 		shared := fake()
@@ -178,8 +195,11 @@ func TestDefineHidesOnlyInside(t *testing.T) {
 `)},
 	}
 	want := strings.Join([]string{
+		"TestAssignInsideReachesOutside calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestAssignOfUnknownKeepsTheDeclaredType calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestDefineHidesOnlyInside calls=[example.com/app/store.Store.Append×1] unresolved=1",
 		"TestParamHidesOnlyInside calls=[example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
+		"TestRunHelper calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestSubtest calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestTable calls=[example.com/app/store.Store.Append×2] unresolved=0",
 	}, "\n")
