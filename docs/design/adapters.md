@@ -66,6 +66,7 @@ classDiagram
     +Internal bool
     +IO bool
     +Unknown bool
+    +Unread bool
     +Text string
     +Global bool
   }
@@ -132,6 +133,7 @@ Directories that are not read:
 - Nothing under these directories is listed or read. They hold copies of dependencies, build outputs and tools' working files, not the product's code
   - `vendor`, `node_modules`, `testdata`, `target`, `build`, `dist`, `__pycache__`
   - Anything starting with `.`. Example: `.git`
+- An import that names something inside a directory that is not read is treated as an import whose destination is unknown ("Imports whose destination is unknown" below)
 - Directories starting with `_` are read. Frameworks keep the product's code and tests there. Examples: jest's `__tests__`, Next.js's `_components`, Python's `_internal`
 - Only Go lists the `.go` files under a directory starting with `_` with role `other`. The go command does not treat it as a package and does not run its tests
 
@@ -203,13 +205,21 @@ Some imports do not have a destination until the code runs. Such an import is li
 
 When the argument is a string, the destination is resolved like any other import.
 
+An import that names something inside a directory hadome does not read ("Directories that are not read" above) is an import whose destination is unknown too. Examples: `import { client } from '../dist/client'`, `from .build import gen`.
+
+- hadome does not read the files of that directory, so it cannot tell which unit the import reaches
+- `Unknown` and `Unread` are true and `ToUnit` is empty. `Text` holds the specifier as written
+- It does not count as an import that performs input or output. What it reaches was not read, so whether it performs input or output is unknown too
+- This covers the TypeScript specifiers resolved as paths (those starting with `.` or `/`, and `paths` aliases) and Python's relative imports
+- A `..` in the path starts with `.` but is not a directory that is not read. An import that points outside the repository stays an import that cannot be resolved
+
 `unknown/import` sends imports whose destination is unknown, added by a change, to a person's review (exit code `3`). It does not fail the check, because a check never fails on what cannot be confirmed. The anchor is the file and the normalised call text, so moving the import does not make it new.
 
 | Rule | Cases |
 |---|---|
-| `unknown/import` | a new import whose destination is unknown returns `3` · one already in base does not · a dynamic import with a string argument is an ordinary import · one inside a test file does not · an Ansible role named with `{{ }}` returns `3` · a role named outright does not |
+| `unknown/import` | a new import whose destination is unknown returns `3` · one already in base does not · a dynamic import with a string argument is an ordinary import · one inside a test file does not · an Ansible role named with `{{ }}` returns `3` · a role named outright does not · a new import naming a directory that is not read returns `3` · one already in base does not · a Python relative import returns `3` too |
 
-A unit with an import whose destination is unknown has `unknown` purity, and `unknown` is never pure ("Pure units" in [rules-tests.md](rules-tests.md)).
+A unit with an import whose destination is unknown has `unknown` purity, and `unknown` is never pure ("Pure units" in [rules-tests.md](rules-tests.md)). So when such an import is added to a unit that was pure, both `unknown/import` and `tests/purity-lost` ask for review: the first points at the import itself, the second at the unit that is no longer pure.
 
 ### Hazard categories
 

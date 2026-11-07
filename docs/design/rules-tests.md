@@ -67,6 +67,10 @@ All are on by default and need no configuration.
 - Which units are pure is decided by hadome on every check (below). Nothing to configure
 - A test that also calls a unit that is not pure (or whose purity is `unknown`) may need the mock for that one, so it is not reported
 - Spies count as mocks. Examples: `vi.spyOn`, `jest.spyOn`, Mockito's `@Spy`. A spy watches calls or replaces behaviour; for pure code, checking the returned value is enough for either. What counts as a mock is in each language's hazard table ([adapters-treesitter.md](adapters-treesitter.md))
+- A function made by `vi.fn()` or `jest.fn()` does not count, with `.mockImplementation(…)` or the like after it or not
+  - What counts as a mock replaces something the unit reaches. Examples: `vi.mock` replaces an imported module, `vi.spyOn` a method of an object. The replacement hides the unit's side effects from the test
+  - `vi.fn()` is a value the test passes to the unit as an argument. Examples: `each([1], vi.fn())`, `total({ read: vi.fn() })`. It replaces nothing the unit imports, so it hides none of the unit's side effects
+  - Counting it would fail every test of a pure function that takes a callback or a dependency as an argument
 
 ### Pure units
 
@@ -91,7 +95,7 @@ hadome decides purity from imports, on every check:
 - **Treatment**: returns exit code `3` (a person reviews it), never `1`
 - **Legitimate removal**: the unit no longer exists in head
 - The `io` table comes from head's configuration for both versions, so adding an entry never asks for a review of units that were already importing it
-- The report points at the import in head that made the unit impure, and its wording says what that import reaches. Example: "`src/ui` is no longer pure: it imports `src/lib`, which imports `node:fs`, which performs input or output". What it reaches is one of: an import that performs input or output, a global API, an import whose destination is unknown, or a unit hadome cannot find among the repository's files
+- The report points at the import in head that made the unit impure, and its wording says what that import reaches. Example: "`src/ui` is no longer pure: it imports `src/lib`, which imports `node:fs`, which performs input or output". What it reaches is one of: an import that performs input or output, a global API, an import whose destination is unknown, an import naming a directory hadome does not read, or a unit hadome cannot find among the repository's files
 
 ## Tests that are not needed
 
@@ -210,7 +214,7 @@ Each rule ships with at least these cases.
 | `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business · calling a helper that sleeps once more is not a new sleep |
 | `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails · a conditional skip without a reason fails |
 | `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes · comparing the results of the same call twice passes |
-| `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes · `vi.spyOn`, `jest.spyOn` and `vi.stubGlobal` in a test of a pure TypeScript unit fail · `vi.stubGlobal` in a test of a unit that calls the global `fetch` passes |
+| `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes · `vi.spyOn`, `jest.spyOn` and `vi.stubGlobal` in a test of a pure TypeScript unit fail · `vi.stubGlobal` in a test of a unit that calls the global `fetch` passes · `vi.fn()` and `jest.fn()` passed to a pure TypeScript unit as a callback or a dependency pass |
 | `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review · an import cycle that reaches input or output, compared with itself, passes · when one unit of a cycle reaches input or output, every unit of the cycle returns `3` · calling the global `fetch` makes the unit and the units importing it return `3` · a unit importing only types stays pure when what it imports stops being pure |
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards · deleting the only Molecule scenario of an Ansible role fails · deleting the role with its scenario passes · deleting the only test of one of two same-named functions of a directory fails |
 | `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes · a new test that calls only names of a repository import that resolves to no file returns `3` |

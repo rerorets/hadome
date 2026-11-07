@@ -80,17 +80,6 @@ func (r *typescript) index(v engine.Version, files []*file) {
 	r.collisions(files)
 }
 
-// resolve turns an import specifier into the imported unit, and whether it is the repository's. A
-// specifier that looks like the repository's own but names no file is internal too, and its unit is
-// the directory of the path it names.
-func (r *typescript) resolve(from, spec string) (string, bool) {
-	p, kind := r.project.resolve(from, spec)
-	if kind == tsExternal {
-		return p, false
-	}
-	return path.Dir(p), true
-}
-
 func (r *typescript) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
 	globals := map[string]bool{}
@@ -121,9 +110,17 @@ func (r *typescript) imports(f *file, t *tables) []facts.Import {
 		if spec == "" {
 			return true
 		}
-		unit, internal := r.resolve(f.path, spec)
-		out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: unit,
-			Internal: internal, IO: !internal && t.isIO(spec)})
+		// A specifier that looks like the repository's own but names no file is internal too, and its
+		// unit is the directory of the path it names.
+		p, kind := r.project.resolve(f.path, spec)
+		switch kind {
+		case tsExternal:
+			out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: p, IO: t.isIO(spec)})
+		case tsUnread:
+			out = append(out, unreadImport(f, n, spec))
+		default:
+			out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: path.Dir(p), Internal: true})
+		}
 		return false
 	})
 	return out

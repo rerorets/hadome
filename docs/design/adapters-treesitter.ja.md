@@ -141,6 +141,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 - テストのファイルがこうした import から取り出した名前を呼ぶと、その呼び出しを未解決（`Test.Unresolved`）と数えます
 - 外部のパッケージとして扱って何も数えないと、製品のコードを呼んでいるかもしれないテストが `tests/guards-nothing` で落ちます。特定できないものは、`tests/target-unknown` で人の確認に回します
 - テストでないファイルの import は、これまでどおり扱います。TypeScript では、名指したパスのディレクトリをユニットとする内部の import です。Python では外部の import です
+- ただし、hadome が読まないディレクトリ（`dist/`、`build/`、`.generated/` など）の中を名指す import は、行き先の分からない import（`Import.Unknown` と `Import.Unread`）にします。ファイルがあってもなくても同じです。テストのファイルでは、ここから取り出した名前の呼び出しを未解決と数えます（[adapters.ja.md](adapters.ja.md) の「行き先の分からない import」）
 
 ## シンボル
 
@@ -268,12 +269,18 @@ TypeScript のテストの宣言は、次のように読みます。
 
 TypeScript のテストが偽の時計に切り替えた後は、`Date.now`・`new Date()`・`setTimeout` を `clock`・`sleep` に数えません。偽の時計に切り替えるのは `vi.useFakeTimers()`・`jest.useFakeTimers()`・`vi.setSystemTime()`・`jest.setSystemTime()`・`sinon.useFakeTimers()` です。テストの中で呼んだときは、呼んだ後から数えません。`beforeEach` か `describe` の直下で呼んだときは、その中のテストのどこでも数えません。`vi.useRealTimers()`・`jest.useRealTimers()` の後は、また数えます。
 
-Java と Kotlin では、各テストの前に走るコードの `clock` と `sleep` も、そのクラスの各テストの危険とします。
+各テストの前に走るコードの `clock` と `sleep` も、そのコードが前に走る各テストの危険とします。そこで時刻を読んだり待ったりすると、そのどのテストの結果も時刻に左右されるからです。
 
-- 各テストの前に走るコードとは、`@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロックです
-- 外側のクラスと継承元のクラスのものも入ります
-- 危険の場所はそのコードのある行です。継承元が別のファイルにあれば、そのファイルの行です
-- そのコードの中の呼び出しや確かめは、テストのものとは数えません。テストが何を守るかは、テストの本体で決まるからです
+| 言語 | 各テストの前に走るコード |
+|---|---|
+| Java、Kotlin | `@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロック。外側のクラスと継承元のクラスのものも入ります |
+| TypeScript | テストを囲む `describe` と、ファイルの直下の `beforeEach`・`beforeAll` の本体。偽の時計に切り替えた後のものは数えません（前の段落） |
+| Python | `autouse=True` の付いた pytest の fixture。同じファイル、テストのディレクトリとその上の `conftest.py`、テストのクラスの中のものです。クラスの `setUp`・`setUpClass`・`asyncSetUp`・`setup_method`・`setup_class`。ファイルの `setup_module`。クラスの外のテストには `setup_function` も入ります |
+
+- 危険の場所はそのコードのある行です。継承元のクラスや `conftest.py` のように別のファイルにあれば、そのファイルの行です
+- Java、Kotlin、Python では、そのコードの中の呼び出しや確かめは、テストのものとは数えません。テストが何を守るかは、テストの本体で決まるからです
+- TypeScript のフックの中の呼び出しは、テストのものと数えます（前述の「TypeScript のテストの前に動くもの」）
+- Python のテストが引数で受け取る fixture は、これまでどおり本体をたどります。中の呼び出しも危険も、そのテストのものです
 
 設定での項目の足し方は Go と同じです。
 

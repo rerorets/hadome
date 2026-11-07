@@ -168,7 +168,9 @@ type pyImport struct {
 	internal bool
 	// missing is true for an import that looks like the repository's own but resolves to nothing.
 	missing bool
-	names   map[string]string // local name -> name in the module ("" binds the module itself)
+	// unread is true, with missing, for a relative import into a directory hadome does not read.
+	unread bool
+	names  map[string]string // local name -> name in the module ("" binds the module itself)
 }
 
 func (r *python) parseImports(f *file) []pyImport {
@@ -210,6 +212,7 @@ func (r *python) fromImport(f *file, n *sitter.Node) pyImport {
 		}
 		im.mod, im.unit, im.internal = r.relative(f.path, prefix, dotted)
 		im.missing = !im.internal
+		im.unread = im.missing && inUnreadDir(im.mod)
 	} else {
 		im.mod, im.unit, im.internal = r.resolve(f.path, im.dotted)
 		im.missing = !im.internal && r.ownPackage(im.dotted)
@@ -231,6 +234,10 @@ func (r *python) fromImport(f *file, n *sitter.Node) pyImport {
 func (r *python) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
 	for _, im := range r.parseImports(f) {
+		if im.unread {
+			out = append(out, unreadImport(f, im.at, im.dotted))
+			continue
+		}
 		to := im.dotted
 		if im.internal {
 			to = im.unit

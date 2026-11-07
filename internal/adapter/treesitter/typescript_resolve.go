@@ -21,6 +21,7 @@ const (
 	tsExternal tsKind = iota // a package from outside the repository
 	tsFound                  // a file of the repository
 	tsMissing                // looks like the repository's own, yet names no file of it
+	tsUnread                 // a path inside a directory hadome does not read (dist/, .generated/)
 )
 
 // tsProject is what resolving needs to know about the whole version.
@@ -147,11 +148,14 @@ func (p *tsProject) file(base string) string {
 	return ""
 }
 
-// lookup resolves a path of the repository: to a TypeScript file, to another file that exists (a
-// stylesheet, a JSON file), or to nothing.
+// lookup resolves a path of the repository: to a TypeScript file, to a directory hadome does not
+// read, to another file that exists (a stylesheet, a JSON file), or to nothing.
 func (p *tsProject) lookup(base string) (string, tsKind) {
 	if f := p.file(base); f != "" {
 		return f, tsFound
+	}
+	if inUnreadDir(base) {
+		return path.Clean(base), tsUnread
 	}
 	if st, err := fs.Stat(p.fsys, path.Clean(base)); err == nil && !st.IsDir() {
 		return path.Clean(base), tsFound
@@ -159,8 +163,8 @@ func (p *tsProject) lookup(base string) (string, tsKind) {
 	return path.Clean(base), tsMissing
 }
 
-// resolve turns a specifier written in the file from into what it names. For tsFound and tsMissing
-// the result is a path of the repository; for tsExternal, the package's name.
+// resolve turns a specifier written in the file from into what it names. For tsFound, tsMissing and
+// tsUnread the result is a path of the repository; for tsExternal, the package's name.
 func (p *tsProject) resolve(from, spec string) (string, tsKind) {
 	switch {
 	case strings.HasPrefix(spec, "."):
@@ -175,7 +179,7 @@ func (p *tsProject) resolve(from, spec string) (string, tsKind) {
 					return f, kind
 				}
 			}
-			return path.Clean(targets[0]), tsMissing
+			return p.lookup(targets[0])
 		}
 		if c.hasBase {
 			if f := p.file(path.Join(c.baseURL, spec)); f != "" {

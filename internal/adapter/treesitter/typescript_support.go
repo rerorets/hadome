@@ -96,7 +96,7 @@ func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
 // bindName binds a local name to a name exported by the file p.
 func (tf *tsFile) bindName(local, p, name string, kind tsKind) {
 	switch {
-	case kind == tsMissing:
+	case kind == tsMissing || kind == tsUnread:
 		tf.unresolved[local] = true
 	case tf.r.files[p] != nil && tf.r.files[p].support:
 		file, decl := tf.r.declaring(p, name)
@@ -108,7 +108,7 @@ func (tf *tsFile) bindName(local, p, name string, kind tsKind) {
 
 // bindModule binds a local name to the whole module p.
 func (tf *tsFile) bindModule(local, p string, kind tsKind) {
-	if kind == tsMissing {
+	if kind == tsMissing || kind == tsUnread {
 		tf.unresolved[local] = true
 		return
 	}

@@ -132,6 +132,7 @@ Some imports look like the repository's own but resolve to no file.
 - When a test file calls a name taken from such an import, the call counts as unresolved (`Test.Unresolved`)
 - Treating it as an external package and counting nothing would fail a test that may well call the product with `tests/guards-nothing`. What cannot be identified goes to a person's review through `tests/target-unknown`
 - Imports of non-test files are treated as before: in TypeScript, an internal import whose unit is the directory of the named path; in Python, an external import
+- An import that names something inside a directory hadome does not read (`dist/`, `build/`, `.generated/` and so on) is an exception: it is an import whose destination is unknown (`Import.Unknown` and `Import.Unread`), whether the file exists or not. In a test file, a call of a name taken from it counts as unresolved ("Imports whose destination is unknown" in [adapters.md](adapters.md))
 
 ## Symbols
 
@@ -223,12 +224,18 @@ Global APIs are recognised by name only: calling a local variable of the same na
 
 After a TypeScript test switches to a fake clock, `Date.now`, `new Date()` and `setTimeout` do not count as `clock` or `sleep`. The fake clock is switched on by `vi.useFakeTimers()`, `jest.useFakeTimers()`, `vi.setSystemTime()`, `jest.setSystemTime()` and `sinon.useFakeTimers()`. Called in a test, it applies from that point on; called in `beforeEach` or directly in a `describe` block, it applies everywhere in the tests inside. After `vi.useRealTimers()` or `jest.useRealTimers()` they count again.
 
-In Java and Kotlin, the `clock` and `sleep` hazards of the code that runs before each test are hazards of every test of the class.
+The `clock` and `sleep` hazards of the code that runs before each test are hazards of every test it runs before. Reading the time or waiting there makes the result of each of those tests depend on time.
 
-- The code that runs before each test is a method annotated `@BeforeEach`, `@BeforeAll`, `@Before` or `@BeforeClass`, and a Kotlin `init` block
-- That of the enclosing classes and of the class extended counts too
-- The hazard is placed on the line of that code, in another file when the class extended is there
-- The calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
+| Language | Code that runs before each test |
+|---|---|
+| Java, Kotlin | Methods annotated `@BeforeEach`, `@BeforeAll`, `@Before` or `@BeforeClass`, and Kotlin `init` blocks. Those of the enclosing classes and of the class extended count too |
+| TypeScript | The bodies of `beforeEach` and `beforeAll` in the `describe` blocks around the test and at the top of the file. What comes after switching to fake timers does not count (previous paragraph) |
+| Python | pytest fixtures marked `autouse=True`: in the same file, in the `conftest.py` of the test's directory and the directories above, and inside the test's class. The class's `setUp`, `setUpClass`, `asyncSetUp`, `setup_method` and `setup_class`. The file's `setup_module`. For a test outside a class, `setup_function` too |
+
+- The hazard is placed on the line of that code, in another file when it is there, such as a class extended or a `conftest.py`
+- In Java, Kotlin and Python, the calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
+- In TypeScript, the calls in a hook count as the test's (see "A TypeScript test also counts as its own the calls and reads of what runs before it" above)
+- A fixture a Python test receives as a parameter is followed into its body as before. The calls and hazards in it are the test's
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 

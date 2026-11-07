@@ -58,6 +58,11 @@ func tsNoMockCases() []engine.Case {
 	}
 	const spy = "  vi.spyOn(Math, 'max');\n"
 	const stub = "  vi.stubGlobal('fetch', async () => ({ status: 3 }));\n"
+	const each = "export const each = (xs: number[], f: (x: number) => void) => xs.forEach(f);\n" +
+		"export const total = (src: { read(): number[] }) => src.read().reduce((a, b) => a + b, 0);\n"
+	const callbacks = "import { each, total } from './each';\n\n" +
+		"it('calls back', () => {\n  const f = vi.fn();\n  each([1], f);\n  expect(f).toHaveBeenCalledWith(1);\n});\n\n" +
+		"it('sums', () => {\n  const read = jest.fn().mockImplementation(() => [1, 2]);\n  expect(total({ read })).toBe(3);\n});\n"
 	return []engine.Case{
 		{Name: "vi.spyOn in a test of a pure TypeScript unit fails", Base: test(calc, ""), Head: test(calc, spy),
 			WantFail: []string{"tests/no-mock"}},
@@ -67,5 +72,7 @@ func tsNoMockCases() []engine.Case {
 			WantFail: []string{"tests/no-mock"}},
 		{Name: "vi.stubGlobal in a test of a unit that calls the global fetch passes",
 			Base: test(calc+fetches, ""), Head: test(calc+fetches, stub)},
+		{Name: "vi.fn and jest.fn passed to a pure TypeScript unit as a callback or a dependency pass",
+			Base: tsTree("src/calc/each.ts", each), Head: tsTree("src/calc/each.ts", each, "src/calc/each.test.ts", callbacks)},
 	}
 }

@@ -79,9 +79,13 @@ type Import struct {
 	// IO is true when ToUnit performs input or output, by the adapter's io table and configuration.
 	IO bool
 	// Unknown is true when the destination is decided only at run time, such as import(name) with a
-	// name that is not a string literal. ToUnit is then empty and Text holds the import as written.
+	// name that is not a string literal, or lies in a directory hadome does not read. ToUnit is then
+	// empty and Text holds the import as written.
 	Unknown bool
-	Text    string
+	// Unread is true, with Unknown, when the import names a path inside a directory hadome does not
+	// read (a build output, a hidden directory). Text then holds the specifier.
+	Unread bool
+	Text   string
 	// Global is true when the unit uses an API the runtime provides without an import, such as
 	// fetch in TypeScript, that performs input or output. ToUnit is then the API's name and IO is
 	// true; it is not an import of a unit, so Internal is false.
