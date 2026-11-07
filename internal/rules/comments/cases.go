@@ -51,7 +51,7 @@ func docCases() []engine.Case {
 		{Name: "a Go String() string method passes", Base: with("\n// Rows lists rows.\ntype Rows []string\n"),
 			Head: with("\n// Rows lists rows.\ntype Rows []string\n\nfunc (r Rows) String() string { return \"\" }\n")},
 		{Name: "a method with the same name but another shape fails", Base: with("\n// Rows lists rows.\ntype Rows []string\n"),
-			Head: with("\n// Rows lists rows.\ntype Rows []string\n\nfunc (r Rows) Len() int64 { return 0 }\n"),
+			Head:     with("\n// Rows lists rows.\ntype Rows []string\n\nfunc (r Rows) Len() int64 { return 0 }\n"),
 			WantFail: []string{"comments/missing-doc"}},
 		{Name: "a new Terraform variable without a description fails", Base: tf(""), Head: tf("variable \"name\" {}\n"),
 			WantFail: []string{"comments/missing-doc"}},
@@ -102,7 +102,7 @@ func referenceCases() []engine.Case {
 			Base: module("store/store.go", store(appendFunc), "node_modules/lib/rows.md", ""),
 			Head: module("store/store.go", refers("rows.md"), "node_modules/lib/rows.md", ""), WantFail: []string{"comments/broken-reference"}},
 		{Name: "a reference after a Japanese bracket is found", Base: module("store/store.go", store(appendFunc)),
-			Head: module("store/store.go", store("// Append adds a row（docs/design/stroe.md）.\nfunc Append() {}\n")),
+			Head:     module("store/store.go", store("// Append adds a row（docs/design/stroe.md）.\nfunc Append() {}\n")),
 			WantFail: []string{"comments/broken-reference"}},
 	}
 }

@@ -91,9 +91,9 @@ var Japanese = map[string]string{
 	"the test passes whatever the code returns, and fails only if something panics or throws": "コードが何を返してもテストは通り、panic か例外のときだけ落ちる",
 	"assert on the behaviour the test means to check; if the function is an assertion hadome does not know, add it to rules.tests.assertions; if the test only checks that nothing throws, add an exception with the reason": "テストで確かめたい振る舞いを assert する。hadome の知らない assert の関数なら rules.tests.assertions に足す。例外が起きないことだけを確かめるテストなら、理由つきの例外を書く",
 	"%d tests have the same body: %s": "%d 本のテストの本体が同じ: %s",
-	"tests with the same body, ignoring names, comments and whitespace; a new copy is a regression":             "名前、コメント、空白を除いて本体が同じテスト。新しい写しは後退になる",
-	"checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy": "同じことを2回確かめても守るものは増えない。振る舞いを変えるときは、写しのすべてを直すことになる",
-	"delete all but one, or change the input if they were meant to check different cases":                       "1本だけ残して消す。別の場合を確かめるつもりだったなら、入力を変える",
+	"tests with the same body, ignoring names, comments and whitespace, and, in different files, the same known targets; a new copy is a regression": "名前、コメント、空白を除いて本体が同じテスト。別のファイルのテストは、分かっている対象も同じときだけ。新しい写しは後退になる",
+	"checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy":                                      "同じことを2回確かめても守るものは増えない。振る舞いを変えるときは、写しのすべてを直すことになる",
+	"delete all but one, or change the input if they were meant to check different cases":                                                            "1本だけ残して消す。別の場合を確かめるつもりだったなら、入力を変える",
 
 	// tests/purity-lost.
 	"%s is no longer pure: it now reaches input or output through its imports":                                         "%s はもう純粋でない。import を通して入出力に届くようになった",
