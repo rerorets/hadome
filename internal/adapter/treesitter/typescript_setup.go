@@ -38,13 +38,13 @@ func (tf *tsFile) dynamicImport(call *sitter.Node) string {
 func (tf *tsFile) bindLoaders() {
 	f := tf.f
 	walk(f.root, func(n *sitter.Node) bool {
-		name, body := "", (*sitter.Node)(nil)
+		name, body, params := "", (*sitter.Node)(nil), (*sitter.Node)(nil)
 		switch n.Kind() {
 		case "function_declaration":
-			name, body = f.field(n, "name"), n.ChildByFieldName("body")
+			name, body, params = f.field(n, "name"), n.ChildByFieldName("body"), tsParams(n)
 		case "variable_declarator":
 			if v := n.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
-				name, body = f.field(n, "name"), v.ChildByFieldName("body")
+				name, body, params = f.field(n, "name"), v.ChildByFieldName("body"), tsParams(v)
 			} else if v != nil && v.Kind() == "object" {
 				tf.objectHelpers(f.field(n, "name"), v)
 			}
@@ -53,7 +53,7 @@ func (tf *tsFile) bindLoaders() {
 			return true
 		}
 		if _, seen := tf.helpers[name]; !seen {
-			tf.helpers[name] = body
+			tf.helpers[name], tf.params[name] = body, params
 		}
 		tf.loaderOf(name, body)
 		return true
@@ -80,32 +80,55 @@ func (tf *tsFile) loaderOf(name string, body *sitter.Node) {
 // bindLoaded records the names a declaration takes from a module loaded with import() or require(),
 // directly or through a loader: const { send } = await import('./mail'), or const mail = await fresh().
 func (w *tsWalk) bindLoaded(n *sitter.Node) {
-	f := w.tf.f
-	v := n.ChildByFieldName("value")
-	if v != nil && v.Kind() == "await_expression" {
-		v = v.NamedChild(0)
-	}
-	unit := w.tf.dynamicImport(v)
+	w.tf.bindLoad(n.ChildByFieldName("name"), n.ChildByFieldName("value"), w.modules, w.loaded)
+}
+
+// loadedUnit is the file v loads with import() or require(), directly or through a loader, seen through await,
+// parentheses and type assertions: (await import('./mail')) as Mail.
+func (tf *tsFile) loadedUnit(v *sitter.Node) string {
+	v = tsUnwrap(v)
+	unit := tf.dynamicImport(v)
 	if unit == "" && v != nil && v.Kind() == "call_expression" {
-		unit = w.tf.loaders[f.field(v, "function")]
+		unit = tf.loaders[tf.f.field(v, "function")]
 	}
-	if unit == "" {
-		return
+	return unit
+}
+
+// bindLoad records what pattern takes from value when value loads a module of the repository:
+// the module object, or the names an object pattern takes from it. It reports whether it did.
+func (tf *tsFile) bindLoad(pattern, value *sitter.Node, modules, loaded map[string]string) bool {
+	f := tf.f
+	unit := tf.loadedUnit(value)
+	if unit == "" || pattern == nil {
+		return false
 	}
-	pattern := n.ChildByFieldName("name")
 	switch pattern.Kind() {
 	case "identifier":
-		w.modules[f.text(pattern)] = unit
+		modules[f.text(pattern)] = unit
 	case "object_pattern":
 		for _, p := range named(pattern) {
 			switch p.Kind() {
 			case "shorthand_property_identifier_pattern":
-				w.loaded[f.text(p)] = w.tf.r.target(unit, f.text(p))
+				loaded[f.text(p)] = tf.r.target(unit, f.text(p))
 			case "pair_pattern":
-				w.loaded[f.field(p, "value")] = w.tf.r.target(unit, f.field(p, "key"))
+				loaded[f.field(p, "value")] = tf.r.target(unit, f.field(p, "key"))
 			}
 		}
 	}
+	return true
+}
+
+// tsUnwrap is the expression under await, parentheses, and type and non-null assertions.
+func tsUnwrap(v *sitter.Node) *sitter.Node {
+	for v != nil {
+		switch v.Kind() {
+		case "await_expression", "parenthesized_expression", "as_expression", "satisfies_expression", "non_null_expression":
+			v = v.NamedChild(0)
+		default:
+			return v
+		}
+	}
+	return v
 }
 
 // bindDriver records the names an import of an HTTP test client binds: import request from

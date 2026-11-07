@@ -221,7 +221,7 @@ base にある行き先の分からない import を持つユニットは、純�
 |---|---|
 | Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require`、testify の suite の確かめ（`s.Equal(…)`、`s.Require().…`） |
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
-| TypeScript | `expect(…)`、`assert` と `assert.…` |
+| TypeScript | matcher を呼ぶ `expect(…)`（`expect(x).toBe(1)`、`expect(x).not.toBe(1)`）、chai の `expect(x).to.…`、`assert` と `assert.…`。`expect(x)` だけのものと、matcher を呼ばないもの（`expect(x).toBeTruthy`）は数えません |
 | Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など）、Spring MockMvc の `andExpect` |
 | Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
 
