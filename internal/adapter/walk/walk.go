@@ -25,8 +25,9 @@ func Skip(name string) bool {
 }
 
 var (
-	helperDir  = regexp.MustCompile(`(^|/)(__mocks__|__fixtures__|testutils?|test-utils|test_utils|testhelpers?)/`)
-	supportDir = regexp.MustCompile(`(^|/)(test|tests|e2e)/`)
+	helperDir    = regexp.MustCompile(`(^|/)(__mocks__|__fixtures__|testutils?|test-utils|test_utils|testhelpers?)/`)
+	goSupportDir = regexp.MustCompile(`(^|/)(test|e2e)/`)
+	testsDir     = regexp.MustCompile(`(^|/)tests/`)
 )
 
 // HelperDir reports whether a file path lies under a directory whose name says it holds helpers for
@@ -34,10 +35,14 @@ var (
 // under such a name.
 func HelperDir(p string) bool { return helperDir.MatchString(p) }
 
+// GoSupportDir reports whether a Go file path lies under a directory that holds packages that exist
+// for the tests: a HelperDir, or test/ or e2e/. tests/ is left out because in Go a directory names
+// its package, and a package called tests can be product code (one holding rules about tests).
+func GoSupportDir(p string) bool { return HelperDir(p) || goSupportDir.MatchString(p) }
+
 // SupportDir reports whether a file path lies under a directory that holds code that exists for the
-// tests in TypeScript and Python: a HelperDir, or test/, tests/ or e2e/. In Go a directory names its
-// package, and a package called tests can be product code, so Go uses HelperDir only.
-func SupportDir(p string) bool { return HelperDir(p) || supportDir.MatchString(p) }
+// tests in TypeScript and Python: a GoSupportDir, or tests/.
+func SupportDir(p string) bool { return GoSupportDir(p) || testsDir.MatchString(p) }
 
 // Files lists every file outside skipped directories, in lexical order.
 func Files(fsys fs.FS) ([]string, error) {

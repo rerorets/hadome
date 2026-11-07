@@ -10,7 +10,7 @@ import (
 )
 
 // markSupport marks the files of test support packages that are not tests themselves: packages
-// under a test helper directory (testutil/), and packages named <name>test that import a package
+// under a test helper directory (testutil/, test/, e2e/), and packages named <name>test that import a package
 // called <name> or sit in a directory of that name, as httptest and fstest do. A file matching
 // files.product, or generated, stays what it was.
 func markSupport(files []parsedFile, product []string) {
@@ -29,7 +29,7 @@ func markSupport(files []parsedFile, product []string) {
 // supportPackage reports whether a file's package exists for the tests. A name that merely ends in
 // test (latest) imports no package called like the rest of it, and is product code.
 func supportPackage(pf parsedFile) bool {
-	if walk.HelperDir(pf.path) {
+	if walk.GoSupportDir(pf.path) {
 		return true
 	}
 	prefix, ok := strings.CutSuffix(pf.file.Name.Name, "test")

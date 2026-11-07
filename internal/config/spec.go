@@ -346,7 +346,7 @@ var filesKey = Key{Name: "files", Kind: KindObject,
 			"They are read as playbooks. Removing an entry takes files out of every rule, so it needs review.",
 			`ansible: ["deploy/*.yml"]`, LooserWhenRemoved, globs),
 		stringList("product", "Globs of files read as product code although a test support directory or name would make "+
-			"them test support (test/, e2e/, testutil/, a Go package such as storetest), in TypeScript, Python and Go. "+
+			"them test support (test/, e2e/, testutil/, tests/ outside Go, a Go package such as storetest), in TypeScript, Python and Go. "+
 			"It never turns a test file (_test.go, *.test.ts, test_*.py, files.tests) into product code. "+
 			"Which files are product code moves what the rules cover both ways, so any change needs review.",
 			`product: ["e2e/server/**"]`, LooserAlways, globs),

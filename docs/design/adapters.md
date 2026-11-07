@@ -166,8 +166,11 @@ For repositories laid out against the conventions, configuration can add roles.
 Go test support packages:
 
 - The files that are not `_test.go` in the following packages are test support files with role `test`. They exist only for the tests and are not product code
-  - A package under a directory whose name says it holds test helpers: `testutil/`, `testutils/`, `test-utils/`, `test_utils/`, `testhelper/`, `testhelpers/`, `__mocks__/`, `__fixtures__/`. Example: `internal/testutil`
-  - Unlike TypeScript and Python, packages under `test/`, `tests/` and `e2e/` are not support. In Go a directory's name is its package's name, and a product package can be called `tests` (for example, one holding rules about tests)
+  - A package under one of these directories: `test/`, `e2e/`, `testutil/`, `testutils/`, `test-utils/`, `test_utils/`, `testhelper/`, `testhelpers/`, `__mocks__/`, `__fixtures__/`. At any depth. Examples: `internal/testutil`, `test/helpers`, `e2e/client`, `worker/e2e/client`
+  - Packages under `tests/` are not support and stay product code. TypeScript and Python make them support, so this is the one difference
+    - Why: in Go a directory's name is its package's name, so product packages called `tests` exist
+    - Example: hadome's own `internal/rules/tests` is a product package holding the rules about tests
+  - A repository that keeps product code under `test/` or `e2e/` can make it product code again with `files.product`. Example: if the product's server the tests run against is under `e2e/server/`, write `files.product: ["e2e/server/**"]`
   - A package whose name ends in `test` and that imports a package named like the part before `test`, or sits in a directory of that name. Examples: `storetest` importing `store`, `store/storetest`. It is the convention of the standard library's `httptest` and `fstest`
   - A package whose name happens to end in `test`, such as `latest`, imports no package named like the part before it (`la`), so it stays product code
 - The functions of a support package are not targets, need no doc comment for `comments/missing-doc`, and are not in the dependency diagram

@@ -103,7 +103,7 @@ Adding tests does not always widen what they guard. These three rules stop tests
 
 ### `tests/guards-nothing`
 
-- **Finds**: a test with no targets (`Calls`), no call it could not identify (`Unresolved`) and no product value it reads (`Reads`). Calls through helpers in test files and functions of test support files ([adapters-treesitter.md](adapters-treesitter.md)) count as targets
+- **Finds**: a test with no targets (`Calls`), no call it could not identify (`Unresolved`) and no product value it reads (`Reads`). Calls through helpers in test files and functions of test support files ([adapters-treesitter.md](adapters-treesitter.md); for Go, [adapters.md](adapters.md)) count as targets
 - **Why it matters**: the test calls no product code, so no change to the product changes its result. A test that calls only the standard library or third-party libraries is one of these
 - **Fix**: call the product function you mean to check, or delete the test
 - A test with any call that could not be identified may be calling product code, so it is not reported. A test none of whose targets can be identified is `tests/target-unknown`'s
