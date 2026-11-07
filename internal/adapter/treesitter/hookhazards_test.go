@@ -148,3 +148,217 @@ TestMore.test_add: clock@tests/test_calc.py:12 clock@tests/test_calc.py:47 sleep
 test_add: clock@tests/test_calc.py:12 clock@tests/test_calc.py:22 sleep@tests/conftest.py:8
 test_other: sleep@tests/conftest.py:8 sleep@tests/other/test_other.py:6`)
 }
+
+// viewpoint: behaviour
+// target: the Python reader
+// A test class runs the setup it inherits, found the way Python finds a method: from the class
+// itself up through its base classes, in the same file or in a module the test file imports, over
+// several levels. A setup the class defines itself replaces the base's, unless it calls the base's
+// through super(). The autouse fixtures of a base class run too, unless the class defines a fixture
+// of the same name. A base class may live in product code or a package's __init__.py. A base class
+// hadome cannot find gives nothing, nor do the bases of a class Python could not create (no
+// method resolution order), and the test is still read.
+func TestPythonTestClassesRunTheSetupTheyInherit(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"app/testing.py", "import time\nimport unittest\n\n\nclass ProductCase(unittest.TestCase):\n    def setUp(self):\n        time.sleep(4)\n",
+		"app/cases/__init__.py", "import time\n\n\nclass PackageCase:\n    def setup_method(self):\n        time.time()\n",
+		"tests/base.py", `import time
+import unittest
+from datetime import datetime
+
+import pytest
+
+
+class BaseCase(unittest.TestCase):
+    def setUp(self):
+        time.sleep(1)
+
+
+class TimedCase(BaseCase):
+    @classmethod
+    def setUpClass(cls):
+        datetime.now()
+
+
+class BasePlain:
+    def setup_method(self):
+        time.time()
+
+    @pytest.fixture(autouse=True)
+    def ready(self):
+        time.sleep(2)
+
+
+def helper():
+    return 1
+`,
+		"tests/test_orders.py", `import time
+import unittest
+
+import pytest
+
+import tests.base as base
+from app.calc import add
+from app.cases import PackageCase
+from app.testing import ProductCase
+from tests.base import BaseCase, BasePlain, TimedCase, helper
+from vendorlib import ExternalCase
+
+
+class LocalBase(unittest.TestCase):
+    def setUp(self):
+        time.monotonic()
+
+
+class TestLocal(LocalBase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestImported(BaseCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestModule(base.BaseCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestDeep(TimedCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestOverride(BaseCase):
+    def setUp(self):
+        self.ready = True
+
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestSuper(BaseCase):
+    def setUp(self):
+        super().setUp()
+
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestExternal(ExternalCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestMissingBase(Missing):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestLoop(TestLoop):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestPlain(BasePlain):
+    def test_add(self):
+        assert add(1, 2) == 3
+
+
+class TestProduct(ProductCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestPackage(PackageCase):
+    def test_add(self):
+        assert add(1, 2) == 3
+
+
+class TestNotAClass(helper):
+    def test_add(self):
+        assert add(1, 2) == 3
+
+
+class TestNoOrder(LocalBase, BaseCase, TimedCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestPlainOverride(BasePlain):
+    @pytest.fixture(autouse=True)
+    def ready(self):
+        yield
+
+    def test_add(self):
+        assert add(1, 2) == 3
+`,
+	))
+	// A test with no such hazard renders as "name: "; the space is dropped so the want reads plainly.
+	expect(t, strings.TrimSpace(strings.ReplaceAll(timeHazards(a)+"\n", ": \n", ":\n")), `
+TestDeep.test_add: clock@tests/base.py:16 sleep@tests/base.py:10
+TestExternal.test_add:
+TestImported.test_add: sleep@tests/base.py:10
+TestLocal.test_add: clock@tests/test_orders.py:16
+TestLoop.test_add:
+TestMissingBase.test_add:
+TestModule.test_add: sleep@tests/base.py:10
+TestNoOrder.test_add:
+TestNotAClass.test_add:
+TestOverride.test_add:
+TestPackage.test_add: clock@app/cases/__init__.py:6
+TestPlain.test_add: clock@tests/base.py:21 sleep@tests/base.py:25
+TestPlainOverride.test_add: clock@tests/base.py:21
+TestProduct.test_add: sleep@app/testing.py:7
+TestSuper.test_add: sleep@tests/base.py:10
+`)
+}
+
+// viewpoint: behaviour
+// target: the Python reader
+// With several base classes, setup is looked up in Python's method resolution order: the first
+// base listed wins over the second, and in a diamond super() in the left branch reaches the right
+// branch before the shared root.
+func TestPythonInheritedSetupFollowsTheMethodResolutionOrder(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"tests/test_calc.py", `import time
+import unittest
+from datetime import datetime
+
+from app.calc import add
+
+
+class Root(unittest.TestCase):
+    def setUp(self):
+        time.sleep(1)
+
+
+class Left(Root):
+    def setUp(self):
+        super().setUp()
+
+
+class Right(Root):
+    def setUp(self):
+        datetime.now()
+
+
+class TestFirst(Right, Left):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestDiamond(Left, Right):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+`,
+	))
+	expect(t, timeHazards(a), `
+TestDiamond.test_add: clock@tests/test_calc.py:20
+TestFirst.test_add: clock@tests/test_calc.py:20`)
+}

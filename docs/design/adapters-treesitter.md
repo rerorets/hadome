@@ -186,7 +186,7 @@ TypeScript test declarations are read as follows.
   - The names taken by `const { add } = await import('./m')` at the top of the file, or by `mod = await import('./m')` in `beforeAll` (also `(await import('./m')) as T`), are read as the module's
   - In a file that only runs `await import('./m')` without using the value, every test counts as calling that module (the unit), because the module does its work when loaded
   - A value set up once counts once, however often the test uses it
-- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
+- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`), including the methods of a base class that run (see "Python's inherited setup" under hazards). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
 - A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()`. Python's and Rust's clients are not read yet
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
@@ -231,12 +231,22 @@ The `clock` and `sleep` hazards of the code that runs before each test are hazar
 |---|---|
 | Java, Kotlin | Methods annotated `@BeforeEach`, `@BeforeAll`, `@Before` or `@BeforeClass`, and Kotlin `init` blocks. Those of the enclosing classes and of the class extended count too |
 | TypeScript | The bodies of `beforeEach` and `beforeAll` in the `describe` blocks around the test and at the top of the file. What comes after switching to fake timers does not count (previous paragraph) |
-| Python | pytest fixtures marked `autouse=True`: in the same file, in the `conftest.py` of the test's directory and the directories above, and inside the test's class. The class's `setUp`, `setUpClass`, `asyncSetUp`, `setup_method` and `setup_class`. The file's `setup_module`. For a test outside a class, `setup_function` too |
+| Python | pytest fixtures marked `autouse=True`: in the same file, in the `conftest.py` of the test's directory and the directories above, and inside the test's class and its base classes. The class's `setUp`, `setUpClass`, `asyncSetUp`, `setup_method` and `setup_class`, including those of its base classes ("Python's inherited setup" below). The file's `setup_module`. For a test outside a class, `setup_function` too |
 
 - The hazard is placed on the line of that code, in another file when it is there, such as a class extended or a `conftest.py`
 - In Java, Kotlin and Python, the calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
 - In TypeScript, the calls in a hook count as the test's (see "A TypeScript test also counts as its own the calls and reads of what runs before it" above)
 - A fixture a Python test receives as a parameter is followed into its body as before. The calls and hazards in it are the test's
+
+**Python's inherited setup**: a Python test class also runs the setup of its base classes. For example, a test of `class TestOrders(BaseCase)` runs `BaseCase.setUp`. It is read as follows.
+
+- Base classes are found among the classes of the same file and the classes the test file imports. Both `BaseCase` of `from tests.base import BaseCase` and `base.BaseCase` of `import tests.base as base` are read. Names inside a base class's file are read through that file's imports
+- A base class that extends another is followed in turn
+- Only one method of each name, such as `setUp`, runs: that of the first class to define it in the order Python looks up methods (the MRO: the test class, its bases, their bases). When the test class writes its own `setUp`, the base's `setUp` does not run
+- When the method found calls the method of the same name through `super()` (`super().setUp()`), the one of the next class in the MRO that defines it runs too. Calling a base by name (`BaseCase.setUp(self)`) is treated the same
+- The `autouse=True` fixtures inside the base classes run too. When the test class, or a class earlier in the MRO, has a fixture of the same name, only the earlier one runs, because pytest overrides fixtures by name
+- The `setup_module` and `setup_function` of a base class's file do not run: pytest runs only those of the module holding the test
+- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. A class whose bases give no MRO, which Python cannot create, gets none of its bases. The test is still read as before
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 

@@ -56,9 +56,9 @@ func pyAutouse(f *file, n *sitter.Node) bool {
 }
 
 // setupHazards gives a test the clock and sleep hazards of what runs before it without being asked
-// for: the autouse fixtures of its file, of the conftest.py files above it and of its class, its
-// class's setUp and the like, and the module's setup_module and setup_function. Reading the clock or
-// sleeping there makes every test they run for depend on time, so each hazard is reported at the
+// for: the autouse fixtures of its file, of the conftest.py files above it and of its class and its
+// base classes, its class's setUp and the like, its own or inherited, and the module's setup_module
+// and setup_function. Reading the clock or sleeping there makes every test they run for depend on time, so each hazard is reported at the
 // setup's own line. Only those hazards are the test's: what the setup calls is not what it guards.
 func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 	sw := &pyWalk{pf: pf, t: newTest(pf.f, "", pf.f.root), vars: map[string]string{}, locals: map[string]bool{},
@@ -66,9 +66,11 @@ func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 	for _, name := range pf.autouseInReach() {
 		sw.fixture(name)
 	}
-	for _, body := range pf.setupBodies(class) {
-		sw.body = body
-		sw.walk(body)
+	for _, c := range pf.setupBodies(class) {
+		sw.in(c.pf, func(sub *pyWalk) {
+			sub.body = c.n
+			sub.walk(c.n)
+		})
 	}
 	for _, h := range sw.t.test.Hazards {
 		if h.Category == facts.HazardClock || h.Category == facts.HazardSleep {
@@ -78,28 +80,20 @@ func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 }
 
 // setupBodies are the bodies of the setup functions that run before a test of class, or of the
-// module when class is nil, other than the fixtures of the file and its conftest.py files.
-func (pf *pyFile) setupBodies(class *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
+// module when class is nil, other than the fixtures of the file and its conftest.py files: the
+// module's, then the class's own and those it inherits.
+func (pf *pyFile) setupBodies(class *sitter.Node) []pyCode {
+	var out []pyCode
 	if body := pf.helpers["setup_module"]; body != nil {
-		out = append(out, body)
+		out = append(out, pyCode{pf, body})
 	}
 	if body := pf.helpers["setup_function"]; body != nil && class == nil {
-		out = append(out, body)
+		out = append(out, pyCode{pf, body})
 	}
 	if class == nil {
 		return out
 	}
-	for _, m := range named(definition(class).ChildByFieldName("body")) {
-		md := definition(m)
-		if md.Kind() != "function_definition" {
-			continue
-		}
-		if pySetups[pf.f.field(md, "name")] || (m.Kind() == "decorated_definition" && pyFixture(pf.f, m) && pyAutouse(pf.f, m)) {
-			out = append(out, md.ChildByFieldName("body"))
-		}
-	}
-	return out
+	return append(append(out, pf.classSetups(class)...), pf.classAutouse(class)...)
 }
 
 // autouseInReach lists the autouse fixtures a test of the file runs: the file's own, then those of
@@ -163,7 +157,7 @@ func (pf *pyFile) lambdaHelper(n *sitter.Node) {
 }
 
 // given types what a test receives from its setup: the fixtures it takes as parameters, and what
-// its class's setUp or setup_method stores on self (self.store = Store()).
+// its class's setUp or setup_method, its own or inherited, stores on self (self.store = Store()).
 func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	f := pf.f
 	out := map[string]string{}
@@ -175,20 +169,21 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	if class == nil {
 		return out
 	}
-	for _, m := range named(definition(class).ChildByFieldName("body")) {
-		md := definition(m)
-		if md.Kind() != "function_definition" || !pySetups[f.field(md, "name")] {
-			continue
-		}
-		walk(md.ChildByFieldName("body"), func(n *sitter.Node) bool {
+	// A base's setUp reached through super() runs inside the class's own, which usually sets self
+	// after it, so the class's own assignment is read last and wins.
+	setups := pf.classSetups(class)
+	for i := len(setups) - 1; i >= 0; i-- {
+		c := setups[i]
+		cf := c.pf.f
+		walk(c.n, func(n *sitter.Node) bool {
 			if n.Kind() != "assignment" {
 				return true
 			}
 			left, right := n.ChildByFieldName("left"), n.ChildByFieldName("right")
-			if left != nil && left.Kind() == "attribute" && strings.HasPrefix(f.text(left), "self.") &&
+			if left != nil && left.Kind() == "attribute" && strings.HasPrefix(cf.text(left), "self.") &&
 				right != nil && right.Kind() == "call" {
-				if c := pf.names[f.field(right, "function")]; c != "" {
-					out[f.text(left)] = c
+				if cls := c.pf.names[cf.field(right, "function")]; cls != "" {
+					out[cf.text(left)] = cls
 				}
 			}
 			return false
@@ -216,5 +211,5 @@ func (pf *pyFile) fixtureDef(name string) (*pyFile, *sitter.Node) {
 	}
 }
 
-// pySetups are the methods of a test class that run before each test or once for the class.
-var pySetups = set("setUp", "setup_method", "setUpClass", "setup_class", "asyncSetUp")
+// pySetupNames are the methods of a test class that run before each test or once for the class.
+var pySetupNames = []string{"setUp", "setup_method", "setUpClass", "setup_class", "asyncSetUp"}
