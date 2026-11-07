@@ -66,6 +66,7 @@ classDiagram
     +IO bool
     +Unknown bool
     +Text string
+    +Global bool
   }
   class Test {
     +Name string
@@ -175,8 +176,9 @@ classDiagram
 |---|---|
 | `Internal` | import がリポジトリの中を指すとき |
 | `IO` | import したユニットが入出力を行うとき。判断はアダプタの `io` の表と、設定が足す項目（`rules.tests.io`）によります |
+| `Global` | import ではなく、import せずに使えるグローバルの API で入出力を行うとき。例: TypeScript の `fetch`。`ToUnit` は API の名前で、`IO` も真です。リポジトリのユニットではないので、`Internal` は偽です |
 
-一覧に載るのは、テストでないファイルの import だけです。それがユニット自身の依存だからです。
+一覧に載るのは、テストでないファイルの import だけです。それがユニット自身の依存だからです。型だけを持ち込む import（TypeScript の `import type` など）は載せません。実行するコードの依存ではないからです。
 
 ### 行き先の分からない import
 
@@ -207,7 +209,7 @@ base にある行き先の分からない import を持つユニットは、純�
 |---|---|---|---|---|---|
 | `clock` | `time.Now`、`time.Since` | `datetime.now`、`time.time` | `Date.now`、`new Date()` | `Instant.now`、`LocalDateTime.now`、`System.currentTimeMillis` | `SystemTime::now`、`Instant::now` |
 | `sleep` | `time.Sleep` | `time.sleep`、`asyncio.sleep` | `setTimeout` | `Thread.sleep`、`delay` | `thread::sleep` |
-| `mock` | モックのライブラリの import | `unittest.mock`、`pytest-mock` | `jest.mock`、`vi.mock`、`mock.module` | Mockito、MockK | `mockall` |
+| `mock` | モックのライブラリの import | `unittest.mock`、`pytest-mock`、`monkeypatch.setattr` | `jest.mock`、`vi.mock`、`mock.module`、`vi.spyOn` | Mockito、MockK、Quarkus の `@InjectMock` | `mockall` |
 | `always-true` | testify の `True(t, true)`、`Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
 スキップ（`t.Skip`、`pytest.skip`、`@Disabled`、`#[ignore]` など）は危険の分類に入れません。`Skip` として、理由と条件と一緒に取り出します。`tests/skip-without-reason` は、理由の無いスキップだけを落とします。

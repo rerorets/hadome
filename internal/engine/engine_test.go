@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -174,5 +175,37 @@ func TestEveryRuleSelfTestPasses(t *testing.T) {
 	e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
 	for _, f := range e.SelfTest() {
 		t.Errorf("%s: %s: %s", f.Rule, f.Name, f.Err)
+	}
+}
+
+// viewpoint: behaviour
+// target: engine.LossExplainer
+// A unit that stops being pure is reported at the import in head that makes it impure, naming what
+// that import reaches, directly or through the unit of the repository it imports.
+func TestPurityLostNamesWhatMadeTheUnitImpure(t *testing.T) {
+	base := module("")
+	direct := module("")
+	direct["store/save.go"] = &fstest.MapFile{Data: []byte("package store\n\nimport \"database/sql\"\n\nvar _ *sql.DB\n")}
+	through := module("")
+	through["store/save.go"] = &fstest.MapFile{Data: []byte("package store\n\nimport \"example.com/app/db\"\n\nvar _ = db.Open\n")}
+	through["db/db.go"] = &fstest.MapFile{Data: []byte("package db\n\nimport \"os\"\n\n// Open opens a file.\nfunc Open() { _, _ = os.Open(\"x\") }\n")}
+	for _, c := range []struct {
+		name string
+		head fstest.MapFS
+		want string
+	}{
+		{"direct", direct, "example.com/app/store is no longer pure: it imports database/sql, which performs input or output"},
+		{"through", through, "example.com/app/store is no longer pure: it imports example.com/app/db, which imports os, which performs input or output"},
+	} {
+		r := check(t, treeSource{base: base, head: c.head})
+		var got []string
+		for _, f := range r.Reviews {
+			if f.Rule == "tests/purity-lost" {
+				got = append(got, fmt.Sprintf("%s:%d %s", f.File, f.Line, f.Message.In("en")))
+			}
+		}
+		if want := "store/save.go:3 " + c.want; len(got) != 1 || got[0] != want {
+			t.Errorf("%s: want [%s], got %q", c.name, want, got)
+		}
 	}
 }

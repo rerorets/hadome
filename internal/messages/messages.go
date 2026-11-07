@@ -96,8 +96,15 @@ var Japanese = map[string]string{
 	"delete all but one, or change the input if they were meant to check different cases":                       "1本だけ残して消す。別の場合を確かめるつもりだったなら、入力を変える",
 
 	// tests/purity-lost.
-	"%s is no longer pure: it now reaches input or output through its imports":                                             "%s はもう純粋でない。import を通して入出力に届くようになった",
-	"a unit that was pure in base and reaches input or output in head, through its imports":                                "base で純粋だったのに、head では import を通して入出力に届くユニット",
+	"%s is no longer pure: it now reaches input or output through its imports":                                         "%s はもう純粋でない。import を通して入出力に届くようになった",
+	"a unit that was pure in base and reaches input or output in head, through its imports or the global APIs it uses": "base で純粋だったのに、head では import か、使うグローバルの API を通して入出力に届くユニット",
+	"%s is no longer pure: it %s":                                                                                          "%s はもう純粋でない。%s",
+	"%s is no longer pure: it imports %s, which %s":                                                                        "%s はもう純粋でない。import している %s が%s",
+	"%s is no longer pure: it imports %s, and further on %s %s":                                                            "%s はもう純粋でない。import している %s の先で、%s が%s",
+	"uses the global %s, which performs input or output":                                                                   "入出力をするグローバルの %s を使っている",
+	"has an import whose destination is decided only at run time: %s":                                                      "実行するまで行き先の決まらない import を持つ: %s",
+	"imports %s, which performs input or output":                                                                           "入出力をする %s を import している",
+	"imports %s, which hadome did not find among the repository's source files":                                            "リポジトリのソースのファイルに見つからない %s を import している",
 	"side effects entered code that used to take values and return values; sometimes intended, often a design slip":        "値を受けて値を返していたコードに副作用が入った。意図したこともあるが、設計の誤りのことが多い",
 	"if intended, a person approves it; otherwise move the side effect to a unit that is not pure and pass its results in": "意図したなら人が認める。そうでなければ副作用を純粋でないユニットに移し、その結果を渡す",
 

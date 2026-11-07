@@ -66,6 +66,7 @@ All are on by default and need no configuration.
 - **Fix**: move the side effect out of the unit, and test the unit with plain values
 - Which units are pure is decided by hadome on every check (below). Nothing to configure
 - A test that also calls a unit that is not pure (or whose purity is `unknown`) may need the mock for that one, so it is not reported
+- Spies count as mocks. Examples: `vi.spyOn`, `jest.spyOn`, Mockito's `@Spy`. A spy watches calls or replaces behaviour; for pure code, checking the returned value is enough for either. What counts as a mock is in each language's hazard table ([adapters-treesitter.md](adapters-treesitter.md))
 
 ### Pure units
 
@@ -73,10 +74,13 @@ A **pure unit** takes inputs and returns results without touching the outside wo
 
 hadome decides purity from imports, on every check:
 
-- A unit is **pure** when it imports nothing that performs input or output, and depends on no unit that is not pure
+- A unit is **pure** when it imports nothing that performs input or output, uses no global API that performs input or output, and depends on no unit that is not pure
+- A global API is an API that performs input or output and can be used without an import. Examples: TypeScript's `fetch`, `localStorage`. Each adapter decides which count ([adapters-treesitter.md](adapters-treesitter.md))
 - What performs input or output is an `io` table in each adapter, like the hazard tables (Go: `net`, `os`, `database/sql`, …; Python: `socket`, `requests`, `sqlite3`, …). Configuration can add entries, never remove them. An entry is a unit (`example.com/acme/db`), or a unit followed by `/...` for it and everything under it (`example.com/acme/clients/...`). An entry may name one of the repository's own units, such as a product's database layer: everything that imports it is then not pure
 - A unit whose imports cannot all be identified is `unknown`, and `unknown` is never pure
 - Purity follows the repository's own imports transitively: a unit that imports a unit that is not pure is not pure either
+- An import cycle (units that import each other) is decided together, as one. When any unit of the cycle reaches input or output, no unit of the cycle is pure: inside a cycle, every unit in effect imports all the others. The answer is the same whichever unit is looked at first
+- An import of types only is not a dependency. Example: TypeScript's `import type`. It disappears when compiled, so it is no dependency of the running code
 - In Go the `time` package is not in the table, because it also holds plain values (`time.Duration`); reading the clock is caught in tests by `tests/no-clock`, not by purity
 
 ### `tests/purity-lost`
@@ -87,6 +91,7 @@ hadome decides purity from imports, on every check:
 - **Treatment**: returns exit code `3` (a person reviews it), never `1`
 - **Legitimate removal**: the unit no longer exists in head
 - The `io` table comes from head's configuration for both versions, so adding an entry never asks for a review of units that were already importing it
+- The report points at the import in head that made the unit impure, and its wording says what that import reaches. Example: "`src/ui` is no longer pure: it imports `src/lib`, which imports `node:fs`, which performs input or output". What it reaches is one of: an import that performs input or output, a global API, an import whose destination is unknown, or a unit hadome cannot find among the repository's files
 
 ## Tests that are not needed
 
@@ -199,8 +204,8 @@ Each rule ships with at least these cases.
 | `tests/no-sleep` | a new sleep fails · a sleep in non-test code is not this rule's business · calling a helper that sleeps once more is not a new sleep |
 | `tests/skip-without-reason` | a new bare skip fails · a skip with a reason passes · an empty reason fails · a conditional skip without a reason fails |
 | `tests/always-true` | `assertTrue(true)` fails · comparing a value with itself fails · comparing two different values passes · comparing the results of the same call twice passes |
-| `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes |
-| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review |
+| `tests/no-mock` | a mock in a test of a pure unit fails · the same mock in a test of a non-pure unit passes · a unit made impure by a configured `io` entry passes · a unit importing a non-pure unit of the repository passes · `vi.spyOn`, `jest.spyOn` and `vi.stubGlobal` in a test of a pure TypeScript unit fail · `vi.stubGlobal` in a test of a unit that calls the global `fetch` passes |
+| `tests/purity-lost` | a pure unit gaining a database import returns `3` · a unit that was never pure does not · a pure unit becoming impure through a unit it imports returns `3` · deleting a pure unit passes · adding an `io` entry for what a unit already imports does not need review · an import cycle that reaches input or output, compared with itself, passes · when one unit of a cycle reaches input or output, every unit of the cycle returns `3` · calling the global `fetch` makes the unit and the units importing it return `3` · a unit importing only types stays pure when what it imports stops being pure |
 | `tests/scope-shrunk` | deleting the only test of a target fails · merging two tests of one target passes · deleting a target and its test passes · renaming a test file passes · a test that skips only on one platform still guards · deleting the only Molecule scenario of an Ansible role fails · deleting the role with its scenario passes |
 | `tests/target-unknown` | a new test with no identifiable target returns `3` · a test reaching the code through a helper passes |
 | `tests/invariant-unguarded` | a new `idempotent` invariant whose only test calls the target once fails · an old unguarded invariant does not block · deleting the only guard fails · moving the guard to another test passes · skipping the only guard fails · removing the invariant returns `3` (`config/loosened`) · an `idempotent` invariant whose only test calls the target once is unguarded · a test calling it twice guards it · `round-trip` needs both operations · a helper called twice counts as two calls · `isolated` needs two scopes · a product-specific invariant is guarded only by `guards:` · `durable` is not guarded without `guards:`, and is with it |

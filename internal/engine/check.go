@@ -258,6 +258,9 @@ func shrunk(rule MeasureRule, base []Item, head side) ([]Finding, error) {
 			continue
 		}
 		present[it.Key] = true // report each key once
+		if e, ok := rule.(LossExplainer); ok {
+			it = e.Lost(it, head.input)
+		}
 		out = append(out, Finding{
 			Rule: rule.ID(), File: it.File, Line: it.Line, Anchor: it.Key,
 			Message: it.Detail, Why: it.Why, Fix: it.Fix, Review: it.Review,

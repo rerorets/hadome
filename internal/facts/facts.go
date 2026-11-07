@@ -82,6 +82,10 @@ type Import struct {
 	// name that is not a string literal. ToUnit is then empty and Text holds the import as written.
 	Unknown bool
 	Text    string
+	// Global is true when the unit uses an API the runtime provides without an import, such as
+	// fetch in TypeScript, that performs input or output. ToUnit is then the API's name and IO is
+	// true; it is not an import of a unit, so Internal is false.
+	Global bool
 }
 
 // Comment is one comment, line or block. Text excludes the comment delimiters.

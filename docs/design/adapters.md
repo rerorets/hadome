@@ -66,6 +66,7 @@ classDiagram
     +IO bool
     +Unknown bool
     +Text string
+    +Global bool
   }
   class Test {
     +Name string
@@ -169,7 +170,7 @@ A **unit** is what a dependency diagram draws a box for. Each language has its n
 | Terraform | Module (a directory) |
 | Ansible | Role; a playbook's is its directory |
 
-`Internal` is true when the import points inside the repository. `IO` is true when the imported unit performs input or output, according to the adapter's `io` table and the entries configuration adds (`rules.tests.io`). Only imports of non-test files are listed: they are what the unit itself depends on.
+`Internal` is true when the import points inside the repository. `IO` is true when the imported unit performs input or output, according to the adapter's `io` table and the entries configuration adds (`rules.tests.io`). `Global` is true when the unit performs input or output not through an import but through a global API it uses without one, such as TypeScript's `fetch`; `ToUnit` is then the API's name, `IO` is true too, and `Internal` is false because it is no unit of the repository. Only imports of non-test files are listed: they are what the unit itself depends on. Imports that bring in types only (TypeScript's `import type` and the like) are not listed: they are no dependency of the running code.
 
 ### Imports whose destination is unknown
 
@@ -200,7 +201,7 @@ Rules about how tests are written work on categories, not API names. Each adapte
 |---|---|---|---|---|---|
 | `clock` | `time.Now`, `time.Since` | `datetime.now`, `time.time` | `Date.now`, `new Date()` | `Instant.now`, `LocalDateTime.now`, `System.currentTimeMillis` | `SystemTime::now`, `Instant::now` |
 | `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` | `Thread.sleep`, `delay` | `thread::sleep` |
-| `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock` | `jest.mock`, `vi.mock`, `mock.module` | Mockito, MockK | `mockall` |
+| `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock`, `monkeypatch.setattr` | `jest.mock`, `vi.mock`, `mock.module`, `vi.spyOn` | Mockito, MockK, Quarkus's `@InjectMock` | `mockall` |
 | `always-true` | testify's `True(t, true)`, `Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
 
 Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a hazard category. They are extracted as `Skip`, with their reason and condition. `tests/skip-without-reason` fails only skips without a reason.
