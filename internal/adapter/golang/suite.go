@@ -49,11 +49,21 @@ func (w *walker) walkMethod(suite string, m *ast.FuncDecl) {
 		recv = names[0].Name
 	}
 	w.recv, w.suiteType = recv, suite
-	if recv != "" {
-		w.vars[recv] = w.resolve(ast.NewIdent(suite))
-	}
-	ast.Inspect(m.Body, w.visit)
+	w.walkSuiteMethod(m)
 	w.recv, w.suiteType = "", ""
+}
+
+// walkSuiteMethod walks a method of the suite being walked in its own block, with the receiver
+// typed as the suite and the parameters as declared.
+func (w *walker) walkSuiteMethod(m *ast.FuncDecl) {
+	outer := w.local
+	w.local = newBlock(nil)
+	if w.recv != "" {
+		w.local.vars[w.recv] = w.resolve(ast.NewIdent(w.suiteType))
+	}
+	w.bindParams(m.Type)
+	ast.Inspect(m.Body, w.visit)
+	w.local = outer
 }
 
 // suiteMethods lists the methods of a type declared in the test's file.
@@ -121,7 +131,7 @@ func (w *walker) receiverCall(name string) {
 		}
 		if !w.walking[name] {
 			w.walking[name] = true
-			ast.Inspect(m.Body, w.visit)
+			w.walkSuiteMethod(m)
 			delete(w.walking, name)
 		}
 		return

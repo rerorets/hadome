@@ -27,10 +27,24 @@ func (w *walker) recordVars(as *ast.AssignStmt) {
 		case i == 0 && len(as.Rhs) == 1: // s, err := store.Open(), v, ok := m[k]
 			t = w.valueType(as.Rhs[0])
 		}
-		if as.Tok == token.DEFINE || t != nil {
-			w.vars[name.Name] = t
+		switch {
+		case as.Tok == token.DEFINE:
+			w.local.vars[name.Name] = t
+		case t != nil:
+			w.assign(name.Name, t)
 		}
 	}
+}
+
+// assign types a variable set with =, in the function that declares it.
+func (w *walker) assign(name string, t *vtype) {
+	for b := w.local; b != nil; b = b.parent {
+		if _, ok := b.vars[name]; ok {
+			b.vars[name] = t
+			return
+		}
+	}
+	w.local.vars[name] = t
 }
 
 // recordRange types the variables of a range over a typed slice, map or channel.
@@ -48,7 +62,7 @@ func (w *walker) recordRange(r *ast.RangeStmt) {
 		t *vtype
 	}{{r.Key, key}, {r.Value, value}} {
 		if id, ok := v.e.(*ast.Ident); ok && id.Name != "_" {
-			w.vars[id.Name] = v.t
+			w.local.vars[id.Name] = v.t
 		}
 	}
 }
@@ -63,7 +77,7 @@ func (w *walker) recordDecl(d *ast.GenDecl) {
 		case *ast.ValueSpec:
 			w.recordSpec(s)
 		case *ast.TypeSpec:
-			w.types[s.Name.Name] = s.Type
+			w.local.types[s.Name.Name] = s.Type
 		}
 	}
 }
@@ -80,8 +94,33 @@ func (w *walker) recordSpec(vs *ast.ValueSpec) {
 		case i == 0 && len(vs.Values) == 1:
 			t = w.valueType(vs.Values[0])
 		}
-		w.vars[name.Name] = t
+		w.local.vars[name.Name] = t
 	}
+}
+
+// bindParams types the parameters of the function being entered by their declared types.
+func (w *walker) bindParams(ft *ast.FuncType) {
+	for _, f := range ft.Params.List {
+		typ := f.Type
+		if e, ok := typ.(*ast.Ellipsis); ok { // ...T is a []T inside the function
+			typ = &ast.ArrayType{Elt: e.Elt}
+		}
+		t := w.resolve(typ)
+		for _, n := range f.Names {
+			if n.Name != "_" {
+				w.local.vars[n.Name] = t
+			}
+		}
+	}
+}
+
+// funcLit walks a function literal in its own block, which sees the names around it.
+func (w *walker) funcLit(lit *ast.FuncLit) {
+	outer := w.local
+	w.local = newBlock(outer)
+	w.bindParams(lit.Type)
+	w.inspect(lit.Body)
+	w.local = outer
 }
 
 func (w *walker) call(c *ast.CallExpr) {
@@ -240,11 +279,7 @@ func (w *walker) subtest(fn ast.Expr) {
 	case *ast.Ident:
 		if h, ok := w.helpers[fn.Name]; ok && !w.walking[fn.Name] {
 			w.walking[fn.Name] = true
-			w.collectTParams(h.decl.Type, h.decl.Body)
-			prev := w.curPath
-			w.curPath = h.path
-			ast.Inspect(h.decl.Body, w.visit)
-			w.curPath = prev
+			w.walkHelper(h, w.args)
 			delete(w.walking, fn.Name)
 			return
 		}

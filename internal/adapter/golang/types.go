@@ -10,8 +10,8 @@ import (
 // checker and loads no other module, so a value whose type is only inferred across packages it did
 // not read stays untyped, and a call on it stays unresolved.
 
-// scope is where an expression is written: its package, its file's imports and, inside a test,
-// the names the test declares.
+// scope is where an expression is written: its package, its file's imports, the helpers of its
+// test package and, inside a function, the names declared around it.
 type scope struct {
 	idx     *index
 	pkgPath string
@@ -19,20 +19,48 @@ type scope struct {
 	// samePkg is true when unqualified names may refer to the package's non-test code: in the
 	// package itself and in its internal test files, but not in an external _test package.
 	samePkg bool
-	// testKey names the test package (helperKey) whose test-file types unqualified names may refer
-	// to; it is empty in non-test code.
+	// testKey names the test package (helperKey) whose test-file types and variables unqualified
+	// names may refer to; it is empty in non-test code.
 	testKey string
-	*frame
+	helpers map[string]helper
+	// local is the innermost function whose names are in scope. It is nil outside a function.
+	local *block
 }
 
-// frame holds the names a test declares. It is nil outside a test.
-type frame struct {
+// block holds the names one function declares: a test, a helper or a function literal. Lookups
+// go outward through parent, so a function literal sees the function around it; a helper's parent
+// is nil, because it does not see the variables of the test that calls it.
+type block struct {
 	// vars maps a variable to its type. A nil type is a variable whose type is not known, which
 	// still hides a package or package-level variable of the same name.
 	vars map[string]*vtype
-	// types holds the types declared inside the test.
-	types   map[string]ast.Expr
-	helpers map[string]helper
+	// types holds the types declared inside the function.
+	types  map[string]ast.Expr
+	parent *block
+}
+
+func newBlock(parent *block) *block {
+	return &block{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, parent: parent}
+}
+
+// lookup finds the variable of the name in the innermost function that declares it.
+func (s scope) lookup(name string) (*vtype, bool) {
+	for b := s.local; b != nil; b = b.parent {
+		if t, ok := b.vars[name]; ok {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
+// localType finds the type of the name declared inside the functions in scope.
+func (s scope) localType(name string) (ast.Expr, bool) {
+	for b := s.local; b != nil; b = b.parent {
+		if t, ok := b.types[name]; ok {
+			return t, true
+		}
+	}
+	return nil, false
 }
 
 // vtype is a type as declared: a repository type, or a literal type such as []struct{…} written in a
@@ -73,12 +101,10 @@ func (s scope) qualify(e ast.Expr, known func(string) bool) string {
 	return ""
 }
 
-// shadowed reports whether the test declares a variable of the name, hiding a package of it.
+// shadowed reports whether a function in scope declares a variable of the name, hiding a package
+// of it.
 func (s scope) shadowed(name string) bool {
-	if s.frame == nil {
-		return false
-	}
-	_, ok := s.vars[name]
+	_, ok := s.lookup(name)
 	return ok
 }
 
@@ -98,8 +124,8 @@ func (s scope) resolve(e ast.Expr) *vtype {
 	case *ast.IndexListExpr:
 		return s.resolve(e.X)
 	case *ast.Ident, *ast.SelectorExpr:
-		if id, ok := e.(*ast.Ident); ok && s.frame != nil {
-			if t, ok := s.types[id.Name]; ok {
+		if id, ok := e.(*ast.Ident); ok {
+			if t, ok := s.localType(id.Name); ok {
 				return &vtype{expr: t, in: s}
 			}
 		}
@@ -153,12 +179,16 @@ func (s scope) valueTypeAt(e ast.Expr, depth int) *vtype {
 	return nil
 }
 
-// nameType returns the type of a variable: one the test declares, or a package-level one of the
-// code (Default, store.Default), or the type of a field (tc.store).
+// nameType returns the type of a variable: one a function in scope declares, a package-level one
+// of the test package's files (shared) or of the code (Default, store.Default), or the type of a
+// field (tc.store).
 func (s scope) nameType(e ast.Expr, depth int) *vtype {
-	if id, ok := e.(*ast.Ident); ok && s.frame != nil {
-		if t, ok := s.vars[id.Name]; ok {
+	if id, ok := e.(*ast.Ident); ok {
+		if t, ok := s.lookup(id.Name); ok {
 			return t
+		}
+		if d, ok := s.idx.testVars[s.testKey+"."+id.Name]; ok && s.testKey != "" {
+			return d.typeAt(depth + 1)
 		}
 	}
 	if id := s.qualify(e, func(id string) bool { _, ok := s.idx.varDecls[id]; return ok }); id != "" {
@@ -221,10 +251,10 @@ func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
 // variable, new(T), or a helper of the test files. It reports false for any other call.
 func (s scope) localResult(fun ast.Expr, c *ast.CallExpr) (*vtype, bool) {
 	id, ok := fun.(*ast.Ident)
-	if !ok || s.frame == nil {
+	if !ok {
 		return nil, false
 	}
-	if _, local := s.vars[id.Name]; local {
+	if _, local := s.lookup(id.Name); local {
 		return nil, true
 	}
 	if id.Name == "new" && len(c.Args) == 1 {
@@ -242,12 +272,17 @@ func (h helper) resultType(caller scope) *vtype {
 	if r == nil || len(r.List) == 0 {
 		return nil
 	}
+	return h.scope(caller).resolve(r.List[0].Type)
+}
+
+// scope is where the helper is written: its own file's imports, and no function around it.
+func (h helper) scope(caller scope) scope {
 	in := caller
-	in.imports, in.frame = h.imports, nil
-	if h.pkgPath != "" {
+	in.imports, in.local = h.imports, nil
+	if h.pkgPath != "" { // a function of a test support package
 		in.pkgPath, in.samePkg, in.testKey = h.pkgPath, true, ""
 	}
-	return in.resolve(r.List[0].Type)
+	return in
 }
 
 // shape is the literal form the type is declared as: the struct, slice or map behind its names.

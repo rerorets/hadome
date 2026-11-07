@@ -83,9 +83,10 @@ func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
 	prevScope, prevPath, prevArgs := w.scope, w.curPath, w.args
 	args := w.bindArgs(h.decl.Type, c)
 	w.scope = scope{idx: w.idx, pkgPath: h.pkgPath, imports: h.imports, samePkg: true,
-		frame: &frame{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, helpers: w.idx.support[h.pkgPath]}}
+		helpers: w.idx.support[h.pkgPath], local: newBlock(nil)}
 	w.curPath, w.args = h.path, args
 	w.collectTParams(h.decl.Type, h.decl.Body)
+	w.bindParams(h.decl.Type)
 	ast.Inspect(h.decl.Body, w.visit)
 	w.scope, w.curPath, w.args = prevScope, prevPath, prevArgs
 	delete(w.walking, id)

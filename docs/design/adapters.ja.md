@@ -353,11 +353,14 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 Go のテストでは、メソッドを呼んだ値の型を宣言から読みます。型の検査はせず、ほかのモジュールも読みません。次の値の型が分かります。
 
-- コードのパッケージの変数（`store.Default.Validate()`）と、テストのファイルのパッケージの変数（`var shared = store.New()`、`var shared *store.Store`）
+- コードのパッケージの変数（`store.Default.Validate()`）と、テストのパッケージの変数（`var shared = store.New()`、`var shared *store.Store`）。テストのパッケージの変数は、同じパッケージのほかの `_test.go` で宣言したものも読みます
 - 括弧で囲んだ複合リテラル（`(Config{}).Validate()`）
 - 関数、メソッド、テストのヘルパーの結果。宣言した結果の型で読みます（`newStore(t).Append()`）
 - range の要素（`for _, s := range stores`）と、宣言した構造体のフィールド（`tc.store.Append()`、`f.w.Drain()`）
 - `var c Config` と `:=` で作った変数
+- ヘルパーと関数リテラルの引数。宣言した引数の型で読みます（`func check(t *testing.T, s *store.Store)`）
+
+変数は関数ごとに読みます。ヘルパーと関数リテラルの中で宣言した変数と引数は、その外の同じ名前の変数を隠します。関数リテラルの中では、外の関数の変数も読めます（`t.Run("x", func(t *testing.T) { tc.store.Append() })`）。ヘルパーの中では、呼んだテストの変数は読めません。ヘルパーの中の呼び出しは、ヘルパーのファイルの import で読みます。
 
 型が分からない値のメソッドは `unknown` になります。
 
