@@ -61,7 +61,7 @@ All are on by default. Generated files are never checked.
   | no `/` (a file name only) | `orders.md` | anywhere in the repository: it exists if any file has that name |
 
   - A reference by file name only usually means a document nearby. Which one cannot be decided, so any file of that name will do.
-  - When looking for a file name only, the directories the adapters do not read (`vendor`, `node_modules`, those starting with `.` or `_`, and so on) are not searched.
+  - When looking for a file name only, the directories the adapters do not read (`vendor`, `node_modules`, those starting with `.`, and so on) are not searched.
 - **Where a reference starts**: at the start of a line, or after a space, a bracket or a quote. The same holds after Japanese separators (`・`, `、`, `（`, `「`, `『`, `【`, `：`, and the full-width space). For example, the reference in `設計（docs/design/store.md）` is found.
 - **Why**: when a comment refers to a design document, readers assume the reasoning is written there. If the document is missing, they cannot read it
 - **Fix**: point at the document's current path, or remove the reference

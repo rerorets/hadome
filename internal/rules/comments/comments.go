@@ -209,7 +209,7 @@ func skipped(dir string) bool {
 	case "vendor", "testdata", "node_modules", "target", "build", "dist", "__pycache__":
 		return true
 	}
-	return strings.HasPrefix(dir, ".") || strings.HasPrefix(dir, "_")
+	return strings.HasPrefix(dir, ".")
 }
 
 // All returns the comments/ rules.
