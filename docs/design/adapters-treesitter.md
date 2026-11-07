@@ -142,7 +142,7 @@ Some imports look like the repository's own but resolve to no file.
 | Python | `def` at module level and in classes | `class` | Name does not start with `_` | A docstring: the body's first statement is a string |
 | Rust | `fn` items and `impl` methods | `struct`, `enum`, `trait` (as interface), `type` | `pub` | `///` lines right before it |
 | Java | Methods and constructors | Classes, interfaces, enums, records | `public` | A `/** */` comment right before it |
-| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when a line with an annotation with arguments (`@Suppress("x")`) stands between them |
+| Kotlin | `fun` at top level and in classes | Classes, interfaces, objects | Not `private`, `internal` or `protected` | A `/** */` comment right before it, also when lines with annotations with arguments (`@Suppress("x")`) stand between them, however many |
 
 Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not product code. Cyclomatic complexity counts each language's `if`, loops, `case`/match arms (not the default one), `catch`, `&&`, `||`, and the ternary operator.
 
@@ -294,6 +294,12 @@ A grammar cannot read some correct code. tree-sitter does not stop there: it put
 | Kotlin | An array literal in an annotation argument (`[]`) |
 
 Such files count as read and are not listed under `unknown/unread` (see "Deliberately left out"). Upgrading the grammars makes them fewer.
+
+At the top level of a file, the Kotlin grammar may read annotations with arguments (`@Suppress("x")`) on the lines before a declaration as an expression. With two or more of them, it takes the declaration after them into that expression, and the declaration and its tests are missed. So hadome replaces such annotations with spaces and reads the file again.
+
+- The replacement keeps the number of bytes and the line breaks, so line numbers and positions stay those of the file
+- The replaced annotations are kept aside and read as the next declaration's. Example: `@Disabled("reason")` on a test class skips its tests
+- A `/** */` comment above the annotations is the declaration's doc comment
 
 ## Unread files
 

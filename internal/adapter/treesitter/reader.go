@@ -29,6 +29,9 @@ type file struct {
 	testGlob, generatedGlob, productGlob bool
 	unit                                 string // the unit's ID, as imports name it
 	unitPath                             string // the unit's location, as diagrams name it
+	// lifted are the nodes a repairer took out of the source before the reading root comes from.
+	// They belong to an earlier reading of the same bytes, so their positions and text are src's.
+	lifted []*sitter.Node
 }
 
 func (f *file) text(n *sitter.Node) string { return n.Utf8Text(f.src) }
@@ -75,15 +78,15 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		if err != nil {
 			return nil, err
 		}
-		tree, err := l.parse(parser, p, src)
+		f, done, err := l.parse(parser, p, src)
 		if err != nil {
 			return nil, err
 		}
-		defer tree.Close()
+		defer done()
 		gen := config.MatchesAny(c.GeneratedFiles, p)
-		files = append(files, &file{path: p, src: src, root: tree.RootNode(),
-			testGlob: !gen && config.MatchesAny(c.TestFiles, p), generatedGlob: gen,
-			productGlob: config.MatchesAny(c.ProductFiles, p)})
+		f.testGlob, f.generatedGlob = !gen && config.MatchesAny(c.TestFiles, p), gen
+		f.productGlob = config.MatchesAny(c.ProductFiles, p)
+		files = append(files, f)
 	}
 	l.r.index(v, files)
 	t := l.tables.with(c)
@@ -114,12 +117,42 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	return a, nil
 }
 
-// parse parses one file with the grammar its path calls for.
-func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (*sitter.Tree, error) {
+// repairer is a reader whose grammar misreads some correct code. repair returns a copy of src to
+// read in its place, with those parts of the code blanked out, and the nodes of root it blanked; or
+// nil when root is read right. The copy keeps every byte's position and line.
+type repairer interface {
+	repair(src []byte, root *sitter.Node) ([]byte, []*sitter.Node)
+}
+
+// parse parses one file with the grammar its path calls for. done frees the file's trees, after
+// which its nodes must not be used.
+func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (f *file, done func(), err error) {
 	if err := parser.SetLanguage(l.r.grammar(p)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return parser.Parse(src, nil), nil
+	tree := parser.Parse(src, nil)
+	trees := []*sitter.Tree{tree}
+	done = func() {
+		for _, t := range trees {
+			t.Close()
+		}
+	}
+	f = &file{path: p, src: src}
+	if r, ok := l.r.(repairer); ok {
+		read := src
+		for range 4 { // a repair may uncover another misreading further on
+			fixed, lifted := r.repair(read, tree.RootNode())
+			if fixed == nil {
+				break
+			}
+			f.lifted = append(f.lifted, lifted...)
+			read = fixed
+			tree = parser.Parse(read, nil)
+			trees = append(trees, tree)
+		}
+	}
+	f.root = tree.RootNode()
+	return f, done, nil
 }
 
 var generatedMark = regexp.MustCompile(`(?i)(@generated|code generated .* do not edit|auto-generated)`)
