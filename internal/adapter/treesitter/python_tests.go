@@ -29,6 +29,8 @@ type pyFile struct {
 	fixtures map[string]string
 	// fixtureDefs are the pytest fixtures of the file: name -> the function.
 	fixtureDefs map[string]*sitter.Node
+	// autouse are the names of the file's pytest fixtures marked autouse=True, in file order.
+	autouse []string
 }
 
 var (
@@ -134,6 +136,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 			t.hazard(facts.HazardMock, def.ChildByFieldName("parameters"))
 		}
 	}
+	pf.setupHazards(t, class)
 	w := &pyWalk{body: def.ChildByFieldName("body"), pf: pf, t: t, vars: pf.given(def, class), locals: map[string]bool{}, walking: map[string]bool{}}
 	for _, p := range pyParams(f, def) {
 		w.fixture(p)

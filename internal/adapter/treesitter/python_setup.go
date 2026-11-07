@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // What a Python test file sets up outside its tests: pytest fixtures, unittest's setUp, and helpers
@@ -19,6 +21,9 @@ func (pf *pyFile) bindSetup() {
 		switch def := definition(n); {
 		case n.Kind() == "decorated_definition" && def.Kind() == "function_definition" && pyFixture(f, n):
 			pf.fixtureDefs[f.field(def, "name")] = def
+			if pyAutouse(f, n) {
+				pf.autouse = append(pf.autouse, f.field(def, "name"))
+			}
 			if class := pf.built(def.ChildByFieldName("body")); class != "" {
 				pf.fixtures[f.field(def, "name")] = class
 			}
@@ -36,6 +41,84 @@ func pyFixture(f *file, n *sitter.Node) bool {
 		}
 	}
 	return false
+}
+
+// pyAutouse reports whether a decorated function is a pytest fixture marked autouse=True: pytest
+// runs it before every test it reaches without the test asking for it.
+func pyAutouse(f *file, n *sitter.Node) bool {
+	for _, d := range named(n) {
+		if d.Kind() == "decorator" && strings.Contains(f.text(d), "fixture") &&
+			strings.Contains(strings.ReplaceAll(f.text(d), " ", ""), "autouse=True") {
+			return true
+		}
+	}
+	return false
+}
+
+// setupHazards gives a test the clock and sleep hazards of what runs before it without being asked
+// for: the autouse fixtures of its file, of the conftest.py files above it and of its class, its
+// class's setUp and the like, and the module's setup_module and setup_function. Reading the clock or
+// sleeping there makes every test they run for depend on time, so each hazard is reported at the
+// setup's own line. Only those hazards are the test's: what the setup calls is not what it guards.
+func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
+	sw := &pyWalk{pf: pf, t: newTest(pf.f, "", pf.f.root), vars: map[string]string{}, locals: map[string]bool{},
+		walking: map[string]bool{}}
+	for _, name := range pf.autouseInReach() {
+		sw.fixture(name)
+	}
+	var bodies []*sitter.Node
+	if body := pf.helpers["setup_module"]; body != nil {
+		bodies = append(bodies, body)
+	}
+	if body := pf.helpers["setup_function"]; body != nil && class == nil {
+		bodies = append(bodies, body)
+	}
+	if class != nil {
+		for _, m := range named(definition(class).ChildByFieldName("body")) {
+			md := definition(m)
+			if md.Kind() == "function_definition" &&
+				(pySetups[pf.f.field(md, "name")] || (m.Kind() == "decorated_definition" && pyFixture(pf.f, m) && pyAutouse(pf.f, m))) {
+				bodies = append(bodies, md.ChildByFieldName("body"))
+			}
+		}
+	}
+	for _, body := range bodies {
+		sw.body = body
+		sw.walk(body)
+	}
+	for _, h := range sw.t.test.Hazards {
+		if h.Category == facts.HazardClock || h.Category == facts.HazardSleep {
+			t.addHazard(h)
+		}
+	}
+}
+
+// autouseInReach lists the autouse fixtures a test of the file runs: the file's own, then those of
+// the conftest.py files of its directory and the directories above, nearest first. A name already
+// listed is the nearer fixture's, so a farther one of that name is left out.
+func (pf *pyFile) autouseInReach() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(names []string) {
+		for _, n := range names {
+			if !seen[n] {
+				seen[n] = true
+				out = append(out, n)
+			}
+		}
+	}
+	add(pf.autouse)
+	for dir := path.Dir(pf.f.path); ; dir = path.Dir(dir) {
+		conftest := path.Join(dir, "conftest")
+		if conftest != module(pf.f.path) {
+			if cf := pf.r.supportFile(conftest, pf.t); cf != nil {
+				add(cf.autouse)
+			}
+		}
+		if dir == "." {
+			return out
+		}
+	}
 }
 
 // built returns the class a fixture's body returns or yields when it builds one of the product's:
