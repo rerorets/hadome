@@ -111,6 +111,8 @@ gate:allow <rule-id> reason: <text>
 
 JSON のスキーマは独自のバージョン番号を持ち、フィールドを足す形でしか変わりません。
 
+ファイル全体についての違反は行を持ちません。例: `size/file-lines`、`tests/purity-lost`。`text` は場所をファイルだけで書き、`json` は `line` を `0` にします。
+
 | 終了コード | 意味 |
 |---|---|
 | `0` | 後退なし |
