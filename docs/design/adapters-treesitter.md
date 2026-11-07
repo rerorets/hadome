@@ -246,7 +246,7 @@ The `clock` and `sleep` hazards of the code that runs before each test are hazar
 - When the method found calls the method of the same name through `super()` (`super().setUp()`), the one of the next class in the MRO that defines it runs too. Calling a base by name (`BaseCase.setUp(self)`) is treated the same
 - The `autouse=True` fixtures inside the base classes run too. When the test class, or a class earlier in the MRO, has a fixture of the same name, only the earlier one runs, because pytest overrides fixtures by name
 - The `setup_module` and `setup_function` of a base class's file do not run: pytest runs only those of the module holding the test
-- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. The test is still read as before
+- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. A class whose bases give no MRO, which Python cannot create, gets none of its bases. The test is still read as before
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 

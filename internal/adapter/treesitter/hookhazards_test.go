@@ -155,11 +155,15 @@ test_other: sleep@tests/conftest.py:8 sleep@tests/other/test_other.py:6`)
 // itself up through its base classes, in the same file or in a module the test file imports, over
 // several levels. A setup the class defines itself replaces the base's, unless it calls the base's
 // through super(). The autouse fixtures of a base class run too, unless the class defines a fixture
-// of the same name. A base class hadome cannot find gives nothing, and the test is still read.
+// of the same name. A base class may live in product code or a package's __init__.py. A base class
+// hadome cannot find gives nothing, nor do the bases of a class Python could not create (no
+// method resolution order), and the test is still read.
 func TestPythonTestClassesRunTheSetupTheyInherit(t *testing.T) {
 	a := analyze(t, "python", tree(
 		"app/__init__.py", "",
 		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"app/testing.py", "import time\nimport unittest\n\n\nclass ProductCase(unittest.TestCase):\n    def setUp(self):\n        time.sleep(4)\n",
+		"app/cases/__init__.py", "import time\n\n\nclass PackageCase:\n    def setup_method(self):\n        time.time()\n",
 		"tests/base.py", `import time
 import unittest
 from datetime import datetime
@@ -185,6 +189,10 @@ class BasePlain:
     @pytest.fixture(autouse=True)
     def ready(self):
         time.sleep(2)
+
+
+def helper():
+    return 1
 `,
 		"tests/test_orders.py", `import time
 import unittest
@@ -193,7 +201,9 @@ import pytest
 
 import tests.base as base
 from app.calc import add
-from tests.base import BaseCase, BasePlain, TimedCase
+from app.cases import PackageCase
+from app.testing import ProductCase
+from tests.base import BaseCase, BasePlain, TimedCase, helper
 from vendorlib import ExternalCase
 
 
@@ -258,6 +268,26 @@ class TestPlain(BasePlain):
         assert add(1, 2) == 3
 
 
+class TestProduct(ProductCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
+class TestPackage(PackageCase):
+    def test_add(self):
+        assert add(1, 2) == 3
+
+
+class TestNotAClass(helper):
+    def test_add(self):
+        assert add(1, 2) == 3
+
+
+class TestNoOrder(LocalBase, BaseCase, TimedCase):
+    def test_add(self):
+        self.assertEqual(add(1, 2), 3)
+
+
 class TestPlainOverride(BasePlain):
     @pytest.fixture(autouse=True)
     def ready(self):
@@ -272,13 +302,17 @@ class TestPlainOverride(BasePlain):
 TestDeep.test_add: clock@tests/base.py:16 sleep@tests/base.py:10
 TestExternal.test_add:
 TestImported.test_add: sleep@tests/base.py:10
-TestLocal.test_add: clock@tests/test_orders.py:14
+TestLocal.test_add: clock@tests/test_orders.py:16
 TestLoop.test_add:
 TestMissingBase.test_add:
 TestModule.test_add: sleep@tests/base.py:10
+TestNoOrder.test_add:
+TestNotAClass.test_add:
 TestOverride.test_add:
+TestPackage.test_add: clock@app/cases/__init__.py:6
 TestPlain.test_add: clock@tests/base.py:21 sleep@tests/base.py:25
 TestPlainOverride.test_add: clock@tests/base.py:21
+TestProduct.test_add: sleep@app/testing.py:7
 TestSuper.test_add: sleep@tests/base.py:10
 `)
 }

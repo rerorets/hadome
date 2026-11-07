@@ -48,7 +48,7 @@ func pyMRO(c pyCode, walking map[string]bool) []pyCode {
 }
 
 // c3merge merges linearizations as Python does: it takes the first head that is in no tail. A
-// hierarchy where none is, which Python refuses to create, ends the merge there.
+// hierarchy where none is, which Python refuses to create, gives no bases at all: its tests never run.
 func c3merge(seqs [][]pyCode) []pyCode {
 	var out []pyCode
 	for {
@@ -69,7 +69,7 @@ func c3merge(seqs [][]pyCode) []pyCode {
 			}
 		}
 		if next == nil {
-			return out
+			return nil
 		}
 		out = append(out, *next)
 		k := next.key()
@@ -161,9 +161,6 @@ func (pf *pyFile) classDef(name string) *sitter.Node {
 // moduleFile reads the file of a module of the repository, whatever its role: a class a test class
 // extends may live in a test support module, a test file or the product's code.
 func (r *python) moduleFile(mod string, t *tables) *pyFile {
-	if sf := r.supportFile(mod, t); sf != nil {
-		return sf
-	}
 	p := mod + ".py"
 	if r.files[p] == nil {
 		p = mod + "/__init__.py"
