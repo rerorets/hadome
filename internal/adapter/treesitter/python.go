@@ -36,10 +36,12 @@ var pyTables = &tables{
 		"datetime.datetime.utcnow": facts.HazardClock, "date.today": facts.HazardClock, "datetime.date.today": facts.HazardClock,
 		"time.time": facts.HazardClock, "time.monotonic": facts.HazardClock,
 		"time.sleep": facts.HazardSleep, "asyncio.sleep": facts.HazardSleep,
+		"monkeypatch.setattr": facts.HazardMock, "monkeypatch.delattr": facts.HazardMock,
 	},
 	mocks: []string{"unittest.mock", "mock", "pytest_mock"},
 	io: []string{"socket", "os", "subprocess", "shutil", "sqlite3", "requests", "httpx", "aiohttp", "urllib.request",
-		"http.client", "psycopg", "psycopg2", "pymysql", "pymongo", "redis", "boto3"},
+		"http.client", "urllib3", "psycopg", "psycopg2", "pymysql", "pymongo", "redis", "boto3", "botocore",
+		"sqlalchemy", "asyncpg", "aiofiles", "google.cloud", "grpc"},
 }
 
 var pyDirective = regexp.MustCompile(`^#\s*(type:|noqa|pylint:|fmt:|pragma|mypy:|isort:)|^#!`)

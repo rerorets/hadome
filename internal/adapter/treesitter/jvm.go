@@ -77,7 +77,10 @@ func jvmTables(extraIO, extraMocks []string, extraCalls map[string]string) *tabl
 		calls: map[string]facts.HazardCategory{},
 		mocks: append([]string{"org.mockito", "org.easymock", "org.jmock"}, extraMocks...),
 		io: append([]string{"java.io", "java.nio.file", "java.nio.channels", "java.net", "java.sql", "javax.sql",
-			"java.lang.ProcessBuilder", "okhttp3", "org.apache.http", "redis.clients", "com.mongodb"}, extraIO...),
+			"java.lang.ProcessBuilder", "okhttp3", "org.apache.http", "redis.clients", "com.mongodb",
+			"jakarta.persistence", "javax.persistence", "org.hibernate", "io.quarkus.hibernate", "com.google.cloud",
+			"jakarta.ws.rs.client", "javax.ws.rs.client", "org.springframework.jdbc", "org.springframework.web.client",
+			"software.amazon.awssdk"}, extraIO...),
 	}
 	for _, c := range []string{"Instant.now", "LocalDate.now", "LocalDateTime.now", "LocalTime.now", "ZonedDateTime.now",
 		"OffsetDateTime.now", "System.currentTimeMillis", "System.nanoTime", "Clock.systemUTC", "Clock.systemDefaultZone", "new Date"} {

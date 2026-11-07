@@ -55,8 +55,12 @@ func plus(m map[string]string, kv ...string) map[string]string {
 	return out
 }
 
+// languageNoMockCases and languagePurityCases are cases in languages only a cgo build reads; see
+// purity_cases_cgo.go.
+var languageNoMockCases, languagePurityCases []engine.Case
+
 func noMockCases() []engine.Case {
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a mock in a test of a pure unit fails", Base: unitTree(false, nil), Head: unitTree(true, nil), WantFail: []string{"tests/no-mock"}},
 		{Name: "the same mock in a test of a unit that is not pure passes",
 			Base: unitTree(false, storeSaves), Head: unitTree(true, storeSaves)},
@@ -65,12 +69,12 @@ func noMockCases() []engine.Case {
 			Head: unitTree(true, plus(storeUsesDB, "db/db.go", pureDB, ".hadome.yml", configuredDBIO))},
 		{Name: "a unit importing a unit of the repository that is not pure passes",
 			Base: unitTree(false, plus(storeUsesDB, "db/db.go", impureDB)), Head: unitTree(true, plus(storeUsesDB, "db/db.go", impureDB))},
-	}
+	}, languageNoMockCases...)
 }
 
 func purityCases() []engine.Case {
 	calc := map[string]string{"calc/calc.go": "package calc\n\n// Add adds.\nfunc Add(a, b int) int { return a + b }\n"}
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a pure unit gaining a database import needs review", Base: unitTree(false, nil), Head: unitTree(false, storeSaves),
 			WantReview: []string{"tests/purity-lost"}},
 		{Name: "a unit that was never pure does not", Base: unitTree(false, storeSaves), Head: unitTree(false, plus(storeSaves, "store/more.go", "package store\n"))},
@@ -81,5 +85,5 @@ func purityCases() []engine.Case {
 		{Name: "adding an io entry for what a unit already imports does not need review",
 			Base: unitTree(false, plus(storeUsesDB, "db/db.go", pureDB)),
 			Head: unitTree(false, plus(storeUsesDB, "db/db.go", pureDB, ".hadome.yml", configuredDBIO))},
-	}
+	}, languagePurityCases...)
 }

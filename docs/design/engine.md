@@ -29,7 +29,11 @@ Some rules find violations ("this test sleeps"). Others measure something ("the 
 | **Finding rule** | A set of findings | A finding in head that has no match in base | `tests/no-sleep`, `deps/not-in-diagram`, `size/function-lines` |
 | **Measure rule** | A set of guarded items | An item in base that is missing from head, unless the rule confirms it was removed legitimately | `tests/scope-shrunk`, `tests/purity-lost` |
 
-A measure rule decides what "removed legitimately" means (for `tests/scope-shrunk`: the target no longer exists in head). The engine only asks. An item marked `Review` that is missing from head goes to the reviews instead of the regressions, like a finding marked `Review`.
+A measure rule decides what "removed legitimately" means (for `tests/scope-shrunk`: the target no longer exists in head). The engine only asks.
+
+A missing item is normally reported as the base item. When the measure rule is also a `LossExplainer`, the engine calls its `Lost` before reporting. `Lost` looks at head and rewrites the item's file, line and wording. Example: `tests/purity-lost` points at the import in head that made the unit impure, and says what it reaches. The base item alone cannot say what changed in head.
+
+An item marked `Review` that is missing from head goes to the reviews instead of the regressions, like a finding marked `Review`.
 
 ## Matching findings across versions
 
@@ -188,6 +192,10 @@ classDiagram
     +Measure(in Input) ([]Item, error)
     +RemovedLegitimately(it Item, head Input) (bool, error)
   }
+  class LossExplainer {
+    <<interface>>
+    +Lost(it Item, head Input) Item
+  }
   class Finding {
     +Rule string
     +File string
@@ -236,6 +244,7 @@ classDiagram
   Source --> Version
   Rule <|-- FindingRule
   Rule <|-- MeasureRule
+  MeasureRule <|-- LossExplainer
   FindingRule ..> Input
   MeasureRule ..> Input
   FindingRule --> Finding

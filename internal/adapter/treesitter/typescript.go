@@ -43,10 +43,12 @@ var tsBranches = branches{
 var tsTables = &tables{
 	calls: map[string]facts.HazardCategory{"Date.now": facts.HazardClock, "performance.now": facts.HazardClock,
 		"setTimeout": facts.HazardSleep, "jest.mock": facts.HazardMock, "vi.mock": facts.HazardMock,
-		"mock.module": facts.HazardMock},
+		"mock.module": facts.HazardMock, "vi.spyOn": facts.HazardMock, "jest.spyOn": facts.HazardMock,
+		"vi.stubGlobal": facts.HazardMock},
 	mocks: []string{"sinon", "jest-mock", "ts-mockito", "testdouble"},
 	io: []string{"fs", "node:fs", "net", "node:net", "http", "node:http", "https", "node:https", "child_process",
-		"node:child_process", "dgram", "node:dgram", "axios", "node-fetch", "pg", "mysql2", "mongodb", "redis", "ioredis"},
+		"node:child_process", "dgram", "node:dgram", "axios", "node-fetch", "undici",
+		"ky", "got", "pg", "mysql2", "mongodb", "mongoose", "redis", "ioredis", "@prisma/client", "@aws-sdk", "@google-cloud"},
 }
 
 var tsDirective = regexp.MustCompile(`^(//\s*@ts-|//\s*eslint-|/\*\s*eslint|///\s*<reference|//\s*prettier-ignore)`)
@@ -126,10 +128,18 @@ func (r *typescript) resolve(from, spec string) (string, bool) {
 
 func (r *typescript) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
+	globals := map[string]bool{}
 	walk(f.root, func(n *sitter.Node) bool {
+		if name := tsGlobalIO(f, n); name != "" && !globals[name] {
+			globals[name] = true
+			out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: name, IO: true, Global: true})
+		}
 		spec := ""
 		switch n.Kind() {
 		case "import_statement", "export_statement":
+			if typeOnly(n) {
+				return false
+			}
 			spec = unquote(f.field(n, "source"))
 		case "call_expression":
 			if fn := f.field(n, "function"); fn == "require" || fn == "import" {
@@ -152,6 +162,78 @@ func (r *typescript) imports(f *file, t *tables) []facts.Import {
 		return false
 	})
 	return out
+}
+
+// tsGlobals are the APIs a browser or Node.js provides without an import that perform input or
+// output, by the name a call, a new or a member access uses.
+var tsGlobals = set("fetch", "navigator.sendBeacon", "WebSocket", "XMLHttpRequest", "EventSource",
+	"localStorage", "sessionStorage", "indexedDB")
+
+// tsGlobalIO returns the global API that performs input or output this node uses, or "": a call of
+// fetch, a new WebSocket, a member of localStorage, with or without window., globalThis. or self.
+// in front. Only the name is read: a local variable of the same name counts too.
+func tsGlobalIO(f *file, n *sitter.Node) string {
+	name := ""
+	switch n.Kind() {
+	case "call_expression":
+		name = f.field(n, "function")
+	case "new_expression":
+		name = f.field(n, "constructor")
+	case "member_expression":
+		name = f.field(n, "object")
+	default:
+		return ""
+	}
+	for _, p := range []string{"window.", "globalThis.", "self."} {
+		name = strings.TrimPrefix(name, p)
+	}
+	if tsGlobals[name] {
+		return name
+	}
+	return ""
+}
+
+// typeOnly reports an import or export that brings in only types: `import type`, `export type
+// {...} from`, or named imports that are all marked `type`. TypeScript erases them, so they are no
+// dependency of the running code.
+func typeOnly(n *sitter.Node) bool {
+	if hasToken(n, "type") {
+		return true
+	}
+	clause := (*sitter.Node)(nil)
+	for _, c := range named(n) {
+		if c.Kind() == "import_clause" {
+			clause = c
+		}
+	}
+	if clause == nil {
+		return false
+	}
+	specs := 0
+	for _, c := range named(clause) {
+		if c.Kind() != "named_imports" {
+			return false // a default or namespace import brings in a value
+		}
+		for _, s := range named(c) {
+			if s.Kind() == "import_specifier" {
+				if !hasToken(s, "type") {
+					return false
+				}
+				specs++
+			}
+		}
+	}
+	return specs > 0
+}
+
+// hasToken reports whether n has an unnamed child of this kind, such as the keyword `type`.
+func hasToken(n *sitter.Node, kind string) bool {
+	for i := uint(0); i < n.ChildCount(); i++ {
+		if c := n.Child(i); !c.IsNamed() && c.Kind() == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *typescript) symbols(f *file) []facts.Symbol {

@@ -37,6 +37,8 @@
 
 「正当に消えた」が何を指すかは、測るルールが決めます。例: `tests/scope-shrunk` なら、対象が head にもう無いことです。エンジンはルールに尋ねるだけです。
 
+消えた項目は、ふつう base の項目のまま報告します。測るルールが `LossExplainer` でもあれば、エンジンは報告の前にその `Lost` を呼びます。`Lost` は head を見て、項目のファイル・行・文言を書き換えます。例: `tests/purity-lost` は、ユニットを純粋でなくした head の import を指し、それが何に届くかを書きます。base の項目だけでは、head で何が変わったかを言えないからです。
+
 `Review` の付いた項目が head に無いときは、後退ではなく人の確認に回ります。`Review` の付いた違反と同じ扱いです。
 
 ## 版をまたいで違反を突き合わせる
@@ -209,6 +211,10 @@ classDiagram
     +Measure(in Input) ([]Item, error)
     +RemovedLegitimately(it Item, head Input) (bool, error)
   }
+  class LossExplainer {
+    <<interface>>
+    +Lost(it Item, head Input) Item
+  }
   class Finding {
     +Rule string
     +File string
@@ -257,6 +263,7 @@ classDiagram
   Source --> Version
   Rule <|-- FindingRule
   Rule <|-- MeasureRule
+  MeasureRule <|-- LossExplainer
   FindingRule ..> Input
   MeasureRule ..> Input
   FindingRule --> Finding

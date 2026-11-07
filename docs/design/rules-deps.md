@@ -45,7 +45,7 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 | `deps/not-in-diagram` | finding | An import between two of the repository's units is not drawn: no arrow between their nodes, or a unit no node covers |
 | `deps/diagram-stale` | finding | A node of the diagram names a directory that holds no unit |
 
-Both are off until `rules.deps.diagram` is set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn.
+Both are off until `rules.deps.diagram` is set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code.
 
 ### `deps/not-in-diagram`
 
