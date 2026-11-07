@@ -140,7 +140,8 @@ func TestAFailedWriteChangesNoFile(t *testing.T) {
 // target: hadome init
 // Suggest invariant 3: init never overwrites a file, and what it writes is valid configuration.
 func TestInitWritesValidConfigurationAndNeverOverwrites(t *testing.T) {
-	t.Chdir(writeTree(t, map[string]string{"main.go": "package main\n", "web/app.ts": "", "node_modules/x/y.py": ""}))
+	t.Chdir(writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "main.go": "package main\n",
+		"package.json": "{}\n", "web/app.ts": "", "node_modules/x/y.py": ""}))
 	code, out := runIn(t, "init")
 	if code != 0 || !strings.Contains(out, "detected: go, typescript") {
 		t.Fatalf("exit %d: %s", code, out)
@@ -152,16 +153,24 @@ func TestInitWritesValidConfigurationAndNeverOverwrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(written), "#   test: [go, test, ./...]  # go\n#   test: [npm, test]  # typescript\n") {
+	if !strings.Contains(string(written), "#   test: [go, test, ./...]  # go\n#   # test: [npm, test]  # typescript\n") {
 		t.Fatalf("init did not offer a commented test command per language:\n%s", written)
 	}
-	// Uncommenting the setting with one of the commands is valid configuration too.
-	uncommented := strings.Replace(strings.Replace(string(written), "# mutation:", "mutation:", 1),
-		"#   test: [go, test, ./...]", "  test: [go, test, ./...]", 1)
+	// Uncommenting every line of the setting once, as an editor's toggle does, is valid
+	// configuration: the other language's command stays a comment instead of a second test key.
+	lines := strings.Split(string(written), "\n")
+	for i, l := range lines {
+		if l == "# mutation:" {
+			for j := i; j < len(lines) && strings.HasPrefix(lines[j], "# "); j++ {
+				lines[j] = strings.TrimPrefix(lines[j], "# ")
+			}
+		}
+	}
+	uncommented := strings.Join(lines, "\n")
 	if err := os.WriteFile(config.FileName, []byte(uncommented), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := runIn(t, "config", "check"); code != 0 {
+	if code, out := runIn(t, "config", "check"); code != 0 || !strings.Contains(uncommented, "\nmutation:\n  test: [go, test, ./...]") {
 		t.Fatalf("the uncommented mutation setting is invalid: %s\n%s", out, uncommented)
 	}
 	if err := os.WriteFile(config.FileName, []byte("schema: 1\n# mine\n"), 0o644); err != nil {
@@ -172,6 +181,28 @@ func TestInitWritesValidConfigurationAndNeverOverwrites(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(config.FileName); string(data) != "schema: 1\n# mine\n" {
 		t.Fatalf("init overwrote the file: %s", data)
+	}
+}
+
+// viewpoint: behaviour
+// target: hadome init
+// A test command is offered only where it can run: npm test without a package.json at the root
+// fails before any mutant is tried. A language without its manifest gets a note instead.
+func TestInitOffersATestCommandOnlyWithItsManifest(t *testing.T) {
+	t.Chdir(writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "main.go": "package main\n", "web/app.ts": ""}))
+	if code, out := runIn(t, "init"); code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	written, err := os.ReadFile(config.FileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(written), "npm") {
+		t.Errorf("npm test offered without a package.json:\n%s", written)
+	}
+	if !strings.Contains(string(written), "#   test: [go, test, ./...]  # go\n") ||
+		!strings.Contains(string(written), "No test command for typescript: no package.json at the root") {
+		t.Errorf("want go's command and a note for typescript:\n%s", written)
 	}
 }
 

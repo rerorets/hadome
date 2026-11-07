@@ -122,18 +122,20 @@ hadome agents --write AGENTS.md CLAUDE.md
 
 **`mutation` の設定**: これもコメントにして書きます（[mutation.ja.md](mutation.ja.md)）。
 
-- 見つけた言語ごとに、よく使うテストのコマンドを1行ずつ並べます
-- 利用者は1つを残し、そのコメントを外して使います
+- 見つけた言語ごとに、よく使うテストのコマンドを並べます。ただし、そのコマンドが動くのに要るファイル（下表）がルートにある言語だけです。例: ルートに `package.json` が無ければ `npm test` は動かないので、書きません
+- 要るファイルがルートに無い言語には、コマンドの代わりに、そのことを書いたコメントを1行書きます
+- 1つ目のコマンドはコメントを1段、2つ目からは2段にします。設定の行のコメントを1度外すと、1つ目のコマンドだけが有効になります。`test` のキーが2つになって設定が不正になることはありません
+- ほかの言語のテストを流すときは、利用者が1つ目のコマンドを書き換えます
 - 推測したコマンドなので、有効にはしません
 
-| 言語 | テストのコマンド |
-|---|---|
-| Go | `[go, test, ./...]` |
-| TypeScript | `[npm, test]` |
-| Python | `[python, -m, pytest]` |
-| Rust | `[cargo, test]` |
-| Java、Kotlin | `[./gradlew, test]` |
-| Terraform、Ansible | 書かない。壊す関数が無い |
+| 言語 | テストのコマンド | ルートに要るファイル（どれか1つ） |
+|---|---|---|
+| Go | `[go, test, ./...]` | `go.mod` |
+| TypeScript | `[npm, test]` | `package.json` |
+| Python | `[python, -m, pytest]` | `pyproject.toml`、`setup.py`、`setup.cfg`、`pytest.ini` |
+| Rust | `[cargo, test]` | `Cargo.toml` |
+| Java、Kotlin | `[./gradlew, test]` | `gradlew` |
+| Terraform、Ansible | 書かない。壊す関数が無い | |
 
 hadome はこのファイルが無くても動きます。`init` は近道で、必須ではありません。
 

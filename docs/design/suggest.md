@@ -106,16 +106,22 @@ Languages are detected by file extension. Ansible's YAML cannot be told apart by
 
 hadome works without the file, so `init` is a shortcut, never a requirement.
 
-It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)). For each language found it lists the usual test command on its own line, and the user keeps one and uncomments it. The commands are guesses, so none is turned on.
+It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)).
 
-| Language | Test command |
-|---|---|
-| Go | `[go, test, ./...]` |
-| TypeScript | `[npm, test]` |
-| Python | `[python, -m, pytest]` |
-| Rust | `[cargo, test]` |
-| Java, Kotlin | `[./gradlew, test]` |
-| Terraform, Ansible | None: there are no functions to break |
+- For each language found it lists the usual test command, but only for a language whose file the command needs (table below) is at the root. Example: without a `package.json` at the root `npm test` cannot run, so it is not written
+- A language without that file at the root gets a one-line comment saying so instead of a command
+- The first command is commented once, the others twice. Uncommenting the setting's lines once turns on the first command only; the setting never gets two `test` keys and becomes invalid
+- To run another language's tests, the user rewrites the first command
+- The commands are guesses, so none is turned on
+
+| Language | Test command | File needed at the root (any one) |
+|---|---|---|
+| Go | `[go, test, ./...]` | `go.mod` |
+| TypeScript | `[npm, test]` | `package.json` |
+| Python | `[python, -m, pytest]` | `pyproject.toml`, `setup.py`, `setup.cfg`, `pytest.ini` |
+| Rust | `[cargo, test]` | `Cargo.toml` |
+| Java, Kotlin | `[./gradlew, test]` | `gradlew` |
+| Terraform, Ansible | None: there are no functions to break | |
 
 ## Invariants
 
