@@ -65,6 +65,9 @@ func (jf *jvmFile) ktInherit(n *sitter.Node, scope *jvmScope, depth int) {
 	for name, body := range sjf.helpers {
 		scope.inherited[name] = jvmCode{sjf, body}
 	}
+	for name := range sjf.valueFields {
+		scope.values[name] = true
+	}
 	for _, m := range mocks {
 		scope.mocks = append(scope.mocks, jvmCode{sjf, m})
 	}
