@@ -66,23 +66,7 @@ func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 	for _, name := range pf.autouseInReach() {
 		sw.fixture(name)
 	}
-	var bodies []*sitter.Node
-	if body := pf.helpers["setup_module"]; body != nil {
-		bodies = append(bodies, body)
-	}
-	if body := pf.helpers["setup_function"]; body != nil && class == nil {
-		bodies = append(bodies, body)
-	}
-	if class != nil {
-		for _, m := range named(definition(class).ChildByFieldName("body")) {
-			md := definition(m)
-			if md.Kind() == "function_definition" &&
-				(pySetups[pf.f.field(md, "name")] || (m.Kind() == "decorated_definition" && pyFixture(pf.f, m) && pyAutouse(pf.f, m))) {
-				bodies = append(bodies, md.ChildByFieldName("body"))
-			}
-		}
-	}
-	for _, body := range bodies {
+	for _, body := range pf.setupBodies(class) {
 		sw.body = body
 		sw.walk(body)
 	}
@@ -91,6 +75,31 @@ func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 			t.addHazard(h)
 		}
 	}
+}
+
+// setupBodies are the bodies of the setup functions that run before a test of class, or of the
+// module when class is nil, other than the fixtures of the file and its conftest.py files.
+func (pf *pyFile) setupBodies(class *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	if body := pf.helpers["setup_module"]; body != nil {
+		out = append(out, body)
+	}
+	if body := pf.helpers["setup_function"]; body != nil && class == nil {
+		out = append(out, body)
+	}
+	if class == nil {
+		return out
+	}
+	for _, m := range named(definition(class).ChildByFieldName("body")) {
+		md := definition(m)
+		if md.Kind() != "function_definition" {
+			continue
+		}
+		if pySetups[pf.f.field(md, "name")] || (m.Kind() == "decorated_definition" && pyFixture(pf.f, m) && pyAutouse(pf.f, m)) {
+			out = append(out, md.ChildByFieldName("body"))
+		}
+	}
+	return out
 }
 
 // autouseInReach lists the autouse fixtures a test of the file runs: the file's own, then those of
