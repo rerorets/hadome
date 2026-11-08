@@ -86,3 +86,34 @@ func TestScopeShrunkNamesTheSymbolAsConfigurationDoes(t *testing.T) {
 	}
 	t.Fatalf("no tests/scope-shrunk among %+v", r.Regressions)
 }
+
+// viewpoint: external contract
+// target: tests/scope-shrunk through engine.Engine.Check
+// When two symbols would be shown with the same name (store.Append in shops/store and in
+// orders/store), each is shown with the shortest path that tells them apart.
+func TestScopeShrunkTellsApartSymbolsThatWouldShowTheSameName(t *testing.T) {
+	product := fstest.MapFS{
+		"go.mod":                {Data: []byte("module example.com/app\n")},
+		"shops/store/store.go":  {Data: []byte("package store\n\n// Append adds a row.\nfunc Append(row string) {}\n")},
+		"orders/store/store.go": {Data: []byte("package store\n\n// Append adds a row.\nfunc Append(row string) {}\n")},
+	}
+	base := fstest.MapFS{"shops/store/store_test.go": {Data: []byte("package store_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/app/shops/store\"\n)\n\n" +
+		"func TestAppend(t *testing.T) {\n\tstore.Append(\"a\")\n}\n")}}
+	for p, f := range product {
+		base[p] = f
+	}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
+	r, err := e.Check(trees{base: base, head: product})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range r.Regressions {
+		if f.Rule == "tests/scope-shrunk" {
+			if msg := f.Message.In("en"); !strings.Contains(msg, " shops/store.Append ") {
+				t.Errorf("want shops/store.Append, got %q", msg)
+			}
+			return
+		}
+	}
+	t.Fatalf("no tests/scope-shrunk among %+v", r.Regressions)
+}

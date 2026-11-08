@@ -121,3 +121,27 @@ func TestAddAndRegisterNeedAUnitThatDoesIO(t *testing.T) {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
 	}
 }
+
+// viewpoint: behaviour
+// target: suggest.Candidates
+// Two candidates whose targets would read the same (store.DeleteRow in shops/store and in
+// orders/store) are written with the shortest paths that tell them apart, so they stay two.
+func TestCandidatesThatWouldReadTheSameAreToldApart(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":                {Data: []byte("module example.com/app\n")},
+		"shops/store/store.go":  {Data: []byte("package store\n\nfunc DeleteRow(id string) {}\n")},
+		"orders/store/store.go": {Data: []byte("package store\n\nfunc DeleteRow(id string) {}\n")},
+	}
+	a, err := adapter.New().Analyze(engine.Version{FS: tree}, config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, cd := range suggest.Candidates(engine.Input{Facts: a, Config: config.Config{}}) {
+		got = append(got, cd.Key())
+	}
+	want := "erasable orders/store.DeleteRow\nerasable shops/store.DeleteRow"
+	if strings.Join(got, "\n") != want {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
+	}
+}

@@ -21,7 +21,7 @@ func TestSurvivorMessagesSayRemovingForNothing(t *testing.T) {
 			"calc.Sign: removing `!` does not fail any test", "calc.Sign: `!` を消しても、どのテストも落ちない"},
 	}
 	for _, c := range cases {
-		msg := finding(c.m).Message
+		msg := finding(c.m, nil).Message
 		if got := msg.In("en"); got != c.en {
 			t.Errorf("en: got %q, want %q", got, c.en)
 		}

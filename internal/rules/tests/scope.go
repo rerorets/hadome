@@ -2,7 +2,6 @@ package tests
 
 import (
 	"github.com/rerorets/hadome/internal/engine"
-	"github.com/rerorets/hadome/internal/facts"
 )
 
 // scopeShrunk is tests/scope-shrunk: every target guarded by an active test in base must still be
@@ -19,13 +18,14 @@ func (scopeShrunk) About() engine.About {
 
 func (r scopeShrunk) Measure(in engine.Input) ([]engine.Item, error) {
 	seen := map[string]bool{}
+	names := in.Facts.Names()
 	var out []engine.Item
 	for _, t := range in.Facts.Tests {
 		if t.Skip.Skipped {
 			continue // a skipped test guards nothing
 		}
 		for _, c := range t.Calls {
-			target, name := c.Target, facts.ShortName(c.Target)
+			target, name := c.Target, names.Short(c.Target)
 			if seen[target] {
 				continue
 			}

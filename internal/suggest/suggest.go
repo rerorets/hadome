@@ -41,6 +41,7 @@ var pairs = [][2]string{{"Export", "Import"}, {"Encode", "Decode"}, {"Marshal", 
 func Candidates(in engine.Input) []engine.Candidate {
 	syms := candidateSymbols(in.Facts)
 	io := ioFiles(in.Facts)
+	names := in.Facts.Names()
 	byID := map[string]facts.Symbol{}
 	for _, s := range syms {
 		byID[s.ID] = s
@@ -52,7 +53,7 @@ func Candidates(in engine.Input) []engine.Candidate {
 		}
 		targets := make([]string, len(ids))
 		for i, id := range ids {
-			targets[i] = target(id)
+			targets[i] = names.Short(id)
 		}
 		out = append(out, engine.Candidate{Type: typ, Targets: targets, File: s.Path, Line: s.Line, Why: why})
 	}
@@ -144,11 +145,6 @@ func ioFiles(a *facts.Analysis) map[string]bool {
 func split(id string) (string, string) {
 	i := strings.LastIndex(id, ".")
 	return id[:i+1], id[i+1:]
-}
-
-// target writes a symbol ID the way configuration names it: the unit's last path element, then the name.
-func target(id string) string {
-	return facts.ShortName(id)
 }
 
 // begins reports whether name begins with word, a PascalCase word such as Delete, in any of three

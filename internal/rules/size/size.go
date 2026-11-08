@@ -39,6 +39,7 @@ func (r limitRule) About() engine.About {
 
 func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 	limit := in.Config.Size[r.key]
+	names := in.Facts.Names()
 	var out []engine.Finding
 	for _, m := range r.measure(in.Facts) {
 		if m.size <= limit {
@@ -46,7 +47,7 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		f := engine.Finding{
 			Rule: r.ID(), File: m.file, Line: m.line, Anchor: m.name, Value: m.size,
-			Message: engine.T("%s: %s %d, limit %d", display(m), engine.T(r.what), m.size, limit),
+			Message: engine.T("%s: %s %d, limit %d", display(m, names), engine.T(r.what), m.size, limit),
 			Why:     r.About().Why,
 			Fix:     r.About().Fix,
 		}
@@ -55,18 +56,18 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 		if m.nested {
 			f.Anchor += "\x00nested"
-			f.Message = engine.T("the function in %s at line %d: %s %d, limit %d", display(m), m.line, engine.T(r.what), m.size, limit)
+			f.Message = engine.T("the function in %s at line %d: %s %d, limit %d", display(m, names), m.line, engine.T(r.what), m.size, limit)
 		}
 		out = append(out, f)
 	}
 	return out, nil
 }
 
-func display(m measured) string {
+func display(m measured, names facts.Names) string {
 	if m.name == "" {
 		return m.file
 	}
-	return facts.ShortName(m.name)
+	return names.Short(m.name)
 }
 
 func files(a *facts.Analysis) []measured {
