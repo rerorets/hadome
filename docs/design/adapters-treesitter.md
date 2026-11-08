@@ -85,6 +85,8 @@ External imports keep their name as `ToUnit` and are checked against the `io` ta
 
 TypeScript imports and exports that bring in types only are not in the list of imports: `import type …`, `export type { … } from …`, and `import { type A, type B } from …` where every name is marked `type`. They disappear when compiled, so they are no dependency of the running code. One that brings in any value is in the list. Examples: `import { type A, b } from …`, `import d, { type A } from …`.
 
+Imports in a declaration file (`.d.ts`, `.d.mts`, `.d.cts`, and `.d.css.ts` and the like, which type a file of another kind) are not in the list of imports either, value imports included. A declaration file only describes types and is never run. So they count neither for purity nor for the `deps/` diagram checks. Example: when `src/types/auth.d.ts` has `import { Role } from "pg"`, `src/types` stays pure.
+
 ### Resolving TypeScript
 
 A specifier is tried in this order.

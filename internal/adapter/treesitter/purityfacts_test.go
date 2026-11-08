@@ -60,6 +60,22 @@ src/ui -> src/lib internal=true io=false global=false`)
 
 // viewpoint: behaviour
 // target: the TypeScript reader
+// A declaration file is never run, so nothing it imports is a dependency, a value import of a
+// database client included. The same import in an ordinary file is one.
+func TestDeclarationFileImportsAreNoDependency(t *testing.T) {
+	a := analyze(t, "typescript", tree(
+		"src/types/auth.d.ts", "import { Role } from 'pg';\nimport { b } from '../lib/b';\ndeclare module 'auth' { interface Session { role: Role } }\n",
+		"src/types/env.d.mts", "import { Pool } from 'pg';\ndeclare global { var pool: Pool }\n",
+		"src/ui/theme.d.css.ts", "import { Pool } from 'pg';\nexport declare const p: Pool;\n",
+		"src/lib/b.ts", "export const b = 1;\n",
+		"src/lib/db.ts", "import { Pool } from 'pg';\nexport const p = new Pool();\n",
+	))
+	expect(t, importLines(a), `
+src/lib -> pg internal=false io=true global=false`)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader
 // Code that calls fetch, opens a WebSocket or an XMLHttpRequest, beacons, or reads localStorage,
 // sessionStorage or indexedDB does input or output without importing anything. Each API counts once
 // per file, with or without window. or globalThis. in front; a method of the same name on another

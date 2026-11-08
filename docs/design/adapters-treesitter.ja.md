@@ -94,6 +94,8 @@ TypeScript だけは、ぶつかる名前の ID にファイルのパスを使�
 
 TypeScript で型だけを持ち込む import と export は、import の一覧に載せません。`import type …`、`export type { … } from …`、名前がすべて `type` 付きの `import { type A, type B } from …` の3つです。コンパイルすると消えるので、実行するコードの依存ではないからです。値を1つでも持ち込むものは載せます。例: `import { type A, b } from …`、`import d, { type A } from …`。
 
+宣言ファイル（`.d.ts`、`.d.mts`、`.d.cts`、`.d.css.ts` のようにほかの種類のファイルを型で書くもの）の import も、import の一覧に載せません。値を持ち込む import も同じです。宣言ファイルは型を書くだけで、実行されないからです。そのため、純粋さにも `deps/` の図の照合にも数えません。例: `src/types/auth.d.ts` が `import { Role } from "pg"` を持っていても、`src/types` は純粋なままです。
+
 ### TypeScript の解決
 
 指定子は次の順に試します。

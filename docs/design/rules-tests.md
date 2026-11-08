@@ -85,6 +85,7 @@ hadome decides purity from imports, on every check:
 - Purity follows the repository's own imports transitively: a unit that imports a unit that is not pure is not pure either
 - An import cycle (units that import each other) is decided together, as one. When any unit of the cycle reaches input or output, no unit of the cycle is pure: inside a cycle, every unit in effect imports all the others. The answer is the same whichever unit is looked at first
 - An import of types only is not a dependency. Example: TypeScript's `import type`. It disappears when compiled, so it is no dependency of the running code
+- An import in a TypeScript declaration file (`.d.ts` and the like) is not a dependency either. Declaration files are never run
 - In Go the `time` package is not in the table, because it also holds plain values (`time.Duration`); reading the clock is caught in tests by `tests/no-clock`, not by purity
 
 ### `tests/purity-lost`
