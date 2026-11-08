@@ -247,7 +247,8 @@ func testsCalling(a *facts.Analysis) map[string][]string {
 
 func finding(m facts.Mutant) engine.Finding {
 	msg := engine.T("%s: changing `%s` to `%s` does not fail any test", short(m.Func), m.Original, m.Replacement)
-	if m.Operator == "remove a call statement" {
+	// A mutant that replaces code with nothing, such as one that drops a `!`, removes it.
+	if m.Operator == "remove a call statement" || m.Replacement == "" {
 		msg = engine.T("%s: removing `%s` does not fail any test", short(m.Func), m.Original)
 	}
 	return engine.Finding{Rule: RuleID, File: m.Path, Line: m.Line, Anchor: m.Anchor,
