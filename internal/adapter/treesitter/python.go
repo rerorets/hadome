@@ -37,7 +37,8 @@ func (*python) grammar(string) *sitter.Language { return sitter.NewLanguage(py.L
 var pyBranches = branches{
 	kinds: set("if_statement", "elif_clause", "for_statement", "while_statement", "except_clause",
 		"conditional_expression", "case_clause", "for_in_clause", "if_clause"),
-	ops: set("and", "or"),
+	ops:    set("and", "or"),
+	nested: set("lambda", "function_definition"),
 }
 
 var pyTables = &tables{

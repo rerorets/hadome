@@ -24,8 +24,9 @@ type kotlin struct {
 func (*kotlin) grammar(string) *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
 
 var ktBranches = branches{
-	kinds: set("if_expression", "for_statement", "while_statement", "do_while_statement", "catch_block", "when_entry"),
-	ops:   set("&&", "||"),
+	kinds:  set("if_expression", "for_statement", "while_statement", "do_while_statement", "catch_block", "when_entry"),
+	ops:    set("&&", "||"),
+	nested: set("lambda_literal", "anonymous_function", "function_declaration"),
 }
 
 var ktTables = jvmTables([]string{"io.ktor.client", "kotlinx.coroutines.io"}, []string{"io.mockk"},

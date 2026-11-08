@@ -21,7 +21,8 @@ func (*java) grammar(string) *sitter.Language { return sitter.NewLanguage(javagr
 var javaBranches = branches{
 	kinds: set("if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement",
 		"catch_clause", "ternary_expression", "switch_label"),
-	ops: set("&&", "||"),
+	ops:    set("&&", "||"),
+	nested: set("lambda_expression", "method_declaration", "constructor_declaration"),
 }
 
 var javaTables = jvmTables(nil, nil, nil)

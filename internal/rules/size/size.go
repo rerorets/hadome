@@ -8,10 +8,13 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// measured is one thing a rule measures: where it is, what it is called and how big it is.
+// measured is one thing a rule measures: where it is, what it is called and how big it is. A
+// function nested in the symbol name has nested set: it is reported under that symbol, at its own
+// line, and matched against base apart from the symbol's own finding.
 type measured struct {
 	file, name string
 	line, size int
+	nested     bool
 }
 
 // limitRule reports everything over one limit. Each finding carries its size as the Value, so a
@@ -40,12 +43,17 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 		if m.size <= limit {
 			continue
 		}
-		out = append(out, engine.Finding{
+		f := engine.Finding{
 			Rule: r.ID(), File: m.file, Line: m.line, Anchor: m.name, Value: m.size,
 			Message: engine.T("%s: %s %d, limit %d", display(m), engine.T(r.what), m.size, limit),
 			Why:     r.About().Why,
 			Fix:     r.About().Fix,
-		})
+		}
+		if m.nested {
+			f.Anchor += "\x00nested"
+			f.Message = engine.T("the function in %s at line %d: %s %d, limit %d", display(m), m.line, engine.T(r.what), m.size, limit)
+		}
+		out = append(out, f)
 	}
 	return out, nil
 }
@@ -83,6 +91,20 @@ func symbols(kinds []facts.SymbolKind, size func(facts.Symbol) int) func(a *fact
 
 var functions = []facts.SymbolKind{facts.SymbolFunction, facts.SymbolMethod}
 
+// complexities measures each function and method, and on their own each function nested in one.
+func complexities(a *facts.Analysis) []measured {
+	out := symbols(functions, func(s facts.Symbol) int { return s.Complexity })(a)
+	for _, s := range a.Symbols {
+		if s.Kind != facts.SymbolFunction && s.Kind != facts.SymbolMethod {
+			continue
+		}
+		for _, n := range s.Nested {
+			out = append(out, measured{file: s.Path, name: s.ID, line: n.Line, size: n.Complexity, nested: true})
+		}
+	}
+	return out
+}
+
 // All returns the size/ rules.
 func All() []engine.Rule {
 	return []engine.Rule{
@@ -94,9 +116,8 @@ func All() []engine.Rule {
 		limitRule{key: "params", what: "parameters", cases: paramCases,
 			measure: symbols(functions, func(s facts.Symbol) int { return s.Params }),
 			fix:     "group parameters that travel together into a type"},
-		limitRule{key: "complexity", what: "cyclomatic complexity", cases: complexityCases,
-			measure: symbols(functions, func(s facts.Symbol) int { return s.Complexity }),
-			fix:     "move each branch's work into a function, or replace a chain of cases with a table"},
+		limitRule{key: "complexity", what: "cyclomatic complexity", cases: complexityCases, measure: complexities,
+			fix: "move each branch's work into a function, or replace a chain of cases with a table"},
 		limitRule{key: "interface-methods", what: "methods", cases: interfaceCases,
 			measure: symbols([]facts.SymbolKind{facts.SymbolInterface}, func(s facts.Symbol) int { return s.Methods }),
 			fix:     "split the interface by who uses it; each caller should need only what it calls"},

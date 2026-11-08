@@ -137,10 +137,21 @@ type Symbol struct {
 	Scoped bool
 	// Params counts the parameters of a function or method, without the receiver.
 	Params int
-	// Complexity is the cyclomatic complexity of a function or method.
+	// Complexity is the cyclomatic complexity of a function or method, without the branches of
+	// the functions nested in it (closures, lambdas, …), which are counted on their own in Nested.
 	Complexity int
+	// Nested are the functions nested in a function or method at any depth, each with its own
+	// complexity.
+	Nested []Nested
 	// Methods counts the methods of an interface.
 	Methods int
+}
+
+// Nested is a function nested in a symbol: an arrow function, lambda, closure, function literal,
+// nested def or a method of an anonymous class. Complexity counts only its own branches.
+type Nested struct {
+	Line       int
+	Complexity int
 }
 
 // Hazard is one occurrence of a hazard category. Evidence is the normalised source text

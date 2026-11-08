@@ -22,6 +22,20 @@ All are findings and on by default.
 
 Cyclomatic complexity is 1, plus one for each `if`, `for`, `case` (not `default`), `&&` and `||`. Each adapter maps its language's branches to the same count.
 
+### Nested functions
+
+A function inside a function is counted apart from the one that holds it, as ESLint's `complexity` does. Nested functions are arrow functions, lambdas, closures, Go function literals, nested `def`s, methods of anonymous classes and the like.
+
+- **The outer function**: counts only its own branches. Branches inside its nested functions are not added. Example: a function with no branches of its own that holds an arrow function with 16 `if`s has complexity 1.
+- **Each nested function**: counts only its own branches, against the same limit. A function nested in a nested function is counted on its own too.
+- **A nested function over the limit**: is reported as a violation of the enclosing symbol (function or method), with the nested function's line in the message. Example: "the function in `setup` at line 4: cyclomatic complexity 16, limit 15". The violation's line is the nested function's line too.
+
+Nested functions are reported under the enclosing symbol so that named ones (`const onMessage = () =>`) and anonymous ones are reported the same way in all six languages. Making each nested function a symbol of its own would add new symbols to other rules too (`size/function-lines`, `comments/` and others).
+
+Against base, a nested function's violation is matched by the enclosing symbol. Line numbers are not used for matching. So a nested function that only moved is not a regression. More nested functions over the limit in the same enclosing symbol, or a larger value for one of them, is a regression. They are matched apart from the outer function's own violation.
+
+Base and head are measured with the same counting, so a change in how it counts never makes an unchanged file regress.
+
 ### What is measured
 
 Only product code: source files and the symbols in them. Test files and generated files are not measured. Tests are long by nature (tables of cases), and generated code is nobody's to split.
@@ -49,7 +63,7 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 | Fact | Used for |
 |---|---|
 | `File.Lines`, `File.Role` | `size/file-lines` |
-| `Symbol.EndLine`, `Symbol.Params`, `Symbol.Complexity` | functions and methods |
+| `Symbol.EndLine`, `Symbol.Params`, `Symbol.Complexity`, `Symbol.Nested` | functions and methods; `Nested` holds the line and complexity of each nested function |
 | `Symbol.Kind` = `interface`, `Symbol.Methods` | `size/interface-methods` |
 
 ## Self-test cases
@@ -59,7 +73,7 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 | `size/function-lines` | a new long function fails · an existing long function that moved passes · an existing long function that grew fails · one that shrank passes · a long test function passes |
 | `size/file-lines` | a file that grows past the limit fails · a generated file passes |
 | `size/params` | a new function with too many parameters fails · five parameters pass |
-| `size/complexity` | a new function with too many branches fails · a function at the limit passes · `default` is not a branch |
+| `size/complexity` | a new function with too many branches fails · a function at the limit passes · `default` is not a branch · a nested function's branches are not added to the outer function · a new nested function with too many branches fails · an unchanged nested function passes |
 | `size/interface-methods` | a new wide interface fails · an interface of five passes |
 | (configuration) | a lowered limit reports only new code · a raised limit needs review |
 

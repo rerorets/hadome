@@ -41,6 +41,8 @@ var tsBranches = branches{
 	kinds: set("if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement",
 		"switch_case", "catch_clause", "ternary_expression"),
 	ops: set("&&", "||", "??"),
+	nested: set("arrow_function", "function_expression", "function_declaration", "generator_function",
+		"generator_function_declaration", "method_definition"),
 }
 
 var tsTables = &tables{
