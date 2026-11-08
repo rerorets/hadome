@@ -1,6 +1,7 @@
 package mutation_test
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
 	"github.com/rerorets/hadome/internal/mutation"
 	"github.com/rerorets/hadome/internal/source"
 )
@@ -180,7 +182,8 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 	}
 	touched := strings.Replace(double, "return n * 2", "return n * 2 // twice", 1)
 	t.Run("a file the build leaves out", func(t *testing.T) {
-		base, head := version(calc, strong), version(calc, strong)
+		base := version(calc, strong)
+		head := version(strings.Replace(calc, "return 1", "return 1 // above zero", 1), strong)
 		head["calc/double.go"] = "//go:build ignore\n\n" + double // new, so a survivor would be a regression
 		var progress strings.Builder
 		an := adapter.New()
@@ -197,6 +200,12 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 		}
 		if !strings.Contains(progress.String(), "calc.Double, swap arithmetic: not built\n") {
 			t.Errorf("want a progress line saying the mutant was not built, got\n%s", progress.String())
+		}
+		lines := strings.Split(strings.TrimSuffix(progress.String(), "\n"), "\n")
+		for i, l := range lines {
+			if want := fmt.Sprintf("mutate %d/%d ", i+1, len(lines)); !strings.HasPrefix(l, want) {
+				t.Errorf("mutants not built and mutants tried are counted as one run: line %d is %q, want it to start %q", i+1, l, want)
+			}
 		}
 	})
 	t.Run("a file built by -tags in the test command", func(t *testing.T) {
@@ -215,4 +224,29 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 			t.Fatalf("the tests catch every break of Double, so want exit 0, got %d: %+v", r.ExitCode(), r)
 		}
 	})
+}
+
+// untranslatable is a mutator that cannot break one language.
+type untranslatable struct{ adapter.Analyzer }
+
+func (untranslatable) Unmutated([]facts.Symbol) []string { return []string{"Cobol"} }
+
+// viewpoint: behaviour
+// target: mutation.Mutate.Run
+// Functions touched in a language hadome cannot break are not passed silently: they go to a
+// person's review, never to a regression.
+func TestALanguageWithoutMutantsGoesToReview(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Fatal("these cases run go test, and go is not on PATH")
+	}
+	an := adapter.New()
+	m := &mutation.Mutate{Analyzer: an, Mutator: untranslatable{an}, Workdir: t.TempDir(), Progress: io.Discard}
+	touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
+	r, err := m.Run(source.Dirs{BaseDir: dir(t, version(calc, strong)), HeadDir: dir(t, version(touched, strong))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Regressions) != 0 || len(r.Reviews) != 1 || r.Reviews[0].File != ".hadome.yml" {
+		t.Fatalf("want one review of the untried language and no regression, got exit %d: %+v", r.ExitCode(), r)
+	}
 }

@@ -17,6 +17,7 @@ func TestTheTestCommandDecidesWhatIsBuilt(t *testing.T) {
 		"a/x_plan9.go":      {Data: []byte("package a\n")},
 		"a/x_plan9_test.go": {Data: []byte("package a\n")},
 		"a/x_mips64.go":     {Data: []byte("package a\n")},
+		"a/one.go":          {Data: []byte("//go:build extra\n\npackage a\n")},
 		"a/extra.go":        {Data: []byte("//go:build extra && more\n\npackage a\n")},
 		"a/_scratch.go":     {Data: []byte("package a\n")},
 		"a/ignored.ts":      {Data: []byte("//go:build ignore\n")},
@@ -41,6 +42,8 @@ func TestTheTestCommandDecidesWhatIsBuilt(t *testing.T) {
 		{[]string{"go", "test", "-tags", "extra,more", "./..."}, "a/extra.go", false},
 		{[]string{"go", "test", "-tags=extra,more", "./..."}, "a/extra.go", false},
 		{[]string{"go", "test", "-tags=extra", "./..."}, "a/extra.go", true},
+		{[]string{"go", "test", "-run", "extra", "./..."}, "a/one.go", true},
+		{[]string{"go", "test", "-tags"}, "a/one.go", true},
 		{[]string{"go", "test", "./..."}, "a/_scratch.go", true},
 		{[]string{"go", "test", "./..."}, "a/ignored.ts", false},
 	} {
