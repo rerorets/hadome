@@ -2,6 +2,7 @@ package golang
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -12,7 +13,8 @@ import (
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // A function literal is counted on its own: the function that holds it counts only its own
-// branches, and each literal, also one nested in another, is listed with its line and complexity.
+// branches, and each literal, also one nested in another, is listed with its line and complexity,
+// in a method as in a function.
 func TestGoNestedComplexity(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod": {Data: []byte("module example.com/app\n")},
@@ -30,18 +32,26 @@ func Outer(x int) func() int {
 		return x
 	}
 }
+
+type T struct{}
+
+func (T) M(x int) { f := func() { if x > 0 { x-- } }; f() }
 `)},
 	}
 	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(a.Symbols) != 1 {
-		t.Fatalf("got %d symbols, want 1", len(a.Symbols))
+	var got []string
+	for _, s := range a.Symbols {
+		got = append(got, fmt.Sprintf("%s %s cx=%d nested=%v", s.Kind, s.ID, s.Complexity, s.Nested))
 	}
-	s := a.Symbols[0]
-	got := fmt.Sprintf("cx=%d nested=%v", s.Complexity, s.Nested)
-	if want := "cx=3 nested=[{6 4} {10 2}]"; got != want {
-		t.Errorf("got %s, want %s", got, want)
+	want := []string{
+		"function example.com/app/store.Outer cx=3 nested=[{6 4} {10 2}]",
+		"type example.com/app/store.T cx=0 nested=[]",
+		"method example.com/app/store.T.M cx=1 nested=[{18 2}]",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
