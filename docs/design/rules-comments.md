@@ -69,6 +69,18 @@ All are on by default. Generated files are never checked.
   - A reference by file name only usually means a document nearby. Which one cannot be decided, so any file of that name will do.
   - When looking for a file name only, the directories the adapters do not read (`vendor`, `node_modules`, those starting with `.`, and so on) are not searched.
   - The list of directories not read is a copy of the adapters' list (`walk.Skip`). Rules may not import the adapters, so they keep a copy. When the two lists differ, a test (`TestBrokenReferenceSkipsTheDirectoriesTheAdaptersSkip` in `internal/adapter`) fails.
+- **Paths `.gitignore` ignores**: when the repository's `.gitignore` ignores the referenced path, a missing file is not reported. An ignored path is one the author decided to keep out of the repository. For example, in a repository whose `.gitignore` lists `.review-notes/` for review output, a comment that names `.review-notes/store.md` passes.
+
+  | Rule | What it is |
+  |---|---|
+  | `.gitignore` files read | those in the version being checked: the root one, and the one in each directory above the referenced path. When the working tree is checked, the working tree's; when a revision is checked, that revision's |
+  | Not read | `.git/info/exclude` and the per-user excludes setting (`core.excludesFile`). Both live outside the repository and differ between machines. The result must be the same on every machine |
+  | Pattern syntax | the same as git. Blank lines and lines starting with `#` are skipped. `!` negates an exclusion. A trailing `/` matches directories only. A `/` at the start or in the middle makes the pattern relative to the directory of its `.gitignore`. Without a `/`, it matches a name at any depth. `*`, `?` and `[…]` do not match `/`. `**/`, `/**` and `/**/` match zero or more directories |
+  | Precedence | a `.gitignore` in a deeper directory takes precedence over a shallower one. Within one file, a later line takes precedence |
+  | Parent directories | when a parent directory is ignored, the files in it are ignored too. As in git, a file inside it cannot be brought back with `!` |
+
+  - A reference by file name only is checked as that file at the root. For example, with `notes.md` in `.gitignore`, the reference `notes.md` passes.
+  - A reference that points above the root (one whose `../` leaves the repository) is never treated as ignored.
 - **Where a reference starts**: at the start of a line, or after a space, a bracket or a quote. The same holds after Japanese separators (`・`, `、`, `（`, `「`, `『`, `【`, `：`, and the full-width space). For example, the reference in `設計（docs/design/store.md）` is found.
 - **Why**: when a comment refers to a design document, readers assume the reasoning is written there. If the document is missing, they cannot read it
 - **Fix**: point at the document's current path, or remove the reference
@@ -105,7 +117,7 @@ The `names` and `paths` of `entry-points` must be valid globs; an invalid one is
 |---|---|
 | `comments/todo-format` | a new bare TODO fails · a TODO with the form passes · a FIXME fails · an existing bare TODO that moved passes · "TODO" in the middle of a sentence passes · a product's own form is applied |
 | `comments/missing-doc` | a new exported function without a doc comment fails · an unexported one passes · a method on an unexported type passes · an exported type without one fails · a test file is not checked · a Go `String() string` method passes · a method with the same name but another shape fails · a new Terraform `variable` without a `description` fails · a new `output` with one passes · a new Ansible default `argument_specs` does not describe fails · one it describes passes · one starting with `_` passes · a function matching a configured entry point's name and paths passes · a function with a configured name outside its paths fails |
-| `comments/broken-reference` | a reference to a missing file fails · a reference to an existing file passes · a relative reference resolves from the file · deleting a document that a comment names fails · a directive is not a reference · a URL is not a reference · a file name only, of a file elsewhere, passes · a file name only, of a file nowhere, fails · a file name only does not count a file in a skipped directory (`node_modules`, one starting with `.`) · a reference after a Japanese bracket is found |
+| `comments/broken-reference` | a reference to a missing file fails · a reference to an existing file passes · a relative reference resolves from the file · deleting a document that a comment names fails · a directive is not a reference · a URL is not a reference · a file name only, of a file elsewhere, passes · a file name only, of a file nowhere, fails · a file name only does not count a file in a skipped directory (`node_modules`, one starting with `.`) · a reference after a Japanese bracket is found · a reference to a path `.gitignore` ignores passes · a reference to a path brought back with `!` fails · a nested `.gitignore` applies below it · a nested `.gitignore` does not apply outside it |
 
 ## Invariants
 
