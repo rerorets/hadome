@@ -90,12 +90,38 @@ class QueryTest {
     }
 
     @Test
+    void derived() {
+        var sql = "select 1";
+        var upper = sql.toUpperCase();
+        var left = "SELECT " + loader();
+        var right = loader() + " FROM t";
+        upper.contains("SELECT");
+        left.contains("SELECT");
+        right.contains("FROM");
+    }
+
+    @Test
     void unknown() {
         var r = loader();
         r.contains(1);
     }
+
+    @Test
+    void sum() {
+        var n = loader() + loader();
+        n.contains(1);
+    }
+
+    @Test
+    void returned() {
+        var r = loader().trim();
+        r.contains(1);
+    }
 }
-`), `QueryTest.literal calls=[] unresolved=0
+`), `QueryTest.derived calls=[] unresolved=0
+QueryTest.literal calls=[] unresolved=0
+QueryTest.returned calls=[] unresolved=1
+QueryTest.sum calls=[] unresolved=1
 QueryTest.typed calls=[] unresolved=0
 QueryTest.unknown calls=[] unresolved=1`)
 	})

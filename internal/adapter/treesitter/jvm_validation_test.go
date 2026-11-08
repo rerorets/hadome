@@ -10,7 +10,8 @@ import (
 // target: the Java and Kotlin readers
 // A REST Assured check chained on a helper declared to return a ValidatableResponse checks the
 // response, whatever the helper's body ends with: then() followed by also(::log), or a call of
-// another helper. A helper declared to return the request checks nothing.
+// another helper. A helper with no declared type checks the response when its body ends in
+// then(). A helper declared to return the request checks nothing.
 func TestRestAssuredChecksThroughADeclaredValidatableResponse(t *testing.T) {
 	t.Run("kotlin", func(t *testing.T) {
 		expect(t, asserts(t, "kotlin", tree(
@@ -27,6 +28,8 @@ abstract class ApiSupport {
     protected fun request(): RequestSpecification = given().contentType("application/json").also(::log)
 
     protected fun ValidatableResponse.again(): RequestSpecification = given().also(::log)
+
+    protected fun listed() = given().get("/items").then()
 
     private fun log(x: Any) = println(x)
 }
@@ -45,8 +48,11 @@ class ApiTest : ApiSupport() {
 
     @Test
     fun extension() { with(list()) { again().body("{}").post("/items") } }
+
+    @Test
+    fun inferred() { listed().statusCode(200) }
 }
-`)), "ApiTest.checked asserts=2 unknown=false\nApiTest.extension asserts=0 unknown=false\nApiTest.unchecked asserts=0 unknown=false")
+`)), "ApiTest.checked asserts=2 unknown=false\nApiTest.extension asserts=0 unknown=false\nApiTest.inferred asserts=1 unknown=false\nApiTest.unchecked asserts=0 unknown=false")
 	})
 	t.Run("java", func(t *testing.T) {
 		expect(t, asserts(t, "java", tree(

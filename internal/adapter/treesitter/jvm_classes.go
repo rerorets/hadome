@@ -180,14 +180,13 @@ var jvmDrivers = map[string][]string{
 // noteValueField records a field of a test class whose initializer names something of the product,
 // and reports whether it does.
 func (jf *jvmFile) noteValueField(name string, init *sitter.Node) bool {
-	if name == "" || init == nil {
-		return false
-	}
 	uses := false
-	walk(init, func(n *sitter.Node) bool {
-		uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
-		return !uses
-	})
+	if name != "" && init != nil {
+		walk(init, func(n *sitter.Node) bool {
+			uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
+			return !uses
+		})
+	}
 	if uses {
 		jf.markValueField(name)
 	}
