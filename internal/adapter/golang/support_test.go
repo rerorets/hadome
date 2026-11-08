@@ -418,3 +418,58 @@ func TestAll(t *testing.T) { storetest.AppendAll(t, nil) }
 		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A package named <name>test outside a directory called <name> is test support when it imports a
+// package called <name>: by the name it gives the import, or by the last element of the import's
+// path. One that imports no such package is product code.
+func TestGoTestSupportPackagesAreKnownByTheirImports(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("// Package store keeps rows.\npackage store\n\n// Open opens.\nfunc Open() int { return 1 }\n")},
+		"fakes/rowstest/rows.go": {Data: []byte(`package rowstest
+
+import rows "example.com/app/store"
+
+func New() int { return rows.Open() }
+`)},
+		"fakes/storetest/store.go": {Data: []byte(`package storetest
+
+import s "example.com/app/store"
+
+func New() int { return s.Open() }
+`)},
+		"fakes/clocktest/clock.go": {Data: []byte(`package clocktest
+
+import "example.com/app/store"
+
+func Now() int { return store.Open() }
+`)},
+	}
+	var paths []string
+	for p := range tree {
+		if strings.HasSuffix(p, ".go") {
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range a.Files {
+		got = append(got, fmt.Sprintf("%s %s", f.Path, f.Role))
+	}
+	sort.Strings(got)
+	want := strings.Join([]string{
+		"fakes/clocktest/clock.go source",
+		"fakes/rowstest/rows.go test",
+		"fakes/storetest/store.go test",
+		"store/store.go source",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
