@@ -196,10 +196,14 @@ func unitOf(a *facts.Analysis, id string) string {
 }
 
 // testsPureUnitsOnly reports whether every target of a test is in a pure unit. A test that also
-// calls code that is not pure may need its mock for that code.
+// calls code that is not pure may need its mock for that code, and so may one that drives the app,
+// whose code it runs without calling it: its targets can be only the pure values it builds.
 func testsPureUnitsOnly(in engine.Input) func(facts.Test) bool {
 	pure := pureUnits(in.Facts)
 	return func(t facts.Test) bool {
+		if t.Drives {
+			return false
+		}
 		for _, c := range t.Calls {
 			if !pure[unitOf(in.Facts, c.Target)] {
 				return false
@@ -210,12 +214,13 @@ func testsPureUnitsOnly(in engine.Input) func(facts.Test) bool {
 }
 
 // fileMockForImpure reports a hazard that applies to the whole test file, such as a jest.mock at its
-// top, in a file where some test calls a target outside the pure units: the mock may be there for
+// top, in a file where some test calls a target outside the pure units or drives the app: the mock may be there for
 // that test, and the runner gives it to every test of the file alike.
 func fileMockForImpure(in engine.Input) func(facts.Test, facts.Hazard) bool {
 	pure := pureUnits(in.Facts)
 	impure := map[string]bool{}
 	for _, t := range in.Facts.Tests {
+		impure[t.Path] = impure[t.Path] || t.Drives
 		for _, c := range t.Calls {
 			if !pure[unitOf(in.Facts, c.Target)] {
 				impure[t.Path] = true

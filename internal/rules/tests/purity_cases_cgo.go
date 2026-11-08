@@ -69,6 +69,10 @@ func tsNoMockCases() []engine.Case {
 	const callbacks = "import { each, total } from './each';\n\n" +
 		"it('calls back', () => {\n  const f = vi.fn();\n  each([1], f);\n  expect(f).toHaveBeenCalledWith(1);\n});\n\n" +
 		"it('sums', () => {\n  const read = jest.fn().mockImplementation(() => [1, 2]);\n  expect(total({ read })).toBe(3);\n});\n"
+	drives := func(mock string) string {
+		return "import request from 'supertest';\nimport { add } from './calc';\n\nit('serves the sum', async () => {\n" + mock +
+			"  const res = await request('http://localhost').get('/sum');\n  expect(res.body.n).toBe(add(1, 2));\n});\n"
+	}
 	return append([]engine.Case{
 		{Name: "vi.spyOn in a test of a pure TypeScript unit fails", Base: test(calc, ""), Head: test(calc, spy),
 			WantFail: []string{"tests/no-mock"}},
@@ -80,6 +84,9 @@ func tsNoMockCases() []engine.Case {
 			Base: test(calc+fetches, ""), Head: test(calc+fetches, stub)},
 		{Name: "vi.fn and jest.fn passed to a pure TypeScript unit as a callback or a dependency pass",
 			Base: tsTree("src/calc/each.ts", each), Head: tsTree("src/calc/each.ts", each, "src/calc/each.test.ts", callbacks)},
+		{Name: "a mock in a test that drives the app passes, though the only target it calls is pure",
+			Base: tsTree("src/calc/calc.ts", calc, "src/calc/calc.test.ts", drives("")),
+			Head: tsTree("src/calc/calc.ts", calc, "src/calc/calc.test.ts", drives(spy))},
 	}, fileMockCases()...)
 }
 
@@ -95,7 +102,11 @@ func fileMockCases() []engine.Case {
 	const adds = "it('adds', () => {\n  expect(add(1, 2)).toBe(3);\n});\n"
 	const loads = "it('loads', async () => {\n  expect(await load()).toBe(200);\n});\n"
 	const spyAdds = "it('adds', () => {\n  vi.spyOn(Math, 'max');\n  expect(add(1, 2)).toBe(3);\n});\n"
+	const served = "import request from 'supertest';\n"
+	const serves = "it('serves', async () => {\n  expect((await request('http://localhost').get('/n')).status).toBe(200);\n});\n"
 	return []engine.Case{
+		{Name: "a file-level vi.mock in a file where another test drives the app passes",
+			Base: shared(served + head + adds + serves), Head: shared(served + head + mock + adds + serves)},
 		{Name: "a file-level vi.mock in a file whose tests call only pure units fails",
 			Base: shared(head + adds), Head: shared(head + mock + adds), WantFail: []string{"tests/no-mock"}},
 		{Name: "a file-level vi.mock in a file where another test calls a unit that is not pure passes",
