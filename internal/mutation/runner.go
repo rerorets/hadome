@@ -21,6 +21,9 @@ type Outcome int
 const (
 	Caught Outcome = iota
 	Survived
+	// Unbuilt is a mutant in a file the build that runs the tests does not compile. No test is run
+	// for it, so it is neither caught nor a survivor.
+	Unbuilt
 )
 
 // Runner runs the test command in a copy of one version. It never writes to the repository's

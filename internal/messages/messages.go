@@ -200,12 +200,15 @@ var Japanese = map[string]string{
 	"untried code is not known to be guarded":                                                                                                   "試していないコードは、守られているかどうか分からない",
 	"a person checks the tests of those functions":                                                                                              "それらの関数のテストを人が確かめる",
 	"%d mutants beyond mutation.max-mutants were not tried, in %s":                                                                              "mutation.max-mutants を超えた %d 個の変異を試していない。対象: %s",
+	"%d mutants in %s were not tried: the build that runs the tests does not compile this file":                                                 "%d 個の変異を試していない（%s）。テストを流すビルドが、このファイルをコンパイルしない",
+	"a person checks the tests of this file, or runs mutate where the build compiles it, such as with CGO_ENABLED=0 in mutation.test":           "このファイルのテストを人が確かめる。または、mutation.test に CGO_ENABLED=0 を書くなど、このファイルをコンパイルするビルドで mutate を実行する",
 	"split the change, or have a person decide whether to raise mutation.max-mutants":                                                           "変更を分けるか、mutation.max-mutants を上げるかどうかを人が決める",
 
 	// hadome mutate's progress lines.
 	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
 	"caught":                        "テストが気づいた",
 	"survived":                      "どのテストも気づかない",
+	"not built":                     "ビルドに入らない",
 	"flip a comparison":             "比較を逆にする",
 	"negate a boolean":              "真偽を反転する",
 	"swap arithmetic":               "算術を入れ替える",

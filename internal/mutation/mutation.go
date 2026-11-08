@@ -8,6 +8,7 @@ package mutation
 import (
 	"errors"
 	"fmt"
+	"go/build"
 	"io"
 	"os"
 	"sort"
@@ -107,9 +108,18 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 	if err != nil || len(mutants) == 0 {
 		return found, err
 	}
+	mutants, outside := splitBuilt(buildContext(c.Test), hv, mutants)
+	found[hv.Label] = append(found[hv.Label], notBuilt(outside)...)
 	if len(mutants) > c.MaxMutants {
 		found[hv.Label] = append(found[hv.Label], untried(mutants[c.MaxMutants:]))
 		mutants = mutants[:c.MaxMutants]
+	}
+	total := len(outside) + len(mutants)
+	for i, mu := range outside {
+		fmt.Fprintln(m.Progress, progress(i+1, total, mu, Unbuilt).In(lang))
+	}
+	if len(mutants) == 0 {
+		return found, nil
 	}
 	head, err := m.runner(hv, c, 0)
 	if err != nil {
@@ -123,7 +133,7 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintln(m.Progress, progress(i+1, len(mutants), mu, out).In(lang))
+		fmt.Fprintln(m.Progress, progress(len(outside)+i+1, total, mu, out).In(lang))
 		if out == Survived {
 			survivors = append(survivors, mu)
 			found[hv.Label] = append(found[hv.Label], finding(mu))
@@ -263,6 +273,48 @@ func untried(rest []facts.Mutant) engine.Finding {
 		Fix:     engine.T("split the change, or have a person decide whether to raise mutation.max-mutants")}
 }
 
+// splitBuilt separates the mutants in files the test command's build compiles from those in files it
+// leaves out. Running the tests against the latter proves nothing: they pass whatever the break.
+func splitBuilt(ctx build.Context, v engine.Version, mutants []facts.Mutant) (built, outside []facts.Mutant) {
+	known := map[string]bool{}
+	for _, mu := range mutants {
+		out, ok := known[mu.Path]
+		if !ok {
+			out = unbuilt(ctx, v.FS, mu.Path)
+			known[mu.Path] = out
+		}
+		if out {
+			outside = append(outside, mu)
+		} else {
+			built = append(built, mu)
+		}
+	}
+	return built, outside
+}
+
+// notBuilt reports, for a person to review, one finding per file whose mutants were not tried
+// because the build that runs the tests does not compile the file. They are neither caught nor
+// survivors.
+func notBuilt(outside []facts.Mutant) []engine.Finding {
+	var out []engine.Finding
+	byFile := map[string][]facts.Mutant{}
+	var files []string
+	for _, mu := range outside {
+		if byFile[mu.Path] == nil {
+			files = append(files, mu.Path)
+		}
+		byFile[mu.Path] = append(byFile[mu.Path], mu)
+	}
+	for _, f := range files {
+		ms := byFile[f]
+		out = append(out, engine.Finding{Rule: RuleID, File: f, Line: ms[0].Line, Anchor: "unbuilt|" + f, Review: true,
+			Message: engine.T("%d mutants in %s were not tried: the build that runs the tests does not compile this file", len(ms), f),
+			Why:     engine.T("untried code is not known to be guarded"),
+			Fix:     engine.T("a person checks the tests of this file, or runs mutate where the build compiles it, such as with CGO_ENABLED=0 in mutation.test")})
+	}
+	return out
+}
+
 // short drops the import path of a symbol ID: example.com/app/store.Append is store.Append.
 func short(id string) string { return facts.ShortName(id) }
 
@@ -270,8 +322,11 @@ func short(id string) string { return facts.ShortName(id) }
 // broke, and whether a test noticed.
 func progress(n, total int, mu facts.Mutant, o Outcome) engine.Text {
 	result := engine.T("caught")
-	if o == Survived {
+	switch o {
+	case Survived:
 		result = engine.T("survived")
+	case Unbuilt:
+		result = engine.T("not built")
 	}
 	return engine.T("mutate %d/%d %s:%d %s, %s: %s", n, total, mu.Path, mu.Line, short(mu.Func), engine.T(mu.Operator), result)
 }

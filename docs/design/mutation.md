@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Package `internal/mutation` breaks the code a change touched, a little and on purpose, and checks whether the tests notice. Broken code is called a **mutant**. When a test fails, the mutant is **caught**; when the tests pass, it **survived**.
+Package `internal/mutation` breaks the code a change touched, a little and on purpose, and checks whether the tests notice. Broken code is called a **mutant**. When a test fails, the mutant is **caught**; when the tests pass, it **survived**. When the build that runs the tests does not compile the mutant's file, it is **not built**: no test is run for it, and it is not counted as survived.
 
 Today's `tests/` rules only see what a test calls. A test can call code without checking its result, and then it guards nothing. Mutation asks "if the code breaks, does a test really fail?", so it measures what the tests guard more truly than now.
 
@@ -113,6 +113,7 @@ classDiagram
     <<enumeration>>
     Caught
     Survived
+    Unbuilt
   }
   Mutator ..> Mutant : makes
   Mutate --> Mutator
@@ -180,6 +181,33 @@ Go's zero value comes from the declared result type.
 A mutant's anchor is the function's name, the kind, and the normalised original line, with no line number. When a change moves the function, the mutant still matches.
 
 After each mutant it tries, it writes one progress line to standard error: which mutant it is, the file and line, the function, the kind of break, and whether a test noticed. The language is the report's: `--lang`, else `messages` in head's configuration. Example: `mutate 1/2 calc/calc.go:5 calc.Sign, flip a comparison: caught`
+
+## Files outside the build
+
+Breaking a file that the build running the tests does not compile makes the tests run none of its code. The tests pass as a matter of course, and whether the code is guarded is unknown. For example, a file with `//go:build !cgo` is not compiled by `go test` with cgo on. Reporting its mutants as survivors would make regressions that no added test could remove.
+
+So the mutants of such a file are set apart as **not built**.
+
+- **No test is run for them.** Their progress line says `not built`
+- **They are counted neither as survived nor as caught.** They are never a regression (exit code `1`)
+- **They go to a person's review (exit code `3`).** One review of `mutation/survived` per file names the file and how many mutants were not tried. Untried mutants are not passed silently (invariant 5)
+- **They do not count toward `max-mutants`.** The limit is on the mutants whose tests are really run
+
+### What Go decides
+
+Whether a Go file is in the build is decided from syntax only. No command such as `go list` is run.
+
+| What is read | Example |
+|---|---|
+| The `//go:build` line | `//go:build !cgo`, `//go:build ignore`, `//go:build linux && amd64` |
+| `_GOOS` and `_GOARCH` in the file name | `poll_windows.go`, `asm_arm64_test.go` |
+| A file name starting with `_` or `.` | `_scratch.go` |
+
+These are the rules of `MatchFile` in `go/build`. The environment matched against is the one hadome runs in.
+
+- GOOS, GOARCH and cgo follow `go/build`'s default (`go/build.Default`). cgo follows `CGO_ENABLED`, and without it, whether a C compiler is found
+- When `mutation.test` has an element `CGO_ENABLED=0`, `GOOS=…` or `GOARCH=…`, that is used. For example, `[env, CGO_ENABLED=0, go, test, ./...]`
+- When `mutation.test` has `-tags`, those tags are taken as satisfied. For example, `[go, test, -tags, integration, ./...]` or `-tags=integration`
 
 ## How to compare
 
@@ -252,7 +280,7 @@ mutation:
 2. The repository's working tree is never changed. Only a version copied to a temporary directory is broken
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
-5. Mutants that could not be tried (beyond the limit, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
+5. Mutants that could not be tried (beyond the limit, in a file outside the build, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
 
 ## Deliberately left out
@@ -262,4 +290,7 @@ mutation:
 - A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
+- Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart today; mutants of other languages run their tests as before
+- Asking `go list` which files are in the build. Starting a command depends on module downloads and caches. What syntax cannot tell (a `mutation.test` that calls a shell script that changes the environment, and the like) is not told apart
+- Trying files outside the build in another environment (running again with `CGO_ENABLED=0`, and the like). The test command in configuration decides the environment the tests run in; hadome does not guess it
 - Agent hooks (settings that run `hadome mutate` when an agent finishes its work). They would depend on a particular agent product. Agents are told through the `hadome agents` block, and CI makes it required

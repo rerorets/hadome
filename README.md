@@ -268,7 +268,7 @@ A rule such as "never UPDATE the log store" is a small program in your own repos
 
 ## Trying mutations
 
-With `mutation` in `.hadome.yml`, `hadome mutate` breaks the functions a change touched, one place at a time, and tries whether the tests notice. A break no test notices is reported as a `mutation/survived` regression.
+With `mutation` in `.hadome.yml`, `hadome mutate` breaks the functions a change touched, one place at a time, and tries whether the tests notice. A break no test notices is reported as a `mutation/survived` regression. A break in a Go file that the build running the tests does not compile (`//go:build !cgo`, and the like) is not run, is not counted as a survivor, and goes to a person's review.
 
 ```yaml
 mutation:
