@@ -19,12 +19,17 @@ func (jf *jvmFile) ktCollect(n *sitter.Node, scope *jvmScope) (tests, mocks []*s
 	for _, m := range ktClassMembers(n) {
 		switch m.Kind() {
 		case "property_declaration":
-			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
+			anns := ktAnnotations(f, m)
+			mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
+			if mock {
 				mocks = append(mocks, m)
-			} else {
+			}
+			if !mock || spy {
 				if name, class := jf.ktFieldType(m); class != "" {
 					scope.fields[name] = class
 				}
+			}
+			if !mock {
 				jf.ktNoteValueField(m)
 			}
 		case "function_declaration":

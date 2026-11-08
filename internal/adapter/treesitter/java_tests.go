@@ -15,7 +15,10 @@ var (
 	jvmSkipAnnotations = set("Disabled", "Ignore")
 	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK",
 		"InjectMock", "InjectSpy")
-	javaLoops = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
+	// jvmSpyAnnotations mark the mock fields that run the real methods of the object they wrap: a
+	// call through one calls the product.
+	jvmSpyAnnotations = set("Spy", "SpyK", "InjectSpy")
+	javaLoops         = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
 )
 
 // jvmFile is what a Java or Kotlin test file binds: class names it can use, helpers, and mocks.
@@ -146,10 +149,15 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
-			if hasAny(annotations(f, m), jvmMockAnnotations) {
+			anns := annotations(f, m)
+			mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
+			if mock {
 				jf.mocks = append(jf.mocks, m)
-			} else {
+			}
+			if !mock || spy {
 				jf.javaFieldTypes(m, scope.fields)
+			}
+			if !mock {
 				for _, d := range named(m) {
 					if d.Kind() == "variable_declarator" {
 						jf.noteValueField(f.field(d, "name"), d.ChildByFieldName("value"))
