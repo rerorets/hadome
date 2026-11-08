@@ -146,7 +146,7 @@ func TestInternalVarIsNotSeen(t *testing.T) { _ = other.Validate() }
 // table case's field, and = inside it types the variable around it. Its parameters and its :=
 // declarations hide a variable of the same name only inside it. = with a value of unknown type
 // keeps the declared type. A helper given to t.Run is walked with the test. The body of a for loop is
-// read once, as a loop.
+// read once, as a loop. A helper given to t.Run twice is walked twice.
 func TestGoFunctionLiteralsSeeTheVariablesAroundThem(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
@@ -203,6 +203,11 @@ func TestForLoop(t *testing.T) {
 
 func TestRunHelper(t *testing.T) { t.Run("x", appendShared) }
 
+func TestRunHelperTwice(t *testing.T) {
+	t.Run("a", appendShared)
+	t.Run("b", appendShared)
+}
+
 func appendShared(t *testing.T) { _ = shared.Append() }
 
 func TestDefineHidesOnlyInside(t *testing.T) {
@@ -221,8 +226,170 @@ func TestDefineHidesOnlyInside(t *testing.T) {
 		"TestForLoop calls=[example.com/app/store.Store.Append×2] unresolved=0",
 		"TestParamHidesOnlyInside calls=[example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 		"TestRunHelper calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestRunHelperTwice calls=[example.com/app/store.Store.Append×2] unresolved=0",
 		"TestSubtest calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		"TestTable calls=[example.com/app/store.Store.Append×2] unresolved=0",
+	}, "\n")
+	if got := callsByTest(t, tree); got != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A helper's parameter declared with an interface, or with a type the adapter cannot read, has the
+// type of the value the caller passed, so a method called on it is the method of that value's type.
+// When the caller's value has no known type either, the call is unresolved, never the interface's
+// method. A parameter declared with a concrete type keeps that type.
+func TestGoHelperInterfaceParametersTakeTheCallersType(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(`package store
+
+import "net/http"
+
+// Receiver accepts writes over HTTP.
+type Receiver struct{ n int }
+
+// ServeHTTP counts the request.
+func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.n++ }
+
+// Appender appends one entry.
+type Appender interface{ Append() int }
+
+// Store holds entries.
+type Store struct{ n int }
+
+// Append adds one entry.
+func (s *Store) Append() int { s.n++; return s.n }
+`)},
+		"store/store_test.go": {Data: []byte(`package store
+
+import (
+	"net/http"
+	"testing"
+)
+
+func add(t *testing.T, a Appender) { _ = a.Append() }
+
+func addTwice(t *testing.T, a Appender) { add(t, a); add(t, a) }
+
+func post(t *testing.T, h http.Handler) { h.ServeHTTP(nil, nil) }
+
+func addConcrete(t *testing.T, s *Store) { _ = s.Append() }
+
+func TestRepositoryInterface(t *testing.T) { add(t, &Store{}) }
+
+func TestThroughTwoHelpers(t *testing.T) {
+	s := &Store{}
+	addTwice(t, s)
+}
+
+func TestExternalInterface(t *testing.T) { post(t, &Receiver{}) }
+
+func TestUnknownArgument(t *testing.T) { add(t, open()) }
+
+func TestConcreteParameter(t *testing.T) { addConcrete(t, nil) }
+`)},
+	}
+	want := strings.Join([]string{
+		"TestConcreteParameter calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestExternalInterface calls=[example.com/app/store.Receiver.ServeHTTP×1] unresolved=0",
+		"TestRepositoryInterface calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestThroughTwoHelpers calls=[example.com/app/store.Store.Append×2] unresolved=0",
+		"TestUnknownArgument calls=[] unresolved=1",
+	}, "\n")
+	if got := callsByTest(t, tree); got != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// Every variable set from one call that returns several values has the type of its own result, and
+// a variable holding a method value (f := s.Append) makes a call of it a call of that method, from
+// the package itself (an unexported method included) and from its external test package.
+func TestGoMultipleResultsAndMethodValues(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(`package store
+
+// Store holds entries.
+type Store struct{ n int }
+
+// Append adds one entry.
+func (s *Store) Append() int { s.n++; return s.n }
+
+func (s *Store) reset() { s.n = 0 }
+
+// Queue holds jobs.
+type Queue struct{ n int }
+
+// Push adds one job.
+func (q *Queue) Push() { q.n++ }
+
+// Pair returns a store and a queue.
+func Pair() (*Store, *Queue) { return &Store{}, &Queue{} }
+
+// Three returns a store, a queue and a store.
+func Three() (a *Store, q *Queue, b *Store) { return &Store{}, &Queue{}, &Store{} }
+`)},
+		"store/store_test.go": {Data: []byte(`package store
+
+import "testing"
+
+func TestPair(t *testing.T) {
+	s, q := Pair()
+	q.Push()
+	_ = s.Append()
+}
+
+func TestNamedResults(t *testing.T) {
+	var a, q, b = Three()
+	q.Push()
+	_ = a.Append()
+	_ = b.Append()
+}
+
+func TestAssignedLater(t *testing.T) {
+	var s *Store
+	var q *Queue
+	s, q = Pair()
+	q.Push()
+	_ = s.Append()
+}
+
+func TestMethodValue(t *testing.T) {
+	s := &Store{}
+	f := s.Append
+	if f() != 1 {
+		t.Fatal("first append")
+	}
+	r := s.reset
+	r()
+}
+`)},
+		"store/ext_test.go": {Data: []byte(`package store_test
+
+import (
+	"testing"
+
+	"example.com/app/store"
+)
+
+func TestMethodValueOutside(t *testing.T) {
+	s := &store.Store{}
+	f := s.Append
+	_ = f()
+}
+`)},
+	}
+	want := strings.Join([]string{
+		"TestAssignedLater calls=[example.com/app/store.Pair×1 example.com/app/store.Queue.Push×1 example.com/app/store.Store.Append×1] unresolved=0",
+		"TestMethodValue calls=[example.com/app/store.Store.Append×1 example.com/app/store.Store.reset×1] unresolved=0",
+		"TestMethodValueOutside calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestNamedResults calls=[example.com/app/store.Queue.Push×1 example.com/app/store.Store.Append×2 example.com/app/store.Three×1] unresolved=0",
+		"TestPair calls=[example.com/app/store.Pair×1 example.com/app/store.Queue.Push×1 example.com/app/store.Store.Append×1] unresolved=0",
 	}, "\n")
 	if got := callsByTest(t, tree); got != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)

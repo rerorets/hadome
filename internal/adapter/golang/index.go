@@ -13,11 +13,13 @@ import (
 // turned into target IDs ("<import path>.<Func>" or "<import path>.<Type>.<Method>").
 type index struct {
 	modules []string
+	// methods holds "<import path>.<Type>.<Method>" for every method.
+	methods map[string]bool
 	// funcs holds "<import path>.<Func>" for every function. Unexported functions are included
 	// because tests in the same package call them.
 	funcs map[string]bool
-	// results maps a function or method ID to the declaration of its first result.
-	results map[string]declRef
+	// results maps a function or method ID to the declarations of its results, in order.
+	results map[string][]declRef
 	// types holds "<import path>.<Type>" for every type, and typeDecls their declarations.
 	// Unexported types are included because tests in the same package call their methods.
 	types     map[string]bool
@@ -45,7 +47,7 @@ type index struct {
 }
 
 func buildIndex(files []parsedFile, modules map[string]string, helpers map[string]map[string]helper) *index {
-	idx := &index{funcs: map[string]bool{}, results: map[string]declRef{}, types: map[string]bool{},
+	idx := &index{funcs: map[string]bool{}, methods: map[string]bool{}, results: map[string][]declRef{}, types: map[string]bool{},
 		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, testVars: map[string]declRef{},
 		values: map[string]bool{}, varDecls: map[string]declRef{}, consts: map[string]bool{},
 		scopes: map[string]int{}, support: map[string]map[string]helper{}}
@@ -92,11 +94,13 @@ func (idx *index) addFunc(pkgPath string, d *ast.FuncDecl, in scope) {
 		return
 	}
 	idx.scopes[id] = scopeParam(d.Type)
-	if r := d.Type.Results; r != nil && len(r.List) > 0 {
-		idx.results[id] = declRef{typ: r.List[0].Type, in: in}
+	if refs := resultRefs(d.Type, in); len(refs) > 0 {
+		idx.results[id] = refs
 	}
 	if d.Recv == nil {
 		idx.funcs[id] = true
+	} else {
+		idx.methods[id] = true
 	}
 }
 
@@ -135,25 +139,40 @@ func (idx *index) addTestDecls(f *ast.File, in scope) {
 	}
 }
 
+// resultRefs are the declarations of a function's results, one for each value it returns:
+// (a, b *Store) gives two.
+func resultRefs(ft *ast.FuncType, in scope) []declRef {
+	if ft.Results == nil {
+		return nil
+	}
+	var out []declRef
+	for _, f := range ft.Results.List {
+		for range max(1, len(f.Names)) {
+			out = append(out, declRef{typ: f.Type, in: in})
+		}
+	}
+	return out
+}
+
 // specRef is the declaration of the i-th variable of var a, b T or var a, b = x, y.
 func specRef(s *ast.ValueSpec, i int, in scope) declRef {
 	ref := declRef{typ: s.Type, in: in}
 	switch {
 	case len(s.Values) == len(s.Names):
 		ref.value = s.Values[i]
-	case i == 0 && len(s.Values) == 1: // var s, err = store.Open()
-		ref.value = s.Values[0]
+	case len(s.Values) == 1: // var s, err = store.Open()
+		ref.value, ref.nth = s.Values[0], i
 	}
 	return ref
 }
 
-// result returns the type of a function's or method's first result.
-func (idx *index) result(id string) *vtype {
-	d, ok := idx.results[id]
-	if !ok {
+// result returns the type of a function's or method's n-th result.
+func (idx *index) result(id string, n int) *vtype {
+	refs := idx.results[id]
+	if n >= len(refs) {
 		return nil
 	}
-	return d.in.resolve(d.typ)
+	return refs[n].in.resolve(refs[n].typ)
 }
 
 // varType returns the type of a package-level variable of the code.
@@ -168,7 +187,7 @@ func (d declRef) typeAt(depth int) *vtype {
 	if d.value == nil {
 		return nil
 	}
-	return d.in.valueTypeAt(d.value, depth)
+	return d.in.nthValueType(d.value, d.nth, depth)
 }
 
 // value reports whether id names something a test can use as a value: a function, a variable or

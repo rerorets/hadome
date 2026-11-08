@@ -71,6 +71,9 @@ type vtype struct {
 	id   string
 	expr ast.Expr // the type's declaration, or the literal type itself
 	in   scope    // where expr is written
+	// method is "<import path>.<Type>.<Method>" for a method value (f := s.Append): calling the
+	// value calls the method. It is empty for other values.
+	method string
 }
 
 // maxDepth bounds the chains of named types and package-level variables followed, so that code
@@ -81,7 +84,9 @@ const maxDepth = 16
 type declRef struct {
 	typ   ast.Expr // the declared type, or nil
 	value ast.Expr // a variable's initial value, or nil
-	in    scope
+	// nth is which of value's results the variable takes, for var a, b = f(); it is 0 otherwise.
+	nth int
+	in  scope
 }
 
 // qualify turns pkg.Name (or Name in the same package) into "<import path>.<Name>" when known.
@@ -166,7 +171,7 @@ func (s scope) valueTypeAt(e ast.Expr, depth int) *vtype {
 	case *ast.CompositeLit:
 		return s.resolve(e.Type)
 	case *ast.CallExpr:
-		return s.resultType(e, depth)
+		return s.resultType(e, 0, depth)
 	case *ast.Ident, *ast.SelectorExpr:
 		return s.nameType(e, depth)
 	case *ast.IndexExpr:
@@ -175,6 +180,18 @@ func (s scope) valueTypeAt(e ast.Expr, depth int) *vtype {
 		return s.valueTypeAt(e.X, depth+1)
 	case *ast.TypeAssertExpr:
 		return s.resolve(e.Type)
+	}
+	return nil
+}
+
+// nthValueType returns the type of the n-th value e gives: the n-th result of a call, or, with n 0,
+// the type of any other value. The second value of v, ok := m[k] and the like is not read.
+func (s scope) nthValueType(e ast.Expr, n, depth int) *vtype {
+	if c, ok := ast.Unparen(e).(*ast.CallExpr); ok {
+		return s.resultType(c, n, depth)
+	}
+	if n == 0 {
+		return s.valueTypeAt(e, depth)
 	}
 	return nil
 }
@@ -198,7 +215,14 @@ func (s scope) nameType(e ast.Expr, depth int) *vtype {
 	if !ok || s.isPackage(sel.X) {
 		return nil
 	}
-	return s.valueTypeAt(sel.X, depth+1).field(sel.Sel.Name)
+	x := s.valueTypeAt(sel.X, depth+1)
+	if f := x.field(sel.Sel.Name); f != nil {
+		return f
+	}
+	if x != nil && x.id != "" && s.idx.methods[x.id+"."+sel.Sel.Name] {
+		return &vtype{method: x.id + "." + sel.Sel.Name}
+	}
+	return nil
 }
 
 // isPackage reports whether e names an imported package.
@@ -211,9 +235,9 @@ func (s scope) isPackage(e ast.Expr) bool {
 	return ok
 }
 
-// resultType returns the type of a call's first result: a function or method of the repository, a
+// resultType returns the type of a call's n-th result: a function or method of the repository, a
 // helper of the test files, new(T) or a conversion T(x).
-func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
+func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 	fun := ast.Unparen(c.Fun)
 	switch f := fun.(type) {
 	case *ast.IndexExpr: // a generic function instantiated, New[int]()
@@ -221,14 +245,17 @@ func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
 	case *ast.IndexListExpr:
 		fun = f.X
 	}
-	if t, local := s.localResult(fun, c); local {
+	if t, local := s.localResult(fun, c, n); local {
 		return t
 	}
 	if h, ok := s.supportFunc(fun); ok {
-		return h.resultType(s)
+		return h.resultType(s, n)
 	}
 	if id := s.qualify(fun, func(id string) bool { return s.idx.funcs[id] }); id != "" {
-		return s.idx.result(id)
+		return s.idx.result(id, n)
+	}
+	if n > 0 { // a conversion gives one value
+		return nil
 	}
 	if t := s.qualify(fun, func(id string) bool { return s.idx.types[id] }); t != "" {
 		return s.resolve(fun) // a conversion
@@ -241,7 +268,7 @@ func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
 			return nil
 		}
 		if t := s.valueTypeAt(f.X, depth+1); t != nil && t.id != "" {
-			return s.idx.result(t.id + "." + f.Sel.Name)
+			return s.idx.result(t.id+"."+f.Sel.Name, n)
 		}
 	}
 	return nil
@@ -249,40 +276,24 @@ func (s scope) resultType(c *ast.CallExpr, depth int) *vtype {
 
 // localResult returns the result type of a call of a name the test knows: a function held in a
 // variable, new(T), or a helper of the test files. It reports false for any other call.
-func (s scope) localResult(fun ast.Expr, c *ast.CallExpr) (*vtype, bool) {
+func (s scope) localResult(fun ast.Expr, c *ast.CallExpr, n int) (*vtype, bool) {
 	id, ok := fun.(*ast.Ident)
 	if !ok {
 		return nil, false
 	}
-	if _, local := s.lookup(id.Name); local {
+	if t, local := s.lookup(id.Name); local {
+		if t != nil && t.method != "" {
+			return s.idx.result(t.method, n), true
+		}
 		return nil, true
 	}
-	if id.Name == "new" && len(c.Args) == 1 {
+	if id.Name == "new" && len(c.Args) == 1 && n == 0 {
 		return s.resolve(c.Args[0]), true
 	}
 	if h, ok := s.helpers[id.Name]; ok {
-		return h.resultType(s), true
+		return h.resultType(s, n), true
 	}
 	return nil, false
-}
-
-// resultType is the type of the helper's first result, read in the helper's own file.
-func (h helper) resultType(caller scope) *vtype {
-	r := h.decl.Type.Results
-	if r == nil || len(r.List) == 0 {
-		return nil
-	}
-	return h.scope(caller).resolve(r.List[0].Type)
-}
-
-// scope is where the helper is written: its own file's imports, and no function around it.
-func (h helper) scope(caller scope) scope {
-	in := caller
-	in.imports, in.local = h.imports, nil
-	if h.pkgPath != "" { // a function of a test support package
-		in.pkgPath, in.samePkg, in.testKey = h.pkgPath, true, ""
-	}
-	return in
 }
 
 // shape is the literal form the type is declared as: the struct, slice or map behind its names.
@@ -340,6 +351,14 @@ func (t *vtype) elem() *vtype {
 		return in.resolve(x.Value)
 	}
 	return nil
+}
+
+// isInterface reports whether the type is an interface, whose methods run the code of whatever
+// value it holds.
+func (t *vtype) isInterface() bool {
+	e, _ := t.shape()
+	_, ok := e.(*ast.InterfaceType)
+	return ok
 }
 
 // isChan reports whether the type is a channel, whose range gives its elements first.
