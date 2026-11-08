@@ -34,8 +34,9 @@ type rust struct {
 func (*rust) grammar(string) *sitter.Language { return sitter.NewLanguage(rustgrammar.Language()) }
 
 var rustBranches = branches{
-	kinds: set("if_expression", "while_expression", "loop_expression", "for_expression", "match_arm"),
-	ops:   set("&&", "||"),
+	kinds:  set("if_expression", "while_expression", "loop_expression", "for_expression", "match_arm"),
+	ops:    set("&&", "||"),
+	nested: set("closure_expression", "function_item"),
 }
 
 var rustTables = &tables{

@@ -56,7 +56,12 @@ classDiagram
     +Scoped bool
     +Params int
     +Complexity int
+    +Nested []Nested
     +Methods int
+  }
+  class Nested {
+    +Line int
+    +Complexity int
   }
   class Import {
     +Path string
@@ -111,6 +116,7 @@ classDiagram
   Analysis --> File
   Analysis --> Comment
   Analysis --> Symbol
+  Symbol --> Nested
   Analysis --> Import
   Analysis --> Test
   Test --> Call

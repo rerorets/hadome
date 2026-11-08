@@ -78,18 +78,26 @@ func cases(n int) string {
 }
 
 func complexityCases() []engine.Case {
-	branches := func(n int) string {
+	ifs := func(indent string, n int) string {
 		var b strings.Builder
-		b.WriteString("func Branchy(x int) {\n")
 		for i := range n {
-			fmt.Fprintf(&b, "\tif x == %d {\n\t\treturn\n\t}\n", i)
+			fmt.Fprintf(&b, "%sif x == %d {\n%s\treturn\n%s}\n", indent, i, indent, indent)
 		}
-		return b.String() + "}\n"
+		return b.String()
+	}
+	branches := func(n int) string { return "func Branchy(x int) {\n" + ifs("\t", n) + "}\n" }
+	// outer is a function with own branches that holds a function literal with inner.
+	outer := func(own, inner int) string {
+		return "func Outer(x int) func() {\n" + ifs("\t", own) + "\treturn func() {\n" + ifs("\t\t", inner) + "\t}\n}\n"
 	}
 	return []engine.Case{
 		{Name: "a new function with too many branches fails", Base: module(src()), Head: module(src(branches(15))), WantFail: []string{"size/complexity"}},
 		{Name: "a function at the limit passes", Base: module(src()), Head: module(src(branches(14)))},
 		{Name: "default is not a branch", Base: module(src()), Head: module(src(cases(14)))},
+		{Name: "a nested function's branches are not added to the outer function", Base: module(src()), Head: module(src(outer(14, 14)))},
+		{Name: "a new nested function with too many branches fails", Base: module(src()), Head: module(src(outer(0, 15))), WantFail: []string{"size/complexity"}},
+		{Name: "an existing nested function that moved passes", Base: module(src(outer(0, 16))), Head: module(src(fn("Pad", 3), outer(0, 16)))},
+		{Name: "an existing nested function that grew fails", Base: module(src(outer(0, 16))), Head: module(src(outer(0, 17))), WantFail: []string{"size/complexity"}},
 	}
 }
 

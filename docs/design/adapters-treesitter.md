@@ -146,6 +146,8 @@ Some imports look like the repository's own but resolve to no file.
 
 Code inside test-only regions (Rust `#[cfg(test)]` modules) is test code, not product code. Cyclomatic complexity counts each language's `if`, loops, `case`/match arms (not the default one), `catch`, `&&`, `||`, and the ternary operator.
 
+Branches inside nested functions (arrow functions, function expressions, lambdas, closures, nested `def`s and `fun`s, methods of anonymous and local classes) are not added to the outer function. Each nested function is counted on its own, and its line and complexity go into `Symbol.Nested` ([rules-size.md](rules-size.md)).
+
 ## Tests
 
 | Language | Test files | A test is | Skipped | Reason |

@@ -122,8 +122,9 @@ var Japanese = map[string]string{
 	"call the code under test through its package-level API (a function, or a method on a value built by a constructor)": "テストするコードを、パッケージの API（関数、またはコンストラクタで作った値のメソッド）から呼ぶ",
 
 	// size/.
-	"%s: %s %d, limit %d": "%s: %s %d（上限 %d）",
-	"%s; grew from %d":    "%s。base の %d から増えた",
+	"%s: %s %d, limit %d":                            "%s: %s %d（上限 %d）",
+	"the function in %s at line %d: %s %d, limit %d": "%s の %d 行目の関数: %s %d（上限 %d）",
+	"%s; grew from %d":                               "%s。base の %d から増えた",
 	"product code over the %s limit (%s); an existing one that grows is a regression too":                                "%s の上限（%s）を超えた製品のコード。既にあるものが大きくなるのも後退になる",
 	"past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it": "上限を超えると、コードは一度に読み切れなくなり、全体を分からないまま変更されるようになる",
 	"%s; raising the limit (rules.size.%s) is a change a person reviews":                                                 "%s。上限（rules.size.%s）を上げるのは、人が確かめる変更である",

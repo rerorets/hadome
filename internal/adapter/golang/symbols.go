@@ -32,10 +32,11 @@ func funcSymbol(fset *token.FileSet, pf parsedFile, id string, d *ast.FuncDecl) 
 	if d.Recv != nil {
 		kind = facts.SymbolMethod
 	}
+	cx, nested := complexity(fset, d.Body)
 	return facts.Symbol{
 		ID: id, Kind: kind, Path: pf.path, Line: fset.Position(d.Pos()).Line, EndLine: fset.Position(d.End()).Line,
 		Exported: exported(d), Doc: d.Doc != nil, DocElsewhere: d.Recv != nil && standardMethod(d),
-		Scoped: scopeWordParam(d.Type) >= 0, Params: len(params(d.Type)), Complexity: complexity(d.Body),
+		Scoped: scopeWordParam(d.Type) >= 0, Params: len(params(d.Type)), Complexity: cx, Nested: nested,
 	}
 }
 
@@ -129,14 +130,20 @@ func methodCount(it *ast.InterfaceType) int {
 }
 
 // complexity is the cyclomatic complexity of a body: 1, plus one per if, for, case (not default),
-// && and ||. Function literals inside count toward the function that holds them.
-func complexity(body *ast.BlockStmt) int {
+// && and ||. Function literals inside are counted on their own and returned as nested, with the
+// literals nested in them.
+func complexity(fset *token.FileSet, body *ast.BlockStmt) (int, []facts.Nested) {
 	n := 1
+	var nested []facts.Nested
 	if body == nil {
-		return n
+		return n, nil
 	}
 	ast.Inspect(body, func(node ast.Node) bool {
 		switch x := node.(type) {
+		case *ast.FuncLit:
+			c, inner := complexity(fset, x.Body)
+			nested = append(append(nested, facts.Nested{Line: fset.Position(x.Pos()).Line, Complexity: c}), inner...)
+			return false
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt:
 			n++
 		case *ast.CaseClause:
@@ -154,5 +161,5 @@ func complexity(body *ast.BlockStmt) int {
 		}
 		return true
 	})
-	return n
+	return n, nested
 }
