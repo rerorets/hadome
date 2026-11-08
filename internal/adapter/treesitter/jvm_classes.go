@@ -113,7 +113,8 @@ var restAssuredChecks = set("statusCode", "statusLine", "body", "header", "heade
 // validation recognises checks that do not start with assert: REST Assured's
 // given()…then().statusCode(200).body(…), where each call after then() checks the response, and
 // Spring MockMvc's perform(…).andExpect(…). The chain may also start at a helper of the file, or of
-// a class the test's class extends, whose body ends in then(): list().statusCode(200).
+// a class the test's class extends, whose body ends in then() or that is declared to return what
+// then() returns: list().statusCode(200).
 func (w *jvmWalk) validation(obj, name string) bool {
 	if name == "andExpect" {
 		return true
@@ -133,9 +134,39 @@ func (w *jvmWalk) validation(obj, name string) bool {
 	if code.n == nil {
 		return false
 	}
+	if restAssuredResponses[lastElem(jvmReturnType(code.jf.f, code.n.Parent()))] {
+		return true
+	}
 	body := strings.Join(strings.Fields(code.jf.f.text(code.n)), "")
 	body = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(body, "}"), ";"), ";")
 	return strings.HasSuffix(body, ".then()")
+}
+
+// restAssuredResponses are the types REST Assured's then() returns.
+var restAssuredResponses = set("ValidatableResponse", "ValidatableResponseOptions")
+
+// jvmReturnType is the declared return type of a Java method or a Kotlin function, without its type
+// arguments and nullability; "" when it declares none. A Kotlin function's receiver type comes
+// before its parameters, and its return type after them.
+func jvmReturnType(f *file, decl *sitter.Node) string {
+	if decl == nil {
+		return ""
+	}
+	if decl.Kind() == "method_declaration" {
+		return typeName(f.field(decl, "type"))
+	}
+	params := false
+	for _, c := range named(decl) {
+		switch c.Kind() {
+		case "function_value_parameters":
+			params = true
+		case "user_type", "nullable_type":
+			if params {
+				return typeName(f.text(c))
+			}
+		}
+	}
+	return ""
 }
 
 // jvmDrivers are the HTTP test clients, by the package a test file imports, and the calls with which
