@@ -24,6 +24,9 @@ type hazardRule struct {
 	cases    []engine.Case
 	// applies, when set, returns which tests of a version the rule looks at.
 	applies func(in engine.Input) func(facts.Test) bool
+	// excuses, when set, returns which hazards of a test the rule leaves out though the test is
+	// looked at.
+	excuses func(in engine.Input) func(facts.Test, facts.Hazard) bool
 }
 
 func (r hazardRule) ID() string           { return r.id }
@@ -39,6 +42,10 @@ func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 	if r.applies != nil {
 		applies = r.applies(in)
 	}
+	excused := func(facts.Test, facts.Hazard) bool { return false }
+	if r.excuses != nil {
+		excused = r.excuses(in)
+	}
 	for _, t := range in.Facts.Tests {
 		if !applies(t) {
 			continue
@@ -50,7 +57,7 @@ func (r hazardRule) Find(in engine.Input) ([]engine.Finding, error) {
 			}
 			// A hazard in a helper is reached from every test that calls it; report it once.
 			key := file + "\x00" + h.Evidence + "\x00" + itoa(h.Line)
-			if h.Category != r.category || seen[key] {
+			if h.Category != r.category || seen[key] || excused(t, h) {
 				continue
 			}
 			seen[key] = true

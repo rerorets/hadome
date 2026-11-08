@@ -114,7 +114,7 @@ func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
 		}
 	}
 	for _, m := range sc.mocks {
-		t.hazard(facts.HazardMock, m)
+		t.fileHazard(facts.HazardMock, m)
 	}
 	w := &rustWalk{sc: sc, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
 	w.walk(fn.ChildByFieldName("body"))

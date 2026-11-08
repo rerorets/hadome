@@ -164,7 +164,7 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 		}
 	}
 	for _, m := range tf.mocks {
-		t.hazard(facts.HazardMock, m)
+		t.fileHazard(facts.HazardMock, m)
 	}
 	w := &tsWalk{tf: tf, t: t, at: at, vars: tf.outerVars(), locals: map[string]bool{}, walking: map[string]bool{},
 		loaded: maps.Clone(tf.outerLoaded), modules: maps.Clone(tf.outerModules), used: map[string]bool{}, done: map[uintptr]bool{}}

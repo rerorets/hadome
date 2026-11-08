@@ -52,7 +52,7 @@ func (s jvmScope) nested() jvmScope {
 // the hazards of its setup, and returns the walker for its body. walk walks a body of code.
 func (jf *jvmFile) startTest(t *testFacts, scope jvmScope, walk func(*jvmWalk, *sitter.Node)) *jvmWalk {
 	for _, mk := range jf.mocks {
-		t.hazard(facts.HazardMock, mk)
+		t.fileHazard(facts.HazardMock, mk)
 	}
 	for _, mk := range scope.mocks {
 		t.hazardIn(mk.jf.f, facts.HazardMock, mk.n)

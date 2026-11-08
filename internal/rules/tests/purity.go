@@ -209,10 +209,26 @@ func testsPureUnitsOnly(in engine.Input) func(facts.Test) bool {
 	}
 }
 
+// fileMockForImpure reports a hazard that applies to the whole test file, such as a jest.mock at its
+// top, in a file where some test calls a target outside the pure units: the mock may be there for
+// that test, and the runner gives it to every test of the file alike.
+func fileMockForImpure(in engine.Input) func(facts.Test, facts.Hazard) bool {
+	pure := pureUnits(in.Facts)
+	impure := map[string]bool{}
+	for _, t := range in.Facts.Tests {
+		for _, c := range t.Calls {
+			if !pure[unitOf(in.Facts, c.Target)] {
+				impure[t.Path] = true
+			}
+		}
+	}
+	return func(t facts.Test, h facts.Hazard) bool { return h.FileWide && impure[t.Path] }
+}
+
 // NoMock is tests/no-mock.
 func NoMock() engine.Rule {
 	return hazardRule{
-		id: "tests/no-mock", category: facts.HazardMock, applies: testsPureUnitsOnly,
+		id: "tests/no-mock", category: facts.HazardMock, applies: testsPureUnitsOnly, excuses: fileMockForImpure,
 		message: "test of pure code uses a mock: %s",
 		finds:   "a mock in a test whose targets are all in pure units (units that touch no input or output)",
 		keys:    []string{"rules.tests.hazards.mock", "rules.tests.io"},

@@ -92,6 +92,12 @@ func (t *testFacts) hazardIn(f *file, cat facts.HazardCategory, n *sitter.Node) 
 	t.addHazard(facts.Hazard{Category: cat, Path: f.path, Line: line(n), Evidence: f.text(n)})
 }
 
+// fileHazard records a hazard at n in the test's file that is outside the tests and applies to each
+// of them, such as a module mocked at the top of the file.
+func (t *testFacts) fileHazard(cat facts.HazardCategory, n *sitter.Node) {
+	t.addHazard(facts.Hazard{Category: cat, Path: t.f.path, Line: line(n), Evidence: t.f.text(n), FileWide: true})
+}
+
 func (t *testFacts) addHazard(hz facts.Hazard) {
 	for _, h := range t.test.Hazards {
 		if h == hz {

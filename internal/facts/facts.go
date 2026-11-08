@@ -163,6 +163,9 @@ type Hazard struct {
 	Path     string
 	Line     int
 	Evidence string
+	// FileWide is true when the hazard is outside the tests and applies to every test of the file:
+	// a module mocked at the top of the file, or an import of a mocking library.
+	FileWide bool
 }
 
 // Skip describes whether a test is skipped, always or only in some cases. Reason is empty when no
