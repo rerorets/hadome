@@ -281,6 +281,9 @@ The zero value comes from the declared result type.
 - Functions whose result type is not in the table, or is not written (TypeScript functions without one, Python functions without an annotation, Kotlin expression bodies), get no mutant of this kind
 - What is replaced is the value of a `return`. In Rust, the last expression of a function's body (one without `;`) is replaced too, since Rust usually returns a value without writing `return`
 - As in Go, a statement that returns a boolean literal (negating a boolean breaks it) or already returns the zero value gets none
+  - Whether it already returns the zero value is decided by the same rule as for constants below. For example, `return 0.0` and `return 0x0` in a function returning `number`, and `return ''` in one returning `string`, are not broken
+  - An integer zero with `-` in front (`return -0`) counts as zero too. TypeScript still breaks it: every number is a float there, so `-0` is a value apart from `0`, and a test can tell them apart with `Object.is`
+  - A float `-0.0` is broken in every language, since a test can tell it from `0.0`
 - Nor does a statement that returns a constant whose value is the zero value. For example, with `export const OK = 0`, `return OK` in a function returning `number` is not broken
 
 Constants are read from syntax, only from declarations in the same file. Of the declarations below, those whose value is a literal are read.
