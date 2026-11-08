@@ -270,7 +270,7 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | Go | テストの道具の `Error`・`Errorf`・`Fatal`・`Fatalf`・`Fail`・`FailNow`、testify の `assert` と `require`、testify の suite の確かめ（`s.Equal(…)`、`s.Require().…`） |
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
 | TypeScript | matcher を呼ぶ `expect(…)`（`expect(x).toBe(1)`、`expect(x).not.toBe(1)`）、chai の `expect(x).to.…`、`assert` と `assert.…`。`expect(x)` だけのものと、matcher を呼ばないもの（`expect(x).toBeTruthy`）は数えません |
-| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、MockK の `verify…`・`coVerify…`・`confirmVerified`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など。本体が `then()` で終わるヘルパーに続くものも入る）、Spring MockMvc の `andExpect` |
+| Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、MockK の `verify…`・`coVerify…`・`confirmVerified`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など。本体が `then()` で終わるヘルパーか、戻り値の型を `ValidatableResponse` と宣言したヘルパーに続くものも入る）、Spring MockMvc の `andExpect` |
 | Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
 
 危険の分類と同じく、この表は例で、全体の表は各アダプタにあります。Go 以外の言語では、名前が `assert`・`expect`・`verify` で始まる関数も assert とみなします。例: `assertEquals`、`assert_called_once`、`expectValid`。ほかのファイルにある確かめるためのヘルパーは、アダプタが中を読めませんが、名前から確かめていると分かるからです。

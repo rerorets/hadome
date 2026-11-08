@@ -26,8 +26,8 @@ type jvmCode struct {
 type jvmScope struct {
 	fields    map[string]string
 	inherited map[string]jvmCode
-	// values are the value fields (jvmFile.valueFields) of a test class of another file that the
-	// class extends.
+	// values are the fields the class and the test classes it extends declare, by whether the last
+	// declaration of each is a value field (jvmFile.valueFields).
 	values map[string]bool
 	mocks  []jvmCode
 	setups []jvmCode
@@ -113,7 +113,8 @@ var restAssuredChecks = set("statusCode", "statusLine", "body", "header", "heade
 // validation recognises checks that do not start with assert: REST Assured's
 // given()…then().statusCode(200).body(…), where each call after then() checks the response, and
 // Spring MockMvc's perform(…).andExpect(…). The chain may also start at a helper of the file, or of
-// a class the test's class extends, whose body ends in then(): list().statusCode(200).
+// a class the test's class extends, whose body ends in then() or that is declared to return what
+// then() returns: list().statusCode(200).
 func (w *jvmWalk) validation(obj, name string) bool {
 	if name == "andExpect" {
 		return true
@@ -129,16 +130,43 @@ func (w *jvmWalk) validation(obj, name string) bool {
 	if !called || strings.Contains(head, ".") {
 		return false
 	}
-	code := jvmCode{w.jf, w.jf.helpers[head]}
-	if code.n == nil {
-		code = w.inherited[head]
-	}
+	code := w.helper(head)
 	if code.n == nil {
 		return false
+	}
+	if restAssuredResponses[lastElem(jvmReturnType(code.jf.f, code.n.Parent()))] {
+		return true
 	}
 	body := strings.Join(strings.Fields(code.jf.f.text(code.n)), "")
 	body = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(body, "}"), ";"), ";")
 	return strings.HasSuffix(body, ".then()")
+}
+
+// restAssuredResponses are the types REST Assured's then() returns.
+var restAssuredResponses = set("ValidatableResponse", "ValidatableResponseOptions")
+
+// jvmReturnType is the declared return type of a Java method or a Kotlin function, without its type
+// arguments and nullability; "" when it declares none. A Kotlin function's receiver type comes
+// before its parameters, and its return type after them.
+func jvmReturnType(f *file, decl *sitter.Node) string {
+	if decl == nil {
+		return ""
+	}
+	if decl.Kind() == "method_declaration" {
+		return typeName(f.field(decl, "type"))
+	}
+	params := false
+	for _, c := range named(decl) {
+		switch c.Kind() {
+		case "function_value_parameters":
+			params = true
+		case "user_type", "nullable_type":
+			if params {
+				return typeName(f.text(c))
+			}
+		}
+	}
+	return ""
 }
 
 // jvmDrivers are the HTTP test clients, by the package a test file imports, and the calls with which
@@ -149,19 +177,20 @@ var jvmDrivers = map[string][]string{
 	"org.springframework.test.web.reactive.server": {"exchange"},
 }
 
-// noteValueField records a field of a test class whose initializer names something of the product.
-func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
-	if name == "" || init == nil {
-		return
-	}
+// noteValueField records a field of a test class whose initializer names something of the product,
+// and reports whether it does.
+func (jf *jvmFile) noteValueField(name string, init *sitter.Node) bool {
 	uses := false
-	walk(init, func(n *sitter.Node) bool {
-		uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
-		return !uses
-	})
+	if name != "" && init != nil {
+		walk(init, func(n *sitter.Node) bool {
+			uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
+			return !uses
+		})
+	}
 	if uses {
 		jf.markValueField(name)
 	}
+	return uses
 }
 
 // markValueField records name as a value field of the file's test classes.
@@ -173,9 +202,13 @@ func (jf *jvmFile) markValueField(name string) {
 }
 
 // valueField reports whether name is a value field of the test's class, or one it inherits, and not
-// a local of the same name.
+// a local of the same name. What the class or the classes it extends declare last decides: an
+// override with a literal is no value field, though the class it extends built one of that name.
 func (w *jvmWalk) valueField(name string) bool {
-	return (w.jf.valueFields[name] || w.values[name]) && !w.locals[name]
+	if v, ok := w.values[name]; ok {
+		return v && !w.locals[name]
+	}
+	return w.jf.valueFields[name] && !w.locals[name]
 }
 
 // readsValueField reports whether an identifier in a test reads a value field of its class: not a

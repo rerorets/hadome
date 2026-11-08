@@ -41,6 +41,7 @@ func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
 		jf.names[v] = f.unit + "." + v
 	}
 	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
+	jf.bindTopHelpers()
 	return jf
 }
 
@@ -200,9 +201,17 @@ func (w *jvmWalk) ktProperty(n *sitter.Node) {
 		case c.Kind() == "variable_declaration":
 			name = f.text(c.NamedChild(0))
 			w.locals[name] = true
+			kind := ""
+			if c.NamedChildCount() > 1 {
+				kind = w.builtinType(f.text(c.NamedChild(1)))
+			}
+			w.noteBuiltin(name, kind)
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
 			if class := w.jf.ktBuilt(c); class != "" {
 				w.vars[name] = class
+			}
+			if w.builtins[name] == "" {
+				w.noteBuiltin(name, w.ktBuiltin(c))
 			}
 		}
 	}
@@ -356,15 +365,16 @@ func ktArgumentValue(a *sitter.Node) *sitter.Node {
 }
 
 // ktNoteValueField records a property of a test class whose initializer names something of the
-// product: its expression after the declaration (val query = QUERY.trim()).
-func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
-	name := "" // what comes before the name (modifiers) is not the initializer
+// product: its expression after the declaration (val query = QUERY.trim()). It returns the
+// property's name, and whether it is such a field.
+func (jf *jvmFile) ktNoteValueField(n *sitter.Node) (string, bool) {
+	name, uses := "", false // what comes before the name (modifiers) is not the initializer
 	for _, c := range named(n) {
 		switch {
 		case c.Kind() == "variable_declaration":
 			name = jf.f.text(c.NamedChild(0))
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
-			jf.noteValueField(name, c)
+			uses = jf.noteValueField(name, c) || uses
 			walk(c, func(x *sitter.Node) bool {
 				if x.Kind() != "string_literal" {
 					return true
@@ -372,24 +382,12 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
 				for _, used := range ktTemplateNames(jf.f, x) {
 					if jf.names[used] != "" {
 						jf.markValueField(name)
+						uses = true
 					}
 				}
 				return true
 			})
 		}
 	}
-}
-
-// ktClassMembers lists a class's members with those of its companion object, whose properties and
-// functions the class's tests use by their bare names.
-func ktClassMembers(n *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	for _, m := range ktMembers(n) {
-		if m.Kind() == "companion_object" {
-			out = append(out, ktMembers(m)...)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
+	return name, uses
 }

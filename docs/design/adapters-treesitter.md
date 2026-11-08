@@ -171,14 +171,15 @@ TypeScript test declarations are read as follows.
 - **Playwright's conditional skips**: `test.skip(cond, description)` and `test.fixme(cond, description)` without a function are not tests. Called in a test, they skip that test only in some cases; called directly in a `describe` block, they skip the tests in it only in some cases. `test.skip()` without arguments in a test always skips it
 
 - What a test calls is read from the names it imports and the objects it builds
-- In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read. In Kotlin, the fields and helpers of a `companion object` are read as the class's own
+- In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read. A spy field (`@Spy`, `@SpyK`, Quarkus's `@InjectSpy`) counts as a mock and is still read as its declared type or the class it is built from: a spy runs the real methods of the object it wraps, so a call on it calls the product's method. In Kotlin, the fields and helpers of a `companion object` are read as the class's own
 - The tests of an inner class (`@Nested` and the like) use the fields and helpers of the class around it too
 - When a Kotlin test class extends another class of the test files (`class StoreTest : StoreTestSupport()`), the fields, helpers, mock fields and the code run before each test of the class it extends are read as its own, and so are those of the class that one extends in turn. The class it extends is found by name: one of the same package first, otherwise the only class of that name. Names in an inherited helper are read through the imports of the helper's own file
+- In Kotlin, a function written outside any class in test code (`fun appendOnce(x: Int) = Store().append(x)`) is followed as a helper too: one of the test's own file, one of another file of the same package, and one the file imports. When a helper of the class has the same name, that one is used, since Kotlin picks the member first
 - In Kotlin, a variable or field built with `apply` or `also` (`Queue().apply { limit = 3 }`) is of the class of the object built, since these two return the object they receive. One that holds an enum constant (`val kind = Kind.DAILY`) is of that enum class. A call chained right on a built object (`Store().append(1)`) calls that class's method
 - In Java and Kotlin, a call of the form `Class.member.method()` is read as follows. When the member is an enum constant, it calls the enum class's method (`Kind.ORDERS.toTable()` calls `Kind.toTable`). When the member is an inner class, it calls that class's method (`Outer.Inner.build()`). Any other member (a property of an `object` and the like) holds a value whose class is unknown, so the test counts as reading product code (`Reads`)
 - In Java and Kotlin, reading a property of a variable read as a product class (`cache.ttl`) counts as reading product code. Calling a method on it (`cache.clear()`) is a call, not a read
 - In Kotlin, `assertThrows<E> { … }` and `assertThrows<E>({ … })` are parsed by the grammar as two comparisons in a row (`(assertThrows < E) > { … }`). They are read as calls, and so are `mockk<T> { … }` and product functions written the same way. The type argument is not read as a value
-- A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change. In Kotlin, so does a field of the class the test class extends
+- A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change. In Kotlin, so does a field of the class the test class extends, unless the test class overrides it with a literal (`override val sql = "SELECT 2"`): the test then reads that value
 - In Kotlin, a product value put into a string template (`"IN ($COUNTED)"`, `"${Kind.ORDERS.table}"`) counts as read too. One that starts with `\$` is not put in. A field whose initializer is such a string counts like the fields above
 - In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
   - When that function returns one function of the module it loads (`return m.append`), the name its result is put in is read as that function. For example, `const fn = await load(); fn()` calls `append`. When it returns different functions on different paths, it is not read
@@ -206,6 +207,11 @@ In TypeScript, a method of a value the test built itself does not count as unres
 - For example, `const xs = [1, 2]; xs.reduce(…)` is a test that calls nothing, the same as `Math.max(...xs)`
 - Such a value passed to a helper of the file is treated the same inside the helper
 - A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, still counts as unresolved
+
+In Java and Kotlin too, a method called on a local the test built as a string or a standard collection counts neither as a call of the product nor as unresolved, since it is the language's own method. Example: `sql.contains("SELECT")` with `val sql = "SELECT 1"`
+
+- A string is a string literal, a member of a string (`"…".trimIndent().split(" ")`), a Java concatenation with a string, or a local declared `String`
+- A collection is one built by a standard function such as `listOf`, or a local declared `List`, `Map` and the like. Its elements may be anything, so calls through an element (`xs.first().push(1)`) are read as before
 
 ### Test support files
 
@@ -309,11 +315,12 @@ Constants are read from syntax, only from declarations in the same file. Of the 
 | Kotlin | `val` and `const val` outside functions. Those with `open` or `abstract`, and those with a getter, are not read |
 
 - Whether the value is the zero value is decided by comparing it with the zero value of the result type. A number counts as the same whichever way it is written, `0`, `0.0`, `0x0`, `0L` or `0_u64`, when its value is zero
+- In Java and Kotlin, a constant returned with the name of the class that declares it is read too. For example, with `object Defaults { const val ZERO = 0 }` in the same file, `return Defaults.ZERO` is not broken. A constant of a `companion object` is read with the name of the class around it (`Store.NONE`)
 - Only Python tells `int` from `float`, since a test can tell `0` from `0.0`. For example, `return RATE` in a function returning `float` is broken into `0.0` even when `RATE = 0`
 - These names are broken as before:
   - names that can be reassigned. For example, TypeScript's `let`, Rust's `static mut`, Java fields without `final`, Kotlin's `var`
   - names declared more than once in the file, with different values or in a form that is not read
-  - names declared as a parameter or a local variable in the function being broken
+  - names declared as a parameter or a local variable in the function being broken; for a constant with its class's name, that class's name declared so
   - constants declared in another file
 
 The other rules are Go's too.

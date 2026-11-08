@@ -15,7 +15,10 @@ var (
 	jvmSkipAnnotations = set("Disabled", "Ignore")
 	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK",
 		"InjectMock", "InjectSpy")
-	javaLoops = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
+	// jvmSpyAnnotations mark the mock fields that run the real methods of the object they wrap: a
+	// call through one calls the product.
+	jvmSpyAnnotations = set("Spy", "SpyK", "InjectSpy")
+	javaLoops         = set("for_statement", "enhanced_for_statement", "while_statement", "do_statement")
 )
 
 // jvmFile is what a Java or Kotlin test file binds: class names it can use, helpers, and mocks.
@@ -36,6 +39,11 @@ type jvmFile struct {
 	assertPrefixes []string
 	// kt is the Kotlin reader, which finds the test classes a Kotlin test class extends; nil in Java.
 	kt *kotlin
+	// topHelpers are the top-level functions of Kotlin test sources the file can call by their bare
+	// names: those of its own package and those it imports.
+	topHelpers map[string]jvmDecl
+	// others are the files of topHelpers, read as their own files bind names.
+	others map[*file]*jvmFile
 }
 
 // bindClasses binds the classes of the file's own package and of what it imports.
@@ -141,16 +149,7 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
-			if hasAny(annotations(f, m), jvmMockAnnotations) {
-				jf.mocks = append(jf.mocks, m)
-			} else {
-				jf.javaFieldTypes(m, scope.fields)
-				for _, d := range named(m) {
-					if d.Kind() == "variable_declarator" {
-						jf.noteValueField(f.field(d, "name"), d.ChildByFieldName("value"))
-					}
-				}
-			}
+			jf.javaField(m, scope.fields)
 		case m.Kind() == "method_declaration":
 			methods = append(methods, m)
 			jf.helpers[f.field(m, "name")] = m.ChildByFieldName("body")
@@ -210,6 +209,8 @@ type jvmWalk struct {
 	inherited map[string]jvmCode
 	// values are the value fields of that class.
 	values map[string]bool
+	// builtins are the locals that hold a string or a standard collection (jvm_builtins.go).
+	builtins map[string]string
 }
 
 func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
@@ -247,7 +248,9 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	case w.jf.names[obj] != "":
 		target = w.jf.names[obj] + "." + name
 	case w.locals[obj]:
-		w.t.test.Unresolved++
+		if w.builtins[obj] == "" {
+			w.t.test.Unresolved++
+		}
 	default:
 		target = w.member(obj, name)
 	}
@@ -266,9 +269,7 @@ func (w *jvmWalk) unqualified(name string, follow func(*sitter.Node)) string {
 		return ""
 	}
 	w.walking[name] = true
-	if body, ok := w.jf.helpers[name]; ok {
-		follow(body)
-	} else if h, ok := w.inherited[name]; ok {
+	if h := w.helper(name); h.n != nil {
 		w.within(h.jf, func() { follow(h.n) })
 	}
 	delete(w.walking, name)
@@ -298,6 +299,11 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 			}
 			name := f.field(d, "name")
 			w.locals[name] = true
+			kind := w.builtinType(typ)
+			if kind == "" {
+				kind = w.javaBuiltin(d.ChildByFieldName("value"))
+			}
+			w.noteBuiltin(name, kind)
 			if class, ok := w.jf.names[typ]; ok {
 				w.vars[name] = class
 			} else if v := d.ChildByFieldName("value"); v != nil && v.Kind() == "object_creation_expression" {
@@ -339,6 +345,27 @@ var javaUses = useGrammar{
 	members: map[string]string{"field_access": "object"},
 	names:   map[string]string{"field_access": "field"},
 	callees: map[string][]string{"method_invocation": {"object", "name"}},
+}
+
+// javaField reads a field of a test class: a mock, typed only when it is a spy, or a field typed
+// into fields and noted when its initializer uses the product.
+func (jf *jvmFile) javaField(m *sitter.Node, fields map[string]string) {
+	anns := annotations(jf.f, m)
+	mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
+	if mock {
+		jf.mocks = append(jf.mocks, m)
+	}
+	if !mock || spy {
+		jf.javaFieldTypes(m, fields)
+	}
+	if mock {
+		return
+	}
+	for _, d := range named(m) {
+		if d.Kind() == "variable_declarator" {
+			jf.noteValueField(jf.f.field(d, "name"), d.ChildByFieldName("value"))
+		}
+	}
 }
 
 // javaFieldTypes types the fields of a test class, as ktFieldType does: by the constructor that

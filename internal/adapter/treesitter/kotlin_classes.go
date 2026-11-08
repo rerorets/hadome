@@ -19,13 +19,20 @@ func (jf *jvmFile) ktCollect(n *sitter.Node, scope *jvmScope) (tests, mocks []*s
 	for _, m := range ktClassMembers(n) {
 		switch m.Kind() {
 		case "property_declaration":
-			if hasAny(ktAnnotations(f, m), jvmMockAnnotations) {
+			anns := ktAnnotations(f, m)
+			mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
+			if mock {
 				mocks = append(mocks, m)
-			} else {
+			}
+			if !mock || spy {
 				if name, class := jf.ktFieldType(m); class != "" {
 					scope.fields[name] = class
 				}
-				jf.ktNoteValueField(m)
+			}
+			if !mock {
+				if name, uses := jf.ktNoteValueField(m); name != "" {
+					scope.values[name] = uses
+				}
 			}
 		case "function_declaration":
 			anns := ktAnnotations(f, m)
@@ -66,7 +73,9 @@ func (jf *jvmFile) ktInherit(n *sitter.Node, scope *jvmScope, depth int) {
 		scope.inherited[name] = jvmCode{sjf, body}
 	}
 	for name := range sjf.valueFields {
-		scope.values[name] = true
+		if _, declared := scope.values[name]; !declared {
+			scope.values[name] = true
+		}
 	}
 	for _, m := range mocks {
 		scope.mocks = append(scope.mocks, jvmCode{sjf, m})
@@ -156,4 +165,18 @@ func (jf *jvmFile) ktBuilt(e *sitter.Node) string {
 		}
 	}
 	return ""
+}
+
+// ktClassMembers lists a class's members with those of its companion object, whose properties and
+// functions the class's tests use by their bare names.
+func ktClassMembers(n *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	for _, m := range ktMembers(n) {
+		if m.Kind() == "companion_object" {
+			out = append(out, ktMembers(m)...)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }

@@ -15,7 +15,8 @@ import (
 
 // consts maps a name declared outside functions to the text of its literal value, or to "" when
 // the name is declared in a form not read: reassignable, without a value, or twice with values that
-// disagree.
+// disagree. In Java and Kotlin a member of a class also has its name qualified by the class that
+// declares it (Defaults.ZERO).
 type consts map[string]string
 
 func (c consts) add(name, value string) {
@@ -61,22 +62,47 @@ func (m *mutator) zeroValue(text string) bool {
 }
 
 // zeroConstant reports whether v names a constant of the file whose value is the function's zero
-// value, and that the function does not declare a name of its own that hides it.
+// value, and that the function does not declare a name of its own that hides it. In Java and Kotlin
+// the name may be qualified by the class of the file that declares it (Defaults.ZERO); the function
+// must then not hide the class's name.
 func (m *mutator) zeroConstant(v *sitter.Node) bool {
-	if v.Kind() != "identifier" { // every grammar's plain name, Kotlin's too
+	name, bound := m.f.text(v), m.f.text(v)
+	switch v.Kind() {
+	case "identifier": // every grammar's plain name, Kotlin's too
+	case "navigation_expression", "field_access":
+		name = strings.Join(strings.Fields(name), "")
+		bound, _, _ = strings.Cut(name, ".")
+	default:
 		return false
 	}
-	name := m.f.text(v)
 	value, ok := m.consts[name]
 	if !ok || !zeroLiteral(value, m.zero, m.b.strictNumbers) {
 		return false
 	}
 	for n := m.decl; n != nil; n = n.Parent() {
-		if (n == m.decl || m.b.functions[n.Kind()]) && m.binds(n, name) {
+		if (n == m.decl || m.b.functions[n.Kind()]) && m.binds(n, bound) {
 			return false
 		}
 	}
 	return true
+}
+
+// jvmTypes are the declarations of Java and Kotlin classes whose members a name can qualify.
+var jvmTypes = set("class_declaration", "object_declaration", "interface_declaration", "enum_declaration",
+	"record_declaration")
+
+// addMember records a member of a Java or Kotlin class under its own name, and under the name
+// qualified by the class that declares it: a companion object's members by the class around it.
+func (c consts) addMember(f *file, n *sitter.Node, name, value string) {
+	c.add(name, value)
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if jvmTypes[p.Kind()] {
+			if class := f.field(p, "name"); class != "" {
+				c.add(class+"."+name, value)
+			}
+			return
+		}
+	}
 }
 
 // binds reports whether n declares name anywhere inside it: as a parameter, a local, a loop
@@ -289,7 +315,7 @@ func javaConstants(f *file) consts {
 				if final {
 					value = textOr(f, d.ChildByFieldName("value"))
 				}
-				out.add(f.field(d, "name"), value)
+				out.addMember(f, n, f.field(d, "name"), value)
 			}
 			return false
 		case "formal_parameter", "enum_constant": // a record's components, an enum's constants
@@ -332,7 +358,7 @@ func ktProperty(f *file, n *sitter.Node, out consts) {
 		switch c.Kind() {
 		case "variable_declaration":
 			if name := identifiers(f, c); len(name) > 0 {
-				out.add(name[0], value)
+				out.addMember(f, n, name[0], value)
 			}
 		case "multi_variable_declaration":
 			out.unread(f, c)

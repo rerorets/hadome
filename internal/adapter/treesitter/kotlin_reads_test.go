@@ -2,7 +2,10 @@
 
 package treesitter
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // viewpoint: behaviour
 // target: the Kotlin reader
@@ -99,4 +102,51 @@ QueryTest.Inner.nested reads=1 calls=0
 QueryTest.field reads=1 calls=0
 QueryTest.plain reads=0 calls=0
 QueryTest.shadowed reads=0 calls=0`)
+}
+
+// viewpoint: behaviour
+// target: the Kotlin reader
+// A test class that overrides an inherited value field with a literal reads its own value, not the
+// product's that the class it extends used, in a test class of another file or of its own. One that
+// overrides it with a product value again reads the product.
+func TestKotlinOverriddenValueFieldsAreTheirOwn(t *testing.T) {
+	support := `package acme
+
+abstract class QuerySupport {
+    protected open val sql = QUERY.trim()
+}
+`
+	tests := `package acme
+
+import kotlin.test.Test
+import kotlin.test.assertTrue
+
+class LiteralTest : QuerySupport() {
+    override val sql = "SELECT 2"
+
+    @Test
+    fun literal() { assertTrue(sql.contains("SELECT")) }
+}
+
+open class LabelSupport {
+    protected open val label = "mine"
+}
+
+class ProductTest : LabelSupport() {
+    override val label = QUERY.lowercase()
+
+    @Test
+    fun product() { assertTrue(label.contains("select")) }
+}
+`
+	want := "LiteralTest.literal reads=0 calls=0\nProductTest.product reads=1 calls=0"
+	query := "package acme\n\nval QUERY = \"SELECT 1\"\n"
+	t.Run("another file", func(t *testing.T) {
+		expect(t, reads(t, "kotlin", tree("src/main/kotlin/acme/Query.kt", query,
+			"src/test/kotlin/acme/QuerySupport.kt", support, "src/test/kotlin/acme/QueryTest.kt", tests)), want)
+	})
+	t.Run("same file", func(t *testing.T) {
+		expect(t, reads(t, "kotlin", tree("src/main/kotlin/acme/Query.kt", query,
+			"src/test/kotlin/acme/QueryTest.kt", tests+strings.TrimPrefix(support, "package acme\n"))), want)
+	})
 }

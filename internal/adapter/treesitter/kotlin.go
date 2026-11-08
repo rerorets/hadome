@@ -19,6 +19,8 @@ type kotlin struct {
 	jvm
 	functions map[string][]string // package -> top-level functions of product code
 	values    map[string][]string // package -> top-level properties of product code
+	// testFunctions are the top-level functions of test code: package -> name -> declaration.
+	testFunctions map[string]map[string]jvmDecl
 }
 
 func (*kotlin) grammar(string) *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
@@ -42,10 +44,11 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 	k.reset()
 	k.functions = map[string][]string{}
 	k.values = map[string][]string{}
+	k.testFunctions = map[string]map[string]jvmDecl{}
 	for _, f := range files {
 		pkg := ""
 		var classes, functions, values []string
-		var types []*sitter.Node
+		var types, fns []*sitter.Node
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_header" && n.NamedChildCount() > 0:
@@ -55,6 +58,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 				types = append(types, n)
 			case n.Kind() == "function_declaration":
 				functions = append(functions, f.field(n, "name"))
+				fns = append(fns, n)
 			case n.Kind() == "property_declaration":
 				for _, c := range named(n) {
 					if c.Kind() == "variable_declaration" && c.NamedChildCount() > 0 {
@@ -70,6 +74,13 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 		if !f.test {
 			k.functions[f.unit] = append(k.functions[f.unit], functions...)
 			k.values[f.unit] = append(k.values[f.unit], values...)
+			continue
+		}
+		for _, n := range fns {
+			if k.testFunctions[f.unit] == nil {
+				k.testFunctions[f.unit] = map[string]jvmDecl{}
+			}
+			k.testFunctions[f.unit][f.field(n, "name")] = jvmDecl{f, n}
 		}
 	}
 }
