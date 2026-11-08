@@ -88,8 +88,14 @@ test('plain', async ({ browserName }) => { expect(browserName).toBeTruthy() })
 test('lists', async ({ page }) => { await page.goto('/rows') })
 `,
 			"src/page.test.ts", `import { test } from 'vitest'
+import { port } from './app'
 
-test('own', async ({ page }) => { page.open() })
-`), "api drives=true\nlists drives=true\nopens drives=true\nown drives=false\nplain drives=false\ntabs drives=true")
+test('own', async ({ page }) => { page.open(port) })
+`,
+			"test/helpers.ts", "export const test = (name: string, fn: (f: { page: number }) => void) => fn({ page: 1 })\n",
+			"src/helped.test.ts", `import { test } from '../test/helpers'
+
+test('helped', ({ page }) => { expect(page).toBe(1) })
+`), "api drives=true\nhelped drives=false\nlists drives=true\nopens drives=true\nown drives=false\nplain drives=false\ntabs drives=true")
 	})
 }
