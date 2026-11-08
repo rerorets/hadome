@@ -2,7 +2,12 @@
 
 package treesitter
 
-import "testing"
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"testing"
+)
 
 // viewpoint: behaviour
 // target: the Python reader
@@ -149,4 +154,193 @@ class TestSuper(StoreCase):
 TestOwn.test_add calls=[] unresolved=0
 TestPlain.test_add calls=[src/app/store.Store.add] unresolved=0
 TestSuper.test_add calls=[src/app/store.Ledger.add] unresolved=0`)
+}
+
+// viewpoint: behaviour
+// target: the Python reader
+// unittest collects every subclass of TestCase whatever its name: extended directly, through
+// TestCase imported by name, or through a base class of the file or of an imported module. Their
+// tests are read, and an inherited setUp types what they call. A class whose name does not start
+// with Test and that extends no TestCase holds no test.
+func TestPythonSubclassesOfTestCaseAreTestClasses(t *testing.T) {
+	expect(t, calls(t, "python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "class Store:\n    def add(self, row):\n        return len(row)\n",
+		"tests/base.py", `import unittest
+
+from app.store import Store
+
+
+class StoreCase(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+`,
+		"tests/test_store.py", `import unittest
+from unittest import TestCase
+
+from app.store import Store
+from tests.base import StoreCase
+
+
+class StoreTests(unittest.TestCase):
+    def test_add(self):
+        s = Store()
+        self.assertEqual(s.add("x"), 1)
+
+
+class ImportedTests(TestCase):
+    def test_add(self):
+        s = Store()
+        self.assertEqual(s.add("x"), 1)
+
+
+class LocalCase(unittest.IsolatedAsyncioTestCase):
+    pass
+
+
+class ThroughLocal(LocalCase):
+    def test_add(self):
+        s = Store()
+        self.assertEqual(s.add("x"), 1)
+
+
+class InheritedTests(StoreCase):
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class Helpers:
+    def test_not_collected(self):
+        s = Store()
+        assert s.add("x") == 1
+`), `ImportedTests.test_add calls=[src/app/store.Store src/app/store.Store.add] unresolved=0
+InheritedTests.test_add calls=[src/app/store.Store.add] unresolved=0
+StoreTests.test_add calls=[src/app/store.Store src/app/store.Store.add] unresolved=0
+ThroughLocal.test_add calls=[src/app/store.Store src/app/store.Store.add] unresolved=0`)
+}
+
+// viewpoint: behaviour
+// target: the Python reader
+// What a class's autouse fixture stores on self types what its tests call, the class's own fixture
+// or one it inherits. A fixture of the same name nearer in the MRO replaces the base's, and what
+// setup_method stores wins over what an autouse fixture stores.
+func TestPythonTestsReachTheCodeThroughClassAutouseFixtures(t *testing.T) {
+	expect(t, calls(t, "python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "class Store:\n    def add(self, row):\n        return len(row)\n\n\nclass Ledger:\n    def add(self, row):\n        return 1\n",
+		"tests/test_store.py", `import pytest
+
+from app.store import Ledger, Store
+
+
+class StoreFixture:
+    @pytest.fixture(autouse=True)
+    def _store(self):
+        self.store = Store()
+
+
+class TestOwn:
+    @pytest.fixture(autouse=True)
+    def _store(self):
+        self.store = Store()
+        yield
+
+    def test_add(self):
+        assert self.store.add("x") == 1
+
+
+class TestInherited(StoreFixture):
+    def test_add(self):
+        assert self.store.add("x") == 1
+
+
+class TestOverridden(StoreFixture):
+    @pytest.fixture(autouse=True)
+    def _store(self):
+        self.store = Ledger()
+
+    def test_add(self):
+        assert self.store.add("x") == 1
+
+
+class TestSetupWins(StoreFixture):
+    def setup_method(self):
+        self.store = Ledger()
+
+    def test_add(self):
+        assert self.store.add("x") == 1
+`), `TestInherited.test_add calls=[src/app/store.Store.add] unresolved=0
+TestOverridden.test_add calls=[src/app/store.Ledger.add] unresolved=0
+TestOwn.test_add calls=[src/app/store.Store.add] unresolved=0
+TestSetupWins.test_add calls=[src/app/store.Ledger.add] unresolved=0`)
+}
+
+// viewpoint: behaviour
+// target: the Python and TypeScript readers
+// A test that calls a function of a test support file is marked as calling support code, whether
+// or not that function reaches the product; a test that calls none is not.
+func TestTestsThatCallSupportCodeAreMarked(t *testing.T) {
+	marked := func(a []string) string {
+		var out []string
+		for _, ts := range analyze(t, a[0], tree(a[1:]...)).Tests {
+			out = append(out, fmt.Sprintf("%s support=%v", ts.Name, ts.CallsSupport))
+		}
+		sort.Strings(out)
+		return strings.Join(out, "\n")
+	}
+	expect(t, marked([]string{"python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "def rows():\n    return [1]\n",
+		"tests/helpers.py", "import os\n\n\ndef force_zone(zone):\n    os.environ[\"TZ\"] = zone\n",
+		"tests/test_helpers_itself.py", `import os
+
+from tests.helpers import force_zone
+from app.store import rows
+
+
+def test_zone():
+    force_zone("UTC")
+    assert os.environ["TZ"] == "UTC"
+
+
+def test_rows():
+    assert rows() == [1]
+`}), "test_rows support=false\ntest_zone support=true")
+	expect(t, marked([]string{"typescript",
+		"src/rows.ts", "export function rows() { return [1]; }\n",
+		"test/clock.ts", "export function forceZone(zone: string) { process.env.TZ = zone; }\n",
+		"test/clock.test.ts", `import { forceZone } from "./clock";
+import { rows } from "../src/rows";
+
+it("sets the zone", () => {
+  forceZone("UTC");
+  expect(process.env.TZ).toBe("UTC");
+});
+
+it("lists rows", () => {
+  expect(rows()).toEqual([1]);
+});
+`}), "lists rows support=false\nsets the zone support=true")
+}
+
+// viewpoint: behaviour
+// target: the Python reader
+// A method called on an object built in the same expression is a call of the class's method, as
+// it is when a local holds the object.
+func TestPythonMethodOnABuiltObjectIsTheClassMethod(t *testing.T) {
+	expect(t, calls(t, "python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "class Store:\n    def add(self, row):\n        return len(row)\n",
+		"tests/test_store.py", `from app.store import Store
+
+
+def test_inline():
+    assert Store().add("x") == 1
+
+
+def test_local():
+    s = Store()
+    assert s.add("x") == 1
+`), `test_inline calls=[src/app/store.Store src/app/store.Store.add] unresolved=0
+test_local calls=[src/app/store.Store src/app/store.Store.add] unresolved=0`)
 }

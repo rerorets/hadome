@@ -135,6 +135,7 @@ func (w *tsWalk) followSupport(p, name string, args []*sitter.Node) {
 		w.t.test.Unresolved++
 		return
 	}
+	w.t.test.CallsSupport = true
 	sub := &tsWalk{tf: sf, t: w.t, vars: sf.outerVars(), locals: map[string]bool{}, walking: w.walking,
 		loaded: maps.Clone(sf.outerLoaded), modules: maps.Clone(sf.outerModules), used: map[string]bool{},
 		done: map[uintptr]bool{}, fake: w.fake, plain: map[string]bool{}, rows: map[string][]string{}}

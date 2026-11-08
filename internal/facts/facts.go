@@ -206,6 +206,10 @@ type Test struct {
 	// (REST Assured's given(), MockMvc's perform(), supertest's request(), Playwright's page fixture). Such a test exercises the
 	// product without calling one of its functions, so what it guards cannot be named.
 	Drives bool
+	// CallsSupport is true when the test calls a function of the repository's test support code
+	// (a helper under test/, conftest.py, a testutil package). That code is no target, so a test of
+	// such a helper itself calls the repository without having a target.
+	CallsSupport bool
 	// Asserts counts the calls that check something: assertions, and calls that fail the test.
 	Asserts int
 	// AssertsUnknown is true when the test hands its testing tool (Go's t, Python's self) to code the

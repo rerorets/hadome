@@ -76,6 +76,7 @@ func (s scope) supportFunc(e ast.Expr) (helper, bool) {
 // test. Its names resolve in its own package: its file's imports, and the package's other
 // functions as helpers.
 func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
+	w.test.CallsSupport = true
 	if w.walking[id] {
 		return
 	}

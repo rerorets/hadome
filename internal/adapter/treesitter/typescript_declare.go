@@ -182,7 +182,6 @@ func (tf *tsFile) suite(n *sitter.Node, sc tsScope, out *[]facts.Test) {
 
 func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts.Test {
 	t := newTest(tf.f, name, at)
-	t.fingerprint([]*sitter.Node{at}, d.name)
 	if sc.skipped || sc.conditional {
 		reason := tf.reasonAt(sc.skipAt)
 		if reason == "" {
@@ -219,6 +218,12 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 		}
 		w.walk(d.fn.ChildByFieldName("body"))
 	}
+	// What runs before the test and the outer variables it uses are known only after the walk.
+	var context []codeIn
+	for _, p := range sc.preludes {
+		context = append(context, codeIn{tf.f, p})
+	}
+	t.fingerprint([]*sitter.Node{at}, d.name, append(context, t.setups...)...)
 	return t.done()
 }
 

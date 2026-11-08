@@ -118,10 +118,36 @@ func (m *mutator) binds(n *sitter.Node, name string) bool {
 		if field != "" {
 			target = c.ChildByFieldName(field)
 		}
-		found = target != nil && slices.Contains(identifiers(m.f, target), name)
+		switch c.Kind() {
+		case "import_statement", "import_from_statement": // only Python's binders hold these
+			found = slices.Contains(pyImportBinds(m.f, c), name)
+		default:
+			found = target != nil && slices.Contains(identifiers(m.f, target), name)
+		}
 		return !found
 	})
 	return found
+}
+
+// pyImportBinds lists the names a Python import binds: the alias of each aliased name, the name
+// itself otherwise, and the first part of a dotted module (import a.b binds a). The module it
+// imports from and the original names behind aliases are not bound.
+func pyImportBinds(f *file, n *sitter.Node) []string {
+	var out []string
+	for i := uint(0); i < n.ChildCount(); i++ {
+		if n.FieldNameForChild(uint32(i)) != "name" {
+			continue
+		}
+		c := n.Child(i)
+		local := f.text(c)
+		if c.Kind() == "aliased_import" {
+			local = f.field(c, "alias")
+		} else if first, _, ok := strings.Cut(local, "."); ok {
+			local = first
+		}
+		out = append(out, local)
+	}
+	return out
 }
 
 var emptyStrings = set(`""`, `''`, "``", `""""""`, `''''''`)
@@ -239,6 +265,11 @@ func pyConstants(f *file) consts {
 			out.add(f.field(n, "name"), "")
 			return false
 		case "lambda":
+			return false
+		case "import_statement", "import_from_statement":
+			for _, name := range pyImportBinds(f, n) {
+				out.add(name, "")
+			}
 			return false
 		case "assignment":
 			left := n.ChildByFieldName("left")

@@ -155,7 +155,7 @@ Branches inside nested functions (arrow functions, function expressions, lambdas
 | Language | Test files | A test is | Skipped | Reason |
 |---|---|---|---|---|
 | TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/`, test support files | A call to `it` or `test` with a name and a function (see the notes below) | `.skip`, `xit`, `xtest`, `.todo`, `.fixme`, or inside `describe.skip` or `xdescribe`. Skipped only in some cases: `.skipIf(cond)`, `.runIf(cond)`, and Playwright's `test.skip(cond, description)` and `test.fixme(cond, description)` | A comment on the skip's line or the line before. For Playwright's `test.skip`, the description after the condition |
-| Python | `test_*.py`, `*_test.py` | A function whose name starts with `test`, at module level or in a `Test*` class | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
+| Python | `test_*.py`, `*_test.py` | A function whose name starts with `test`, at module level or in a test class. A test class is a class whose name starts with `Test`, or a class that extends `unittest.TestCase` (see the notes below) | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
 | Rust | Files under `tests/` and `benches/`; `#[cfg(test)]` modules in any file | A function with `#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[sqlx::test]`, `#[test_log::test]` or `#[rstest]` | `#[ignore]` | `#[ignore = "…"]` |
 | Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/` and the like) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
 | Kotlin | Same as Java | A function with the same annotations as Java | `@Disabled`, `@Ignore` | The annotation's string argument |
@@ -169,6 +169,13 @@ TypeScript test declarations are read as follows.
   - A row that is an array matches the parameters by position. A row that is not an array goes to the first parameter. A row that is an object matches a destructuring parameter (`({ op }) =>`) by key. A tagged template table matches nothing
 - **Where the function is**: a test's function is its last argument that is a function, because vitest takes options between the name and the function (`it(name, { retry: 2 }, fn)`) and jest takes a timeout after it. When the name string is followed by the name of a function (`it('adds', checkAdd)`), that function of the file is followed
 - **Playwright's conditional skips**: `test.skip(cond, description)` and `test.fixme(cond, description)` without a function are not tests. Called in a test, they skip that test only in some cases; called directly in a `describe` block, they skip the tests in it only in some cases. `test.skip()` without arguments in a test always skips it
+
+Python test classes are recognised as follows.
+
+- unittest collects the tests of any class that extends `unittest.TestCase`, whatever its name, and so does pytest. `class StoreTests(unittest.TestCase)` is therefore a test class
+- `TestCase` is recognised as a base class not found in the repository whose name ends in `TestCase`. For example, `unittest.TestCase`, `TestCase` from `from unittest import TestCase`, `IsolatedAsyncioTestCase`, and Django's `TestCase`
+- It is recognised through base classes too. For example, `class OrderTests(StoreCase)`, where `StoreCase` in the same file or an imported file is `class StoreCase(unittest.TestCase)`. Base classes are followed as in "Python's inherited setup" under hazards
+- A function in a class whose name does not start with `Test` and that extends no `TestCase` is not a test
 
 - What a test calls is read from the names it imports and the objects it builds
 - In Java and Kotlin, the fields of the test class are read too. A field built by a constructor is of that class; a field without an initializer (`lateinit`, injected, a constructor property) is of its declared type. A field built any other way, such as a mock, is not read. A spy field (`@Spy`, `@SpyK`, Quarkus's `@InjectSpy`) counts as a mock and is still read as its declared type or the class it is built from: a spy runs the real methods of the object it wraps, so a call on it calls the product's method. In Kotlin, the fields and helpers of a `companion object` are read as the class's own
@@ -196,7 +203,7 @@ TypeScript test declarations are read as follows.
   - The names taken by `const { add } = await import('./m')` at the top of the file, or by `mod = await import('./m')` in `beforeAll` (also `(await import('./m')) as T`), are read as the module's
   - In a file that only runs `await import('./m')` without using the value, every test counts as calling that module (the unit), because the module does its work when loaded
   - A value set up once counts once, however often the test uses it
-- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`), including the methods of a base class that run (see "Python's inherited setup" under hazards). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
+- What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`), including the methods of a base class that run (see "Python's inherited setup" under hazards). The class a test class's `autouse=True` fixture stores on `self` is read the same way, including the fixtures of its base classes; of fixtures with the same name, only the one earlier in the MRO is read. When two of them store the same name, the one nearer the test class is used, and when both `setUp` (or the like) and a fixture store it, `setUp`'s is used. A call made directly on a newly built object (`Store().append(1)`) is read as a call of that class's method, as when a local holds the object. A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
 - A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()`, Hono's `app.request(…)` and `app.fetch(new Request(…))` (recognised by the shape of the call), and a Playwright test that receives the `page`, `context` or `request` fixture (`test('…', async ({ page }) => …)`), which drives the application from outside through a browser or HTTP; receiving one is enough. Playwright is recognised by the file importing `@playwright/test`, directly or through a test support file that imports it (such as `e2e/fixtures.ts` holding `base.extend(…)`). Python's and Rust's clients are not read yet
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
@@ -227,6 +234,9 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 - **Following**: when a test calls a function of a support file, the function is followed. The calls inside are resolved through the support file's own imports, so a test that calls the product through a helper guards that product code
   - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
   - Calling a name the support file does not hold as a function (a value, say) counts as unresolved
+  - A test that calls a function of a support file has `Test.CallsSupport` set
+  - When the test's file is the own test of the support file holding the function it calls, `Test.TestsSupport` is set too. A support file's own test is a file in the same directory whose name, without its test marker, is the support file's name. For example, `test/clock.test.ts` for `test/clock.ts`, and `tests/test_helpers.py` and `tests/helpers_test.py` for `tests/helpers.py`
+  - How the two facts are used is in `tests/guards-nothing` in [rules-tests.md](rules-tests.md)
 - **Other role settings**: files matching the `files.tests` globs are test files. Files matching the `files.product` globs are not support files; they are read as product code ([adapters.md](adapters.md))
 - **The list of directories**: the list is `walk.SupportDir`. The Go adapter uses it without `tests/` (`walk.GoSupportDir`), because product packages called `tests` exist in Go ([adapters.md](adapters.md))
 
@@ -268,7 +278,7 @@ The `clock` and `sleep` hazards of the code that runs before each test are hazar
 - When the method found calls the method of the same name through `super()` (`super().setUp()`), the one of the next class in the MRO that defines it runs too. Calling a base by name (`BaseCase.setUp(self)`) is treated the same
 - The `autouse=True` fixtures inside the base classes run too. When the test class, or a class earlier in the MRO, has a fixture of the same name, only the earlier one runs, because pytest overrides fixtures by name
 - The `setup_module` and `setup_function` of a base class's file do not run: pytest runs only those of the module holding the test
-- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. A class whose bases give no MRO, which Python cannot create, gets none of its bases. In both cases, the test itself is read
+- A base class that cannot be found adds no setup: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. An outside `TestCase` is used only to recognise the class as a test class (Python test classes under "Tests"). A class whose bases give no MRO, which Python cannot create, gets none of its bases. In both cases, the test itself is read
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 
@@ -309,7 +319,7 @@ Constants are read from syntax, only from declarations in the same file. Of the 
 | Language | Declarations read |
 |---|---|
 | TypeScript | `const` at the top of the file (`export const` included) |
-| Python | `NAME = value` at the top of the module, only when the file has no other assignment to that name and no `global` of it |
+| Python | `NAME = value` at the top of the module, only when the file has no other assignment to that name, no import that binds it, and no `global` of it. An import binds the name after `as`, or the imported name when there is no `as`. `from m import NONE as OTHER` binds `OTHER`, not `NONE`. `import a.b` binds `a` |
 | Rust | `const` and `static` outside functions and `impl`. `static mut` is not read |
 | Java | fields with `final`, and interface constants |
 | Kotlin | `val` and `const val` outside functions. Those with `open` or `abstract`, and those with a getter, are not read |

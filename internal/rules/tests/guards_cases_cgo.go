@@ -26,8 +26,16 @@ func supportCases() []engine.Case {
 	}
 	const base = "import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n"
 	const helper = "import { firstRow } from '../test/helpers'\n\nit('starts at one', () => { expect(firstRow()).toBe(1) })\n"
+	withClock := func(test string) fstest.MapFS {
+		t := tr(base)
+		t["test/clock.ts"] = &fstest.MapFile{Data: []byte("export function forceZone(zone: string) {\n  process.env.TZ = zone\n}\n")}
+		t["test/clock.test.ts"] = &fstest.MapFile{Data: []byte(test)}
+		return t
+	}
+	const ofHelper = "import { forceZone } from './clock'\n\nit('sets the zone', () => {\n  forceZone('UTC')\n  expect(process.env.TZ).toBe('UTC')\n})\n"
 	return []engine.Case{
 		{Name: "a test that reaches the code through a helper of a test support file passes", Base: tr(base), Head: tr(base + "\n" + helper)},
+		{Name: "a test of a helper of a test support file itself passes", Base: tr(base), Head: withClock(ofHelper)},
 	}
 }
 

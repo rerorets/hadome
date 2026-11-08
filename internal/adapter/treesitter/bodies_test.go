@@ -204,3 +204,105 @@ tests::one
 tests::two`)
 	})
 }
+
+// viewpoint: behaviour
+// target: the Python and TypeScript readers
+// The setup that runs for a test is part of its fingerprint: tests with the same body under a
+// different setUp or autouse fixture of their class, a different beforeEach of their describe, or
+// a different declaration of an outer variable they use, check different things. Under the same
+// setup they share a fingerprint.
+func TestBodiesIncludeTheSetup(t *testing.T) {
+	t.Run("python", func(t *testing.T) {
+		expect(t, bodies(t, "python", tree(
+			"src/app/__init__.py", "",
+			"src/app/store.py", "class Store:\n    def add(self, row):\n        return 1\n\n\nclass Ledger:\n    def add(self, row):\n        return 1\n",
+			"tests/test_store.py", `import unittest
+
+import pytest
+
+from app.store import Ledger, Store
+
+
+class TestA(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class TestB(unittest.TestCase):
+    def setUp(self):
+        self.store = Ledger()
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class TestC(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+
+
+class TestD:
+    @pytest.fixture(autouse=True)
+    def _store(self):
+        self.store = Ledger()
+        self.store.add("seed")
+
+    def test_add(self):
+        self.assertEqual(self.store.add("x"), 1)
+`)), `TestA.test_add TestC.test_add
+TestB.test_add
+TestD.test_add`)
+	})
+	t.Run("typescript", func(t *testing.T) {
+		expect(t, bodies(t, "typescript", tree(
+			"src/words.ts", "export const en = { hi: 'hi' };\nexport const fr = { hi: 'salut' };\nexport function say(k: string) { return k; }\n",
+			"src/words.test.ts", `import { en, fr, say } from "./words";
+
+describe("en", () => {
+  const KEYS = Object.keys(en);
+  it("says every key", () => {
+    for (const k of KEYS) expect(say(k)).toBe(k);
+  });
+});
+
+describe("fr", () => {
+  const KEYS = Object.keys(fr);
+  it("says every key", () => {
+    for (const k of KEYS) expect(say(k)).toBe(k);
+  });
+});
+
+describe("en again", () => {
+  const KEYS = Object.keys(en);
+  it("says every key", () => {
+    for (const k of KEYS) expect(say(k)).toBe(k);
+  });
+});
+
+describe("hooked", () => {
+  beforeEach(() => say("start"));
+  it("says hi", () => {
+    expect(say("hi")).toBe("hi");
+  });
+});
+
+describe("plain", () => {
+  it("says hi", () => {
+    expect(say("hi")).toBe("hi");
+  });
+  it("says hi twice", () => {
+    expect(say("hi")).toBe("hi");
+  });
+});
+`)), `en again says every key en says every key
+fr says every key
+hooked says hi
+plain says hi plain says hi twice`)
+	})
+}

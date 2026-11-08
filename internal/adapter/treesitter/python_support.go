@@ -66,6 +66,7 @@ func (w *pyWalk) followSupport(mod, name string) {
 		w.t.test.Unresolved++
 		return
 	}
+	w.t.test.CallsSupport = true
 	w.in(sf, func(sub *pyWalk) { sub.follow(name) })
 }
 

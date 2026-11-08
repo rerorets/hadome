@@ -53,7 +53,7 @@ func (r *python) tests(f *file, t *tables) []facts.Test {
 		switch {
 		case def.Kind() == "function_definition" && strings.HasPrefix(f.field(def, "name"), "test"):
 			out = append(out, pf.test(f.field(def, "name"), n, nil))
-		case def.Kind() == "class_definition" && strings.HasPrefix(f.field(def, "name"), "Test"):
+		case def.Kind() == "class_definition" && pf.testClass(n):
 			for _, m := range named(def.ChildByFieldName("body")) {
 				if md := definition(m); md.Kind() == "function_definition" && strings.HasPrefix(f.field(md, "name"), "test") {
 					out = append(out, pf.test(f.field(def, "name")+"."+f.field(md, "name"), m, n))
@@ -122,7 +122,13 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 	def := definition(n)
 	t := newTest(f, name, def)
 	t.test.Declared = declaredBefore(f, def, docstringLines(f, def)...)
-	t.fingerprint([]*sitter.Node{n}, def.ChildByFieldName("name"))
+	var context []codeIn
+	if class != nil {
+		for _, c := range append(pf.classAutouse(class), pf.classSetups(class)...) {
+			context = append(context, codeIn{c.pf.f, c.n})
+		}
+	}
+	t.fingerprint([]*sitter.Node{n}, def.ChildByFieldName("name"), context...)
 	for _, d := range []*sitter.Node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
 			pf.decorators(t, d)
@@ -282,6 +288,13 @@ func (w *pyWalk) target(fn *sitter.Node) string {
 		return ""
 	}
 	obj, attr := f.field(fn, "object"), f.field(fn, "attribute")
+	// A method called on what a call returns at once (Store().append()) is typed as a local that
+	// holds the result would be.
+	if o := fn.ChildByFieldName("object"); o.Kind() == "call" {
+		if owner, ok := w.pf.names[f.field(o, "function")]; ok {
+			return owner + "." + attr
+		}
+	}
 	for _, owners := range []map[string]string{w.pf.spaces, w.vars, w.pf.names} {
 		if owner, ok := owners[obj]; ok {
 			return owner + "." + attr

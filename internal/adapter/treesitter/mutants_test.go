@@ -513,6 +513,53 @@ class Calc {
 	runZeroConstantCases(t, cases, []string{"a", "b", "c", "d", "e", "f"})
 }
 
+// viewpoint: behaviour
+// target: lang.Mutants
+// A Python import binds its alias, or the name itself when there is none, and the first part of a
+// dotted module; it does not bind the original name behind an alias. A zero constant of the file
+// named like that original name is still zero, at the top of the file and when the function
+// imports it under an alias too. A name an import does bind is not a constant of the file.
+func TestMutantsReadWhatAPythonImportBinds(t *testing.T) {
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"python", "src/calc.py", `import os.path
+import json as NONE_JSON
+from app.limits import NONE as IMPORTED_NONE, EMPTY
+from app import OFF as _
+
+NONE = 0
+EMPTY = 0
+os = 0
+OFF = 0
+
+
+def a() -> int:
+    return NONE
+
+
+def b() -> int:
+    return EMPTY
+
+
+def c() -> int:
+    return os
+
+
+def d() -> int:
+    from app.limits import OFF as LIMIT_OFF
+    return OFF
+
+
+def e() -> int:
+    from app.limits import OFF
+    return OFF
+`, []string{"b: EMPTY -> 0", "c: os -> 0", "e: OFF -> 0"}},
+	}
+	runZeroConstantCases(t, cases, []string{"a", "b", "c", "d", "e"})
+}
+
 func runZeroConstantCases(t *testing.T, cases []struct {
 	lang, path, src string
 	want            []string
