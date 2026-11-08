@@ -61,7 +61,7 @@ func (w *walker) walkSuiteMethod(m *ast.FuncDecl) {
 	if w.recv != "" {
 		w.local.vars[w.recv] = w.resolve(ast.NewIdent(w.suiteType))
 	}
-	w.bindParams(m.Type)
+	w.bindParams(m.Type, nil)
 	ast.Inspect(m.Body, w.visit)
 	w.local = outer
 }

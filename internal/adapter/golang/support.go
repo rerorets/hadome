@@ -81,13 +81,32 @@ func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
 	}
 	w.walking[id] = true
 	prevScope, prevPath, prevArgs := w.scope, w.curPath, w.args
-	args := w.bindArgs(h.decl.Type, c)
+	args, passed := w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c)
 	w.scope = scope{idx: w.idx, pkgPath: h.pkgPath, imports: h.imports, samePkg: true,
 		helpers: w.idx.support[h.pkgPath], local: newBlock(nil)}
 	w.curPath, w.args = h.path, args
 	w.collectTParams(h.decl.Type, h.decl.Body)
-	w.bindParams(h.decl.Type)
+	w.bindParams(h.decl.Type, passed)
 	ast.Inspect(h.decl.Body, w.visit)
 	w.scope, w.curPath, w.args = prevScope, prevPath, prevArgs
 	delete(w.walking, id)
+}
+
+// resultType is the type of the helper's n-th result, read in the helper's own file.
+func (h helper) resultType(caller scope, n int) *vtype {
+	refs := resultRefs(h.decl.Type, h.scope(caller))
+	if n >= len(refs) {
+		return nil
+	}
+	return refs[n].in.resolve(refs[n].typ)
+}
+
+// scope is where the helper is written: its own file's imports, and no function around it.
+func (h helper) scope(caller scope) scope {
+	in := caller
+	in.imports, in.local = h.imports, nil
+	if h.pkgPath != "" { // a function of a test support package
+		in.pkgPath, in.samePkg, in.testKey = h.pkgPath, true, ""
+	}
+	return in
 }

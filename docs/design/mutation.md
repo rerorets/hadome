@@ -158,9 +158,9 @@ A break that gives back the same value is not made a mutant. It changes nothing,
 
 - `return 0` is not broken by returning the zero value
 - A return of a constant whose value is the zero value is not broken either. For example, with `ExitOK = 0`, `return engine.ExitOK` is not broken
-- In Go, the constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. Only a literal, `false`, `iota` at the start of its block, and conversions of these are read
+- In Go, the constant's value is read, from syntax only, from its declaration in the same package or in a package of the same module. The value is computed as a constant expression. The expression may use literals, `false` and `true`, `iota`, constants declared earlier in the same file, conversions, and operators on numbers, strings and booleans. For example, `const Off Level = 1 - 1` is a constant whose value is zero
 - In TypeScript, Python, Rust, Java and Kotlin, only declarations in the same file are read ([adapters-treesitter.md](adapters-treesitter.md), "Mutants")
-- A constant whose value cannot be read (one from another module, a value written as an expression, or one declared with different values in two files) is broken as before
+- A constant whose value cannot be read (one from another module, a value written as an expression that uses something that cannot be read, or one declared with different values in two files) is broken as before
 
 Go's zero value comes from the declared result type.
 

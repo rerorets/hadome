@@ -24,8 +24,8 @@ func (w *walker) recordVars(as *ast.AssignStmt) {
 		switch {
 		case len(as.Rhs) == len(as.Lhs):
 			t = w.valueType(as.Rhs[i])
-		case i == 0 && len(as.Rhs) == 1: // s, err := store.Open(), v, ok := m[k]
-			t = w.valueType(as.Rhs[0])
+		case len(as.Rhs) == 1: // s, q := store.Pair(), v, ok := m[k]
+			t = w.nthValueType(as.Rhs[0], i, 0)
 		}
 		switch {
 		case as.Tok == token.DEFINE:
@@ -91,25 +91,34 @@ func (w *walker) recordSpec(vs *ast.ValueSpec) {
 			t = w.resolve(vs.Type)
 		case len(vs.Values) == len(vs.Names):
 			t = w.valueType(vs.Values[i])
-		case i == 0 && len(vs.Values) == 1:
-			t = w.valueType(vs.Values[0])
+		case len(vs.Values) == 1:
+			t = w.nthValueType(vs.Values[0], i, 0)
 		}
 		w.local.vars[name.Name] = t
 	}
 }
 
-// bindParams types the parameters of the function being entered by their declared types.
-func (w *walker) bindParams(ft *ast.FuncType) {
+// bindParams types the parameters of the function being entered. A parameter declared with a type
+// of the repository that is not an interface keeps that type. One declared with an interface, or
+// with a type the adapter cannot read (http.Handler, a type parameter), takes the type of the value
+// the caller passed, from passed; when that is not known either, it stays untyped, so a method
+// called on it is unresolved rather than the interface's method, which runs no code of its own.
+func (w *walker) bindParams(ft *ast.FuncType, passed map[string]*vtype) {
 	for _, f := range ft.Params.List {
 		typ := f.Type
 		if e, ok := typ.(*ast.Ellipsis); ok { // ...T is a []T inside the function
 			typ = &ast.ArrayType{Elt: e.Elt}
 		}
-		t := w.resolve(typ)
+		declared := w.resolve(typ)
 		for _, n := range f.Names {
-			if n.Name != "_" {
-				w.local.vars[n.Name] = t
+			if n.Name == "_" {
+				continue
 			}
+			t := declared
+			if declared == nil || declared.isInterface() {
+				t = passed[n.Name]
+			}
+			w.local.vars[n.Name] = t
 		}
 	}
 }
@@ -118,7 +127,7 @@ func (w *walker) bindParams(ft *ast.FuncType) {
 func (w *walker) funcLit(lit *ast.FuncLit) {
 	outer := w.local
 	w.local = newBlock(outer)
-	w.bindParams(lit.Type)
+	w.bindParams(lit.Type, nil)
 	w.inspect(lit.Body)
 	w.local = outer
 }
@@ -131,7 +140,9 @@ func (w *walker) call(c *ast.CallExpr) {
 	case *ast.SelectorExpr:
 		w.selectorCall(c, fun)
 	case *ast.Ident: // builtins and helpers declared in test files are neither targets nor unresolved
-		if id := w.qualify(fun, func(id string) bool { _, ok := w.idx.funcs[id]; return ok }); id != "" {
+		if t, ok := w.lookup(fun.Name); ok && t != nil && t.method != "" {
+			w.methodValueCall(t.method, c)
+		} else if id := w.qualify(fun, func(id string) bool { _, ok := w.idx.funcs[id]; return ok }); id != "" {
 			w.record(id, c)
 		} else if w.qualify(fun, func(id string) bool { return w.idx.values[id] }) != "" {
 			w.test.Unresolved++
@@ -163,6 +174,17 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 	// result of a call (store.New().Len()) or a literal ((Config{}).Validate()).
 	if t := w.valueType(sel.X); t != nil && t.id != "" && (ast.IsExported(name) || w.ownType(t.id)) {
 		w.record(t.id+"."+name, c)
+		return
+	}
+	w.test.Unresolved++
+}
+
+// methodValueCall counts a call of a variable holding a method value as a call of the method,
+// under the same visibility a call written s.Append() has.
+func (w *walker) methodValueCall(method string, c *ast.CallExpr) {
+	dot := strings.LastIndex(method, ".")
+	if ast.IsExported(method[dot+1:]) || w.ownType(method[:dot]) {
+		w.record(method, c)
 		return
 	}
 	w.test.Unresolved++
@@ -279,7 +301,7 @@ func (w *walker) subtest(fn ast.Expr) {
 	case *ast.Ident:
 		if h, ok := w.helpers[fn.Name]; ok && !w.walking[fn.Name] {
 			w.walking[fn.Name] = true
-			w.walkHelper(h, w.args)
+			w.walkHelper(h, w.args, nil)
 			delete(w.walking, fn.Name)
 			return
 		}

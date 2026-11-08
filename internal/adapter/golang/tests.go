@@ -326,18 +326,18 @@ func (w *walker) followHelper(name string, c *ast.CallExpr) {
 		return
 	}
 	w.walking[name] = true
-	w.walkHelper(h, w.bindArgs(h.decl.Type, c))
+	w.walkHelper(h, w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c))
 	delete(w.walking, name)
 }
 
 // walkHelper walks a helper's body in the helper's own file and block: it sees its parameters,
-// typed as declared, and not the variables of the function that calls it.
-func (w *walker) walkHelper(h helper, args map[string]string) {
+// typed as declared or as passed (bindParams), and not the variables of the function that calls it.
+func (w *walker) walkHelper(h helper, args map[string]string, passed map[string]*vtype) {
 	prevPath, prevArgs, prevScope := w.curPath, w.args, w.scope
 	w.curPath, w.args, w.scope = h.path, args, h.scope(w.scope)
 	w.local = newBlock(nil)
 	w.collectTParams(h.decl.Type, h.decl.Body)
-	w.bindParams(h.decl.Type)
+	w.bindParams(h.decl.Type, passed)
 	ast.Inspect(h.decl.Body, w.visit)
 	w.curPath, w.args, w.scope = prevPath, prevArgs, prevScope
 }
@@ -350,6 +350,24 @@ func (w *walker) bindArgs(ft *ast.FuncType, c *ast.CallExpr) map[string]string {
 		for _, n := range f.Names {
 			if i < len(c.Args) {
 				out[n.Name] = w.argText(c.Args[i])
+			}
+			i++
+		}
+	}
+	return out
+}
+
+// argTypes maps the helper's parameters to the types of the caller's arguments, read where the
+// caller wrote them. A parameter whose argument's type is not known is left out.
+func (w *walker) argTypes(ft *ast.FuncType, c *ast.CallExpr) map[string]*vtype {
+	out := map[string]*vtype{}
+	i := 0
+	for _, f := range ft.Params.List {
+		for _, n := range f.Names {
+			if i < len(c.Args) {
+				if t := w.valueType(c.Args[i]); t != nil {
+					out[n.Name] = t
+				}
 			}
 			i++
 		}

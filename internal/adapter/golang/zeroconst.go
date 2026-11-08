@@ -13,8 +13,8 @@ import (
 // zeroConsts reads, from syntax only, the declarations returning the zero value needs: the
 // underlying type of a named result type, which gives its zero value, and constants whose value is
 // already the zero value, for which returning it changes nothing, so no test could catch that
-// mutant. It reads packages of the version's modules only: constants whose value is a literal,
-// false, iota at the start of its block, or a conversion of one of these, and types declared once.
+// mutant. It reads packages of the version's modules only: constants whose value is a constant
+// expression it can evaluate (constValue), and types declared once.
 type zeroConsts struct {
 	fsys    fs.FS
 	modules map[string]string                   // directory -> module path
@@ -255,7 +255,9 @@ func builtinZero(name string) string {
 }
 
 // addZeroConsts records, for each package-level constant of f, whether its value is the zero value.
+// A constant's value may use the constants declared before it in the same file.
 func addZeroConsts(f *ast.File, out, seen map[string]bool) {
+	known := map[string]constant.Value{}
 	for _, d := range f.Decls {
 		g, ok := d.(*ast.GenDecl)
 		if !ok || g.Tok != token.CONST {
@@ -268,49 +270,17 @@ func addZeroConsts(f *ast.File, out, seen map[string]bool) {
 				values = vs.Values // a spec without values repeats the previous ones
 			}
 			for j, n := range vs.Names {
-				isZero := j < len(values) && zeroValue(values[j], i)
+				v := constant.MakeUnknown()
+				if j < len(values) {
+					v = constValue(values[j], i, known)
+				}
+				isZero := zeroConstant(v)
 				if seen[n.Name] && out[n.Name] != isZero {
 					isZero = false
 				}
 				seen[n.Name], out[n.Name] = true, isZero
+				known[n.Name] = v
 			}
 		}
 	}
-}
-
-// zeroValue reports whether a constant expression is the zero value, with iota at the given index.
-func zeroValue(e ast.Expr, iota int) bool {
-	switch e := e.(type) {
-	case *ast.ParenExpr:
-		return zeroValue(e.X, iota)
-	case *ast.BasicLit:
-		return zeroLiteral(e)
-	case *ast.Ident:
-		return e.Name == "false" || (e.Name == "iota" && iota == 0)
-	case *ast.CallExpr:
-		return conversion(e) && zeroValue(e.Args[0], iota)
-	}
-	return false
-}
-
-func zeroLiteral(l *ast.BasicLit) bool {
-	v := constant.MakeFromLiteral(l.Value, l.Kind, 0)
-	if v.Kind() == constant.String {
-		return constant.StringVal(v) == ""
-	}
-	return constant.Sign(v) == 0 // a number or a rune
-}
-
-// conversion reports a call that may be a conversion such as Code(0) or pkg.Code(0). A builtin
-// such as len or real gives zero for a zero argument too; unsafe.Sizeof and the like do not.
-func conversion(c *ast.CallExpr) bool {
-	if len(c.Args) != 1 {
-		return false
-	}
-	if s, ok := c.Fun.(*ast.SelectorExpr); ok {
-		if x, ok := s.X.(*ast.Ident); ok && x.Name == "unsafe" {
-			return false
-		}
-	}
-	return true
 }
