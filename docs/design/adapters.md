@@ -16,7 +16,7 @@ It does not:
 
 - Judge anything. Whether something is a violation is decided by the rules
 - Run code, build the project, or call the language's toolchain (no `go`, `node`, `python`, `cargo`, `javac`, `kotlinc`), so that hadome stays one binary that works without them
-- Parse exception markers. Adapters hand over comments; the engine finds `gate:allow` in them, with one implementation for every language
+- Parse exception markers. Adapters hand over comments; the engine finds `gate:allow` in them, with one implementation for every language. A comment carries its first line and its last line (`EndLine`). The engine uses the last line to tell whether a marker is at the top of its file
 
 ## The facts
 
@@ -41,6 +41,7 @@ classDiagram
   class Comment {
     +Path string
     +Line int
+    +EndLine int
     +Text string
     +Directive bool
   }

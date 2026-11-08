@@ -62,6 +62,7 @@ gate:allow <rule-id> reason: <text>
 ```
 
 - It applies to the line it is on and to the next line
+- A finding about a whole file is covered only by a marker at the top of the file. Today that is `size/file-lines` alone. A marker near the line the finding points at does not cover it
 - A marker without `reason:` followed by text has no effect, and is itself reported as a finding (`engine/marker-without-reason`)
 - A marker naming an unknown rule is reported as a finding (`engine/marker-unknown-rule`)
 - A marker that suppresses nothing is reported as a finding (`engine/marker-unused`), so stale exceptions do not pile up
@@ -70,6 +71,25 @@ gate:allow <rule-id> reason: <text>
 - New exceptions do not fail the check, but they make the result need review (exit code `3`): no regressions, and at least one new exception for a person to look at. Who approves it is up to the workflow (a label, a reviewer, a decision queue)
 
 How the marker is found inside a comment is the language adapter's job. The engine receives markers as data.
+
+### A marker at the top of a file
+
+A marker is at the top of its file when it is on a comment line and every line above it is one of these.
+
+| Line | Example |
+|---|---|
+| A blank line | |
+| A comment line; for a comment over several lines, every line to its end | A license header, `//go:build` |
+| A line 1 that starts with `#!` | `#!/usr/bin/env python3` |
+| A line that is only `---` | A YAML document separator |
+
+A comment line is a line that starts with a comment: `//`, `/*` or `#`. From the second line of a comment over several lines on, a line may start with anything. A line with code before its comment is not a comment line.
+
+- **At the top**: below a license header, below `//go:build`, below YAML's `---`
+- **Not at the top**: below Go's or Kotlin's `package` line, below a Python module docstring, below an `import`
+- **Why**: a marker at the top stays in place however the file's content grows or shrinks and whatever the limit is. And it is where a reader starts reading the file, so it is hard to miss.
+
+A marker at the top follows the same rules as any other marker. One without a reason has no effect, and one that suppresses nothing is reported as `engine/marker-unused`.
 
 ## Sources
 

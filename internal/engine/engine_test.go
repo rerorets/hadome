@@ -224,6 +224,58 @@ func TestAFileOverTheLimitPointsAtItsFirstLineOverIt(t *testing.T) {
 	}
 }
 
+// topCase is a file that starts with src and holds a marker for size/file-lines; top says whether
+// the marker is at the top of the file.
+type topCase struct {
+	path, src string
+	top       bool
+}
+
+// marker is a valid exception marker for size/file-lines, without its comment delimiters.
+const marker = "gate:allow size/file-lines reason: one table of cases"
+
+// viewpoint: behaviour
+// target: engine.Engine.Check with size/file-lines
+// A marker covers a whole-file finding only at the top of the file: on a comment line that only
+// blank lines, comment lines (a license header, //go:build), a shebang and YAML's --- precede. Below
+// a package line or code, or after code on its own line, it covers nothing.
+func TestAMarkerAtTheTopCoversTheWholeFile(t *testing.T) {
+	cases := append([]topCase{
+		{"store/license.go", "// Copyright A.\n// License B.\n\n//go:build linux\n\n// " + marker + "\npackage store\n", true},
+		{"store/block.go", "/*\n Copyright A.\n*/\n\n// " + marker + "\npackage store\n", true},
+		{"store/package.go", "package store\n\n// " + marker + "\n", false},
+		{"store/trailing.go", "package store // " + marker + "\n", false},
+		{"main.tf", "# Copyright A.\n\n/* " + marker + " */\nvariable \"rows\" {}\n", true},
+		{"after.tf", "variable \"cols\" {}\n# " + marker + "\n", false},
+		{"roles/web/tasks/main.yml", "---\n# Copyright A.\n# " + marker + "\n- name: ping\n  ping:\n", true},
+		{"roles/db/tasks/main.yml", "- name: pong\n  ping:\n# " + marker + "\n", false},
+	}, treeSitterTop...)
+	head := fstest.MapFS{
+		"go.mod":      {Data: []byte("module example.com/app\n")},
+		".hadome.yml": {Data: []byte("schema: 1\nrules:\n  size:\n    file-lines: 10\n")},
+	}
+	for _, c := range cases {
+		head[c.path] = &fstest.MapFile{Data: []byte(c.src + strings.Repeat("\n", 20))}
+	}
+	base := fstest.MapFS{"go.mod": head["go.mod"], ".hadome.yml": head[".hadome.yml"]}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: size.All()}
+	r, err := e.Check(treeSource{base: base, head: head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reported := map[string]bool{}
+	for _, f := range r.Regressions {
+		if f.Rule == "size/file-lines" {
+			reported[f.File] = true
+		}
+	}
+	for _, c := range cases {
+		if reported[c.path] == c.top {
+			t.Errorf("%s: file-lines reported %v, want %v", c.path, reported[c.path], !c.top)
+		}
+	}
+}
+
 func hasRule(fs []engine.Finding, rule string) bool {
 	for _, f := range fs {
 		if f.Rule == rule {

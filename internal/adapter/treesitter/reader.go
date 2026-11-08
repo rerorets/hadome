@@ -177,7 +177,7 @@ func comments(f *file, directive func(string) bool) []facts.Comment {
 			return true
 		}
 		raw := f.text(n)
-		out = append(out, facts.Comment{Path: f.path, Line: line(n), Text: stripDelimiters(raw), Directive: directive(raw)})
+		out = append(out, facts.Comment{Path: f.path, Line: line(n), EndLine: endLine(n), Text: stripDelimiters(raw), Directive: directive(raw)})
 		return false
 	})
 	return out

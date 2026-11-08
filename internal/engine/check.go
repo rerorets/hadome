@@ -166,6 +166,7 @@ func (e *Engine) side(v Version, c config.Config, rules []Rule) (side, error) {
 		}
 	}
 	markers, bad := parseMarkers(e.ownComments(a.Comments), known)
+	markTop(markers, a.Comments, v.FS)
 	kept, unused := suppress(raw, markers)
 	s.findings = append(append(kept, bad...), unused...)
 	s.markers = markers

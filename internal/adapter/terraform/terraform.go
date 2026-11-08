@@ -350,8 +350,9 @@ func lexComments(p string, src []byte) []comment {
 		for _, d := range directives {
 			directive = directive || strings.HasPrefix(text, d)
 		}
-		out = append(out, comment{Comment: facts.Comment{Path: p, Line: t.Range.Start.Line, Text: text, Directive: directive},
-			end: t.Range.Start.Line + strings.Count(raw, "\n")})
+		end := t.Range.Start.Line + strings.Count(raw, "\n")
+		out = append(out, comment{Comment: facts.Comment{Path: p, Line: t.Range.Start.Line, EndLine: end, Text: text, Directive: directive},
+			end: end})
 	}
 	return out
 }
