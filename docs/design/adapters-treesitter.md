@@ -310,11 +310,12 @@ Constants are read from syntax, only from declarations in the same file. Of the 
 | Kotlin | `val` and `const val` outside functions. Those with `open` or `abstract`, and those with a getter, are not read |
 
 - Whether the value is the zero value is decided by comparing it with the zero value of the result type. A number counts as the same whichever way it is written, `0`, `0.0`, `0x0`, `0L` or `0_u64`, when its value is zero
+- In Java and Kotlin, a constant returned with the name of the class that declares it is read too. For example, with `object Defaults { const val ZERO = 0 }` in the same file, `return Defaults.ZERO` is not broken. A constant of a `companion object` is read with the name of the class around it (`Store.NONE`)
 - Only Python tells `int` from `float`, since a test can tell `0` from `0.0`. For example, `return RATE` in a function returning `float` is broken into `0.0` even when `RATE = 0`
 - These names are broken as before:
   - names that can be reassigned. For example, TypeScript's `let`, Rust's `static mut`, Java fields without `final`, Kotlin's `var`
   - names declared more than once in the file, with different values or in a form that is not read
-  - names declared as a parameter or a local variable in the function being broken
+  - names declared as a parameter or a local variable in the function being broken; for a constant with its class's name, that class's name declared so
   - constants declared in another file
 
 The other rules are Go's too.
