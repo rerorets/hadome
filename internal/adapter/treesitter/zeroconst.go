@@ -44,6 +44,22 @@ func identifiers(f *file, n *sitter.Node) []string {
 	return out
 }
 
+// zeroValue reports whether the text of a returned value is the function's zero value, written as
+// a literal in any spelling: 0.0 and 0x0 for 0, single quotes for "". An integer zero with a minus in front is
+// zero too, except where every number is a float and -0 differs from 0.
+func (m *mutator) zeroValue(text string) bool {
+	if text == m.zero || zeroLiteral(text, m.zero, m.b.strictNumbers) {
+		return true
+	}
+	rest, negative := strings.CutPrefix(text, "-")
+	if !negative || m.b.floatsOnly {
+		return false
+	}
+	rest = strings.TrimSpace(rest)
+	_, float := zeroNumber(rest)
+	return !float && zeroLiteral(rest, m.zero, m.b.strictNumbers)
+}
+
 // zeroConstant reports whether v names a constant of the file whose value is the function's zero
 // value, and that the function does not declare a name of its own that hides it.
 func (m *mutator) zeroConstant(v *sitter.Node) bool {

@@ -75,6 +75,7 @@ flowchart LR
 - 数えるのは製品のコードの import だけです。テストファイルは製品の依存ではありません
 - 数えるのは、リポジトリ自身のユニットの間の import だけです。外部のライブラリは描きません
 - 型だけを持ち込む import は数えません。例: TypeScript の `import type`。コンパイルすると消え、実行するコードの依存ではないからです
+- TypeScript の宣言ファイル（`.d.ts` など）の import も数えません。宣言ファイルは実行されないからです
 
 ### `deps/not-in-diagram`
 

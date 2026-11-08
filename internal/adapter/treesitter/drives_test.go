@@ -72,4 +72,30 @@ class AppTest {
 it('serves', async () => { await request('http://localhost:3000').get('/rows').expect(200) })
 `), "serves drives=true")
 	})
+	t.Run("playwright", func(t *testing.T) {
+		expect(t, drives("typescript",
+			"src/app.ts", "export const port = 3000\n",
+			"e2e/home.spec.ts", `import { test, expect } from '@playwright/test'
+
+test('opens', async ({ page }) => { await page.goto('/'); await expect(page).toHaveTitle(/x/) })
+test('api', async ({ request: api }) => { expect((await api.get('/rows')).ok()).toBe(true) })
+test('tabs', async ({ context }, info) => { await context.newPage() })
+test('plain', async ({ browserName }) => { expect(browserName).toBeTruthy() })
+`,
+			"e2e/fixtures.ts", "import { test as base } from '@playwright/test'\nexport const test = base.extend({})\n",
+			"e2e/rows.spec.ts", `import { test } from './fixtures'
+
+test('lists', async ({ page }) => { await page.goto('/rows') })
+`,
+			"src/page.test.ts", `import { test } from 'vitest'
+import { port } from './app'
+
+test('own', async ({ page }) => { page.open(port) })
+`,
+			"test/helpers.ts", "export const test = (name: string, fn: (f: { page: number }) => void) => fn({ page: 1 })\n",
+			"src/helped.test.ts", `import { test } from '../test/helpers'
+
+test('helped', ({ page }) => { expect(page).toBe(1) })
+`), "api drives=true\nhelped drives=false\nlists drives=true\nopens drives=true\nown drives=false\nplain drives=false\ntabs drives=true")
+	})
 }

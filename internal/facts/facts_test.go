@@ -28,3 +28,21 @@ func TestCountLinesCountsWhatAnEditorShows(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: behaviour
+// target: facts.ShortName
+// A symbol shows as its unit's last path element and its name; a symbol of a unit at the root of a
+// TypeScript project (unit ".") shows as its name alone, not with the dots of the root in front.
+func TestShortNameShowsTheLastElementAndTheName(t *testing.T) {
+	for id, want := range map[string]string{
+		"example.com/app/store.Append": "store.Append",
+		"web/src/lib.getSession":       "lib.getSession",
+		"..devServer":                  "devServer",
+		"vite.config.devServer":        "vite.config.devServer",
+		"src":                          "src",
+	} {
+		if got := facts.ShortName(id); got != want {
+			t.Errorf("ShortName(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

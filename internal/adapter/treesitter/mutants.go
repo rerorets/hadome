@@ -59,6 +59,9 @@ type breaks struct {
 	binders map[string]string
 	// strictNumbers tells an integer zero from a float zero, where a test can see the difference.
 	strictNumbers bool
+	// floatsOnly is set where every number is a float, so -0 is a value of its own that a test can
+	// tell from 0 (JavaScript's Object.is).
+	floatsOnly bool
 }
 
 func bodyField(fn *sitter.Node) *sitter.Node { return fn.ChildByFieldName("body") }
@@ -200,7 +203,7 @@ func (m *mutator) returned(v *sitter.Node) {
 		return
 	}
 	text := m.f.text(v)
-	if _, boolean := m.b.literals[text]; boolean || text == m.zero || m.zeroConstant(v) {
+	if _, boolean := m.b.literals[text]; boolean || m.zeroValue(text) || m.zeroConstant(v) {
 		return
 	}
 	m.add(returnZero, v.StartByte(), v.EndByte(), m.zero)

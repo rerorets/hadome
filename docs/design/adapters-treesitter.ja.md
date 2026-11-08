@@ -94,6 +94,8 @@ TypeScript だけは、ぶつかる名前の ID にファイルのパスを使�
 
 TypeScript で型だけを持ち込む import と export は、import の一覧に載せません。`import type …`、`export type { … } from …`、名前がすべて `type` 付きの `import { type A, type B } from …` の3つです。コンパイルすると消えるので、実行するコードの依存ではないからです。値を1つでも持ち込むものは載せます。例: `import { type A, b } from …`、`import d, { type A } from …`。
 
+宣言ファイル（`.d.ts`、`.d.mts`、`.d.cts`、`.d.css.ts` のようにほかの種類のファイルを型で書くもの）の import も、import の一覧に載せません。値を持ち込む import も同じです。宣言ファイルは型を書くだけで、実行されないからです。そのため、純粋さにも `deps/` の図の照合にも数えません。例: `src/types/auth.d.ts` が `import { Role } from "pg"` を持っていても、`src/types` は純粋なままです。
+
 ### TypeScript の解決
 
 指定子は次の順に試します。
@@ -235,6 +237,7 @@ TypeScript のテストの宣言は、次のように読みます。
 | TypeScript | supertest の `request()` | `supertest` |
 | TypeScript | Hono の `app.request(…)`。最初の引数が `/` で始まる文字列か `new Request(…)` のとき、またはオブジェクトがリポジトリから import した名前のとき | 要らない（呼び出しの形で見分ける） |
 | TypeScript | `app.fetch(new Request(…))`。fetch の形で HTTP を受けるアプリに、メモリの中で要求を渡す | 要らない（呼び出しの形で見分ける） |
+| TypeScript | Playwright の fixture の `page`・`context`・`request` を受け取るテスト（`test('…', async ({ page }) => …)`）。ブラウザか HTTP でアプリを外から動かすからです。呼ばなくても、受け取れば Drives とします | `@playwright/test`。または、`@playwright/test` を import するテストの補助のファイル（`base.extend(…)` を持つ `e2e/fixtures.ts` など） |
 
 テストからの呼び出しは Go のアダプタと同じように対象に解決します。たどるのは、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数です。解決できない呼び出しは未解決として数えます。
 
@@ -333,6 +336,9 @@ Go と同じ6つとは、`<` → `>=`、`>=` → `<`、`<=` → `>`、`>` → `<
   - 戻り値の型を書いていない関数。例: TypeScript で型を省いた関数、Python で注釈の無い関数、Kotlin の式の本体
 - 置き換えるのは `return` の値です。Rust では関数の本体の最後の式（`;` の無い式）も置き換えます。Rust では `return` を書かずに値を返すのがふつうだからです
 - Go と同じく、次の文では作りません。真偽のリテラルを返す文（真偽の反転が壊す）と、すでにゼロの値を返す文です
+  - すでにゼロの値かは、下の定数と同じ決まりで決めます。例: `number` を返す関数の `return 0.0`、`return 0x0`、`string` を返す関数の `return ''` は壊しません
+  - 整数のゼロに `-` を付けたもの（`return -0`）もゼロとみなします。ただし TypeScript では壊します。数がすべて浮動小数点数なので、`-0` は `0` と別の値で、テストが `Object.is` で見分けられるからです
+  - 浮動小数点数の `-0.0` は、どの言語でも壊します。テストが `0.0` と見分けられるからです
 - 値がゼロの定数を返す文でも作りません。例: `export const OK = 0` のとき、`number` を返す関数の `return OK` は壊しません
 
 定数は、同じファイルの宣言だけを構文で読みます。読むのは次の宣言のうち、値がリテラルのものです。

@@ -83,6 +83,9 @@ func (r *typescript) index(v engine.Version, files []*file) {
 }
 
 func (r *typescript) imports(f *file, t *tables) []facts.Import {
+	if declarationFile(f.path) {
+		return nil
+	}
 	var out []facts.Import
 	globals := map[string]bool{}
 	walk(f.root, func(n *sitter.Node) bool {
@@ -156,6 +159,15 @@ func tsGlobalIO(f *file, n *sitter.Node) string {
 	}
 	return ""
 }
+
+// declarationFile reports a declaration file (.d.ts, .d.mts, .d.cts, or .d.<ext>.ts for a file of
+// another kind). It only describes types and is never run, so nothing it imports is a dependency of
+// the running code, just as with `import type`.
+func declarationFile(p string) bool {
+	return tsDeclarationFile.MatchString(path.Base(p))
+}
+
+var tsDeclarationFile = regexp.MustCompile(`\.d(\.[^./]+)?\.[cm]?ts$`)
 
 // typeOnly reports an import or export that brings in only types: `import type`, `export type
 // {...} from`, or named imports that are all marked `type`. TypeScript erases them, so they are no

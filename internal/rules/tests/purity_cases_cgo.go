@@ -34,7 +34,13 @@ func tsPurityCases() []engine.Case {
 	typesOnly := "import type { Row } from '../lib/b';\nimport { type Size } from '../lib/b';\nexport const a = (r: Row, s: Size) => [r, s];\n"
 	rows := "export type Row = { id: number };\nexport type Size = number;\nexport const b = () => 1;\n"
 	rowsRead := "import { readFileSync } from 'node:fs';\nexport type Row = { id: number };\nexport type Size = number;\nexport const b = () => readFileSync('x').length;\n"
+	limits := "export const MAX = 3;\n"
+	auth := "import { Pool } from 'pg';\ndeclare global { var pool: Pool }\n"
+	clamp := "import { MAX } from '../types/limits';\nexport const clamp = (n: number) => Math.min(n, MAX);\n"
 	return []engine.Case{
+		{Name: "a unit that comes to import a directory whose declaration file imports a database client stays pure",
+			Base: tsTree("src/types/limits.ts", limits, "src/types/auth.d.ts", auth, "src/calc/clamp.ts", "export const clamp = (n: number) => n;\n"),
+			Head: tsTree("src/types/limits.ts", limits, "src/types/auth.d.ts", auth, "src/calc/clamp.ts", clamp)},
 		{Name: "an import cycle that reaches input or output, compared with itself, passes",
 			Base: tsTree("src/ui/a.ts", cycleA, "src/lib/b.ts", cycleBReads), Head: tsTree("src/ui/a.ts", cycleA, "src/lib/b.ts", cycleBReads)},
 		{Name: "every unit of an import cycle loses its purity when one of them reaches input or output",
@@ -63,7 +69,7 @@ func tsNoMockCases() []engine.Case {
 	const callbacks = "import { each, total } from './each';\n\n" +
 		"it('calls back', () => {\n  const f = vi.fn();\n  each([1], f);\n  expect(f).toHaveBeenCalledWith(1);\n});\n\n" +
 		"it('sums', () => {\n  const read = jest.fn().mockImplementation(() => [1, 2]);\n  expect(total({ read })).toBe(3);\n});\n"
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "vi.spyOn in a test of a pure TypeScript unit fails", Base: test(calc, ""), Head: test(calc, spy),
 			WantFail: []string{"tests/no-mock"}},
 		{Name: "jest.spyOn in a test of a pure TypeScript unit fails", Base: test(calc, ""), Head: test(calc, "  jest.spyOn(Math, 'max');\n"),
@@ -74,5 +80,27 @@ func tsNoMockCases() []engine.Case {
 			Base: test(calc+fetches, ""), Head: test(calc+fetches, stub)},
 		{Name: "vi.fn and jest.fn passed to a pure TypeScript unit as a callback or a dependency pass",
 			Base: tsTree("src/calc/each.ts", each), Head: tsTree("src/calc/each.ts", each, "src/calc/each.test.ts", callbacks)},
+	}, fileMockCases()...)
+}
+
+// fileMockCases are mocks at the top of a test file, which the runner applies to every test of it.
+func fileMockCases() []engine.Case {
+	shared := func(test string) fstest.MapFS {
+		return tsTree("src/calc/calc.ts", "export const add = (a: number, b: number) => a + b;\n",
+			"src/api/load.ts", "export const load = async () => (await fetch('/rows')).status;\n",
+			"src/api/load.test.ts", test)
+	}
+	const head = "import { add } from '../calc/calc';\nimport { load } from './load';\n\n"
+	const mock = "vi.mock('fancy-lib', () => ({ preset: vi.fn() }));\n\n"
+	const adds = "it('adds', () => {\n  expect(add(1, 2)).toBe(3);\n});\n"
+	const loads = "it('loads', async () => {\n  expect(await load()).toBe(200);\n});\n"
+	const spyAdds = "it('adds', () => {\n  vi.spyOn(Math, 'max');\n  expect(add(1, 2)).toBe(3);\n});\n"
+	return []engine.Case{
+		{Name: "a file-level vi.mock in a file whose tests call only pure units fails",
+			Base: shared(head + adds), Head: shared(head + mock + adds), WantFail: []string{"tests/no-mock"}},
+		{Name: "a file-level vi.mock in a file where another test calls a unit that is not pure passes",
+			Base: shared(head + adds + loads), Head: shared(head + mock + adds + loads)},
+		{Name: "a mock inside a test that calls only pure units fails, though another test of the file does not",
+			Base: shared(head + adds + loads), Head: shared(head + spyAdds + loads), WantFail: []string{"tests/no-mock"}},
 	}
 }

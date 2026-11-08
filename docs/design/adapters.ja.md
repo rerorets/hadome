@@ -100,6 +100,7 @@ classDiagram
     +Path string
     +Line int
     +Evidence string
+    +FileWide bool
   }
   class Skip {
     +Skipped bool
@@ -248,6 +249,8 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | `sleep` | `time.Sleep` | `time.sleep`、`asyncio.sleep` | `setTimeout` | `Thread.sleep`、`delay` | `thread::sleep` |
 | `mock` | モックのライブラリの import | `unittest.mock`、`pytest-mock`、`monkeypatch.setattr` | `jest.mock`、`vi.mock`、`mock.module`、`vi.spyOn` | Mockito、MockK、Quarkus の `@InjectMock` | `mockall` |
 | `always-true` | testify の `True(t, true)`、`Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
+
+テストの外にあって、ファイルのすべてのテストに効く危険には `FileWide` を付けます。例: TypeScript のファイルの先頭の `vi.mock(…)`、Python・Java・Kotlin・Rust のモックのライブラリの import。`tests/no-mock` が、テストの中のモックと分けて扱うためです（[rules-tests.ja.md](rules-tests.ja.md)）。
 
 スキップ（`t.Skip`、`pytest.skip`、`@Disabled`、`#[ignore]` など）は危険の分類に入れません。`Skip` として、理由と条件と一緒に取り出します。`tests/skip-without-reason` は、理由の無いスキップだけを落とします。
 

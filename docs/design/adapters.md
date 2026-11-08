@@ -100,6 +100,7 @@ classDiagram
     +Path string
     +Line int
     +Evidence string
+    +FileWide bool
   }
   class Skip {
     +Skipped bool
@@ -240,6 +241,8 @@ Rules about how tests are written work on categories, not API names. Each adapte
 | `sleep` | `time.Sleep` | `time.sleep`, `asyncio.sleep` | `setTimeout` | `Thread.sleep`, `delay` | `thread::sleep` |
 | `mock` | imports of mocking libraries | `unittest.mock`, `pytest-mock`, `monkeypatch.setattr` | `jest.mock`, `vi.mock`, `mock.module`, `vi.spyOn` | Mockito, MockK, Quarkus's `@InjectMock` | `mockall` |
 | `always-true` | testify's `True(t, true)`, `Equal(t, x, x)` | `assert True` | `expect(true).toBe(true)` | `assertTrue(true)` | `assert!(true)` |
+
+A hazard that is outside the tests and applies to every test of the file is marked `FileWide`. Examples: `vi.mock(…)` at the top of a TypeScript file, an import of a mocking library in Python, Java, Kotlin and Rust. `tests/no-mock` treats it apart from a mock inside a test ([rules-tests.md](rules-tests.md)).
 
 Skips (`t.Skip`, `pytest.skip`, `@Disabled`, `#[ignore]` and so on) are not a hazard category. They are extracted as `Skip`, with their reason and condition. `tests/skip-without-reason` fails only skips without a reason.
 

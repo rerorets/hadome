@@ -474,6 +474,45 @@ func TestMutantsReadZeroInEverySpellingOfANumber(t *testing.T) {
 	runZeroConstantCases(t, cases, names)
 }
 
+// viewpoint: behaviour
+// target: lang.Mutants
+// A returned literal that already is the zero value, in any spelling of it, gets no mutant: 0.0,
+// 0x0 and 0e0 for 0, single quotes for "", and an integer zero with a minus in front. A negative float zero
+// is broken, since a test can tell it from 0 (Object.is in JavaScript, where every number is a
+// float, so -0 is broken there too); so is a value that is not zero.
+func TestMutantsSkipLiteralsAlreadyZero(t *testing.T) {
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"typescript", "src/calc.ts", `export function a(): number { return 0.0; }
+export function b(): number { return 0x0; }
+export function c(): number { return 0e0; }
+export function d(): string { return ''; }
+export function e(): number { return -0; }
+export function f(): number { return 1.0; }
+`, []string{"e: -0 -> 0", "f: 1.0 -> 0"}},
+		{"python", "src/calc.py", "def a() -> int:\n    return -0\n\ndef b() -> int:\n    return 0x0\n\ndef c() -> float:\n    return 0.0\n\n" +
+			"def d() -> float:\n    return -0.0\n\ndef e() -> str:\n    return ''\n\ndef f() -> float:\n    return 0\n",
+			[]string{"d: -0.0 -> 0.0", "f: 0 -> 0.0"}},
+		{"java", "src/main/java/calc/Calc.java", `package calc;
+
+class Calc {
+    int a() { return -0; }
+    int b() { return 0x0; }
+    double c() { return 0d; }
+    double d() { return -0.0; }
+    long e() { return 0L; }
+}
+`, []string{"d: -0.0 -> 0"}},
+		{"rust", "src/calc.rs", "fn a() -> i32 { -0 }\nfn b() -> f64 { 0e0 }\nfn c() -> i64 { return 0x0; }\nfn d() -> f64 { -0.0 }\n",
+			[]string{"d: -0.0 -> 0.0"}},
+		{"kotlin", "src/main/kotlin/calc/Calc.kt", "package calc\n\nfun a(): Int { return -0 }\nfun b(): Long { return 0x0L }\nfun c(): Double { return -0.0 }\n",
+			[]string{"c: -0.0 -> 0.0"}},
+	}
+	runZeroConstantCases(t, cases, []string{"a", "b", "c", "d", "e", "f"})
+}
+
 func runZeroConstantCases(t *testing.T, cases []struct {
 	lang, path, src string
 	want            []string

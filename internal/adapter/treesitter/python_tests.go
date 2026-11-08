@@ -129,7 +129,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 		}
 	}
 	for _, m := range pf.mocks {
-		t.hazard(facts.HazardMock, m)
+		t.fileHazard(facts.HazardMock, m)
 	}
 	for _, p := range pyParams(f, def) {
 		if p == "mocker" {

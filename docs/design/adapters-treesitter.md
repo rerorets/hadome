@@ -85,6 +85,8 @@ External imports keep their name as `ToUnit` and are checked against the `io` ta
 
 TypeScript imports and exports that bring in types only are not in the list of imports: `import type …`, `export type { … } from …`, and `import { type A, type B } from …` where every name is marked `type`. They disappear when compiled, so they are no dependency of the running code. One that brings in any value is in the list. Examples: `import { type A, b } from …`, `import d, { type A } from …`.
 
+Imports in a declaration file (`.d.ts`, `.d.mts`, `.d.cts`, and `.d.css.ts` and the like, which type a file of another kind) are not in the list of imports either, value imports included. A declaration file only describes types and is never run. So they count neither for purity nor for the `deps/` diagram checks. Example: when `src/types/auth.d.ts` has `import { Role } from "pg"`, `src/types` stays pure.
+
 ### Resolving TypeScript
 
 A specifier is tried in this order.
@@ -189,7 +191,7 @@ TypeScript test declarations are read as follows.
   - In a file that only runs `await import('./m')` without using the value, every test counts as calling that module (the unit), because the module does its work when loaded
   - A value set up once counts once, however often the test uses it
 - What a Python test receives is read too: the class a pytest fixture (a function decorated with `@pytest.fixture`) named like a test parameter returns or yields, and the class a test class's `setUp`, `setup_method` and the like store on `self` (`self.store = Store()`), including the methods of a base class that run (see "Python's inherited setup" under hazards). A lambda held by a name at the top of the file (`twice = lambda n: double(n)`) is followed as a helper. Reassigning the name inside the test drops the type the fixture gave. Fixtures of other files (`conftest.py`) and lambdas held in a dict or the like are not read
-- A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()`. Python's and Rust's clients are not read yet
+- A test that calls the entry of an HTTP test client drives the application from outside (`Test.Drives`). The client is recognised by the file importing it. Java and Kotlin: REST Assured's `given()` (`io.restassured`), MockMvc's `perform()` (`org.springframework.test.web.servlet`), WebTestClient's `exchange()` (`org.springframework.test.web.reactive.server`). TypeScript: supertest's `request()`, Hono's `app.request(…)` and `app.fetch(new Request(…))` (recognised by the shape of the call), and a Playwright test that receives the `page`, `context` or `request` fixture (`test('…', async ({ page }) => …)`), which drives the application from outside through a browser or HTTP; receiving one is enough. Playwright is recognised by the file importing `@playwright/test`, directly or through a test support file that imports it (such as `e2e/fixtures.ts` holding `base.extend(…)`). Python's and Rust's clients are not read yet
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
 
@@ -279,6 +281,9 @@ The zero value comes from the declared result type.
 - Functions whose result type is not in the table, or is not written (TypeScript functions without one, Python functions without an annotation, Kotlin expression bodies), get no mutant of this kind
 - What is replaced is the value of a `return`. In Rust, the last expression of a function's body (one without `;`) is replaced too, since Rust usually returns a value without writing `return`
 - As in Go, a statement that returns a boolean literal (negating a boolean breaks it) or already returns the zero value gets none
+  - Whether it already returns the zero value is decided by the same rule as for constants below. For example, `return 0.0` and `return 0x0` in a function returning `number`, and `return ''` in one returning `string`, are not broken
+  - An integer zero with `-` in front (`return -0`) counts as zero too. TypeScript still breaks it: every number is a float there, so `-0` is a value apart from `0`, and a test can tell them apart with `Object.is`
+  - A float `-0.0` is broken in every language, since a test can tell it from `0.0`
 - Nor does a statement that returns a constant whose value is the zero value. For example, with `export const OK = 0`, `return OK` in a function returning `number` is not broken
 
 Constants are read from syntax, only from declarations in the same file. Of the declarations below, those whose value is a literal are read.

@@ -50,9 +50,15 @@ type File struct {
 
 // ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
 // unit's last path element, then the name. example.com/app/store.Append is store.Append, and
-// web/src/lib.getSession is lib.getSession. The ID itself stays whole wherever findings are matched.
+// web/src/lib.getSession is lib.getSession. A unit at the root of a TypeScript project is ".", so
+// its IDs start with "..": the name alone is shown, ..devServer as devServer. The ID itself stays
+// whole wherever findings are matched.
 func ShortName(id string) string {
-	return id[strings.LastIndex(id, "/")+1:]
+	short := id[strings.LastIndex(id, "/")+1:]
+	if name, root := strings.CutPrefix(short, ".."); root && name != "" {
+		return name
+	}
+	return short
 }
 
 // CountLines returns the number of lines of a file's content, as an editor shows them: the newline
@@ -163,6 +169,9 @@ type Hazard struct {
 	Path     string
 	Line     int
 	Evidence string
+	// FileWide is true when the hazard is outside the tests and applies to every test of the file:
+	// a module mocked at the top of the file, or an import of a mocking library.
+	FileWide bool
 }
 
 // Skip describes whether a test is skipped, always or only in some cases. Reason is empty when no
@@ -194,7 +203,7 @@ type Test struct {
 	// passed as a value. Names in type positions are not values.
 	Reads int
 	// Drives is true when the test drives the application from outside through an HTTP test client
-	// (REST Assured's given(), MockMvc's perform(), supertest's request()). Such a test exercises the
+	// (REST Assured's given(), MockMvc's perform(), supertest's request(), Playwright's page fixture). Such a test exercises the
 	// product without calling one of its functions, so what it guards cannot be named.
 	Drives bool
 	// Asserts counts the calls that check something: assertions, and calls that fail the test.

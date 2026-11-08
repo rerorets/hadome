@@ -60,6 +60,22 @@ src/ui -> src/lib internal=true io=false global=false`)
 
 // viewpoint: behaviour
 // target: the TypeScript reader
+// A declaration file is never run, so nothing it imports is a dependency, a value import of a
+// database client included. The same import in an ordinary file is one.
+func TestDeclarationFileImportsAreNoDependency(t *testing.T) {
+	a := analyze(t, "typescript", tree(
+		"src/types/auth.d.ts", "import { Role } from 'pg';\nimport { b } from '../lib/b';\ndeclare module 'auth' { interface Session { role: Role } }\n",
+		"src/types/env.d.mts", "import { Pool } from 'pg';\ndeclare global { var pool: Pool }\n",
+		"src/ui/theme.d.css.ts", "import { Pool } from 'pg';\nexport declare const p: Pool;\n",
+		"src/lib/b.ts", "export const b = 1;\n",
+		"src/lib/db.ts", "import { Pool } from 'pg';\nexport const p = new Pool();\n",
+	))
+	expect(t, importLines(a), `
+src/lib -> pg internal=false io=true global=false`)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader
 // Code that calls fetch, opens a WebSocket or an XMLHttpRequest, beacons, or reads localStorage,
 // sessionStorage or indexedDB does input or output without importing anything. Each API counts once
 // per file, with or without window. or globalThis. in front; a method of the same name on another
@@ -156,4 +172,38 @@ func TestPersistenceAndClientLibrariesPerformInputOrOutput(t *testing.T) {
 			t.Errorf("python %s: want one import that performs input or output, got %+v", mod, a.Imports)
 		}
 	}
+}
+
+// viewpoint: behaviour
+// target: the TypeScript, Python and Java readers
+// A mock outside the tests applies to every test of the file and is marked file-wide: a module
+// mocked at the top of a TypeScript file, an import of a mocking library. A mock inside a test is
+// that test's own.
+func TestFileLevelMocksAreFileWide(t *testing.T) {
+	wide := func(a *facts.Analysis) string {
+		var out []string
+		for _, ts := range a.Tests {
+			for _, h := range ts.Hazards {
+				if h.Category == facts.HazardMock {
+					out = append(out, ts.Name+" "+h.Evidence+" wide="+tf(h.FileWide))
+				}
+			}
+		}
+		slices.Sort(out)
+		return strings.Join(out, "\n")
+	}
+	expect(t, wide(analyze(t, "typescript", tree(
+		"src/calc.ts", "export const add = (a: number, b: number) => a + b\n",
+		"src/calc.test.ts", "import { add } from './calc'\nvi.mock('fancy-lib')\n\nit('adds', () => { vi.spyOn(Math, 'max'); expect(add(1, 2)).toBe(3) })\n",
+	))), `
+adds vi.mock('fancy-lib') wide=true
+adds vi.spyOn(Math, 'max') wide=false`)
+	expect(t, wide(analyze(t, "python", tree(
+		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"tests/test_calc.py", "from unittest import mock\nfrom app.calc import add\n\n\ndef test_adds():\n    assert add(1, 2) == 3\n",
+	))), "test_adds from unittest import mock wide=true")
+	expect(t, wide(analyze(t, "java", tree(
+		"src/main/java/acme/Calc.java", "package acme;\n\npublic class Calc { public int add(int a, int b) { return a + b; } }\n",
+		"src/test/java/acme/CalcTest.java", "package acme;\n\nimport org.junit.jupiter.api.Test;\nimport org.mockito.Mockito;\n\nclass CalcTest {\n    @Test void adds() { new Calc().add(1, 2); }\n}\n",
+	))), "CalcTest.adds import org.mockito.Mockito; wide=true")
 }
