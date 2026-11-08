@@ -36,6 +36,11 @@ type jvmFile struct {
 	assertPrefixes []string
 	// kt is the Kotlin reader, which finds the test classes a Kotlin test class extends; nil in Java.
 	kt *kotlin
+	// topHelpers are the top-level functions of Kotlin test sources the file can call by their bare
+	// names: those of its own package and those it imports.
+	topHelpers map[string]jvmDecl
+	// others are the files of topHelpers, read as their own files bind names.
+	others map[*file]*jvmFile
 }
 
 // bindClasses binds the classes of the file's own package and of what it imports.
@@ -266,13 +271,43 @@ func (w *jvmWalk) unqualified(name string, follow func(*sitter.Node)) string {
 		return ""
 	}
 	w.walking[name] = true
-	if body, ok := w.jf.helpers[name]; ok {
-		follow(body)
-	} else if h, ok := w.inherited[name]; ok {
+	if h := w.helper(name); h.n != nil {
 		w.within(h.jf, func() { follow(h.n) })
 	}
 	delete(w.walking, name)
 	return ""
+}
+
+// helper finds the body of a helper a test calls by a bare name: a method of the test's class, one
+// of a class it extends, or a top-level function of the test sources. Kotlin resolves a bare name
+// to a member before a top-level function.
+func (w *jvmWalk) helper(name string) jvmCode {
+	if body, ok := w.jf.helpers[name]; ok {
+		return jvmCode{w.jf, body}
+	}
+	if h, ok := w.inherited[name]; ok {
+		return h
+	}
+	if d, ok := w.jf.topHelpers[name]; ok {
+		return jvmCode{w.jf.fileOf(d.f), ktBody(d.n)}
+	}
+	return jvmCode{}
+}
+
+// fileOf is the reading of a Kotlin test file whose top-level function a test of this file calls.
+func (jf *jvmFile) fileOf(f *file) *jvmFile {
+	if f == jf.f {
+		return jf
+	}
+	if jf.others == nil {
+		jf.others = map[*file]*jvmFile{}
+	}
+	if o, ok := jf.others[f]; ok {
+		return o
+	}
+	o := jf.kt.testFile(f, jf.t)
+	jf.others[f] = o
+	return o
 }
 
 func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {

@@ -129,10 +129,7 @@ func (w *jvmWalk) validation(obj, name string) bool {
 	if !called || strings.Contains(head, ".") {
 		return false
 	}
-	code := jvmCode{w.jf, w.jf.helpers[head]}
-	if code.n == nil {
-		code = w.inherited[head]
-	}
+	code := w.helper(head)
 	if code.n == nil {
 		return false
 	}

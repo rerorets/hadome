@@ -41,7 +41,30 @@ func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
 		jf.names[v] = f.unit + "." + v
 	}
 	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
+	jf.bindTopHelpers()
 	return jf
+}
+
+// bindTopHelpers binds the top-level functions of test code that the file's tests can call by bare
+// names: those of its package, and those it imports, which then name no target of the product.
+func (jf *jvmFile) bindTopHelpers() {
+	jf.topHelpers = map[string]jvmDecl{}
+	for name, d := range jf.kt.testFunctions[jf.f.unit] {
+		jf.topHelpers[name] = d
+	}
+	ktImports(jf.f, func(name string, wildcard bool, _ *sitter.Node) {
+		if wildcard {
+			for fn, d := range jf.kt.testFunctions[name] {
+				jf.topHelpers[fn] = d
+			}
+			return
+		}
+		fn := lastElem(name)
+		if d, ok := jf.kt.testFunctions[strings.TrimSuffix(name, "."+fn)][fn]; ok {
+			jf.topHelpers[fn] = d
+			delete(jf.names, fn)
+		}
+	})
 }
 
 // ktAnnotations returns a declaration's annotations by name.
