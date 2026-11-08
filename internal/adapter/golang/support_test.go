@@ -426,7 +426,7 @@ func TestAll(t *testing.T) { storetest.AppendAll(t, nil) }
 // path. One that imports no such package is product code.
 func TestGoTestSupportPackagesAreKnownByTheirImports(t *testing.T) {
 	tree := fstest.MapFS{
-		"go.mod": {Data: []byte("module example.com/app\n")},
+		"go.mod":         {Data: []byte("module example.com/app\n")},
 		"store/store.go": {Data: []byte("// Package store keeps rows.\npackage store\n\n// Open opens.\nfunc Open() int { return 1 }\n")},
 		"fakes/rowstest/rows.go": {Data: []byte(`package rowstest
 
