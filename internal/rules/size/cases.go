@@ -48,7 +48,13 @@ func fileCases() []engine.Case {
 	return []engine.Case{
 		{Name: "a file that grows past the limit fails", Base: module(map[string]string{"store/a.go": lines(390)}),
 			Head: module(map[string]string{"store/a.go": lines(410)}), WantFail: []string{"size/file-lines"}},
+		{Name: "an unchanged file over the limit passes", Base: module(map[string]string{"store/a.go": lines(410)}),
+			Head: module(map[string]string{"store/a.go": lines(410)})},
 		{Name: "a generated file passes", Base: module(src()), Head: module(generated)},
+		// The default limit is 400, so the finding is at line 401 and the marker there covers it.
+		{Name: "a marker on the first line over the limit suppresses the file's finding", Base: module(src()),
+			Head:       module(map[string]string{"store/a.go": lines(400) + "// gate:allow size/file-lines reason: one table of cases\n" + strings.Repeat("\n", 9)}),
+			WantReview: []string{"exception:size/file-lines"}},
 		{Name: "a lowered limit reports only what the change adds",
 			Base: module(map[string]string{"store/a.go": lines(350)}),
 			Head: module(map[string]string{"store/a.go": lines(350), ".hadome.yml": "schema: 1\nrules:\n  size:\n    file-lines: 300\n"})},

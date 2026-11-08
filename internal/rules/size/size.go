@@ -10,11 +10,12 @@ import (
 
 // measured is one thing a rule measures: where it is, what it is called and how big it is. A
 // function nested in the symbol name has nested set: it is reported under that symbol, at its own
-// line, and matched against base apart from the symbol's own finding.
+// line, and matched against base apart from the symbol's own finding. A whole file has whole set:
+// it is reported at its first line over the limit, which depends on the limit and not on the file.
 type measured struct {
-	file, name string
-	line, size int
-	nested     bool
+	file, name    string
+	line, size    int
+	nested, whole bool
 }
 
 // limitRule reports everything over one limit. Each finding carries its size as the Value, so a
@@ -49,6 +50,9 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 			Why:     r.About().Why,
 			Fix:     r.About().Fix,
 		}
+		if m.whole {
+			f.Line = limit + 1
+		}
 		if m.nested {
 			f.Anchor += "\x00nested"
 			f.Message = engine.T("the function in %s at line %d: %s %d, limit %d", display(m), m.line, engine.T(r.what), m.size, limit)
@@ -69,7 +73,7 @@ func files(a *facts.Analysis) []measured {
 	var out []measured
 	for _, f := range a.Files {
 		if f.Role == facts.RoleSource {
-			out = append(out, measured{file: f.Path, size: f.Lines})
+			out = append(out, measured{file: f.Path, size: f.Lines, whole: true})
 		}
 	}
 	return out

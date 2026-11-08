@@ -180,10 +180,10 @@ func TestListIntroductionsAreInTheChosenLanguage(t *testing.T) {
 
 // viewpoint: external contract
 // target: engine.WriteText and engine.WriteJSON
-// A finding about a whole file (file-lines, purity-lost) has no line. The text output names only
-// the file, never "file:0"; the JSON keeps line 0, which CI reads as the whole file.
+// A finding with no line to point at (a file hadome could not read) has line 0. The text output
+// names only the file, never "file:0"; the JSON keeps line 0, which CI reads as the whole file.
 func TestAWholeFileFindingShowsNoLine(t *testing.T) {
-	r := engine.Report{Regressions: []engine.Finding{{Rule: "size/file-lines", File: "store/store.go",
+	r := engine.Report{Regressions: []engine.Finding{{Rule: "unknown/unread", File: "store/store.go",
 		Message: engine.T("too long"), Why: engine.T("why"), Fix: engine.T("fix")}}}
 	var text bytes.Buffer
 	engine.WriteText(&text, r, "en")
