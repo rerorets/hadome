@@ -276,7 +276,7 @@ time.Sleep(50 * time.Millisecond)
 
 ## ミューテーションを試す
 
-`.hadome.yml`に`mutation`を書くと、`hadome mutate`で、変更が触れた関数を1か所ずつ壊し、テストが気づくかを試せます。どのテストも気づかなかった壊し方は、`mutation/survived`の後退として報告します。
+`.hadome.yml`に`mutation`を書くと、`hadome mutate`で、変更が触れた関数を1か所ずつ壊し、テストが気づくかを試せます。どのテストも気づかなかった壊し方は、`mutation/survived`の後退として報告します。テストを流すビルドがコンパイルしない Go のファイル（`//go:build !cgo` など）の壊し方は、テストを流さず、生き残りとも数えずに、人の確認に回します。
 
 ```yaml
 mutation:

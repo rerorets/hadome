@@ -148,3 +148,71 @@ func TestSurvivorsAreComparedLikeFindings(t *testing.T) {
 		}
 	})
 }
+
+const double = `package calc
+
+// Double returns twice n.
+func Double(n int) int {
+	return n * 2
+}
+`
+
+const doubleTest = `package calc
+
+import "testing"
+
+func TestDouble(t *testing.T) {
+	if Double(3) != 6 {
+		t.Fatal("wrong double")
+	}
+}
+`
+
+// viewpoint: behaviour
+// target: mutation.Mutate.Run
+// Integration: a mutant in a file the build that runs the tests does not compile is never run, so
+// it is neither caught nor a survivor. Even in a new function it is not a regression; the file goes to a person's review,
+// with a progress line that says why. A file the build compiles because of -tags in the test
+// command is tried as before.
+func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Fatal("these cases run go test, and go is not on PATH")
+	}
+	touched := strings.Replace(double, "return n * 2", "return n * 2 // twice", 1)
+	t.Run("a file the build leaves out", func(t *testing.T) {
+		base, head := version(calc, strong), version(calc, strong)
+		head["calc/double.go"] = "//go:build ignore\n\n" + double // new, so a survivor would be a regression
+		var progress strings.Builder
+		an := adapter.New()
+		m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress}
+		r, err := m.Run(source.Dirs{BaseDir: dir(t, base), HeadDir: dir(t, head)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Regressions) != 0 || r.ExitCode() != engine.ExitReview {
+			t.Fatalf("want no regression and a review, got exit %d: %+v", r.ExitCode(), r)
+		}
+		if len(r.Reviews) != 1 || r.Reviews[0].Rule != mutation.RuleID || r.Reviews[0].File != "calc/double.go" {
+			t.Fatalf("want one review of calc/double.go, got %+v", r.Reviews)
+		}
+		if !strings.Contains(progress.String(), "calc.Double, swap arithmetic: not built\n") {
+			t.Errorf("want a progress line saying the mutant was not built, got\n%s", progress.String())
+		}
+	})
+	t.Run("a file built by -tags in the test command", func(t *testing.T) {
+		tagged := "schema: 1\nmutation:\n  test: [go, test, -tags, special, ./...]\n  timeout: 60s\n"
+		base, head := version(calc, strong), version(calc, strong)
+		for i, v := range []map[string]string{base, head} {
+			v[".hadome.yml"] = tagged
+			v["calc/double.go"] = "//go:build special\n\n" + []string{double, touched}[i]
+			v["calc/double_test.go"] = "//go:build special\n\n" + doubleTest
+		}
+		r, err := run(t, base, head)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.ExitCode() != engine.ExitOK {
+			t.Fatalf("the tests catch every break of Double, so want exit 0, got %d: %+v", r.ExitCode(), r)
+		}
+	})
+}
