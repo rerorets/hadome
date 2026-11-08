@@ -29,6 +29,11 @@ type tsFile struct {
 	// loaders are the functions of the file that load one module of the repository with import():
 	// function name -> unit. A test that takes names from what they return calls that module.
 	loaders map[string]string
+	// loaderFns are the loaders that return one function of the module they load:
+	// function name -> target. const fn = await load() then names that function.
+	loaderFns map[string]string
+	// external are the local names the file imports from outside the repository.
+	external map[string]bool
 	// outer types the variables declared outside the tests (in a describe block, set in beforeEach):
 	// name -> class, by the class they are built with or declared as. A name given two classes is "".
 	outer map[string]string
@@ -120,6 +125,12 @@ type tsWalk struct {
 	setup int
 	// fake is true after the test turned on fake timers: Date and setTimeout then read the fake clock.
 	fake bool
+	// plain are the locals that hold a value built in the test from literals, the language's
+	// built-ins or external libraries: their methods are not the repository's.
+	plain map[string]bool
+	// rows are the parameters of a describe.each or it.each callback bound to functions of the
+	// repository in its table: name -> the targets, one per row that holds one.
+	rows map[string][]string
 }
 
 func (w *tsWalk) walk(body *sitter.Node) {
@@ -166,9 +177,15 @@ func (w *tsWalk) declare(n *sitter.Node) {
 	f := w.tf.f
 	name := f.field(n, "name")
 	w.locals[name] = true
-	delete(w.vars, name)
-	delete(w.loaded, name)
-	delete(w.modules, name)
+	plain := w.plainValue(n.ChildByFieldName("value"))
+	for _, local := range append(tsPatternNames(f, n.ChildByFieldName("name")), name) {
+		w.locals[local] = true
+		delete(w.vars, local)
+		delete(w.loaded, local)
+		delete(w.modules, local)
+		delete(w.rows, local)
+		w.plain[local] = plain
+	}
 	w.bindLoaded(n)
 	if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
 		if target, ok := w.tf.names[f.field(v, "constructor")]; ok {
@@ -222,19 +239,23 @@ func (w *tsWalk) call(n *sitter.Node) {
 	}
 	switch fn.Kind() {
 	case "identifier":
-		if target, ok := w.loaded[callee]; ok {
+		if targets, ok := w.rows[callee]; ok {
+			for _, target := range targets {
+				w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
+			}
+		} else if target, ok := w.loaded[callee]; ok {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		} else if target, ok := w.tf.names[callee]; ok {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		} else if v, ok := w.tf.via[callee]; ok {
-			w.followSupport(v[0], v[1])
+			w.followSupport(v[0], v[1], args)
 		} else if w.tf.unresolved[callee] {
 			w.t.test.Unresolved++
 		} else {
-			w.follow(callee)
+			w.follow(callee, args)
 		}
 	case "member_expression":
-		if target := w.memberTarget(f.field(fn, "object"), f.field(fn, "property")); target != "" {
+		if target := w.memberTarget(f.field(fn, "object"), f.field(fn, "property"), args); target != "" {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		}
 	}
@@ -265,13 +286,14 @@ func (w *tsWalk) tool(n, fn *sitter.Node, callee string, args []*sitter.Node) bo
 
 // memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
 // it follows a function an object of the file holds, and a method of a local value of unknown type
-// counts as unresolved.
-func (w *tsWalk) memberTarget(obj, prop string) string {
+// counts as unresolved, unless the test built it itself (see plain).
+func (w *tsWalk) memberTarget(obj, prop string, args []*sitter.Node) string {
 	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
 	for _, files := range []map[string]string{w.tf.spaces, w.modules} {
 		if p, ok := files[obj]; ok {
 			if sf := w.tf.r.files[p]; sf != nil && sf.support {
-				w.followSupport(w.tf.r.declaring(p, prop))
+				file, decl := w.tf.r.declaring(p, prop)
+				w.followSupport(file, decl, args)
 				return ""
 			}
 			return w.tf.r.target(p, prop)
@@ -282,10 +304,10 @@ func (w *tsWalk) memberTarget(obj, prop string) string {
 			return owner + "." + prop
 		}
 	}
-	if w.follow(obj + "." + prop) { // a function an object of the file holds
+	if w.follow(obj+"."+prop, args) { // a function an object of the file holds
 		return ""
 	}
-	if w.locals[obj] || w.tf.unresolved[obj] {
+	if (w.locals[obj] && !w.plain[obj]) || w.tf.unresolved[obj] {
 		w.t.test.Unresolved++
 	}
 	return ""
@@ -325,24 +347,33 @@ func (w *tsWalk) element(n *sitter.Node) {
 	switch name.Kind() {
 	case "identifier":
 		target = w.tf.names[f.text(name)]
-		if v, ok := w.tf.via[f.text(name)]; ok {
-			w.followSupport(v[0], v[1])
+		if targets, ok := w.rows[f.text(name)]; ok {
+			for _, t := range targets {
+				w.t.call(t, nil)
+			}
+		} else if v, ok := w.tf.via[f.text(name)]; ok {
+			w.followSupport(v[0], v[1], nil)
 		} else if w.tf.unresolved[f.text(name)] {
 			w.t.test.Unresolved++
 		} else if target == "" {
-			w.follow(f.text(name)) // a component the file declares: function Harness() { return <Form /> }
+			w.follow(f.text(name), nil) // a component the file declares: function Harness() { return <Form /> }
 		}
 	case "member_expression":
-		target = w.memberTarget(f.field(name, "object"), f.field(name, "property"))
+		target = w.memberTarget(f.field(name, "object"), f.field(name, "property"), nil)
 	}
 	if target != "" {
 		w.t.call(target, nil)
 	}
 }
 
-// follow walks a helper of the file the test calls, once per chain of calls, and reports whether
-// there was one.
-func (w *tsWalk) follow(name string) bool {
+// follow walks a helper of the file the test calls with args, once per chain of calls, and reports
+// whether there was one.
+func (w *tsWalk) follow(name string, args []*sitter.Node) bool {
+	return w.followFrom(w, name, args)
+}
+
+// followFrom walks a helper called from the walker from, which binds its arguments (see bindArgs).
+func (w *tsWalk) followFrom(from *tsWalk, name string, args []*sitter.Node) bool {
 	body, ok := w.tf.helpers[name]
 	if !ok {
 		return false
@@ -351,8 +382,10 @@ func (w *tsWalk) follow(name string) bool {
 		w.walking[key] = true
 		locals := maps.Clone(w.locals)
 		w.params(w.tf.params[name])
+		restore := w.bindArgs(from, w.tf.params[name], args)
 		w.defaults(w.tf.params[name])
 		w.walk(body)
+		restore()
 		w.locals = locals
 		delete(w.walking, key)
 	}

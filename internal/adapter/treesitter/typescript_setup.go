@@ -74,7 +74,61 @@ func (tf *tsFile) loaderOf(name string, body *sitter.Node) {
 		for u := range units {
 			tf.loaders[name] = u
 		}
+		if fn := tf.returnedFunction(body); fn != "" {
+			tf.loaderFns[name] = fn
+		}
 	}
+}
+
+// returnedFunction is the function of a loaded module a loader's body returns, or "" unless every
+// return names the same one: return m.append after const m = await import('./store'), return
+// append after const { append } = await import('./store'), or an arrow returning
+// (await import('./store')).append.
+func (tf *tsFile) returnedFunction(body *sitter.Node) string {
+	modules, loaded := map[string]string{}, map[string]string{}
+	var returned []*sitter.Node
+	if body.Kind() != "statement_block" {
+		returned = append(returned, body)
+	}
+	walk(body, func(x *sitter.Node) bool {
+		switch x.Kind() {
+		case "variable_declarator":
+			tf.bindLoad(x.ChildByFieldName("name"), x.ChildByFieldName("value"), modules, loaded)
+		case "return_statement":
+			returned = append(returned, x.NamedChild(0))
+		}
+		return x == body || !tsFunctions[x.Kind()]
+	})
+	target := ""
+	for _, e := range returned {
+		t := tf.loadedFunction(tsUnwrap(e), modules, loaded)
+		if t == "" || (target != "" && t != target) {
+			return ""
+		}
+		target = t
+	}
+	return target
+}
+
+// loadedFunction is the function of a loaded module e names: a name taken from it, a member of a
+// module object, or a member of import() itself.
+func (tf *tsFile) loadedFunction(e *sitter.Node, modules, loaded map[string]string) string {
+	if e == nil {
+		return ""
+	}
+	switch e.Kind() {
+	case "identifier":
+		return loaded[tf.f.text(e)]
+	case "member_expression":
+		obj, prop := tsUnwrap(e.ChildByFieldName("object")), tf.f.field(e, "property")
+		if unit := tf.dynamicImport(obj); unit != "" {
+			return tf.r.target(unit, prop)
+		}
+		if unit, ok := modules[tf.f.text(obj)]; ok && obj.Kind() == "identifier" {
+			return tf.r.target(unit, prop)
+		}
+	}
+	return ""
 }
 
 // bindLoaded records the names a declaration takes from a module loaded with import() or require(),
@@ -98,6 +152,12 @@ func (tf *tsFile) loadedUnit(v *sitter.Node) string {
 // the module object, or the names an object pattern takes from it. It reports whether it did.
 func (tf *tsFile) bindLoad(pattern, value *sitter.Node, modules, loaded map[string]string) bool {
 	f := tf.f
+	if v := tsUnwrap(value); v != nil && v.Kind() == "call_expression" && pattern != nil && pattern.Kind() == "identifier" {
+		if fn := tf.loaderFns[f.field(v, "function")]; fn != "" {
+			loaded[f.text(pattern)] = fn // const fn = await load(), where load returns one function of a module
+			return true
+		}
+	}
 	unit := tf.loadedUnit(value)
 	if unit == "" || pattern == nil {
 		return false
