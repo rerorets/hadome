@@ -174,9 +174,11 @@ func (brokenReference) About() engine.About {
 // a space, a bracket, a quote, or a Japanese separator such as ・ or （.
 var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'・、（「『【：　])((?:\\.{1,2}/)*[A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.md)(?:#[A-Za-z0-9_-]*)?")
 
-// Find reports references to Markdown files that do not exist in the version.
+// Find reports references to Markdown files that do not exist in the version, unless the version's
+// .gitignore files ignore the path.
 func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 	var names map[string]bool // the version's file names, read at the first bare name that is not at the root
+	var ignore *gitignore     // the version's .gitignore files, read at the first missing target
 	var out []engine.Finding
 	for _, l := range lines(in.Facts) {
 		for _, m := range reference.FindAllStringSubmatch(l.text, -1) {
@@ -198,6 +200,12 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 				if names[ref] {
 					continue
 				}
+			}
+			if ignore == nil {
+				ignore = newGitignore(in.Version.FS)
+			}
+			if ignore.ignored(target) {
+				continue
 			}
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: l.path, Line: l.n, Anchor: ref,
