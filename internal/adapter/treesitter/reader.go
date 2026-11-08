@@ -111,6 +111,9 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 			a.Symbols = append(a.Symbols, l.r.symbols(f)...)
 		}
 	}
+	if tr, ok := l.r.(tracer); ok {
+		tr.trace(files, t, a)
+	}
 	for _, f := range files {
 		a.Tests = append(a.Tests, l.r.tests(f, t)...)
 	}

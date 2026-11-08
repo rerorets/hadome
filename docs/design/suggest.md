@@ -20,7 +20,7 @@ A candidate is found from the symbols of non-test, non-generated code. Only expo
 
 | Type | A symbol is a candidate when |
 |---|---|
-| `idempotent` | Its name begins with `Create`, `Insert`, `Submit` or `Enqueue`. Or its name begins with `Add` or `Register`, and the symbol's unit has an import that does input or output (`Import.IO`) |
+| `idempotent` | Its name begins with `Create`, `Add`, `Insert`, `Register`, `Submit` or `Enqueue`, it reaches input or output, and it is reached from an entry point that can be retried ("Conditions of `idempotent`" below) |
 | `erasable` | Its name begins with `Delete`, `Remove`, `Erase` or `Purge` |
 | `isolated` | Its name begins with `Get`, `List`, `Find`, `Search`, `Read`, `Load`, `Fetch` or `Query`, and it has a scope parameter (a parameter whose name says user, tenant, owner, account, org, team, workspace, customer or project; see [rules-tests.md](rules-tests.md)) |
 | `round-trip` | It is the first of a pair in the same unit and receiver: `Export`/`Import`, `Encode`/`Decode`, `Marshal`/`Unmarshal`, `Serialize`/`Deserialize` or `Save`/`Load`, followed by the same rest of the name (`ExportRows` and `ImportRows`) |
@@ -36,11 +36,49 @@ A candidate is found from the symbols of non-test, non-generated code. Only expo
   - In camelCase and snake_case the word is compared with its first letter in lower case. For example, both `deleteRow` and `delete_row` begin with `Delete`
   - `Address` and `address` do not begin with `Add`
   - The pairs of `round-trip` are looked for in the same spelling. For example, `exportRows` and `importRows`, `export_rows` and `import_rows`
-- **Why `Add` and `Register` have a condition**: these two words also name many functions that only return a value, such as `AddDays` or `Add(a, b)`. Idempotency matters only for functions that change state. Among the facts, only an import that does input or output says that code changes state, so that is the condition
-  - The other four words (`Create`, `Insert`, `Submit`, `Enqueue`) almost always change state, so they have no condition
 - **UI components**: a function in a `.tsx` or `.jsx` file whose name starts with an upper-case letter is not a candidate. In React, such a function is a component. A component is a part of a screen, not an operation. For example, `DeleteRowDialog`
 
 A symbol already named by a configured invariant of the same type is not a candidate. The target of a candidate is written the way configuration writes it: the unit's last path element, then the name (`api.CreatePost`, `store.Store.Delete`). When two symbols would have the same name in this form, each is written with the shortest path that tells them apart ([rules-tests.md](rules-tests.md)), such as `shops/[id].load` and `orders/[id].load`.
+
+### Conditions of `idempotent`
+
+Deciding by the name alone makes functions that only return a value candidates too. For example, `AddDays`, `Add(a, b)`, a `createAuthCookie` that only builds a value, and a `Register` that only registers routes. Idempotency matters only for functions that a retried request can make change state twice. So a symbol is a candidate only when all three of these hold.
+
+| Condition | What it means |
+|---|---|
+| **(a) Name** | It begins with `Create`, `Add`, `Insert`, `Register`, `Submit` or `Enqueue` |
+| **(b) Reaches input or output** | The function's body uses something that does input or output. Or the functions its body calls, as far as hadome can follow the calls (and the functions they call), use one |
+| **(c) Reached from an entry point** | It is reached from an entry point that can be retried, through calls hadome can follow. The entry point itself counts |
+
+- Example: a `CreateOrder` that a handler calls and that writes to the database is a candidate
+- Example: a `createAuthCookie` that only builds a value fails (b), so it is not a candidate
+- Example: a `Register` that only registers routes fails (b) too, so it is not a candidate
+- **A repository with no entry point**: in a repository with no recognisable entry point at all, such as a library, (a) and (b) alone decide
+
+**What does input or output**: the same knowledge `tests/purity-lost` uses ([adapters.md](adapters.md)'s io table, and the configuration's `io`).
+
+| Language | What reaches input or output when the body uses it |
+|---|---|
+| Go | A function of a package in the io table (`sql.Open`, `http.Get`). A method of a value whose type is from a package in the io table (`s.db.ExecContext(…)` when the field is a `*sql.DB`). A variable of another package of the repository, when that package reaches input or output |
+| TypeScript | A name imported from a package in the io table. A global input or output API (`fetch` and the like). A value that is not a function (such as `db`), imported from a module of the repository whose unit reaches input or output |
+
+- A unit reaches input or output when it has an import that does input or output, or when imports lead from it to a unit of the repository that has one
+- **Calls hadome can follow**: in Go, the calls whose callee is identified the way a test's call targets are (functions, and methods of values of declared types). In TypeScript, calls of imported names and of names declared at the top of the file. Only the name is looked at, even when a local variable hides it
+
+**Entry points that can be retried**: the ones recognisable from the syntax alone.
+
+| Language | Entry points |
+|---|---|
+| Go | Functions and methods whose parameters are `(http.ResponseWriter, *http.Request)` (the shape of `ServeHTTP` and `http.HandlerFunc`). Functions handed to `Handle`, `HandleFunc`, `Get`, `Post`, `Put`, `Patch`, `Delete` and the like together with a string path (`mux.HandleFunc("/orders", h.CreateOrder)`), and function literals written there |
+| TypeScript | `GET`, `POST` and the like exported by SvelteKit's `+server.*`, and `load` and `actions` of `+page.server.*` and `+layout.server.*`. `GET`, `POST` and the like exported by a Next.js `route.*` under `app/`, and the default export under `pages/api/`. The functions exported by a file that starts with `'use server'`. Functions handed to `get`, `post`, `put`, `patch`, `delete`, `all`, `use` or `on` together with a string path in Express, Hono and the like (`app.post('/orders', createOrder)`), and functions written there |
+
+- Entry code that is not a symbol, such as the `actions` object or a function written next to a path, counts the calls in it as reached from an entry point
+
+**Deliberately left out**:
+
+- Entry points and per-function calls of Python, Java, Kotlin and Rust. In these languages (b) is decided by the unit: it holds when the symbol's unit reaches input or output. (c) is not looked at. hadome does not read per-function calls of these languages as facts yet
+- Queue consumers and scheduled jobs in Go and TypeScript. They have no fixed shape to recognise in the syntax
+- Where calls of interface values, and of functions received as parameters, go. The syntax does not decide it
 
 ### Where candidates appear
 

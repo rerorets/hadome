@@ -6,7 +6,6 @@ package suggest
 
 import (
 	"path"
-	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -16,21 +15,22 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// byPrefix maps an invariant type to the name prefixes that suggest it, and why. A prefix listed in
-// io suggests it only in a unit that does input or output: the word also names many functions that
-// only compute a value (AddDays, Add(a, b)).
+// byPrefix maps an invariant type to the name prefixes that suggest it, and why. A type with
+// retried suggests a symbol only when it reaches input or output and an entry point that can be
+// retried reaches it: the words also name many functions that only compute a value (AddDays,
+// Add(a, b), a createAuthCookie that builds a value).
 var byPrefix = []struct {
 	typ, why string
 	prefixes []string
-	io       []string
+	retried  bool
 	scoped   bool
 }{
 	{"idempotent", "creates things; a retried request must not create them twice",
-		[]string{"Create", "Add", "Insert", "Register", "Submit", "Enqueue"}, []string{"Add", "Register"}, false},
+		[]string{"Create", "Add", "Insert", "Register", "Submit", "Enqueue"}, true, false},
 	{"erasable", "deletes things; what is deleted must remain nowhere",
-		[]string{"Delete", "Remove", "Erase", "Purge"}, nil, false},
+		[]string{"Delete", "Remove", "Erase", "Purge"}, false, false},
 	{"isolated", "reads data for a user or tenant; nobody else's data may come back",
-		[]string{"Get", "List", "Find", "Search", "Read", "Load", "Fetch", "Query"}, nil, true},
+		[]string{"Get", "List", "Find", "Search", "Read", "Load", "Fetch", "Query"}, false, true},
 }
 
 // pairs are the operations whose round trip must give back the original.
@@ -40,7 +40,7 @@ var pairs = [][2]string{{"Export", "Import"}, {"Encode", "Decode"}, {"Marshal", 
 // Candidates returns the candidates of one version that its configuration does not already name.
 func Candidates(in engine.Input) []engine.Candidate {
 	syms := candidateSymbols(in.Facts)
-	io := ioFiles(in.Facts)
+	reach := newReach(in.Facts)
 	names := in.Facts.Names()
 	byID := map[string]facts.Symbol{}
 	for _, s := range syms {
@@ -61,7 +61,7 @@ func Candidates(in engine.Input) []engine.Candidate {
 		prefix, name := split(s.ID)
 		for _, p := range byPrefix {
 			for _, w := range p.prefixes {
-				if _, _, ok := begins(name, w); ok && (!p.scoped || s.Scoped) && (!slices.Contains(p.io, w) || io[s.Path]) {
+				if _, _, ok := begins(name, w); ok && (!p.scoped || s.Scoped) && (!p.retried || reach.retried(s)) {
 					add(p.typ, p.why, s, s.ID)
 					break
 				}
@@ -123,21 +123,6 @@ func component(s facts.Symbol) bool {
 	ext := path.Ext(s.Path)
 	_, name := split(s.ID)
 	return (ext == ".tsx" || ext == ".jsx") && s.Kind == facts.SymbolFunction && name != "" && unicode.IsUpper([]rune(name)[0])
-}
-
-// ioFiles are the files of units that import something that does input or output.
-func ioFiles(a *facts.Analysis) map[string]bool {
-	units := map[string]bool{}
-	for _, im := range a.Imports {
-		if im.IO {
-			units[im.FromUnit] = true
-		}
-	}
-	out := map[string]bool{}
-	for _, f := range a.Files {
-		out[f.Path] = f.Unit != "" && units[f.Unit]
-	}
-	return out
 }
 
 // split cuts a symbol ID into everything up to the last name and the name: "example.com/app/store.Store."

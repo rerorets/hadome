@@ -28,6 +28,7 @@ classDiagram
     +Symbols []Symbol
     +Imports []Import
     +Tests []Test
+    +Entries []Entry
   }
   class File {
     +Path string
@@ -59,6 +60,16 @@ classDiagram
     +Complexity int
     +Nested []Nested
     +Methods int
+    +Traced bool
+    +Calls []string
+    +Units []string
+    +IO bool
+  }
+  class Entry {
+    +Path string
+    +Line int
+    +Symbol string
+    +Calls []string
   }
   class Nested {
     +Line int
@@ -121,6 +132,7 @@ classDiagram
   Analysis --> Comment
   Analysis --> Symbol
   Symbol --> Nested
+  Analysis --> Entry
   Analysis --> Import
   Analysis --> Test
   Test --> Call
@@ -128,6 +140,8 @@ classDiagram
   Test --> Skip
   Language ..> Analysis : 受け持ったファイルの事実を返す
 ```
+
+`Symbol.Traced`・`Calls`・`Units`・`IO` と `Analysis.Entries` は、関数が入出力に届くかと、やり直されうる入口から届くかを決めるための事実です。今は Go と TypeScript のアダプタだけが埋め、埋めたシンボルは `Traced` を真にします。`Calls` は本体から呼ぶリポジトリの関数の ID、`Units` は本体が値を使うリポジトリのユニット、`IO` は本体が入出力をするものを直接使うことです。読み方は [suggest.ja.md](suggest.ja.md) の「`idempotent` の条件」にあります。
 
 ### ファイルと役割
 

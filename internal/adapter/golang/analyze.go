@@ -104,7 +104,9 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 		}
 		a.Imports = append(a.Imports, importsOf(fset, pf, idx, tb.io)...)
 		if !pf.generated {
-			a.Symbols = append(a.Symbols, symbolsOf(fset, pf)...)
+			syms, entries := traceFile(fset, pf, idx, tb, symbolsOf(fset, pf))
+			a.Symbols = append(a.Symbols, syms...)
+			a.Entries = append(a.Entries, entries...)
 		}
 	}
 	return a, nil

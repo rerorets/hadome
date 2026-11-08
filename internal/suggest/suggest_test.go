@@ -13,10 +13,12 @@ import (
 
 const api = `package api
 
+import "os"
+
 // Store keeps rows.
 type Store struct{}
 
-func CreatePost() {}
+func CreatePost() { _ = os.WriteFile("post", nil, 0o600) }
 func Address() {}
 func Deleted() bool { return false }
 func createDraft() {}
@@ -93,20 +95,12 @@ func TestConfiguredInvariantsAreNotSuggested(t *testing.T) {
 	}
 }
 
-// viewpoint: behaviour
-// target: suggest.Candidates
-// Add and Register suggest idempotent only in a unit that does input or output, since they also
-// name functions that only compute a value; Create needs no such unit.
-func TestAddAndRegisterNeedAUnitThatDoesIO(t *testing.T) {
-	tree := fstest.MapFS{
-		"go.mod": {Data: []byte("module example.com/app\n")},
-		"dates/dates.go": {Data: []byte("package dates\n\nimport \"time\"\n\n" +
-			"func AddDays(t time.Time, n int) time.Time { return t.AddDate(0, 0, n) }\n" +
-			"func RegisterFormat(name string) string { return name }\n" +
-			"func CreateRange(n int) []int { return make([]int, n) }\n")},
-		"members/members.go": {Data: []byte("package members\n\nimport \"database/sql\"\n\n" +
-			"func AddMember(db *sql.DB, name string) error { return nil }\n" +
-			"func RegisterDevice(db *sql.DB, id string) error { return nil }\n")},
+// goCandidates analyses a Go module and returns its candidates' keys.
+func goCandidates(t *testing.T, files map[string]string) string {
+	t.Helper()
+	tree := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}}
+	for p, src := range files {
+		tree[p] = &fstest.MapFile{Data: []byte(src)}
 	}
 	a, err := adapter.New().Analyze(engine.Version{FS: tree}, config.Config{})
 	if err != nil {
@@ -116,9 +110,55 @@ func TestAddAndRegisterNeedAUnitThatDoesIO(t *testing.T) {
 	for _, cd := range suggest.Candidates(engine.Input{Facts: a, Config: config.Config{}}) {
 		got = append(got, cd.Key())
 	}
-	want := "idempotent dates.CreateRange\nidempotent members.AddMember\nidempotent members.RegisterDevice"
-	if strings.Join(got, "\n") != want {
-		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
+	return strings.Join(got, "\n")
+}
+
+// viewpoint: behaviour
+// target: suggest.Candidates
+// In a repository with no entry point, a function is an idempotent candidate when its name says it
+// creates and it reaches input or output: itself (a method of a *sql.DB) or through a function it
+// calls. A function that only computes a value is not one, even in a unit that does input or output.
+func TestIdempotentCandidatesReachInputOrOutput(t *testing.T) {
+	got := goCandidates(t, map[string]string{
+		"dates/dates.go": "package dates\n\nimport \"time\"\n\n" +
+			"func AddDays(t time.Time, n int) time.Time { return t.AddDate(0, 0, n) }\n" +
+			"func RegisterFormat(name string) string { return name }\n" +
+			"func CreateRange(n int) []int { return make([]int, n) }\n",
+		"members/members.go": "package members\n\nimport \"database/sql\"\n\n" +
+			"func AddMember(db *sql.DB, name string) error { _, err := db.Exec(\"insert\", name); return err }\n" +
+			"func RegisterDevice(db *sql.DB, id string) error { return insert(db, id) }\n" +
+			"func CreateToken(id string) string { return \"t-\" + id }\n" +
+			"func insert(db *sql.DB, id string) error { _, err := db.Exec(\"insert\", id); return err }\n",
+	})
+	want := "idempotent members.AddMember\nidempotent members.RegisterDevice"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: suggest.Candidates
+// In a repository with entry points, an idempotent candidate must also be reached from one: a
+// function registered for a path, or one a function literal registered for a path calls. A
+// function that writes but no entry point reaches is not one, and neither is the function that
+// only registers the routes.
+func TestIdempotentCandidatesAreReachedFromAnEntryPoint(t *testing.T) {
+	got := goCandidates(t, map[string]string{
+		"store/store.go": "package store\n\nimport \"database/sql\"\n\n" +
+			"type Store struct{ db *sql.DB }\n\n" +
+			"func (s *Store) CreateOrder() error { _, err := s.db.Exec(\"insert\"); return err }\n" +
+			"func (s *Store) AddAudit() error { _, err := s.db.Exec(\"insert\"); return err }\n" +
+			"func (s *Store) InsertBackfill() error { _, err := s.db.Exec(\"insert\"); return err }\n",
+		"web/web.go": "package web\n\nimport (\n\t\"net/http\"\n\n\t\"example.com/app/store\"\n)\n\n" +
+			"type Handler struct{ store *store.Store }\n\n" +
+			"func (h *Handler) Orders(w http.ResponseWriter, r *http.Request) { _ = h.store.CreateOrder() }\n\n" +
+			"func Register(mux *http.ServeMux, h *Handler) {\n" +
+			"\tmux.HandleFunc(\"/orders\", h.Orders)\n" +
+			"\tmux.HandleFunc(\"/audit\", func(w http.ResponseWriter, r *http.Request) { _ = h.store.AddAudit() })\n}\n",
+	})
+	want := "idempotent store.Store.AddAudit\nidempotent store.Store.CreateOrder"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }
 

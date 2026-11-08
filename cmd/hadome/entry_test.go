@@ -297,7 +297,7 @@ func TestInitDetectsAnsibleByLayout(t *testing.T) {
 func TestSuggestPrintsConfigurationToPaste(t *testing.T) {
 	t.Chdir(writeTree(t, map[string]string{
 		"go.mod":     "module example.com/app\n",
-		"api/api.go": "package api\n\nfunc CreatePost() {}\n\nfunc ExportRows() {}\n\nfunc ImportRows() {}\n",
+		"api/api.go": "package api\n\nimport \"os\"\n\nfunc CreatePost() { _ = os.WriteFile(\"post\", nil, 0o600) }\n\nfunc ExportRows() {}\n\nfunc ImportRows() {}\n",
 	}))
 	code, out := runIn(t, "suggest")
 	if code != 0 {

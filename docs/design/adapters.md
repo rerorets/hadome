@@ -28,6 +28,7 @@ classDiagram
     +Symbols []Symbol
     +Imports []Import
     +Tests []Test
+    +Entries []Entry
   }
   class File {
     +Path string
@@ -59,6 +60,16 @@ classDiagram
     +Complexity int
     +Nested []Nested
     +Methods int
+    +Traced bool
+    +Calls []string
+    +Units []string
+    +IO bool
+  }
+  class Entry {
+    +Path string
+    +Line int
+    +Symbol string
+    +Calls []string
   }
   class Nested {
     +Line int
@@ -121,6 +132,7 @@ classDiagram
   Analysis --> Comment
   Analysis --> Symbol
   Symbol --> Nested
+  Analysis --> Entry
   Analysis --> Import
   Analysis --> Test
   Test --> Call
@@ -128,6 +140,8 @@ classDiagram
   Test --> Skip
   Language ..> Analysis : returns the facts of the files it claimed
 ```
+
+`Symbol.Traced`, `Calls`, `Units`, `IO` and `Analysis.Entries` are the facts that decide whether a function reaches input or output and whether an entry point that can be retried reaches it. Only the Go and TypeScript adapters fill them for now, and set `Traced` on the symbols they fill. `Calls` are the IDs of the repository's functions the body calls, `Units` the repository's units whose values the body uses, and `IO` that the body uses something that does input or output directly. How they are read is in [suggest.md](suggest.md), "Conditions of `idempotent`".
 
 ### Files and roles
 

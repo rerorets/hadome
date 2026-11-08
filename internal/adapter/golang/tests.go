@@ -120,6 +120,8 @@ type walker struct {
 	// recv is the receiver of the suite method being walked ("s" in func (s *StoreSuite) TestAdd()),
 	// and suiteType its type's name. Calls on the receiver are the suite's own or its assertions.
 	recv, suiteType string
+	// trace collects what a function of the product code reaches; it is nil for a test.
+	trace *trace
 }
 
 type callCount struct {

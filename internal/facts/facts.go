@@ -153,6 +153,26 @@ type Symbol struct {
 	Nested []Nested
 	// Methods counts the methods of an interface.
 	Methods int
+	// Traced is true when the adapter read Calls, Units and IO of a function or method. Without
+	// it they say nothing, not that the function calls nothing.
+	Traced bool
+	// Calls are the IDs of the repository's functions and methods the body calls, as far as the
+	// adapter can tell which one is called.
+	Calls []string
+	// Units are the repository's units whose values (not functions) the body uses: a variable
+	// holding a database handle, for one.
+	Units []string
+	// IO is true when the body itself uses something that does input or output.
+	IO bool
+}
+
+// Entry is an entry point that can be retried: an HTTP handler, a route. It is either a symbol, or
+// code that is not one (a function written where a route is registered), whose calls are listed.
+type Entry struct {
+	Path   string
+	Line   int
+	Symbol string
+	Calls  []string
 }
 
 // Nested is a function nested in a symbol: an arrow function, lambda, closure, function literal,
@@ -261,6 +281,7 @@ type Analysis struct {
 	Symbols  []Symbol
 	Imports  []Import
 	Tests    []Test
+	Entries  []Entry
 }
 
 // HasSymbol reports whether a symbol with this ID exists in the version.
