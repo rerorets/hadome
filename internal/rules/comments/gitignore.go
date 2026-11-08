@@ -87,8 +87,7 @@ func parseIgnoreLine(l string) (ignoreRule, bool) {
 	for strings.HasSuffix(l, " ") && !strings.HasSuffix(l, "\\ ") {
 		l = l[:len(l)-1]
 	}
-	// git never matches a pattern that ends in an unescaped backslash.
-	if l == "" || strings.HasPrefix(l, "#") || (len(l)-len(strings.TrimRight(l, `\`)))%2 == 1 {
+	if l == "" || strings.HasPrefix(l, "#") || loneBackslashAtEnd(l) {
 		return ignoreRule{}, false
 	}
 	var r ignoreRule
@@ -113,6 +112,15 @@ func parseIgnoreLine(l string) (ignoreRule, bool) {
 	}
 	r.re = re
 	return r, true
+}
+
+// loneBackslashAtEnd reports whether l ends in a backslash that escapes nothing. git never matches
+// such a pattern.
+func loneBackslashAtEnd(l string) bool {
+	for strings.HasSuffix(l, `\\`) {
+		l = l[:len(l)-2]
+	}
+	return strings.HasSuffix(l, `\`)
 }
 
 // globRegexp translates a slash-separated gitignore pattern. A segment that is exactly ** matches

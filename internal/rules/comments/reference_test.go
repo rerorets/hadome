@@ -42,6 +42,7 @@ func TestBrokenReferenceFollowsGitignorePatterns(t *testing.T) {
 		{"an escaped star is a literal star", map[string]string{".gitignore": "notes\\*/\n"}, "notesx/rows.md", true},
 		{"an escaped ordinary character is itself", map[string]string{".gitignore": "no\\tes/\n"}, "notes/rows.md", false},
 		{"a trailing backslash never matches", map[string]string{".gitignore": "rows.md\\\n"}, "rows.md", true},
+		{"an escaped backslash before a lone one never matches", map[string]string{".gitignore": "rows.md\\\\\\\n"}, "rows.md", true},
 		{"an unclosed bracket is literal", map[string]string{".gitignore": "draft[.md\n"}, "draft.md", true},
 		{"an unreadable line does not stop the others", map[string]string{".gitignore": "draft[].md\nnotes/\n"}, "notes/rows.md", false},
 		{"a lone slash is not a pattern", map[string]string{".gitignore": "/\n"}, "notes/rows.md", true},
