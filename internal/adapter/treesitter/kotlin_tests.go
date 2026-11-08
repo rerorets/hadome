@@ -45,28 +45,6 @@ func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
 	return jf
 }
 
-// bindTopHelpers binds the top-level functions of test code that the file's tests can call by bare
-// names: those of its package, and those it imports, which then name no target of the product.
-func (jf *jvmFile) bindTopHelpers() {
-	jf.topHelpers = map[string]jvmDecl{}
-	for name, d := range jf.kt.testFunctions[jf.f.unit] {
-		jf.topHelpers[name] = d
-	}
-	ktImports(jf.f, func(name string, wildcard bool, _ *sitter.Node) {
-		if wildcard {
-			for fn, d := range jf.kt.testFunctions[name] {
-				jf.topHelpers[fn] = d
-			}
-			return
-		}
-		fn := lastElem(name)
-		if d, ok := jf.kt.testFunctions[strings.TrimSuffix(name, "."+fn)][fn]; ok {
-			jf.topHelpers[fn] = d
-			delete(jf.names, fn)
-		}
-	})
-}
-
 // ktAnnotations returns a declaration's annotations by name.
 func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
 	out := map[string]*sitter.Node{}
@@ -412,18 +390,4 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) (string, bool) {
 		}
 	}
 	return name, uses
-}
-
-// ktClassMembers lists a class's members with those of its companion object, whose properties and
-// functions the class's tests use by their bare names.
-func ktClassMembers(n *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	for _, m := range ktMembers(n) {
-		if m.Kind() == "companion_object" {
-			out = append(out, ktMembers(m)...)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
 }

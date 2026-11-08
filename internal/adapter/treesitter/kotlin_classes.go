@@ -166,3 +166,17 @@ func (jf *jvmFile) ktBuilt(e *sitter.Node) string {
 	}
 	return ""
 }
+
+// ktClassMembers lists a class's members with those of its companion object, whose properties and
+// functions the class's tests use by their bare names.
+func ktClassMembers(n *sitter.Node) []*sitter.Node {
+	var out []*sitter.Node
+	for _, m := range ktMembers(n) {
+		if m.Kind() == "companion_object" {
+			out = append(out, ktMembers(m)...)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}

@@ -149,21 +149,7 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
-			anns := annotations(f, m)
-			mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
-			if mock {
-				jf.mocks = append(jf.mocks, m)
-			}
-			if !mock || spy {
-				jf.javaFieldTypes(m, scope.fields)
-			}
-			if !mock {
-				for _, d := range named(m) {
-					if d.Kind() == "variable_declarator" {
-						jf.noteValueField(f.field(d, "name"), d.ChildByFieldName("value"))
-					}
-				}
-			}
+			jf.javaField(m, scope.fields)
 		case m.Kind() == "method_declaration":
 			methods = append(methods, m)
 			jf.helpers[f.field(m, "name")] = m.ChildByFieldName("body")
@@ -290,38 +276,6 @@ func (w *jvmWalk) unqualified(name string, follow func(*sitter.Node)) string {
 	return ""
 }
 
-// helper finds the body of a helper a test calls by a bare name: a method of the test's class, one
-// of a class it extends, or a top-level function of the test sources. Kotlin resolves a bare name
-// to a member before a top-level function.
-func (w *jvmWalk) helper(name string) jvmCode {
-	if body, ok := w.jf.helpers[name]; ok {
-		return jvmCode{w.jf, body}
-	}
-	if h, ok := w.inherited[name]; ok {
-		return h
-	}
-	if d, ok := w.jf.topHelpers[name]; ok {
-		return jvmCode{w.jf.fileOf(d.f), ktBody(d.n)}
-	}
-	return jvmCode{}
-}
-
-// fileOf is the reading of a Kotlin test file whose top-level function a test of this file calls.
-func (jf *jvmFile) fileOf(f *file) *jvmFile {
-	if f == jf.f {
-		return jf
-	}
-	if jf.others == nil {
-		jf.others = map[*file]*jvmFile{}
-	}
-	if o, ok := jf.others[f]; ok {
-		return o
-	}
-	o := jf.kt.testFile(f, jf.t)
-	jf.others[f] = o
-	return o
-}
-
 func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {
 	switch name {
 	case "assertTrue":
@@ -391,6 +345,27 @@ var javaUses = useGrammar{
 	members: map[string]string{"field_access": "object"},
 	names:   map[string]string{"field_access": "field"},
 	callees: map[string][]string{"method_invocation": {"object", "name"}},
+}
+
+// javaField reads a field of a test class: a mock, typed only when it is a spy, or a field typed
+// into fields and noted when its initializer uses the product.
+func (jf *jvmFile) javaField(m *sitter.Node, fields map[string]string) {
+	anns := annotations(jf.f, m)
+	mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
+	if mock {
+		jf.mocks = append(jf.mocks, m)
+	}
+	if !mock || spy {
+		jf.javaFieldTypes(m, fields)
+	}
+	if mock {
+		return
+	}
+	for _, d := range named(m) {
+		if d.Kind() == "variable_declarator" {
+			jf.noteValueField(jf.f.field(d, "name"), d.ChildByFieldName("value"))
+		}
+	}
 }
 
 // javaFieldTypes types the fields of a test class, as ktFieldType does: by the constructor that
