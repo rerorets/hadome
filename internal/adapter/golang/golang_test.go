@@ -470,10 +470,11 @@ func Short(s string) bool { return len(strings.TrimSpace(s)) < limit }
 // target: golang.Adapter.Mutants
 // Returning the zero value in place of a constant whose value is already the zero value changes
 // nothing, and no test could catch it: no such mutant is made, wherever the constant is declared
-// in the module and however its zero value is written. Everything else is still broken: a
-// constant with another value, one hadome cannot read (another module's, an expression, one
-// declared with different values in two files), a variable or field, a local name shadowing a
-// zero constant, and a result whose zero value is nil.
+// in the module and however its zero value is written, an arithmetic expression of literals and
+// constants declared before it included. Everything else is still broken: a constant with another
+// value, one hadome cannot read (another module's, an expression with an operand hadome cannot
+// read, one declared with different values in two files), a variable or field, a local name
+// shadowing a zero constant, and a result whose zero value is nil.
 func TestGoMutantsSkipConstantsAlreadyZero(t *testing.T) {
 	const queue = `package worker
 
@@ -543,6 +544,40 @@ func Size() uintptr { return size }
 func Length() int { return length }
 
 func Mode() int { return mode }
+
+func Off() int { return off }
+
+func Half() int { return half }
+
+func Diff() int { return diff }
+
+func Third() float64 { return third }
+
+func Scaled() uintptr { return scaled }
+
+func Plus() int { return plus }
+
+func Minus() int { return minus }
+
+func Closed() bool { return closed }
+
+func Open() bool { return open }
+
+func Negated() bool { return negated }
+
+func Both() bool { return both }
+
+func Either() bool { return either }
+
+func Joined() string { return joined }
+
+func Added() int { return added }
+
+func Rest() int { return rest }
+
+func Ratio() float64 { return ratio }
+
+func Shifted() int { return shifted }
 `
 	tree := fstest.MapFS{
 		"go.mod": {Data: []byte("module example.com/app\n")},
@@ -576,6 +611,23 @@ const (
 	wait   = status.Code(0)
 	size   = unsafe.Sizeof(0)
 	length = len("")
+	off    = 1 - 1
+	half   = 1 / 2
+	diff   = busy - 3
+	third  = 1.0 / 3
+	scaled = 0 * size
+	plus    = +0
+	minus   = -1 + 1
+	closed  = false
+	open    = true
+	negated = !true
+	both    = true && false
+	either  = false || true
+	joined  = "" + ""
+	added   = 0 + 0
+	rest    = 4 % 2
+	ratio   = 0.0 / 2.5
+	shifted = 1<<1 - 2
 )
 
 var defaults row
@@ -617,6 +669,11 @@ var defaults row
 		"Larger: larger -> 0",
 		"Size: size -> 0",
 		"Mode: mode -> 0",
+		"Third: third -> 0",
+		"Scaled: scaled -> 0",
+		"Open: open -> false",
+		"Either: either -> false",
+		"Shifted: shifted -> 0",
 	}, "\n")
 	if g := strings.Join(got, "\n"); g != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
