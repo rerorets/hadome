@@ -1,6 +1,10 @@
 package suggest
 
-import "github.com/rerorets/hadome/internal/facts"
+import (
+	"slices"
+
+	"github.com/rerorets/hadome/internal/facts"
+)
 
 // reach answers, for one version, which functions reach input or output and which an entry point
 // that can be retried reaches. Design: docs/design/suggest.md, "Conditions of idempotent".
@@ -24,8 +28,15 @@ func newReach(a *facts.Analysis) *reach {
 			syms[s.ID] = s
 		}
 	}
-	// Reaching input or output spreads from callee to caller until nothing changes, so that calls
-	// in a cycle give the same answer whichever function is looked at first.
+	r.spreadIO(syms)
+	r.fromEntries(a.Entries, syms)
+	return r
+}
+
+// spreadIO marks the functions that reach input or output. It spreads from callee to caller until
+// nothing changes, so that calls in a cycle give the same answer whichever function is looked at
+// first.
+func (r *reach) spreadIO(syms map[string]facts.Symbol) {
 	for _, s := range syms {
 		if r.ownIO(s) {
 			r.io[s.ID] = true
@@ -34,19 +45,17 @@ func newReach(a *facts.Analysis) *reach {
 	for changed := true; changed; {
 		changed = false
 		for _, s := range syms {
-			if r.io[s.ID] || !s.Traced {
-				continue
-			}
-			for _, c := range s.Calls {
-				if r.io[c] {
-					r.io[s.ID], changed = true, true
-					break
-				}
+			if !r.io[s.ID] && s.Traced && slices.ContainsFunc(s.Calls, func(c string) bool { return r.io[c] }) {
+				r.io[s.ID], changed = true, true
 			}
 		}
 	}
+}
+
+// fromEntries marks the functions the entry points reach through calls.
+func (r *reach) fromEntries(entries []facts.Entry, syms map[string]facts.Symbol) {
 	var queue []string
-	for _, e := range a.Entries {
+	for _, e := range entries {
 		if e.Symbol != "" {
 			queue = append(queue, e.Symbol)
 		}
@@ -55,13 +64,11 @@ func newReach(a *facts.Analysis) *reach {
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
-		if r.reached[id] {
-			continue
+		if !r.reached[id] {
+			r.reached[id] = true
+			queue = append(queue, syms[id].Calls...)
 		}
-		r.reached[id] = true
-		queue = append(queue, syms[id].Calls...)
 	}
-	return r
 }
 
 // ownIO reports whether a function reaches input or output without looking at the functions it

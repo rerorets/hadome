@@ -2,7 +2,6 @@ package golang
 
 import (
 	"go/ast"
-	"go/token"
 	"path"
 	"slices"
 
@@ -12,14 +11,14 @@ import (
 // testMain is a package's func TestMain(m *testing.M). It runs before every test of its directory:
 // the internal and the external test package build into one test binary.
 type testMain struct {
-	fset    *token.FileSet
+	rd      reading
 	pf      parsedFile
 	decl    *ast.FuncDecl
 	helpers map[string]helper
 }
 
 // findTestMains finds the TestMain of each directory, by directory.
-func findTestMains(fset *token.FileSet, files []parsedFile, helpers map[string]map[string]helper) map[string]*testMain {
+func findTestMains(rd reading, files []parsedFile, helpers map[string]map[string]helper) map[string]*testMain {
 	out := map[string]*testMain{}
 	for _, pf := range files {
 		if !pf.test {
@@ -29,7 +28,7 @@ func findTestMains(fset *token.FileSet, files []parsedFile, helpers map[string]m
 		for _, decl := range pf.file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if ok && fn.Recv == nil && fn.Body != nil && fn.Name.Name == "TestMain" && takesM(fn.Type, imports) {
-				out[path.Dir(pf.path)] = &testMain{fset: fset, pf: pf, decl: fn, helpers: helpers[helperKey(pf)]}
+				out[path.Dir(pf.path)] = &testMain{rd: rd, pf: pf, decl: fn, helpers: helpers[helperKey(pf)]}
 			}
 		}
 	}
@@ -47,11 +46,11 @@ func takesM(ft *ast.FuncType, imports map[string]string) bool {
 // give walks TestMain for one test, adding what it calls to the test's calls and its clock and
 // sleep to the test's hazards. Its checks, skips and unresolved calls are not the test's: what a
 // test checks is decided by its own body. A nil main gives nothing.
-func (main *testMain) give(w *walker, idx *index, tb *tables) {
+func (main *testMain) give(w *walker) {
 	if main == nil {
 		return
 	}
-	mw := newWalker(main.fset, main.pf, idx, tb, main.helpers)
+	mw := newWalker(main.rd, main.pf, main.helpers)
 	mw.calls = w.calls
 	mw.bindParams(main.decl.Type, nil)
 	ast.Inspect(main.decl.Body, mw.visit)

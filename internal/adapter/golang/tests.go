@@ -131,7 +131,7 @@ type callCount struct {
 
 // extractTests reads the tests of one file. main is the TestMain of the file's directory, or nil;
 // it runs before each of them.
-func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, helpers map[string]helper, main *testMain) []facts.Test {
+func extractTests(rd reading, pf parsedFile, helpers map[string]helper, main *testMain) []facts.Test {
 	imports := fileImports(pf.file)
 	var out []facts.Test
 	for _, decl := range pf.file.Decls {
@@ -139,27 +139,16 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 		if !ok || fn.Recv != nil || fn.Body == nil || !strings.HasPrefix(fn.Name.Name, "Test") || !takesT(fn.Type, imports) {
 			continue
 		}
-		w := newWalker(fset, pf, idx, tb, helpers)
-		w.test = facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
-			Body: body(fset, pf.src, fn)}
+		w := newWalker(rd, pf, helpers)
+		w.test = facts.Test{Name: fn.Name.Name, Path: pf.path, Line: rd.fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
+			Body: body(rd.fset, pf.src, fn)}
 		w.collectTParams(fn.Type, fn.Body)
 		ast.Inspect(fn.Body, w.visit)
-		main.give(w, idx, tb)
+		main.give(w)
 		w.test.Calls = w.callFacts()
 		out = append(out, w.test)
 	}
 	return out
-}
-
-// newWalker returns a walker for a function declared in a test file.
-func newWalker(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, helpers map[string]helper) *walker {
-	return &walker{
-		scope: scope{idx: idx, pkgPath: pf.pkgPath, imports: fileImports(pf.file), samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
-			testKey: helperKey(pf), helpers: helpers, local: newBlock(nil)},
-		fset: fset, tables: tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
-		walking: map[string]bool{}, curPath: pf.path,
-		callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
-	}
 }
 
 // body fingerprints the test from its parameters to its closing brace, so the name is left out.

@@ -103,7 +103,7 @@ func callIDs(w *walker) []string {
 
 // traceFile fills in the calls, units and input or output of the file's functions and methods,
 // and returns the entry points the file declares or registers.
-func traceFile(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, syms []facts.Symbol) ([]facts.Symbol, []facts.Entry) {
+func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, []facts.Entry) {
 	byID := map[string]int{}
 	for i, s := range syms {
 		byID[s.ID] = i
@@ -116,8 +116,8 @@ func traceFile(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, syms 
 			continue
 		}
 		id := funcID(pf.pkgPath, d)
-		t := &trace{units: map[string]bool{}, path: pf.path, fset: fset}
-		w := newWalker(fset, pf, idx, tb, nil)
+		t := &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset}
+		w := newWalker(rd, pf, nil)
 		w.testKey, w.trace = "", t
 		if d.Recv != nil && len(d.Recv.List) == 1 && len(d.Recv.List[0].Names) == 1 {
 			w.local.vars[d.Recv.List[0].Names[0].Name] = w.resolve(d.Recv.List[0].Type)
@@ -126,7 +126,7 @@ func traceFile(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, syms 
 		ast.Inspect(d.Body, w.visit)
 		entries = append(entries, t.entries...)
 		if id != "" && handlerShape(d.Type, imports) {
-			entries = append(entries, facts.Entry{Path: pf.path, Line: fset.Position(d.Pos()).Line, Symbol: id})
+			entries = append(entries, facts.Entry{Path: pf.path, Line: rd.fset.Position(d.Pos()).Line, Symbol: id})
 		}
 		i, ok := byID[id]
 		if id == "" || !ok {
