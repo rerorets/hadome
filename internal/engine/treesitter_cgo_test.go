@@ -15,6 +15,7 @@ var treeSitterFiles = map[string]string{
 var treeSitterTop = []topCase{
 	{"app/run.py", "#!/usr/bin/env python3\n# " + marker + "\nrows = 1\n", true},
 	{"app/doc.py", "\"\"\"Rows.\"\"\"\n# " + marker + "\nrows = 1\n", false},
+	{"src/cli.ts", "#!/usr/bin/env node\n// " + marker + "\nexport const cols = 1\n", true},
 	{"src/license.ts", "/**\n * Copyright A.\n */\n// " + marker + "\nexport const rows = 1\n", true},
 	{"src/main/kotlin/B.kt", "package app\n// " + marker + "\n", false},
 }

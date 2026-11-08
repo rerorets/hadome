@@ -224,6 +224,27 @@ func TestAFileOverTheLimitPointsAtItsFirstLineOverIt(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: engine.Engine.Check
+// A marker covers a finding on its own line and on the next one, and none further away: a marker two
+// lines above the finding suppresses nothing.
+func TestAMarkerCoversItsLineAndTheNext(t *testing.T) {
+	const allow = "// gate:allow tests/no-clock reason: measures wall time on purpose"
+	for name, tc := range map[string]struct {
+		test    string
+		covered bool
+	}{
+		"same line": {"\t_ = time.Now() " + allow + "\n", true},
+		"next line": {"\t" + allow + "\n\t_ = time.Now()\n", true},
+		"two lines": {"\t" + allow + "\n\n\t_ = time.Now()\n", false},
+	} {
+		r := check(t, treeSource{base: module(""), head: module(tc.test)})
+		if got := !hasRule(r.Regressions, "tests/no-clock") && !hasRule(r.Regressions, "engine/marker-unused"); got != tc.covered {
+			t.Errorf("%s: covered %v, want %v; regressions %+v", name, got, tc.covered, r.Regressions)
+		}
+	}
+}
+
 // topCase is a file that starts with src and holds a marker for size/file-lines; top says whether
 // the marker is at the top of the file.
 type topCase struct {
@@ -246,6 +267,7 @@ func TestAMarkerAtTheTopCoversTheWholeFile(t *testing.T) {
 		{"store/package.go", "package store\n\n// " + marker + "\n", false},
 		{"store/trailing.go", "package store // " + marker + "\n", false},
 		{"main.tf", "# Copyright A.\n\n/* " + marker + " */\nvariable \"rows\" {}\n", true},
+		{"license.tf", "/*\n Copyright A.\n*/\n# " + marker + "\nvariable \"keys\" {}\n", true},
 		{"after.tf", "variable \"cols\" {}\n# " + marker + "\n", false},
 		{"roles/web/tasks/main.yml", "---\n# Copyright A.\n# " + marker + "\n- name: ping\n  ping:\n", true},
 		{"roles/db/tasks/main.yml", "- name: pong\n  ping:\n# " + marker + "\n", false},
