@@ -113,7 +113,7 @@ gate:allow <rule-id> reason: <text>
 
 JSON のスキーマは独自のバージョン番号を持ち、フィールドを足す形でしか変わりません。
 
-ファイル全体についての違反は行を持ちません。例: `size/file-lines`、`tests/purity-lost`。`text` は場所をファイルだけで書き、`json` は `line` を `0` にします。
+ファイル全体についての違反でも、指せる行があれば行を持ちます。例: `size/file-lines` は上限を超えた最初の行を指します（[rules-size.ja.md](rules-size.ja.md)）。指せる行が無い違反だけが、行を持ちません。例: `unknown/unread`、`tests/invariant-unguarded`。このとき `text` は場所をファイルだけで書き、`json` は `line` を `0` にします。
 
 | 終了コード | 意味 |
 |---|---|

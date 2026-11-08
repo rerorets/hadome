@@ -107,7 +107,7 @@ Renames are detected by the engine, not by the source, so every source behaves t
 
 The JSON schema has its own version number and changes only by adding fields.
 
-A finding about a whole file has no line. Examples: `size/file-lines`, `tests/purity-lost`. `text` writes only the file as its place, and `json` sets `line` to `0`.
+A finding about a whole file still has a line when there is one to point at. Example: `size/file-lines` points at the first line over the limit ([rules-size.md](rules-size.md)). Only a finding with no line to point at has none. Examples: `unknown/unread`, `tests/invariant-unguarded`. Then `text` writes only the file as its place, and `json` sets `line` to `0`.
 
 | Exit code | Meaning |
 |---|---|

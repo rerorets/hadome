@@ -44,6 +44,15 @@ Only product code: source files and the symbols in them. Test files and generate
 
 The anchor of a finding is the file or the symbol, so a violation already in base never blocks however lines move. A finding also carries the **measured value**. When a head finding matches one in base but its value is larger, it is a regression: an 80-line function that grows to 90 lines fails, one that shrinks to 75 passes. This is the engine's general rule for findings with a measure ([engine.md](engine.md)), not something `size/` does by itself.
 
+### The line a file-lines finding points at
+
+A `size/file-lines` finding points at the first line over the limit. Example: with a limit of 300, line 301. `text` writes `store/store.go:301`, and `json` sets `line` to `301`.
+
+- **How the line is decided**: by the limit alone, not by the file's content. So it is the same line in a file of any language.
+- **Why it has a line**: without one, editors and CI annotations point at the top of the file. The first line over the limit shows where the part over the limit starts.
+- **Matching against base**: the anchor of the finding is the file. The line is not used for matching. So a line that changes because the limit changed is no regression by itself.
+- **Exception markers**: as for every other rule, a marker applies to its own line and the next one. So the marker goes on the reported line or the line before it. Example: with a limit of 300, line 300 or 301. When lines added above the marker, or a changed limit, move the marker off that line, it suppresses nothing. Then both the finding and `engine/marker-unused` are reported.
+
 ## Configuration
 
 ```yaml
@@ -71,7 +80,7 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 | Rule | Cases |
 |---|---|
 | `size/function-lines` | a new long function fails · an existing long function that moved passes · an existing long function that grew fails · one that shrank passes · a long test function passes |
-| `size/file-lines` | a file that grows past the limit fails · a generated file passes |
+| `size/file-lines` | a file that grows past the limit fails · an unchanged file over the limit passes · a generated file passes · an exception marker on the first line over the limit suppresses the file's finding |
 | `size/params` | a new function with too many parameters fails · five parameters pass |
 | `size/complexity` | a new function with too many branches fails · a function at the limit passes · `default` is not a branch · a nested function's branches are not added to the outer function · a new nested function with too many branches fails · an unchanged nested function passes |
 | `size/interface-methods` | a new wide interface fails · an interface of five passes |

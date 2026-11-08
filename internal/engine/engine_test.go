@@ -1,6 +1,8 @@
 package engine_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -156,6 +158,69 @@ func TestAGrownViolationShowsItsBaseValue(t *testing.T) {
 		if got := r.Regressions[0].Message.In(lang); got != want {
 			t.Errorf("%s: got %q, want %q", lang, got, want)
 		}
+	}
+}
+
+// viewpoint: external contract
+// target: engine.Engine.Check with size/file-lines, engine.WriteJSON and engine.WriteText
+// A file five lines over a limit of 300 is reported at line 301, the first line over the limit, in
+// every language hadome reads (tree-sitter's only with cgo), in JSON and in text alike. A file hadome could not read is not
+// measured, so file-lines does not report it.
+func TestAFileOverTheLimitPointsAtItsFirstLineOverIt(t *testing.T) {
+	pad := strings.Repeat("\n", 304) // with the first line, each file has 305 lines
+	over := map[string]string{
+		"store/store.go":           "package store\n" + pad,
+		"main.tf":                  "variable \"rows\" {}\n" + pad,
+		"roles/web/tasks/main.yml": "- name: ping\n" + pad,
+	}
+	for p, first := range treeSitterFiles {
+		over[p] = first + pad
+	}
+	head := fstest.MapFS{
+		"go.mod":          {Data: []byte("module example.com/app\n")},
+		".hadome.yml":     {Data: []byte("schema: 1\nrules:\n  size:\n    file-lines: 300\n")},
+		"store/broken.go": {Data: []byte("package store\n\nfunc Append( {\n" + pad)},
+	}
+	for p, src := range over {
+		head[p] = &fstest.MapFile{Data: []byte(src)}
+	}
+	base := fstest.MapFS{"go.mod": head["go.mod"], ".hadome.yml": head[".hadome.yml"]}
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: size.All()}
+	r, err := e.Check(treeSource{base: base, head: head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var js bytes.Buffer
+	if err := engine.WriteJSON(&js, r, "en"); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Regressions []struct {
+			Rule, File string
+			Line       int
+		} `json:"regressions"`
+	}
+	if err := json.Unmarshal(js.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	lines := map[string]int{}
+	for _, f := range got.Regressions {
+		if f.Rule == "size/file-lines" {
+			lines[f.File] = f.Line
+		}
+	}
+	var text bytes.Buffer
+	engine.WriteText(&text, r, "en")
+	for p := range over {
+		if lines[p] != 301 {
+			t.Errorf("json: %s at line %d, want 301", p, lines[p])
+		}
+		if !strings.Contains(text.String(), "\n  "+p+":301\n") {
+			t.Errorf("text: want %s:301\n%s", p, text.String())
+		}
+	}
+	if _, ok := lines["store/broken.go"]; ok || len(lines) != len(over) {
+		t.Errorf("want file-lines for exactly the %d files hadome read, got %v", len(over), lines)
 	}
 }
 
