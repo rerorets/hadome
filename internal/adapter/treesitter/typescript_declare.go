@@ -111,6 +111,8 @@ type tsScope struct {
 	// preludes run before each test of the scope: the bodies of beforeEach and beforeAll, the
 	// tables of .each, and describe-level test.skip(cond) and fake timers.
 	preludes []*sitter.Node
+	// rows bind the parameters of the describe.each callbacks around the test (see tsWalk.rows).
+	rows map[string][]string
 }
 
 func (sc tsScope) with(preludes ...*sitter.Node) tsScope {
@@ -118,10 +120,42 @@ func (sc tsScope) with(preludes ...*sitter.Node) tsScope {
 	return sc
 }
 
+// bind gives the tests of the scope the bindings of a describe.each callback's parameters.
+func (sc tsScope) bind(rows map[string][]string) tsScope {
+	sc.rows = maps.Clone(sc.rows)
+	if sc.rows == nil {
+		sc.rows = map[string][]string{}
+	}
+	maps.Copy(sc.rows, rows)
+	return sc
+}
+
+// tabled is the scope inside a declaration with a table: the table runs with each test, and the
+// parameters of a describe.each callback hold its rows.
+func (tf *tsFile) tabled(sc tsScope, d tsDecl) tsScope {
+	if d.table == nil {
+		return sc
+	}
+	sc = sc.with(d.table)
+	if d.suite {
+		sc = sc.bind(tf.rowBindings(d.table, tsParams(d.fn)))
+	}
+	return sc
+}
+
+// helperOfSupport reports whether x is a helper function of a test support file that is not also a
+// test file.
+func (tf *tsFile) helperOfSupport(x *sitter.Node) bool {
+	return tf.f.support && !tf.f.testGlob && !tsTestFile.MatchString(tf.f.path) && tsHelperFunction(x)
+}
+
 // suite finds the tests under n, the program or the body of a describe block.
 func (tf *tsFile) suite(n *sitter.Node, sc tsScope, out *[]facts.Test) {
 	sc = sc.with(tf.preludes(n)...)
 	walk(n, func(x *sitter.Node) bool {
+		if tf.helperOfSupport(x) {
+			return false // a support file's helper declares its tests in the file that calls it
+		}
 		if x.Kind() != "call_expression" {
 			return true
 		}
@@ -129,10 +163,7 @@ func (tf *tsFile) suite(n *sitter.Node, sc tsScope, out *[]facts.Test) {
 		if !ok {
 			return true
 		}
-		inner := sc
-		if d.table != nil {
-			inner = inner.with(d.table)
-		}
+		inner := tf.tabled(sc, d)
 		if (d.skipped && !inner.skipped) || (d.conditional && !inner.skipped && !inner.conditional) {
 			inner.skipAt = x
 		}
@@ -167,7 +198,11 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 		t.fileHazard(facts.HazardMock, m)
 	}
 	w := &tsWalk{tf: tf, t: t, at: at, vars: tf.outerVars(), locals: map[string]bool{}, walking: map[string]bool{},
-		loaded: maps.Clone(tf.outerLoaded), modules: maps.Clone(tf.outerModules), used: map[string]bool{}, done: map[uintptr]bool{}}
+		loaded: maps.Clone(tf.outerLoaded), modules: maps.Clone(tf.outerModules), used: map[string]bool{}, done: map[uintptr]bool{},
+		plain: map[string]bool{}, rows: maps.Clone(sc.rows)}
+	if w.rows == nil {
+		w.rows = map[string][]string{}
+	}
 	for _, unit := range tf.sideEffects {
 		t.call(unit, nil)
 	}
@@ -175,10 +210,13 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 		w.prelude(p)
 	}
 	if d.fn.Kind() == "identifier" {
-		w.follow(tf.f.text(d.fn))
+		w.follow(tf.f.text(d.fn), nil)
 	} else {
 		t.test.Drives = t.test.Drives || tf.receivesBrowser(d.fn)
 		w.params(tsParams(d.fn))
+		if d.table != nil {
+			maps.Copy(w.rows, tf.rowBindings(d.table, tsParams(d.fn)))
+		}
 		w.walk(d.fn.ChildByFieldName("body"))
 	}
 	return t.done()
@@ -193,4 +231,15 @@ func (tf *tsFile) reasonAt(n *sitter.Node) string {
 		return r
 	}
 	return tf.comments[line(n)-1]
+}
+
+// tsHelperFunction reports whether n is a function that runs only when something calls it: a
+// declaration, a method, or a function held by a name or returned. A function passed straight to a
+// call ([1, 2].forEach((n) => it(…))) runs where it is written.
+func tsHelperFunction(n *sitter.Node) bool {
+	if !tsFunctions[n.Kind()] {
+		return false
+	}
+	parent := n.Parent()
+	return parent == nil || parent.Kind() != "arguments"
 }

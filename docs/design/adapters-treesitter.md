@@ -165,6 +165,8 @@ TypeScript test declarations are read as follows.
 - **Forms that take a table or a condition first**: `it.each(table)(name, fn)`, `` test.each`table`(name, fn) ``, `test.concurrent.each`, `describe.each`, `it.skipIf(cond)(name, fn)` and `it.runIf(cond)(name, fn)` are tests or `describe` blocks too
   - The name of a `describe.each` goes into the names of the tests inside it
   - The table runs with the test, so the calls in the table count as the test's calls
+  - When the rows of the table hold functions or components of the repository, the callback's parameters name them. For example, a test inside `describe.each([[append], [remove]])('%s', (fn) => …)` that calls `fn(1)` counts as calling both `append` and `remove`
+  - A row that is an array matches the parameters by position. A row that is not an array goes to the first parameter. A row that is an object matches a destructuring parameter (`({ op }) =>`) by key. A tagged template table matches nothing
 - **Where the function is**: a test's function is its last argument that is a function, because vitest takes options between the name and the function (`it(name, { retry: 2 }, fn)`) and jest takes a timeout after it. When the name string is followed by the name of a function (`it('adds', checkAdd)`), that function of the file is followed
 - **Playwright's conditional skips**: `test.skip(cond, description)` and `test.fixme(cond, description)` without a function are not tests. Called in a test, they skip that test only in some cases; called directly in a `describe` block, they skip the tests in it only in some cases. `test.skip()` without arguments in a test always skips it
 
@@ -179,8 +181,11 @@ TypeScript test declarations are read as follows.
 - A test that reads a field whose initializer uses a product value (`private val sql = QUERY.trim()`) counts as reading the product (`Reads`): when the value changes, the test's result can change. In Kotlin, so does a field of the class the test class extends
 - In Kotlin, a product value put into a string template (`"IN ($COUNTED)"`, `"${Kind.ORDERS.table}"`) counts as read too. One that starts with `\$` is not put in. A field whose initializer is such a string counts like the fields above
 - In TypeScript, the names a test takes from a module it loads with `import('./x')`, named by a string, are read too. When a function of the file loads one module only and returns it (a helper that reloads the module), the names taken from its result are read as well
+  - When that function returns one function of the module it loads (`return m.append`), the name its result is put in is read as that function. For example, `const fn = await load(); fn()` calls `append`. When it returns different functions on different paths, it is not read
 - In TypeScript, `require('./x')` named by a string is read like an import, at the top of the file, in a `describe` block and inside a test: `const { send } = require('./mail')`, `const mail = require('./mail')`
 - What a TypeScript test calls includes the repository's components it renders as JSX elements (`<Page />`). Helpers of the file are followed whether declared with `function` or held by a `const` (`const renderPage = () => …`), including those declared inside a `describe` block. Functions an object holds (`helpers.twice` in `const helpers = { twice: (n) => … }`) are followed too. A component the test file declares (`function Harness() { return <Field /> }`, `const Wrapper = () => <Field />`) and renders as an element is followed like a helper. Calling a helper runs the default values of its parameters (`function make(store = createStore())`), so they count too
+  - A helper's parameter names what the call passes in the same position, whatever the parameter is called. For example, `r.GET()` inside `call(route, 'a')` is `GET` of the module put in `route`. What can be passed is a module loaded with `import()`, an imported name or module, and a value the test built
+  - A parameter that gets nothing, or that destructures, names nothing. It does not name an outer variable of the same name either
 - Variables declared outside a TypeScript test (in a `describe` block and the like) are typed by the class built with `new`, a type annotation (`let store: Store`), or an assignment such as one in `beforeEach` (`store = new Store()`). A local of the same name inside the test hides the outer variable. A variable the file gives two classes is not read
 - A TypeScript test also counts as its own the calls and reads of what runs before it:
   - The bodies of `beforeEach` and `beforeAll` in the `describe` blocks around it and at the top of the file (`beforeEach(() => render(<Page />))`)
@@ -195,6 +200,13 @@ TypeScript test declarations are read as follows.
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
 
+In TypeScript, a method of a value the test built itself does not count as unresolved, because it is not a method of the repository.
+
+- A value the test built itself is a local variable made from literals (`[1, 2]`, `{ n: 1 }`), built-ins (`JSON.parse(s)`, `Math.max(…)`, `new Map()`), an external library (`userEvent.setup()`), or a method of such a value (`xs.filter(…)`)
+- For example, `const xs = [1, 2]; xs.reduce(…)` is a test that calls nothing, the same as `Math.max(...xs)`
+- Such a value passed to a helper of the file is treated the same inside the helper
+- A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, still counts as unresolved
+
 ### Test support files
 
 Some files are not test files but exist only for the tests: `test/helpers.ts`, `e2e/fixtures.ts`, `conftest.py`. They are not product code, so they are treated as test support files.
@@ -205,7 +217,7 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 | Python | Files under the same directories as TypeScript; `conftest.py`; files whose name ends in test joined to helper(s) (`test_helpers.py`) |
 
 - **Role**: `test`. They are therefore not targets, `comments/missing-doc` asks nothing of them, and they are not in the dependency diagram
-- **Tests inside**: in TypeScript, `it` and `test` in a support file are read as tests, since mocha runs the files under `test/` as tests. In Python, only files named like test files (`test_*.py`, `*_test.py`) are read for tests, since that is what pytest collects
+- **Tests inside**: in TypeScript, `it` and `test` in a support file are read as tests, since mocha runs the files under `test/` as tests. Those a function of the support file declares are not read, since they become tests of the file that calls the function, for example `export function describeIfReady() { return (name) => describe(name, …) }`. Those inside a function passed straight to a call (`[1, 2].forEach((n) => it(…))`) are still read. In Python, only files named like test files (`test_*.py`, `*_test.py`) are read for tests, since that is what pytest collects
 - **Following**: when a test calls a function of a support file, the function is followed. The calls inside are resolved through the support file's own imports, so a test that calls the product through a helper guards that product code
   - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
   - Calling a name the support file does not hold as a function (a value, say) counts as unresolved

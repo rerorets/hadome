@@ -15,7 +15,7 @@ import (
 // testFile reads what a test file, or a test support file, binds.
 func (r *typescript) testFile(f *file, t *tables) *tsFile {
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, via: map[string][2]string{},
-		unresolved: map[string]bool{}, helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{},
+		unresolved: map[string]bool{}, loaderFns: map[string]string{}, external: map[string]bool{}, helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{},
 		outer: map[string]string{}, params: map[string]*sitter.Node{}, setups: map[string][]tsSetup{},
 		setupNodes: map[uintptr]bool{}, outerLoaded: map[string]string{}, outerModules: map[string]string{}}
 	tf.bind()
@@ -54,6 +54,7 @@ func (tf *tsFile) required(call *sitter.Node) string {
 func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
 	p, kind := tf.r.project.resolve(tf.f.path, spec)
 	if kind == tsExternal || n == nil {
+		tf.bindExternal(n, kind)
 		return
 	}
 	switch n.Kind() {
@@ -93,6 +94,16 @@ func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
 	})
 }
 
+// bindExternal records the names an import from outside the repository binds.
+func (tf *tsFile) bindExternal(n *sitter.Node, kind tsKind) {
+	if n == nil || kind != tsExternal {
+		return
+	}
+	for _, name := range tsImportedNames(tf.f, n) {
+		tf.external[name] = true
+	}
+}
+
 // bindName binds a local name to a name exported by the file p.
 func (tf *tsFile) bindName(local, p, name string, kind tsKind) {
 	switch {
@@ -118,7 +129,7 @@ func (tf *tsFile) bindModule(local, p string, kind tsKind) {
 // followSupport walks a function of a test support file the test calls. Its calls resolve through
 // the support file's own imports, and its hazards are reported at its own lines. A name the file
 // holds no function for counts as unresolved.
-func (w *tsWalk) followSupport(p, name string) {
+func (w *tsWalk) followSupport(p, name string, args []*sitter.Node) {
 	sf := w.tf.r.supportFile(p, w.tf.t)
 	if sf == nil || sf.helpers[name] == nil {
 		w.t.test.Unresolved++
@@ -126,10 +137,10 @@ func (w *tsWalk) followSupport(p, name string) {
 	}
 	sub := &tsWalk{tf: sf, t: w.t, vars: sf.outerVars(), locals: map[string]bool{}, walking: w.walking,
 		loaded: maps.Clone(sf.outerLoaded), modules: maps.Clone(sf.outerModules), used: map[string]bool{},
-		done: map[uintptr]bool{}, fake: w.fake}
+		done: map[uintptr]bool{}, fake: w.fake, plain: map[string]bool{}, rows: map[string][]string{}}
 	prev := w.t.f
 	w.t.f = sf.f
-	sub.follow(name)
+	sub.followFrom(w, name, args)
 	w.t.f = prev
 }
 

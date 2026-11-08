@@ -46,5 +46,5 @@ describe('send', () => {
 send helper calls=[src.send] unresolved=0
 send module calls=[src.send] unresolved=0
 send renamed calls=[src.send] unresolved=0
-send two calls=[] unresolved=0`)
+send two calls=[] unresolved=1`)
 }
