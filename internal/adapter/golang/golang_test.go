@@ -836,3 +836,29 @@ func Error() string                    { return "" }
 		t.Errorf("documented elsewhere:\n got %v\nwant %s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Mutants
+// A method asked for is broken as a function is.
+func TestGoMutantsInMethods(t *testing.T) {
+	src := `package calc
+
+type Counter struct{ n int }
+
+func (c *Counter) Over(limit int) bool { return c.n > limit }
+`
+	tree := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}, "calc/calc.go": {Data: []byte(src)}}
+	funcs := []facts.Symbol{{ID: "example.com/app/calc.Counter.Over", Kind: facts.SymbolMethod, Path: "calc/calc.go", Line: 5}}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		got = append(got, fmt.Sprintf("%d %s %s: %s -> %s", m.Line, m.Func, m.Operator, m.Original, m.Replacement))
+	}
+	want := "5 example.com/app/calc.Counter.Over return the zero value: c.n > limit -> false\n5 example.com/app/calc.Counter.Over flip a comparison: > -> <="
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
