@@ -152,6 +152,57 @@ func (tf *tsFile) bindDriver(n *sitter.Node) {
 	})
 }
 
+// tsPlaywright is the package of Playwright's test runner, and tsBrowserFixtures the fixtures it
+// hands a test that drive the application from outside: a browser page, a browser context, and an
+// HTTP client for the application's API.
+const tsPlaywright = "@playwright/test"
+
+var tsBrowserFixtures = set("page", "context", "request")
+
+// playwright reports whether an import of spec takes Playwright's test runner: the package itself,
+// or a test support file that imports it, such as fixtures.ts holding base.extend(...). The support
+// file's own imports are read, not followed further.
+func (tf *tsFile) playwright(spec string) bool {
+	if spec == tsPlaywright {
+		return true
+	}
+	p, kind := tf.r.project.resolve(tf.f.path, spec)
+	if kind == tsExternal {
+		return false
+	}
+	sf := tf.r.files[p]
+	if sf == nil || !sf.support {
+		return false
+	}
+	for _, top := range named(sf.root) {
+		if top.Kind() == "import_statement" && unquote(sf.field(top, "source")) == tsPlaywright {
+			return true
+		}
+	}
+	return false
+}
+
+// receivesBrowser reports whether a test function takes one of Playwright's fixtures that drive
+// the application from outside: async ({ page }) => ….
+func (tf *tsFile) receivesBrowser(fn *sitter.Node) bool {
+	params := named(tsParams(fn))
+	if !tf.browser || len(params) == 0 {
+		return false
+	}
+	found := false
+	walk(params[0], func(x *sitter.Node) bool {
+		switch x.Kind() {
+		case "shorthand_property_identifier_pattern":
+			found = found || tsBrowserFixtures[tf.f.text(x)]
+		case "pair_pattern":
+			found = found || tsBrowserFixtures[tf.f.field(x, "key")]
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // objectHelpers records the functions an object of the file holds, as helpers named obj.key:
 // const helpers = { twice: (n) => double(n), build() { return new Store() } }.
 func (tf *tsFile) objectHelpers(obj string, o *sitter.Node) {

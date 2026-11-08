@@ -194,7 +194,7 @@ type Test struct {
 	// passed as a value. Names in type positions are not values.
 	Reads int
 	// Drives is true when the test drives the application from outside through an HTTP test client
-	// (REST Assured's given(), MockMvc's perform(), supertest's request()). Such a test exercises the
+	// (REST Assured's given(), MockMvc's perform(), supertest's request(), Playwright's page fixture). Such a test exercises the
 	// product without calling one of its functions, so what it guards cannot be named.
 	Drives bool
 	// Asserts counts the calls that check something: assertions, and calls that fail the test.

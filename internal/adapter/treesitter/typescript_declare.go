@@ -177,6 +177,7 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 	if d.fn.Kind() == "identifier" {
 		w.follow(tf.f.text(d.fn))
 	} else {
+		t.test.Drives = t.test.Drives || tf.receivesBrowser(d.fn)
 		w.params(tsParams(d.fn))
 		w.walk(d.fn.ChildByFieldName("body"))
 	}

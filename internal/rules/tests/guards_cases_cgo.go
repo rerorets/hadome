@@ -11,7 +11,7 @@ import (
 func init() {
 	languageGuardsCases = append(driveCases(), supportCases()...)
 	languageScopeCases = collidingCases()
-	languageUnknownCases = missingImportCases()
+	languageUnknownCases = append(missingImportCases(), browserCases()...)
 }
 
 // supportCases are tests that reach the product through a helper of a test support file, which
@@ -64,6 +64,25 @@ func missingImportCases() []engine.Case {
 	return []engine.Case{
 		{Name: "a test that calls only names of a local import naming no file needs review", Base: tr(base),
 			Head: tr(base + "\n" + missing), WantReview: []string{"tests/target-unknown"}},
+	}
+}
+
+// browserCases are Playwright tests that take the browser page: they drive the application from
+// outside, through a helper of a test support file too.
+func browserCases() []engine.Case {
+	tr := func(test string) fstest.MapFS {
+		return fstest.MapFS{
+			"src/rows.ts":      {Data: []byte("export function rows(): number[] { return [1, 2] }\n")},
+			"src/rows.test.ts": {Data: []byte("import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n")},
+			"e2e/helpers.ts":   {Data: []byte("import type { Page } from '@playwright/test'\n\nexport async function signIn(page: Page) { await page.goto('/sign-in') }\n")},
+			"e2e/home.spec.ts": {Data: []byte(test)},
+		}
+	}
+	const base = "import { test, expect } from '@playwright/test'\n\ntest('opens', async ({ page }) => { await page.goto('/'); await expect(page).toHaveTitle(/x/) })\n"
+	const helper = "\nimport { signIn } from './helpers'\n\ntest('signs in', async ({ page }) => { await signIn(page); await expect(page).toHaveURL(/home/) })\n"
+	return []engine.Case{
+		{Name: "a Playwright test that takes the browser page passes", Base: tr(""), Head: tr(base)},
+		{Name: "a Playwright test that hands the page to a helper of a test support file passes", Base: tr(base), Head: tr(base + helper)},
 	}
 }
 

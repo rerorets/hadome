@@ -237,6 +237,7 @@ TypeScript のテストの宣言は、次のように読みます。
 | TypeScript | supertest の `request()` | `supertest` |
 | TypeScript | Hono の `app.request(…)`。最初の引数が `/` で始まる文字列か `new Request(…)` のとき、またはオブジェクトがリポジトリから import した名前のとき | 要らない（呼び出しの形で見分ける） |
 | TypeScript | `app.fetch(new Request(…))`。fetch の形で HTTP を受けるアプリに、メモリの中で要求を渡す | 要らない（呼び出しの形で見分ける） |
+| TypeScript | Playwright の fixture の `page`・`context`・`request` を受け取るテスト（`test('…', async ({ page }) => …)`）。ブラウザか HTTP でアプリを外から動かすからです。呼ばなくても、受け取れば Drives とします | `@playwright/test`。または、`@playwright/test` を import するテストの補助のファイル（`base.extend(…)` を持つ `e2e/fixtures.ts` など） |
 
 テストからの呼び出しは Go のアダプタと同じように対象に解決します。たどるのは、各ファイルがリポジトリから import する名前と、import したクラスのコンストラクタで作った変数です。解決できない呼び出しは未解決として数えます。
 

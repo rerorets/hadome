@@ -35,7 +35,10 @@ type tsFile struct {
 	mocks []*sitter.Node // file-level evidence that the file mocks
 	// drivers are the local names of the HTTP test clients the file imports (supertest's request),
 	// whose calls drive the application from outside.
-	drivers  map[string]bool
+	drivers map[string]bool
+	// browser is true when the file takes Playwright's test from @playwright/test, directly or
+	// through a test support file that does.
+	browser  bool
 	comments map[int]string
 	// params are the parameter lists of the helpers, whose default values run on each call.
 	params map[string]*sitter.Node
@@ -78,6 +81,7 @@ func (tf *tsFile) bind() {
 			if spec == "supertest" {
 				tf.bindDriver(top)
 			}
+			tf.browser = tf.browser || tf.playwright(spec)
 			tf.bindImport(top, spec)
 		case "lexical_declaration", "variable_declaration":
 			for _, d := range named(top) {
