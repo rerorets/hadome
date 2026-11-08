@@ -26,8 +26,8 @@ type jvmCode struct {
 type jvmScope struct {
 	fields    map[string]string
 	inherited map[string]jvmCode
-	// values are the value fields (jvmFile.valueFields) of a test class of another file that the
-	// class extends.
+	// values are the fields the class and the test classes it extends declare, by whether the last
+	// declaration of each is a value field (jvmFile.valueFields).
 	values map[string]bool
 	mocks  []jvmCode
 	setups []jvmCode
@@ -177,10 +177,11 @@ var jvmDrivers = map[string][]string{
 	"org.springframework.test.web.reactive.server": {"exchange"},
 }
 
-// noteValueField records a field of a test class whose initializer names something of the product.
-func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
+// noteValueField records a field of a test class whose initializer names something of the product,
+// and reports whether it does.
+func (jf *jvmFile) noteValueField(name string, init *sitter.Node) bool {
 	if name == "" || init == nil {
-		return
+		return false
 	}
 	uses := false
 	walk(init, func(n *sitter.Node) bool {
@@ -190,6 +191,7 @@ func (jf *jvmFile) noteValueField(name string, init *sitter.Node) {
 	if uses {
 		jf.markValueField(name)
 	}
+	return uses
 }
 
 // markValueField records name as a value field of the file's test classes.
@@ -201,9 +203,13 @@ func (jf *jvmFile) markValueField(name string) {
 }
 
 // valueField reports whether name is a value field of the test's class, or one it inherits, and not
-// a local of the same name.
+// a local of the same name. What the class or the classes it extends declare last decides: an
+// override with a literal is no value field, though the class it extends built one of that name.
 func (w *jvmWalk) valueField(name string) bool {
-	return (w.jf.valueFields[name] || w.values[name]) && !w.locals[name]
+	if v, ok := w.values[name]; ok {
+		return v && !w.locals[name]
+	}
+	return w.jf.valueFields[name] && !w.locals[name]
 }
 
 // readsValueField reports whether an identifier in a test reads a value field of its class: not a

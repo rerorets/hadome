@@ -30,7 +30,9 @@ func (jf *jvmFile) ktCollect(n *sitter.Node, scope *jvmScope) (tests, mocks []*s
 				}
 			}
 			if !mock {
-				jf.ktNoteValueField(m)
+				if name, uses := jf.ktNoteValueField(m); name != "" {
+					scope.values[name] = uses
+				}
 			}
 		case "function_declaration":
 			anns := ktAnnotations(f, m)
@@ -71,7 +73,9 @@ func (jf *jvmFile) ktInherit(n *sitter.Node, scope *jvmScope, depth int) {
 		scope.inherited[name] = jvmCode{sjf, body}
 	}
 	for name := range sjf.valueFields {
-		scope.values[name] = true
+		if _, declared := scope.values[name]; !declared {
+			scope.values[name] = true
+		}
 	}
 	for _, m := range mocks {
 		scope.mocks = append(scope.mocks, jvmCode{sjf, m})

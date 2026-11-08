@@ -387,15 +387,16 @@ func ktArgumentValue(a *sitter.Node) *sitter.Node {
 }
 
 // ktNoteValueField records a property of a test class whose initializer names something of the
-// product: its expression after the declaration (val query = QUERY.trim()).
-func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
-	name := "" // what comes before the name (modifiers) is not the initializer
+// product: its expression after the declaration (val query = QUERY.trim()). It returns the
+// property's name, and whether it is such a field.
+func (jf *jvmFile) ktNoteValueField(n *sitter.Node) (string, bool) {
+	name, uses := "", false // what comes before the name (modifiers) is not the initializer
 	for _, c := range named(n) {
 		switch {
 		case c.Kind() == "variable_declaration":
 			name = jf.f.text(c.NamedChild(0))
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
-			jf.noteValueField(name, c)
+			uses = jf.noteValueField(name, c) || uses
 			walk(c, func(x *sitter.Node) bool {
 				if x.Kind() != "string_literal" {
 					return true
@@ -403,12 +404,14 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) {
 				for _, used := range ktTemplateNames(jf.f, x) {
 					if jf.names[used] != "" {
 						jf.markValueField(name)
+						uses = true
 					}
 				}
 				return true
 			})
 		}
 	}
+	return name, uses
 }
 
 // ktClassMembers lists a class's members with those of its companion object, whose properties and
