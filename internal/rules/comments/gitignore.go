@@ -87,7 +87,8 @@ func parseIgnoreLine(l string) (ignoreRule, bool) {
 	for strings.HasSuffix(l, " ") && !strings.HasSuffix(l, "\\ ") {
 		l = l[:len(l)-1]
 	}
-	if l == "" || strings.HasPrefix(l, "#") {
+	// git never matches a pattern that ends in an unescaped backslash.
+	if l == "" || strings.HasPrefix(l, "#") || (len(l)-len(strings.TrimRight(l, `\`)))%2 == 1 {
 		return ignoreRule{}, false
 	}
 	var r ignoreRule
@@ -145,11 +146,9 @@ func segmentRegexp(s string) string {
 			b.WriteString("[^/]*")
 		case '?':
 			b.WriteString("[^/]")
-		case '\\':
-			if i+1 < len(s) {
-				i++
-				b.WriteString(regexp.QuoteMeta(s[i : i+1]))
-			}
+		case '\\': // never last: parseIgnoreLine drops a pattern ending in a lone backslash
+			i++
+			b.WriteString(regexp.QuoteMeta(s[i : i+1]))
 		case '[':
 			end := strings.IndexByte(s[i+1:], ']')
 			if end < 0 {

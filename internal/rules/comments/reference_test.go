@@ -37,6 +37,16 @@ func TestBrokenReferenceFollowsGitignorePatterns(t *testing.T) {
 		{"a comment line is not a pattern", map[string]string{".gitignore": "# notes/\n"}, "notes/rows.md", true},
 		{"a character class", map[string]string{".gitignore": "draft[0-9].md\n"}, "draft3.md", false},
 		{"a negated character class", map[string]string{".gitignore": "draft[!0-9].md\n"}, "draft3.md", true},
+		{"a negated character class matches what it leaves out", map[string]string{".gitignore": "draft[!0-9].md\n"}, "draftx.md", false},
+		{"a question mark matches one character", map[string]string{".gitignore": "draft?.md\n"}, "draft3.md", false},
+		{"an escaped star is a literal star", map[string]string{".gitignore": "notes\\*/\n"}, "notesx/rows.md", true},
+		{"an escaped ordinary character is itself", map[string]string{".gitignore": "no\\tes/\n"}, "notes/rows.md", false},
+		{"a trailing backslash never matches", map[string]string{".gitignore": "rows.md\\\n"}, "rows.md", true},
+		{"an unclosed bracket is literal", map[string]string{".gitignore": "draft[.md\n"}, "draft.md", true},
+		{"an unreadable line does not stop the others", map[string]string{".gitignore": "draft[].md\nnotes/\n"}, "notes/rows.md", false},
+		{"a lone slash is not a pattern", map[string]string{".gitignore": "/\n"}, "notes/rows.md", true},
+		{"trailing spaces are dropped", map[string]string{".gitignore": "notes/  \n"}, "notes/rows.md", false},
+		{"a carriage return is dropped", map[string]string{".gitignore": "notes/\r\n"}, "notes/rows.md", false},
 		{"a reference above the root is never ignored", map[string]string{".gitignore": "*.md\n"}, "../../../rows.md", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
