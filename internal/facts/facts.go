@@ -50,9 +50,15 @@ type File struct {
 
 // ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
 // unit's last path element, then the name. example.com/app/store.Append is store.Append, and
-// web/src/lib.getSession is lib.getSession. The ID itself stays whole wherever findings are matched.
+// web/src/lib.getSession is lib.getSession. A unit at the root of a TypeScript project is ".", so
+// its IDs start with "..": the name alone is shown, ..devServer as devServer. The ID itself stays
+// whole wherever findings are matched.
 func ShortName(id string) string {
-	return id[strings.LastIndex(id, "/")+1:]
+	short := id[strings.LastIndex(id, "/")+1:]
+	if name, root := strings.CutPrefix(short, ".."); root && name != "" {
+		return name
+	}
+	return short
 }
 
 // CountLines returns the number of lines of a file's content, as an editor shows them: the newline

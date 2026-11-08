@@ -247,7 +247,7 @@ hadome は純粋さを import から、検査のたびに決めます。
 
 違反にはすべて、エージェント向けに書いた `why` と `fix` が付きます。中身は、何が起きたか、なぜ困るか、それを解消するいちばん小さな変更です。上の文章がそのメッセージの出発点になります。
 
-違反の文言は、シンボルを設定で名指すのと同じ形で書きます。ユニットのパスの最後の要素と名前です。例: `example.com/app/store.Append` は `store.Append`。`size/` と `comments/` も同じ形です。base と照らし合わせるときは、省かない ID を使います。
+違反の文言は、シンボルを設定で名指すのと同じ形で書きます。ユニットのパスの最後の要素と名前です。例: `example.com/app/store.Append` は `store.Append`。TypeScript のリポジトリの直下のファイルはユニットが `.` なので、名前だけを書きます。例: ルートの `vite.config.ts` の `devServer` は `devServer`。`size/` と `comments/` も同じ形です。base と照らし合わせるときは、省かない ID を使います。
 
 危険な書き方の違反（`no-clock`、`no-sleep`、`always-true`、`no-mock`）の `message` には、見つけたコードを1行で書きます。何行にもわたる呼び出しは最初の行だけを書き、80文字を超えるところは切ります。省いたところには「…」を付けます。例: `test waits by sleeping: setTimeout(() => { …`。base と照らし合わせるときは、省かないコード全体を使います。
 
