@@ -89,7 +89,8 @@ type tsParam struct {
 	pattern *sitter.Node
 }
 
-// tsParamList reads a parameter list in order. A parameter with a default value keeps its name.
+// tsParamList reads a parameter list in order. A parameter with a default value keeps its name: the
+// grammar gives it as a parameter with a value, also in JavaScript files.
 func tsParamList(f *file, params *sitter.Node) []tsParam {
 	if params == nil {
 		return nil
@@ -102,9 +103,6 @@ func tsParamList(f *file, params *sitter.Node) []tsParam {
 	for _, p := range list {
 		if k := p.Kind(); k == "required_parameter" || k == "optional_parameter" {
 			p = p.ChildByFieldName("pattern")
-		}
-		if p != nil && p.Kind() == "assignment_pattern" {
-			p = p.ChildByFieldName("left")
 		}
 		if p != nil && p.Kind() == "identifier" {
 			out = append(out, tsParam{name: f.text(p)})
