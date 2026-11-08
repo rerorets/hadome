@@ -141,3 +141,86 @@ it.each([[(n: number) => n]])('inline', (fn) => { expect(fn(1)).toBe(1) })
 inline calls=[] unresolved=0
 renders %s calls=[src/ui.Badge src/ui.Chip] unresolved=0`)
 }
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// What a local holds decides whether its methods are unidentified: a copy of a plain value, a
+// built-in function's or class's result and a value required from an external library are plain;
+// a local with no value, a choice between values, and what a function or module loaded with
+// import() returns are not.
+func TestWhatALocalHoldsDecidesWhetherItsMethodsAreUnresolved(t *testing.T) {
+	expect(t, calls(t, "typescript",
+		"worker/queue.ts", "export function open() { return { close() {} } }\n",
+		"worker/queue.test.js", `const ue = require('user-event')
+const { setup } = require('other-lib')
+const { open } = require('./queue')
+
+it('copy', () => { const a = [1]; const b = a; b.push(2) })
+it('builtin function', () => { const s = String(1); s.trim() })
+it('builtin class', () => { const m = new Map(); m.set(1, 2) })
+it('required module', () => { const u = ue.setup(); u.click() })
+it('required name', () => { const u = setup(); u.click() })
+it('no value', () => { let c; c = open(); c.close() })
+it('choice', () => { const c = true ? open() : open(); c.close() })
+it('loaded function', async () => { const { open: o } = await import('./queue'); const c = o(); c.close() })
+it('loaded module', async () => { const q = await import('./queue'); const c = q.open(); c.close() })
+`), `builtin class calls=[] unresolved=0
+builtin function calls=[] unresolved=0
+choice calls=[worker.open] unresolved=1
+copy calls=[] unresolved=0
+loaded function calls=[worker.open] unresolved=1
+loaded module calls=[worker.open] unresolved=1
+no value calls=[worker.open] unresolved=1
+required module calls=[] unresolved=0
+required name calls=[] unresolved=0`)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// A helper's parameters hold their arguments only while the helper runs: afterwards the test's own
+// names hold what they held before. A parameter holds a class instance passed to it, an optional
+// parameter holds its argument too, and a parameter that receives something else holds neither a
+// plain value nor a table row of the same name.
+func TestHelperParametersHoldArgumentsOnlyInsideTheHelper(t *testing.T) {
+	expect(t, calls(t, "typescript",
+		"src/store.ts", "export class Store { add(n: number) { return n } }\nexport function open() { return { close() {} } }\nexport function append(n: number) { return n }\nexport function GET() {}\n",
+		"src/store.test.ts", `import { Store, open, append } from './store'
+type S = { GET(): void }
+let route: S
+beforeAll(async () => { route = await import('./store') })
+function other(route: S) { route.GET() }
+function use(s: Store) { s.add(1) }
+function maybe(s?: Store) { s.add(1) }
+function shut(c: { close(): void }) { c.close() }
+it('restored', () => { other({ GET() {} }); route.GET() })
+it('class', () => { const store = new Store(); use(store) })
+it('optional', () => { const store = new Store(); maybe(store) })
+it('not plain', () => { const c = [1]; shut(open()); c.push(1) })
+describe.each([[append]])('%s', (fn) => {
+  function call(fn: () => number) { return fn() }
+  it('not a row', () => { call(() => 1) })
+})
+describe.each([{ op: append }])('$op', ({ op: run }) => {
+  it('renamed key', () => { expect(run(1)).toBe(1) })
+})
+`), `$op renamed key calls=[src.append] unresolved=0
+%s not a row calls=[] unresolved=0
+class calls=[src.Store src.Store.add] unresolved=0
+not plain calls=[src.open] unresolved=1
+optional calls=[src.Store src.Store.add] unresolved=0
+restored calls=[src.GET] unresolved=0`)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// In a JavaScript file, a helper's parameter with a default value holds the argument in its
+// position like any other.
+func TestDefaultedParametersHoldTheirArgument(t *testing.T) {
+	expect(t, calls(t, "typescript",
+		"src/route.js", "export function GET(id) { return id }\n",
+		"src/route.test.js", `let route
+beforeAll(async () => { route = await import('./route') })
+function call(r = null, id) { return r.GET(id) }
+it('defaulted', () => { call(route, 'a') })
+`), `defaulted calls=[src.GET] unresolved=0`)
+}
