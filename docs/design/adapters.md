@@ -385,6 +385,14 @@ A value of another module's type declared without a pointer (`var r io.Reader`) 
 
 For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
 
+A package's `TestMain` (`func TestMain(m *testing.M)`) runs before every test of the package. So the product code `TestMain` calls counts as called by every test in the same directory.
+
+- Example: when `TestMain` calls `db.Open` and a test only uses `dbtest.Pool()`, that test's targets include `db.Open`
+- Helpers and functions of test support packages that `TestMain` calls are followed as they are for a test
+- `clock` and `sleep` inside `TestMain` are hazards of every test too. Reading the time or waiting there makes every test's result depend on the time
+- Checks, `unknown` and skips inside `TestMain` are not counted as the tests'. What a test checks is decided by its own body
+- A `TestMain` of the external test package (`package store_test`) applies to every test in the directory too. The tests of both packages build into one test binary
+
 There is no tokenizer shared across languages. Each language is read with its own parser.
 
 Full parsers are used for every language because what users get (accurate function spans, test boundaries, annotations and imports, and few `unknown` facts) comes ahead of how easy hadome is to build. The extra work this brings (a C dependency for tree-sitter, and builds per operating system and architecture) is taken on by the release process, not by users. See [distribution.md](distribution.md).

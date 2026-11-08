@@ -93,9 +93,10 @@ func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	helpers := collectHelpers(files)
 	idx := buildIndex(files, modules, helpers)
 	tb := newTables(c)
+	mains := findTestMains(fset, files, helpers)
 	for _, pf := range files {
 		if pf.test {
-			a.Tests = append(a.Tests, extractTests(fset, pf, idx, tb, helpers[helperKey(pf)])...)
+			a.Tests = append(a.Tests, extractTests(fset, pf, idx, tb, helpers[helperKey(pf)], mains[path.Dir(pf.path)])...)
 			continue
 		}
 		if pf.support { // test code: neither the product's dependencies nor its documented API
