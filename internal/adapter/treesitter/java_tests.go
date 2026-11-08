@@ -215,6 +215,8 @@ type jvmWalk struct {
 	inherited map[string]jvmCode
 	// values are the value fields of that class.
 	values map[string]bool
+	// builtins are the locals that hold a string or a standard collection (jvm_builtins.go).
+	builtins map[string]string
 }
 
 func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
@@ -252,7 +254,9 @@ func (w *jvmWalk) invoke(n *sitter.Node, obj, name string, args []*sitter.Node, 
 	case w.jf.names[obj] != "":
 		target = w.jf.names[obj] + "." + name
 	case w.locals[obj]:
-		w.t.test.Unresolved++
+		if w.builtins[obj] == "" {
+			w.t.test.Unresolved++
+		}
 	default:
 		target = w.member(obj, name)
 	}
@@ -333,6 +337,11 @@ func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
 			}
 			name := f.field(d, "name")
 			w.locals[name] = true
+			kind := w.builtinType(typ)
+			if kind == "" {
+				kind = w.javaBuiltin(d.ChildByFieldName("value"))
+			}
+			w.noteBuiltin(name, kind)
 			if class, ok := w.jf.names[typ]; ok {
 				w.vars[name] = class
 			} else if v := d.ChildByFieldName("value"); v != nil && v.Kind() == "object_creation_expression" {

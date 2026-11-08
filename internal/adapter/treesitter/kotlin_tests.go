@@ -223,9 +223,17 @@ func (w *jvmWalk) ktProperty(n *sitter.Node) {
 		case c.Kind() == "variable_declaration":
 			name = f.text(c.NamedChild(0))
 			w.locals[name] = true
+			kind := ""
+			if c.NamedChildCount() > 1 {
+				kind = w.builtinType(f.text(c.NamedChild(1)))
+			}
+			w.noteBuiltin(name, kind)
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
 			if class := w.jf.ktBuilt(c); class != "" {
 				w.vars[name] = class
+			}
+			if w.builtins[name] == "" {
+				w.noteBuiltin(name, w.ktBuiltin(c))
 			}
 		}
 	}

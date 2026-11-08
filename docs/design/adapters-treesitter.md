@@ -208,6 +208,11 @@ In TypeScript, a method of a value the test built itself does not count as unres
 - Such a value passed to a helper of the file is treated the same inside the helper
 - A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, still counts as unresolved
 
+In Java and Kotlin too, a method called on a local the test built as a string or a standard collection counts neither as a call of the product nor as unresolved, since it is the language's own method. Example: `sql.contains("SELECT")` with `val sql = "SELECT 1"`
+
+- A string is a string literal, a member of a string (`"…".trimIndent().split(" ")`), a Java concatenation with a string, or a local declared `String`
+- A collection is one built by a standard function such as `listOf`, or a local declared `List`, `Map` and the like. Its elements may be anything, so calls through an element (`xs.first().push(1)`) are read as before
+
 ### Test support files
 
 Some files are not test files but exist only for the tests: `test/helpers.ts`, `e2e/fixtures.ts`, `conftest.py`. They are not product code, so they are treated as test support files.
