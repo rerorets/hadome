@@ -185,6 +185,8 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 		base := version(calc, strong)
 		head := version(strings.Replace(calc, "return 1", "return 1 // above zero", 1), strong)
 		head["calc/double.go"] = "//go:build ignore\n\n" + double // new, so a survivor would be a regression
+		// One mutant only: removing the call.
+		head["calc/log.go"] = "//go:build ignore\n\npackage calc\n\nimport \"fmt\"\n\n// Log says hello.\nfunc Log() {\n\tfmt.Println(\"hello\")\n}\n"
 		var progress strings.Builder
 		an := adapter.New()
 		m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress}
@@ -195,8 +197,15 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 		if len(r.Regressions) != 0 || r.ExitCode() != engine.ExitReview {
 			t.Fatalf("want no regression and a review, got exit %d: %+v", r.ExitCode(), r)
 		}
-		if len(r.Reviews) != 1 || r.Reviews[0].Rule != mutation.RuleID || r.Reviews[0].File != "calc/double.go" {
-			t.Fatalf("want one review of calc/double.go, got %+v", r.Reviews)
+		var files []string
+		for _, f := range r.Reviews {
+			if f.Rule != mutation.RuleID {
+				t.Errorf("unexpected review %+v", f)
+			}
+			files = append(files, f.File)
+		}
+		if strings.Join(files, " ") != "calc/double.go calc/log.go" {
+			t.Fatalf("want one review per file left out of the build, got %+v", r.Reviews)
 		}
 		if !strings.Contains(progress.String(), "calc.Double, swap arithmetic: not built\n") {
 			t.Errorf("want a progress line saying the mutant was not built, got\n%s", progress.String())
