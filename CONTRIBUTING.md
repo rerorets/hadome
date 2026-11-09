@@ -42,7 +42,7 @@ git config core.hooksPath .githooks
 - A new package or import starts with an arrow in [the dependency diagram](docs/design/dependencies.md). An import the diagram does not draw fails hadome's check of itself.
 - A new rule comes with its self-test.
 - When `go run ./cmd/hadome check` returns exit code `3`, say in the pull request what needs a person's review.
-- Pull requests are squash-merged. The pull request's title becomes the commit message on main, and a line of the release notes.
+- Pull requests are squash-merged. The pull request's title becomes the commit message on main. The title and description are also what the [changelog](CHANGELOG.md) is drafted from.
 
 ## Review
 
