@@ -29,10 +29,13 @@ type reached struct {
 
 func newReached() reached { return reached{calls: map[string]bool{}, units: map[string]bool{}} }
 
+// keys returns the keys set to true, sorted.
 func keys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+	for k, v := range m {
+		if v {
+			out = append(out, k)
+		}
 	}
 	sort.Strings(out)
 	return out
@@ -83,6 +86,7 @@ type tracing struct {
 	io     func(path string) bool  // whether a whole path names something that does input or output
 	locals map[string]string       // the variables of the function being read, and their types
 	fields map[string]string       // the fields of its class, and their types
+	seen   map[string]bool         // the values at the top of the file already read for it
 }
 
 // traceFiles fills in the facts of the functions each file lists, and appends the entry points
@@ -139,41 +143,41 @@ func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
 			})
 		}
 	}
-	tr.reachInto(fn, code, &got, true)
+	tr.seen = map[string]bool{}
+	tr.reachInto(fn, code, &got)
 	return got
 }
 
-func (tr *tracing) reachInto(fn tfunc, code *sitter.Node, got *reached, values bool) {
+func (tr *tracing) reachInto(fn tfunc, code *sitter.Node, got *reached) {
 	f := tr.f
 	walk(code, func(n *sitter.Node) bool {
 		if tr.syn.special != nil && tr.syn.special(tr, fn, n, got) {
 			return false
 		}
 		if obj, name := tr.syn.member(f, n); obj != nil && name != nil {
-			// A known object is read here; an object of more than a name is read further down.
-			return !tr.memberOf(fn, obj, f.text(name), got) || !tr.syn.idents[obj.Kind()]
+			// A known name is read here; any other object is read further down.
+			return !tr.memberOf(fn, obj, f.text(name), got)
 		}
 		if !tr.syn.idents[n.Kind()] || tr.memberName(n) {
 			return true
 		}
-		tr.name(fn, f.text(n), got, values)
+		tr.name(fn, f.text(n), got)
 		return true
 	})
 }
 
-// memberName reports whether an identifier is the member side of a member access, which Kotlin
-// wraps in a node of its own (navigation_suffix).
+// memberName reports whether an identifier is the member side of a member access.
 func (tr *tracing) memberName(n *sitter.Node) bool {
-	for p, i := n.Parent(), 0; p != nil && i < 2; p, i = p.Parent(), i+1 {
-		if _, name := tr.syn.member(tr.f, p); name != nil && name.Id() == n.Id() {
-			return true
-		}
+	p := n.Parent()
+	if p == nil {
+		return false
 	}
-	return false
+	_, name := tr.syn.member(tr.f, p)
+	return name != nil && name.Id() == n.Id()
 }
 
 // name records the use of a bare name.
-func (tr *tracing) name(fn tfunc, x string, got *reached, values bool) {
+func (tr *tracing) name(fn tfunc, x string, got *reached) {
 	if _, local := tr.locals[x]; local {
 		return
 	}
@@ -187,8 +191,9 @@ func (tr *tracing) name(fn tfunc, x string, got *reached, values bool) {
 	case tr.funcs[fn.own+"."+x]:
 		got.calls[fn.own+"."+x] = true
 	default:
-		if v, ok := tr.values[x]; ok && values {
-			tr.reachInto(fn, v, got, false)
+		if v, ok := tr.values[x]; ok && !tr.seen[x] { // a value made from another reaches what that one does
+			tr.seen[x] = true
+			tr.reachInto(fn, v, got)
 		}
 	}
 }
@@ -205,8 +210,9 @@ func (tr *tracing) use(b tbind, got *reached) {
 	}
 }
 
-// memberOf records a.b where a is the object itself, a variable or field of a known type, or a
-// name the file binds. It reports whether it knew what a is.
+// memberOf records a.b where a is the object itself, a variable or field of a known type, a name
+// the file binds, a field of the object itself or a new object of a known class. It reports
+// whether a is the object itself or a name it knew, which then needs no reading of its own.
 func (tr *tracing) memberOf(fn tfunc, obj *sitter.Node, name string, got *reached) bool {
 	if tr.self(obj) {
 		if fn.class != "" && tr.funcs[fn.class+"."+name] {
@@ -214,9 +220,14 @@ func (tr *tracing) memberOf(fn tfunc, obj *sitter.Node, name string, got *reache
 		}
 		return true
 	}
-	b, ok := tr.object(fn, obj)
-	if !ok {
-		return false
+	var b tbind
+	known := tr.syn.idents[obj.Kind()]
+	if known {
+		if b, known = tr.named(tr.f.text(obj)); !known {
+			return false
+		}
+	} else {
+		b = tr.object(fn, obj)
 	}
 	switch {
 	case b.io:
@@ -226,7 +237,7 @@ func (tr *tracing) memberOf(fn tfunc, obj *sitter.Node, name string, got *reache
 	case b.unit != "":
 		got.units[b.unit] = true
 	}
-	return true
+	return known
 }
 
 // self reports whether a node is the object itself: self, this.
@@ -234,46 +245,55 @@ func (tr *tracing) self(n *sitter.Node) bool {
 	return tr.syn.selves[n.Kind()] || tr.syn.selves[tr.f.text(n)]
 }
 
-// object returns what the object of a member access stands for: a variable or field of a known
-// type, a name the file binds, a field of the object itself, or a new object of a known class.
-func (tr *tracing) object(fn tfunc, obj *sitter.Node) (tbind, bool) {
-	f := tr.f
-	typed := func(t string) (tbind, bool) { return tr.types(t), t != "" }
-	if tr.syn.idents[obj.Kind()] {
-		x := f.text(obj)
-		if t, isLocal := tr.locals[x]; isLocal {
-			return typed(t)
-		}
-		if b, bound := tr.binds[x]; bound {
-			return b, true
-		}
-		if t, isField := tr.fields[x]; isField {
-			return typed(t)
-		}
-		return tbind{}, false
+// typed returns what a variable's written type stands for; nothing for a variable written without
+// one.
+func (tr *tracing) typed(t string) tbind {
+	if t == "" {
+		return tbind{}
 	}
-	if inner, field := tr.syn.member(f, obj); inner != nil && field != nil && tr.self(inner) {
-		return typed(tr.fields[f.text(field)])
+	return tr.types(t)
+}
+
+// named returns what a name used as an object stands for, and whether it is one the function
+// knows: a variable, a name the file binds, or a field of its class.
+func (tr *tracing) named(x string) (tbind, bool) {
+	if t, isLocal := tr.locals[x]; isLocal {
+		return tr.typed(t), true
 	}
-	if tr.syn.built != nil {
-		if t := tr.syn.built(f, obj); t != "" {
-			return tr.class(fn, t), true
-		}
+	if b, bound := tr.binds[x]; bound {
+		return b, true
+	}
+	if t, isField := tr.fields[x]; isField {
+		return tr.typed(t), true
 	}
 	return tbind{}, false
 }
 
-// enclosing returns the function whose declaration holds n, whose parameters and class code there
-// sees, or top when n is outside every function.
-func enclosing(fns []tfunc, n *sitter.Node, top tfunc) tfunc {
-	found := top
-	for _, fn := range fns {
-		if fn.decl != nil && fn.decl.StartByte() <= n.StartByte() && n.EndByte() <= fn.decl.EndByte() &&
-			(found.decl == nil || fn.decl.StartByte() >= found.decl.StartByte()) {
-			found = fn
+// object returns what an object of more than a name stands for: a field of the object itself, or
+// a new object of a known class. Anything else stands for nothing known.
+func (tr *tracing) object(fn tfunc, obj *sitter.Node) tbind {
+	f := tr.f
+	if inner, field := tr.syn.member(f, obj); inner != nil && field != nil && tr.self(inner) {
+		return tr.typed(tr.fields[f.text(field)])
+	}
+	if tr.syn.built != nil {
+		if t := tr.syn.built(f, obj); t != "" {
+			return tr.class(fn, t)
 		}
 	}
-	return found
+	return tbind{}
+}
+
+// enclosing returns the function whose declaration holds n, whose parameters and class code there
+// sees, or top when n is outside every function. The functions listed never nest, so at most one
+// holds n.
+func enclosing(fns []tfunc, n *sitter.Node, top tfunc) tfunc {
+	for _, fn := range fns {
+		if fn.decl.StartByte() <= n.StartByte() && n.EndByte() <= fn.decl.EndByte() {
+			return fn
+		}
+	}
+	return top
 }
 
 // class returns what a class name stands for: a class the file binds, or one it declares.

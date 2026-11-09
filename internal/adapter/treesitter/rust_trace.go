@@ -63,10 +63,7 @@ func (r *rust) path(tr *tracing, fn tfunc, n *sitter.Node, got *reached) bool {
 		return false
 	}
 	f := tr.f
-	segs := strings.Split(strings.ReplaceAll(f.text(n), " ", ""), "::")
-	if i := strings.Index(segs[len(segs)-1], "<"); i >= 0 {
-		segs[len(segs)-1] = segs[len(segs)-1][:i]
-	}
+	segs := strings.Split(strings.ReplaceAll(f.text(n), " ", ""), "::") // a scoped identifier has two or more
 	last := segs[len(segs)-1]
 	if segs[0] == "Self" && fn.class != "" {
 		if tr.funcs[fn.class+"."+last] {
@@ -86,6 +83,10 @@ func (r *rust) path(tr *tracing, fn tfunc, n *sitter.Node, got *reached) bool {
 		}
 		return true
 	}
+	if own := fn.own + "." + strings.Join(segs, "."); tr.funcs[own] { // Type::f of the same module
+		got.calls[own] = true
+		return true
+	}
 	loc, internal := r.resolve(f.path, segs)
 	switch {
 	case !internal:
@@ -93,7 +94,7 @@ func (r *rust) path(tr *tracing, fn tfunc, n *sitter.Node, got *reached) bool {
 	case tr.funcs[loc+"."+last]:
 		got.calls[loc+"."+last] = true
 	default:
-		if t := loc + "." + strings.Join(segs[len(segs)-2:], "."); len(segs) > 1 && tr.funcs[t] { // module::Type::f
+		if t := loc + "." + strings.Join(segs[len(segs)-2:], "."); tr.funcs[t] { // module::Type::f
 			got.calls[t] = true
 		} else {
 			got.units[loc] = true

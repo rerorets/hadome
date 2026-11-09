@@ -30,3 +30,18 @@ func TestSurvivorMessagesSayRemovingForNothing(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: behaviour
+// target: the finding for untried mutants
+// The functions whose mutants were not tried are named once each, in order, whatever order the
+// mutants come in.
+func TestUntriedNamesEachFunctionOnceInOrder(t *testing.T) {
+	var rest []facts.Mutant
+	for _, fn := range []string{"calc.Zeta", "calc.Beta", "calc.Zeta", "calc.Delta", "calc.Alpha"} {
+		rest = append(rest, facts.Mutant{Func: fn})
+	}
+	want := "5 mutants beyond mutation.max-mutants were not tried, in calc.Alpha, calc.Beta, calc.Delta, calc.Zeta"
+	if got := untried(rest, nil).Message.In("en"); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}

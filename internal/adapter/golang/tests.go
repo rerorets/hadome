@@ -244,6 +244,9 @@ func (w *walker) visit(n ast.Node) bool {
 		w.funcLit(n)
 		return false
 	case *ast.CallExpr:
+		if w.trace.route(w, n) {
+			return false // registering a route is not the function's own work: its handlers are entry points
+		}
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
 	case *ast.SelectorExpr:

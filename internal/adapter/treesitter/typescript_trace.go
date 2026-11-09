@@ -299,7 +299,7 @@ func (tr *tsTrace) declared(name string, val *sitter.Node) []facts.Entry {
 // route returns the entries a router call registers: app.post('/orders', createOrder).
 func (tr *tsTrace) route(call *sitter.Node) []facts.Entry {
 	fn := call.ChildByFieldName("function")
-	if fn == nil || fn.Kind() != "member_expression" || !tsRouteMethods[tr.f.field(fn, "property")] {
+	if fn == nil || !tsRouteMethods[tr.f.field(fn, "property")] { // only a member access has a property
 		return nil
 	}
 	args := arguments(call.ChildByFieldName("arguments"))

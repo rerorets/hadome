@@ -79,6 +79,11 @@ func TestNamesShowCollidingIDsWithTheShortestPathThatTellsThemApart(t *testing.T
 			t.Errorf("Short(%q) = %q, want %q", id, got, want)
 		}
 	}
+	// An ID that is the trailing path of another is shown whole, and so is the other.
+	nested := (&facts.Analysis{Symbols: []facts.Symbol{{ID: "a/x.F"}, {ID: "b/a/x.F"}}}).Names()
+	if got := nested.Short("a/x.F") + " " + nested.Short("b/a/x.F"); got != "a/x.F b/a/x.F" {
+		t.Errorf("nested: got %q, want %q", got, "a/x.F b/a/x.F")
+	}
 	if got := facts.Names(nil).Short("src/routes/shops/[id].load"); got != "[id].load" {
 		t.Errorf("nil Names: Short = %q, want [id].load", got)
 	}

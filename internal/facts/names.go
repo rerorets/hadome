@@ -11,18 +11,16 @@ type Names map[string]string
 
 // Names collects the colliding IDs among the version's symbols, units and test call targets.
 func (a *Analysis) Names() Names {
-	ids := map[string]bool{}
+	ids := map[string]struct{}{}
 	for _, s := range a.Symbols {
-		ids[s.ID] = true
+		ids[s.ID] = struct{}{}
 	}
 	for _, f := range a.Files {
-		if f.Unit != "" {
-			ids[f.Unit] = true
-		}
+		ids[f.Unit] = struct{}{} // a file of no unit adds "", which no other ID shows as
 	}
 	for _, t := range a.Tests {
 		for _, c := range t.Calls {
-			ids[c.Target] = true
+			ids[c.Target] = struct{}{}
 		}
 	}
 	groups := map[string][]string{}
@@ -53,11 +51,9 @@ func (n Names) Short(id string) string {
 // distinct returns the shortest trailing path of id, of two path elements or more, that no other
 // ID of the group ends with; the whole ID when none is shorter.
 func distinct(id string, group []string) string {
-	for k := 2; ; k++ {
-		suffix, whole := trailing(id, k)
-		if whole {
-			return id
-		}
+	elems := strings.Split(id, "/")
+	for k := 2; k < len(elems); k++ {
+		suffix := strings.Join(elems[len(elems)-k:], "/")
 		shared := false
 		for _, other := range group {
 			if other != id && (other == suffix || strings.HasSuffix(other, "/"+suffix)) {
@@ -69,16 +65,5 @@ func distinct(id string, group []string) string {
 			return suffix
 		}
 	}
-}
-
-// trailing returns the last k path elements of id, and whether that is all of it.
-func trailing(id string, k int) (string, bool) {
-	i := len(id)
-	for ; k > 0; k-- {
-		i = strings.LastIndex(id[:i], "/")
-		if i < 0 {
-			return id, true
-		}
-	}
-	return id[i+1:], false
+	return id
 }

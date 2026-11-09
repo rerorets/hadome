@@ -31,7 +31,7 @@ func reachOf(t *testing.T, a *facts.Analysis, id string) string {
 	t.Helper()
 	for _, s := range a.Symbols {
 		if s.ID == id {
-			return fmt.Sprintf("io=%v calls=%v units=%v", s.IO, s.Calls, s.Units)
+			return fmt.Sprintf("io=%v calls=%v units=%q", s.IO, s.Calls, s.Units)
 		}
 	}
 	t.Fatalf("no symbol %s", id)

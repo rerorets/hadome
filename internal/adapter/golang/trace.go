@@ -136,8 +136,8 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 		}
 		s := &syms[i]
 		s.IO, s.Calls = t.io, callIDs(w)
-		for u := range t.units {
-			if u != pf.pkgPath {
+		for u, used := range t.units {
+			if used && u != pf.pkgPath {
 				s.Units = append(s.Units, u)
 			}
 		}

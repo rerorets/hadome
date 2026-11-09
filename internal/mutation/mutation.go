@@ -312,9 +312,9 @@ func finding(m facts.Mutant, names facts.Names) engine.Finding {
 // untried reports the mutants beyond the limit, for a person to review: they were not tried, so
 // they are known neither to be caught nor to survive.
 func untried(rest []facts.Mutant, names facts.Names) engine.Finding {
-	funcs := map[string]bool{}
+	funcs := map[string]struct{}{}
 	for _, m := range rest {
-		funcs[names.Short(m.Func)] = true
+		funcs[names.Short(m.Func)] = struct{}{}
 	}
 	shown := make([]string, 0, len(funcs))
 	for f := range funcs {

@@ -133,9 +133,6 @@ func (w *walker) funcLit(lit *ast.FuncLit) {
 }
 
 func (w *walker) call(c *ast.CallExpr) {
-	if w.trace.route(w, c) { // registering a route is not the product's input or output
-		return
-	}
 	if w.passesTool(c) && !w.readable(c) {
 		w.test.AssertsUnknown = true
 	}

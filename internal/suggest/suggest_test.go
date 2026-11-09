@@ -117,8 +117,9 @@ func goCandidates(t *testing.T, files map[string]string) string {
 // target: suggest.Candidates
 // In a repository with no entry point, a function is an idempotent candidate when its name says it
 // creates and it reaches input or output: itself (a method of a *sql.DB), through a function it
-// calls, or through a variable of a package that does input or output. A function that only
-// computes a value is not one, even in a unit that does input or output.
+// calls at any depth, or through a variable of a package that reaches input or output through
+// what it imports. A function that only computes a value is not one, even in a unit that does
+// input or output.
 func TestIdempotentCandidatesReachInputOrOutput(t *testing.T) {
 	got := goCandidates(t, map[string]string{
 		"dates/dates.go": "package dates\n\nimport \"time\"\n\n" +
@@ -130,11 +131,15 @@ func TestIdempotentCandidatesReachInputOrOutput(t *testing.T) {
 			"func RegisterDevice(db *sql.DB, id string) error { return insert(db, id) }\n" +
 			"func CreateToken(id string) string { return \"t-\" + id }\n" +
 			"func insert(db *sql.DB, id string) error { _, err := db.Exec(\"insert\", id); return err }\n",
-		"settings/settings.go": "package settings\n\nimport \"os\"\n\nvar Path = os.Getenv(\"SETTINGS\")\n",
+		"env/env.go":           "package env\n\nimport \"os\"\n\nfunc Get(k string) string { return os.Getenv(k) }\n",
+		"settings/settings.go": "package settings\n\nimport \"example.com/app/env\"\n\nvar Path = env.Get(\"SETTINGS\")\n",
+		"members/chain.go": "package members\n\nimport \"database/sql\"\n\n" +
+			"func AddChain(db *sql.DB) { step1(db) }\nfunc step1(db *sql.DB) { step2(db) }\n" +
+			"func step2(db *sql.DB) { step3(db) }\nfunc step3(db *sql.DB) { _, _ = db.Exec(\"insert\") }\n",
 		"members/settings.go": "package members\n\nimport \"example.com/app/settings\"\n\n" +
 			"func AddSetting() string { return settings.Path }\n",
 	})
-	want := "idempotent members.AddMember\nidempotent members.AddSetting\nidempotent members.RegisterDevice"
+	want := "idempotent members.AddChain\nidempotent members.AddMember\nidempotent members.AddSetting\nidempotent members.RegisterDevice"
 	if got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
