@@ -84,7 +84,7 @@ classDiagram
 
 | Key | Meaning |
 |---|---|
-| `id`, `kind`, `run`, `timeout` | As before |
+| `id`, `kind`, `run`, `timeout` | As in the configuration of [external-gates.md](../external-gates.md) |
 | `paths` | Globs of the files passed in. Omitted: every file |
 | `options` | Any value; passed to the command untouched |
 

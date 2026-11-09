@@ -73,7 +73,7 @@ All are on by default and need no configuration.
 - A mock at the top of the file is not reported when some test of the same file calls a unit that is not pure. Examples: `jest.mock('lib')` or `vi.mock('lib')` at the top of the file, an import of a mocking library
   - The test runner applies a mock at the top of the file to every test of the file alike. It cannot be taken off one test
   - So a mock put there for a test that calls a unit that is not pure is attached to the tests that call only pure units too. Counting it would fail every pure test of the file
-  - A mock written inside a test that calls only pure units is still reported. Example: `vi.spyOn` inside that test
+  - A mock written inside a test that calls only pure units is reported. Example: `vi.spyOn` inside that test
   - Adapters mark a hazard that is outside the tests and applies to every test of the file with `Hazard.FileWide`
 - Spies count as mocks. Examples: `vi.spyOn`, `jest.spyOn`, Mockito's `@Spy`. A spy watches calls or replaces behaviour; for pure code, checking the returned value is enough for either. What counts as a mock is in each language's hazard table ([adapters-treesitter.md](adapters-treesitter.md))
 - A function made by `vi.fn()` or `jest.fn()` does not count, with `.mockImplementation(…)` or the like after it or not
