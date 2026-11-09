@@ -148,6 +148,7 @@ mod tests {
 // is one marked #[test_matrix] or #[rstest::rstest]. A result after => is checked when the case
 // runs, so it counts as an assert. A case ending in => ignore or => inconclusive does not run: the
 // test is skipped in some cases, with the reason in ignore["…"], and skipped when no case runs.
+// A value written after ignore without brackets is the case's expected result, not a reason.
 func TestRustTestCase(t *testing.T) {
 	a := analyze(t, "rust", tree(
 		"Cargo.toml", "[package]\nname = \"calc\"\n",
@@ -163,11 +164,14 @@ mod tests {
     fn bare(a: i32) { let d = double(a); assert!(d > a); }
 
     #[test_case::test_case(1 => 2 ; "one")]
-    #[test_case(2 => 4)]
+    #[test_case::test_case(2 => 4)]
     fn full(a: i32) -> i32 { double(a) }
 
     #[test_matrix([1, 2], [3, 4])]
     fn matrix(a: i32, b: i32) { double(a + b); }
+
+    #[test_case::test_matrix([1, 2])]
+    fn matrix_full(a: i32) { double(a); }
 
     #[rstest::rstest]
     #[case(1)]
@@ -178,7 +182,11 @@ mod tests {
     fn some_ignored(a: i32) -> i32 { double(a) }
 
     #[test_case(1 => inconclusive 2)]
+    #[test_case(2 => ignore["not ready"] 4)]
     fn none_runs(a: i32) -> i32 { double(a) }
+
+    #[test_case(1 => ignore "2")]
+    fn ignored_string(a: i32) -> String { double(a).to_string() }
 
     fn helper(a: i32) -> i32 { double(a) }
 }
@@ -198,8 +206,10 @@ mod tests {
 	expect(t, strings.Join(got, "\n"), `
 tests::bare calls=1 asserts=1
 tests::full calls=1 asserts=2
+tests::ignored_string calls=1 asserts=0 skip=""
 tests::matrix calls=1 asserts=0
-tests::none_runs calls=1 asserts=0 skip=""
+tests::matrix_full calls=1 asserts=0
+tests::none_runs calls=1 asserts=0 skip="not ready"
 tests::rstest_full calls=1 asserts=0
 tests::some_ignored calls=1 asserts=1 skipIf="slow on large inputs"`)
 }
