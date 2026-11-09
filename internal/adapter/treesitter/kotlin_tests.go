@@ -108,7 +108,8 @@ func ktBody(fn *sitter.Node) *sitter.Node {
 
 func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
-	t.fingerprint(append(append([]*sitter.Node{}, scope.inputs...), m), m.ChildByFieldName("name"))
+	nodes := append(append([]*sitter.Node{}, scope.inputs...), m)
+	t.fingerprint(nodes, append(jvmNameOnly(jf.f, nodes), m.ChildByFieldName("name")))
 	skip := classSkip
 	for k, a := range ktAnnotations(jf.f, m) {
 		if jvmSkipAnnotations[k] {

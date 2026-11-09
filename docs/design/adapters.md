@@ -302,6 +302,21 @@ A parameterised test writes its inputs outside its body. So the parameters, and 
 | Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body. The annotations of the `@ParameterizedClass` classes around the test too |
 | Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
 
+A test's name can also be written in annotations or arguments outside its body. What only gives the test a name is left out of the fingerprint, like the test's own name. Something only gives a name when changing or removing it changes neither what the test runs nor what it checks. Anything that changes how many times the test runs, its inputs, its time limit or which runs include it does not only give a name.
+
+| Language | What only gives a name, left out of the fingerprint |
+|---|---|
+| Java / Kotlin | `@DisplayName`. The `name` element of `@ParameterizedTest`, `@RepeatedTest` and `@ParameterizedClass` (`@ParameterizedTest(name = "{0}")` is the same as `@ParameterizedTest`) |
+| Python | The `ids=` argument of `@pytest.mark.parametrize`. The `id=` argument of `pytest.param` |
+| Rust | The description of an rstest case (`::small` in `#[case::small(1)]`) |
+
+These change how the test runs rather than its name, so they are part of the fingerprint:
+
+- inputs (`@ValueSource`, the values of `@pytest.mark.parametrize`, `#[case(1)]`)
+- the number of runs (the `value` of `@RepeatedTest`)
+- time limits (`@Timeout`, `@pytest.mark.timeout`)
+- tags that decide which runs include the test (`@Tag`, `@pytest.mark.slow`)
+
 In Python and TypeScript, the setup that runs before a test is part of the fingerprint too. Tests with the same body under different setup check different things. For example, `TestA` and `TestB` in one file hold tests with the same body and build different things in `setUp`. Or tests with the same body in different `describe` blocks each use their own block's `const KEYS = …`.
 
 ### What a test guards
@@ -357,6 +372,17 @@ Variables are read per function. A variable or parameter declared in a helper or
 
 A method of a value whose type is unknown is `unknown`.
 
+A method of a value of another module's concrete type (a type that is not an interface) is a call into that module's code. It is neither a target nor `unknown`, the same as a call of a standard library function (`strings.ToUpper`). Since no other module is read, only these values are taken as values of a concrete type:
+
+- values declared with a pointer type (`db *sql.DB`, `func open(t *testing.T) *sql.DB`). A pointer to an interface has no methods, so a pointer type whose method is called is a concrete type
+- values made by a composite literal (`&bytes.Buffer{}`), because an interface cannot be made by a composite literal
+- results of the database libraries' functions and methods whose result types hadome knows
+  - `database/sql`: `*sql.DB` from `sql.Open`, `*sql.Tx` from `Begin`, `*sql.Conn` from `Conn`, `*sql.Stmt` from `Prepare`, `*sql.Rows` from `Query`, `*sql.Row` from `QueryRow`, and so on
+  - `sqlx`: `*sqlx.DB` from `sqlx.Connect`, `*sqlx.Tx` from `Beginx`, and so on
+  - `pgx`: `*pgx.Conn` from `pgx.Connect`, `*pgxpool.Pool` from `pgxpool.New`, `*pgxpool.Conn` from `Acquire`, and so on
+
+A value of another module's type declared without a pointer (`var r io.Reader`) stays `unknown`, because the type may be an interface. So does a result that is an interface (`pgx.Tx`, returned by pgx's `conn.Begin`). An interface's method may run a method of a value of the product's code.
+
 For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
@@ -372,7 +398,7 @@ Full parsers are used for every language because what users get (accurate functi
 3. Text inside a string literal or a comment is never reported as code (no hazard, import or symbol comes from it)
 4. A file no adapter claims is still listed with role `other`
 5. Configuration can add hazard entries but never remove built-in ones
-6. A test body's fingerprint does not change when the name, comments or whitespace change. It changes when any literal changes
+6. A test body's fingerprint does not change when the name, the annotations and arguments that only give a name, comments or whitespace change. It changes when any literal changes
 
 ## Deliberately left out
 

@@ -14,7 +14,7 @@ import (
 var builtinIO = []string{
 	"C", "os", "os/exec", "os/signal", "os/user", "io/ioutil", "syscall", "plugin", "log/syslog",
 	"net", "net/http", "net/http/httptrace", "net/mail", "net/rpc/...", "net/smtp", "crypto/tls", "crypto/rand",
-	"database/sql", "golang.org/x/sys/...", "golang.org/x/net/...",
+	"database/sql", "github.com/jmoiron/sqlx", "golang.org/x/sys/...", "golang.org/x/net/...",
 	"github.com/jackc/pgx/...", "github.com/lib/pq", "github.com/go-sql-driver/mysql", "github.com/mattn/go-sqlite3",
 	"modernc.org/sqlite", "go.mongodb.org/mongo-driver/...", "github.com/redis/go-redis/...",
 	"google.golang.org/grpc/...", "cloud.google.com/go/...", "github.com/aws/aws-sdk-go-v2/...",

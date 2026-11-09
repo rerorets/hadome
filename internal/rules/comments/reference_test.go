@@ -73,3 +73,51 @@ func TestBrokenReferenceFollowsGitignorePatterns(t *testing.T) {
 		})
 	}
 }
+
+// viewpoint: behaviour
+// target: comments/broken-reference through engine.Engine.Check
+// A reference such as README/CLAUDE.md that is not a path is read as file names joined by "or". It
+// passes only when every part names a file somewhere (a part without .md also by the name with .md
+// added), no part is empty, the first part is not a directory at the root, and it does not start
+// with ./, ../ or /.
+func TestBrokenReferenceReadsFileNamesJoinedBySlash(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		files    []string
+		ref      string
+		reported bool
+	}{
+		{"every part exists", []string{"README.md", "docs/CLAUDE.md"}, "README/CLAUDE.md", false},
+		{"a part without .md exists as it is", []string{"README", "CLAUDE.md"}, "README/CLAUDE.md", false},
+		{"three parts", []string{"README.md", "AGENTS.md", "CLAUDE.md"}, "README/AGENTS/CLAUDE.md", false},
+		{"a part does not exist", []string{"README.md"}, "README/CLAUDE.md", true},
+		{"a part ending in .md is not given another .md", []string{"README.md.md", "CLAUDE.md"}, "README.md/CLAUDE.md", true},
+		{"an empty part", []string{"README.md", "CLAUDE.md", ".md"}, "README//CLAUDE.md", true},
+		{"a directory at the root", []string{"docs/rows.md", "stroe.md", "docs.md"}, "docs/stroe.md", true},
+		{"a reference from the file", []string{"README.md", "CLAUDE.md"}, "./README/CLAUDE.md", true},
+		{"a reference from the parent", []string{"README.md", "CLAUDE.md"}, "../README/CLAUDE.md", true},
+		{"a reference from the root", []string{"README.md", "CLAUDE.md"}, "/README/CLAUDE.md", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := func(comment string) fstest.MapFS {
+				m := fstest.MapFS{
+					"go.mod":         {Data: []byte("module example.com/app\n")},
+					".hadome.yml":    {Data: []byte("schema: 1\n")},
+					"store/store.go": {Data: []byte("// Package store keeps rows.\npackage store\n" + comment)},
+				}
+				for _, p := range tc.files {
+					m[p] = &fstest.MapFile{Data: []byte("")}
+				}
+				return m
+			}
+			e := &engine.Engine{Analyzer: adapter.New(), Rules: comments.All()}
+			r, err := e.Check(trees{base: tree(""), head: tree("\n// See " + tc.ref + ".\n")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(r.Regressions) == 1; got != tc.reported || len(r.Regressions) > 1 {
+				t.Errorf("reported = %v, want %v: %+v", len(r.Regressions), tc.reported, r.Regressions)
+			}
+		})
+	}
+}

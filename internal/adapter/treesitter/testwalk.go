@@ -240,16 +240,23 @@ func isField(p *sitter.Node, field string, c *sitter.Node) bool {
 	return got != nil && got.Id() == c.Id()
 }
 
-// fingerprint sets the test's Body from the tokens of nodes, leaving out the node naming the test,
+// fingerprint sets the test's Body from the tokens of nodes, leaving out the nodes that only name
+// the test (names: its name, and annotations or arguments that only give it a display name),
 // comments and whitespace. Text between children that is not whitespace, such as the content of a
 // string some grammars keep outside any node, is a token too. context is the setup that runs for the
 // test, possibly in another file; tests with the same body under different setup check different
 // things, so its tokens are part of the Body, after a separator no source holds.
-func (t *testFacts) fingerprint(nodes []*sitter.Node, name *sitter.Node, context ...codeIn) {
+func (t *testFacts) fingerprint(nodes []*sitter.Node, names []*sitter.Node, context ...codeIn) {
+	leaveOut := map[uintptr]bool{}
+	for _, n := range names {
+		if n != nil {
+			leaveOut[n.Id()] = true
+		}
+	}
 	var toks []string
 	var add func(f *file, n *sitter.Node)
 	add = func(f *file, n *sitter.Node) {
-		if (name != nil && n.Id() == name.Id()) || strings.Contains(n.Kind(), "comment") {
+		if leaveOut[n.Id()] || strings.Contains(n.Kind(), "comment") {
 			return
 		}
 		if n.ChildCount() == 0 {

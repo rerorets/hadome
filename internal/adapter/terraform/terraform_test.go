@@ -309,7 +309,8 @@ func TestTerraformRunFingerprint(t *testing.T) {
 // viewpoint: behaviour
 // target: terraform.Adapter.Analyze
 // All three comment forms are comments, without their delimiters; tflint, checkov and trivy
-// instructions are directives, and an exception marker stays an ordinary comment for the engine.
+// instructions are directives, and an exception marker stays an ordinary comment for the engine. A
+// block comment spans every line it is written on.
 func TestTerraformComments(t *testing.T) {
 	a := analyze(t, config.Config{}, map[string]string{"main.tf": `# tflint-ignore: terraform_unused_declarations
 variable "a" {}
@@ -323,15 +324,15 @@ variable "c" {} # trailing
 `})
 	var got []string
 	for _, c := range a.Comments {
-		got = append(got, fmt.Sprintf("%d %q directive=%v", c.Line, c.Text, c.Directive))
+		got = append(got, fmt.Sprintf("%d-%d %q directive=%v", c.Line, c.EndLine, c.Text, c.Directive))
 	}
 	want := []string{
-		`1 "tflint-ignore: terraform_unused_declarations" directive=true`,
-		`3 "gate:allow comments/missing-doc the module is internal" directive=false`,
-		"5 \"a block\\n   comment\" directive=false",
-		`7 "checkov:skip=CKV_AWS_20:public by design" directive=true`,
-		`8 "trivy:ignore:AVD-AWS-0086" directive=true`,
-		`9 "trailing" directive=false`,
+		`1-1 "tflint-ignore: terraform_unused_declarations" directive=true`,
+		`3-3 "gate:allow comments/missing-doc the module is internal" directive=false`,
+		"5-6 \"a block\\n   comment\" directive=false",
+		`7-7 "checkov:skip=CKV_AWS_20:public by design" directive=true`,
+		`8-8 "trivy:ignore:AVD-AWS-0086" directive=true`,
+		`9-9 "trailing" directive=false`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("comments:\n got %q\nwant %q", got, want)

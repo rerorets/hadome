@@ -172,8 +172,12 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 	}
 	// A method of a value whose type is declared: a variable, a field (tc.store.Append()), the
 	// result of a call (store.New().Len()) or a literal ((Config{}).Validate()).
-	if t := w.valueType(sel.X); t != nil && t.id != "" && (ast.IsExported(name) || w.ownType(t.id)) {
+	t := w.valueType(sel.X)
+	if t != nil && t.id != "" && (ast.IsExported(name) || w.ownType(t.id)) {
 		w.record(t.id+"."+name, c)
+		return
+	}
+	if t != nil && t.ext != "" { // a call into another module, like one of its functions
 		return
 	}
 	w.test.Unresolved++
