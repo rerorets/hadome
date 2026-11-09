@@ -135,7 +135,7 @@ func jvmTables(extraIO, extraMocks []string, extraCalls map[string]string) *tabl
 		mocks: append([]string{"org.mockito", "org.easymock", "org.jmock"}, extraMocks...),
 		io: append([]string{"java.io", "java.nio.file", "java.nio.channels", "java.net", "java.sql", "javax.sql",
 			"java.lang.ProcessBuilder", "okhttp3", "org.apache.http", "redis.clients", "com.mongodb",
-			"jakarta.persistence", "javax.persistence", "org.hibernate", "io.quarkus.hibernate", "com.google.cloud",
+			"jakarta.persistence", "javax.persistence", "org.springframework.data", "org.hibernate", "io.quarkus.hibernate", "com.google.cloud",
 			"jakarta.ws.rs.client", "javax.ws.rs.client", "org.springframework.jdbc", "org.springframework.web.client",
 			"software.amazon.awssdk"}, extraIO...),
 	}

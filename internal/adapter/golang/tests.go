@@ -120,6 +120,8 @@ type walker struct {
 	// recv is the receiver of the suite method being walked ("s" in func (s *StoreSuite) TestAdd()),
 	// and suiteType its type's name. Calls on the receiver are the suite's own or its assertions.
 	recv, suiteType string
+	// trace collects what a function of the product code reaches; it is nil for a test.
+	trace *trace
 }
 
 type callCount struct {
@@ -127,7 +129,9 @@ type callCount struct {
 	scopes map[string]bool
 }
 
-func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, helpers map[string]helper) []facts.Test {
+// extractTests reads the tests of one file. main is the TestMain of the file's directory, or nil;
+// it runs before each of them.
+func extractTests(rd reading, pf parsedFile, helpers map[string]helper, main *testMain) []facts.Test {
 	imports := fileImports(pf.file)
 	var out []facts.Test
 	for _, decl := range pf.file.Decls {
@@ -135,17 +139,12 @@ func extractTests(fset *token.FileSet, pf parsedFile, idx *index, tb *tables, he
 		if !ok || fn.Recv != nil || fn.Body == nil || !strings.HasPrefix(fn.Name.Name, "Test") || !takesT(fn.Type, imports) {
 			continue
 		}
-		w := &walker{
-			scope: scope{idx: idx, pkgPath: pf.pkgPath, imports: imports, samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
-				testKey: helperKey(pf), helpers: helpers, local: newBlock(nil)},
-			fset: fset, tables: tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
-			walking: map[string]bool{}, curPath: pf.path,
-			callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
-			test: facts.Test{Name: fn.Name.Name, Path: pf.path, Line: fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
-				Body: body(fset, pf.src, fn)},
-		}
+		w := newWalker(rd, pf, helpers)
+		w.test = facts.Test{Name: fn.Name.Name, Path: pf.path, Line: rd.fset.Position(fn.Pos()).Line, Declared: declared(fn.Doc),
+			Body: body(rd.fset, pf.src, fn)}
 		w.collectTParams(fn.Type, fn.Body)
 		ast.Inspect(fn.Body, w.visit)
+		main.give(w)
 		w.test.Calls = w.callFacts()
 		out = append(out, w.test)
 	}
@@ -245,6 +244,9 @@ func (w *walker) visit(n ast.Node) bool {
 		w.funcLit(n)
 		return false
 	case *ast.CallExpr:
+		if w.trace.route(w, n) {
+			return false // registering a route is not the function's own work: its handlers are entry points
+		}
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
 	case *ast.SelectorExpr:

@@ -152,6 +152,8 @@ func unknownCases() []engine.Case {
 		{Name: "a test calling the package API passes", Base: tree(testFile(plainTest)), Head: tree(testFile(plainTest + "\nfunc TestNew(t *testing.T) {\n\t_ = store.New()\n}\n"))},
 		{Name: "a test reaching the API through a helper passes", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(plainTest + "\nfunc build() *store.Store { return store.New() }\n\nfunc TestHelper(t *testing.T) {\n\tif build().Len() != 0 {\n\t\tt.Fatal(\"want empty\")\n\t}\n}\n"))},
+		{Name: "a test whose package's TestMain calls the API passes", Base: tree(testFile(plainTest)),
+			Head: tree(testFile(strings.TrimPrefix(opaque, plainTest) + "\nfunc TestMain(m *testing.M) {\n\t_ = store.New()\n\tm.Run()\n}\n"))},
 	}
 }
 

@@ -1,0 +1,116 @@
+package suggest
+
+import (
+	"slices"
+
+	"github.com/rerorets/hadome/internal/facts"
+)
+
+// reach answers, for one version, which functions reach input or output and which an entry point
+// that can be retried reaches. Design: docs/design/suggest.md, "Conditions of idempotent".
+type reach struct {
+	io      map[string]bool // function IDs that reach input or output
+	unitIO  map[string]bool // units that reach input or output through their imports
+	reached map[string]bool // function IDs an entry point reaches
+	entries bool            // whether the version has any entry point
+}
+
+func newReach(a *facts.Analysis) *reach {
+	r := &reach{io: map[string]bool{}, unitIO: unitsReachingIO(a),
+		reached: map[string]bool{}, entries: len(a.Entries) > 0}
+	syms := map[string]facts.Symbol{}
+	for _, s := range a.Symbols {
+		if s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod {
+			syms[s.ID] = s
+		}
+	}
+	r.spreadIO(syms)
+	r.fromEntries(a.Entries, syms)
+	return r
+}
+
+// spreadIO marks the functions that reach input or output. It spreads from callee to caller until
+// nothing changes, so that calls in a cycle give the same answer whichever function is looked at
+// first.
+func (r *reach) spreadIO(syms map[string]facts.Symbol) {
+	for _, s := range syms {
+		if r.ownIO(s) {
+			r.io[s.ID] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, s := range syms {
+			if !r.io[s.ID] && slices.ContainsFunc(s.Calls, func(c string) bool { return r.io[c] }) {
+				r.io[s.ID], changed = true, true
+			}
+		}
+	}
+}
+
+// fromEntries marks the functions the entry points reach through calls.
+func (r *reach) fromEntries(entries []facts.Entry, syms map[string]facts.Symbol) {
+	var queue []string
+	for _, e := range entries {
+		if e.Symbol != "" {
+			queue = append(queue, e.Symbol)
+		}
+		queue = append(queue, e.Calls...)
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if !r.reached[id] {
+			r.reached[id] = true
+			queue = append(queue, syms[id].Calls...)
+		}
+	}
+}
+
+// ownIO reports whether a function reaches input or output without looking at the functions it
+// calls.
+func (r *reach) ownIO(s facts.Symbol) bool {
+	if s.IO {
+		return true
+	}
+	for _, u := range s.Units {
+		if r.unitIO[u] {
+			return true
+		}
+	}
+	return false
+}
+
+// retried reports whether a symbol reaches input or output and, when the version has an entry
+// point, whether an entry point reaches it.
+func (r *reach) retried(s facts.Symbol) bool {
+	return r.io[s.ID] && (!r.entries || r.reached[s.ID])
+}
+
+// unitsReachingIO are the units that import something that does input or output, or import a unit
+// of the repository that does, at any depth.
+func unitsReachingIO(a *facts.Analysis) map[string]bool {
+	out := map[string]bool{}
+	importers := map[string][]string{}
+	var queue []string
+	for _, im := range a.Imports {
+		switch {
+		case im.IO && !out[im.FromUnit]:
+			out[im.FromUnit] = true
+			queue = append(queue, im.FromUnit)
+		case im.Internal:
+			importers[im.ToUnit] = append(importers[im.ToUnit], im.FromUnit)
+		}
+	}
+	for len(queue) > 0 {
+		u := queue[0]
+		queue = queue[1:]
+		for _, from := range importers[u] {
+			if !out[from] {
+				out[from] = true
+				queue = append(queue, from)
+			}
+		}
+	}
+	return out
+}

@@ -178,6 +178,9 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 		return
 	}
 	if t != nil && t.ext != "" { // a call into another module, like one of its functions
+		if w.tables.io.has(t.ext[:strings.LastIndex(t.ext, ".")]) {
+			w.trace.doesIO()
+		}
 		return
 	}
 	w.test.Unresolved++
@@ -257,6 +260,7 @@ func (w *walker) readSelector(sel *ast.SelectorExpr) {
 	if x, ok := sel.X.(*ast.Ident); ok && !w.shadowed(x.Name) {
 		if p, ok := w.imports[x.Name]; ok && w.idx.internal(p) && w.idx.value(p+"."+sel.Sel.Name) {
 			w.test.Reads++
+			w.trace.usesUnit(p)
 		}
 	}
 }
@@ -316,6 +320,9 @@ func (w *walker) subtest(fn ast.Expr) {
 }
 
 func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
+	if w.tables.io.has(p) {
+		w.trace.doesIO()
+	}
 	if assertImports[p] || w.tables.asserts[p+"."+name] {
 		w.test.Asserts++
 	}

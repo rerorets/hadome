@@ -28,6 +28,7 @@ classDiagram
     +Symbols []Symbol
     +Imports []Import
     +Tests []Test
+    +Entries []Entry
   }
   class File {
     +Path string
@@ -59,6 +60,15 @@ classDiagram
     +Complexity int
     +Nested []Nested
     +Methods int
+    +Calls []string
+    +Units []string
+    +IO bool
+  }
+  class Entry {
+    +Path string
+    +Line int
+    +Symbol string
+    +Calls []string
   }
   class Nested {
     +Line int
@@ -121,6 +131,7 @@ classDiagram
   Analysis --> Comment
   Analysis --> Symbol
   Symbol --> Nested
+  Analysis --> Entry
   Analysis --> Import
   Analysis --> Test
   Test --> Call
@@ -128,6 +139,8 @@ classDiagram
   Test --> Skip
   Language ..> Analysis : returns the facts of the files it claimed
 ```
+
+`Symbol.Calls`, `Units`, `IO` and `Analysis.Entries` are the facts that decide whether a function reaches input or output and whether an entry point that can be retried reaches it. Every adapter of a language with functions fills them for its functions and methods. `Calls` are the IDs of the repository's functions the body calls, `Units` the repository's units whose values the body uses, and `IO` that the body uses something that does input or output directly. How they are read is in [suggest.md](suggest.md), "Conditions of `idempotent`".
 
 ### Files and roles
 
@@ -384,6 +397,14 @@ A method of a value of another module's concrete type (a type that is not an int
 A value of another module's type declared without a pointer (`var r io.Reader`) stays `unknown`, because the type may be an interface. So does a result that is an interface (`pgx.Tx`, returned by pgx's `conn.Begin`). An interface's method may run a method of a value of the product's code.
 
 For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
+
+A package's `TestMain` (`func TestMain(m *testing.M)`) runs before every test of the package. So the product code `TestMain` calls counts as called by every test in the same directory.
+
+- Example: when `TestMain` calls `db.Open` and a test only uses `dbtest.Pool()`, that test's targets include `db.Open`
+- Helpers and functions of test support packages that `TestMain` calls are followed as they are for a test
+- `clock` and `sleep` inside `TestMain` are hazards of every test too. Reading the time or waiting there makes every test's result depend on the time
+- Checks, `unknown` and skips inside `TestMain` are not counted as the tests'. What a test checks is decided by its own body
+- A `TestMain` of the external test package (`package store_test`) applies to every test in the directory too. The tests of both packages build into one test binary
 
 There is no tokenizer shared across languages. Each language is read with its own parser.
 

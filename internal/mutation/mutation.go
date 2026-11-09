@@ -103,6 +103,7 @@ type versions struct {
 // of the progress lines.
 func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lang string) (map[string][]engine.Finding, error) {
 	bv, hv := vs.base, vs.head
+	shown := vs.headFacts.Names()
 	found := map[string][]engine.Finding{}
 	for _, lang := range m.Mutator.Unmutated(funcs) {
 		found[hv.Label] = append(found[hv.Label], engine.Finding{Rule: RuleID, File: config.FileName,
@@ -117,12 +118,12 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 	mutants, outside := splitBuilt(buildContext(c.Test), hv, mutants)
 	found[hv.Label] = append(found[hv.Label], notBuilt(outside)...)
 	if len(mutants) > c.MaxMutants {
-		found[hv.Label] = append(found[hv.Label], untried(mutants[c.MaxMutants:]))
+		found[hv.Label] = append(found[hv.Label], untried(mutants[c.MaxMutants:], shown))
 		mutants = mutants[:c.MaxMutants]
 	}
 	total := len(outside) + len(mutants)
 	for i, mu := range outside {
-		fmt.Fprintln(m.Progress, progress(i+1, total, mu, Unbuilt).In(lang))
+		fmt.Fprintln(m.Progress, progress(i+1, total, mu, Unbuilt, shown).In(lang))
 	}
 	if len(mutants) == 0 {
 		return found, nil
@@ -144,10 +145,10 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintln(m.Progress, progress(len(outside)+i+1, total, mu, out).In(lang))
+		fmt.Fprintln(m.Progress, progress(len(outside)+i+1, total, mu, out, shown).In(lang))
 		if out == Survived {
 			survivors = append(survivors, mu)
-			found[hv.Label] = append(found[hv.Label], finding(mu))
+			found[hv.Label] = append(found[hv.Label], finding(mu, shown))
 		}
 	}
 	baseSurvivors, err := m.inBase(bv, vs.baseFacts, survivors, c, lang)
@@ -195,7 +196,7 @@ func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors 
 	if err != nil {
 		return nil, fmt.Errorf("base: %w", err)
 	}
-	callers := testsCalling(baseFacts)
+	callers, shown := testsCalling(baseFacts), baseFacts.Names()
 	var out []engine.Finding
 	for _, mu := range counterparts {
 		names, pkgs := callers.of(mu.Func, c.Test)
@@ -204,7 +205,7 @@ func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors 
 			return nil, err
 		}
 		if o == Survived {
-			out = append(out, finding(mu))
+			out = append(out, finding(mu, shown))
 		}
 	}
 	return out, nil
@@ -297,11 +298,11 @@ func hasGo(a *facts.Analysis) bool {
 	return false
 }
 
-func finding(m facts.Mutant) engine.Finding {
-	msg := engine.T("%s: changing `%s` to `%s` does not fail any test", short(m.Func), m.Original, m.Replacement)
+func finding(m facts.Mutant, names facts.Names) engine.Finding {
+	msg := engine.T("%s: changing `%s` to `%s` does not fail any test", names.Short(m.Func), m.Original, m.Replacement)
 	// A mutant that replaces code with nothing, such as one that drops a `!`, removes it.
 	if m.Operator == "remove a call statement" || m.Replacement == "" {
-		msg = engine.T("%s: removing `%s` does not fail any test", short(m.Func), m.Original)
+		msg = engine.T("%s: removing `%s` does not fail any test", names.Short(m.Func), m.Original)
 	}
 	return engine.Finding{Rule: RuleID, File: m.Path, Line: m.Line, Anchor: m.Anchor,
 		Message: msg,
@@ -310,18 +311,18 @@ func finding(m facts.Mutant) engine.Finding {
 
 // untried reports the mutants beyond the limit, for a person to review: they were not tried, so
 // they are known neither to be caught nor to survive.
-func untried(rest []facts.Mutant) engine.Finding {
-	funcs := map[string]bool{}
+func untried(rest []facts.Mutant, names facts.Names) engine.Finding {
+	funcs := map[string]struct{}{}
 	for _, m := range rest {
-		funcs[short(m.Func)] = true
+		funcs[names.Short(m.Func)] = struct{}{}
 	}
-	names := make([]string, 0, len(funcs))
+	shown := make([]string, 0, len(funcs))
 	for f := range funcs {
-		names = append(names, f)
+		shown = append(shown, f)
 	}
-	sort.Strings(names)
+	sort.Strings(shown)
 	return engine.Finding{Rule: RuleID, File: config.FileName, Anchor: "untried", Review: true,
-		Message: engine.T("%d mutants beyond mutation.max-mutants were not tried, in %s", len(rest), strings.Join(names, ", ")),
+		Message: engine.T("%d mutants beyond mutation.max-mutants were not tried, in %s", len(rest), strings.Join(shown, ", ")),
 		Why:     engine.T("untried code is not known to be guarded"),
 		Fix:     engine.T("split the change, or have a person decide whether to raise mutation.max-mutants")}
 }
@@ -369,11 +370,9 @@ func notBuilt(outside []facts.Mutant) []engine.Finding {
 }
 
 // short drops the import path of a symbol ID: example.com/app/store.Append is store.Append.
-func short(id string) string { return facts.ShortName(id) }
-
 // progress is the line written after trying the n-th of total mutants: where the break is, what it
 // broke, and whether a test noticed.
-func progress(n, total int, mu facts.Mutant, o Outcome) engine.Text {
+func progress(n, total int, mu facts.Mutant, o Outcome, names facts.Names) engine.Text {
 	result := engine.T("caught")
 	switch o {
 	case Survived:
@@ -381,5 +380,5 @@ func progress(n, total int, mu facts.Mutant, o Outcome) engine.Text {
 	case Unbuilt:
 		result = engine.T("not built")
 	}
-	return engine.T("mutate %d/%d %s:%d %s, %s: %s", n, total, mu.Path, mu.Line, short(mu.Func), engine.T(mu.Operator), result)
+	return engine.T("mutate %d/%d %s:%d %s, %s: %s", n, total, mu.Path, mu.Line, names.Short(mu.Func), engine.T(mu.Operator), result)
 }

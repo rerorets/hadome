@@ -151,6 +151,7 @@ func merge(into, from *facts.Analysis) {
 	into.Symbols = append(into.Symbols, from.Symbols...)
 	into.Imports = append(into.Imports, from.Imports...)
 	into.Tests = append(into.Tests, from.Tests...)
+	into.Entries = append(into.Entries, from.Entries...)
 }
 
 // sortAnalysis orders everything by path, then line, as facts.Analysis promises.
@@ -164,6 +165,9 @@ func sortAnalysis(a *facts.Analysis) {
 		return less(a.Imports[i].Path, a.Imports[i].Line, a.Imports[j].Path, a.Imports[j].Line)
 	})
 	sort.SliceStable(a.Tests, func(i, j int) bool { return less(a.Tests[i].Path, a.Tests[i].Line, a.Tests[j].Path, a.Tests[j].Line) })
+	sort.SliceStable(a.Entries, func(i, j int) bool {
+		return less(a.Entries[i].Path, a.Entries[i].Line, a.Entries[j].Path, a.Entries[j].Line)
+	})
 }
 
 func less(p1 string, l1 int, p2 string, l2 int) bool {

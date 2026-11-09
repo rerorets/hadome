@@ -28,6 +28,7 @@ classDiagram
     +Symbols []Symbol
     +Imports []Import
     +Tests []Test
+    +Entries []Entry
   }
   class File {
     +Path string
@@ -59,6 +60,15 @@ classDiagram
     +Complexity int
     +Nested []Nested
     +Methods int
+    +Calls []string
+    +Units []string
+    +IO bool
+  }
+  class Entry {
+    +Path string
+    +Line int
+    +Symbol string
+    +Calls []string
   }
   class Nested {
     +Line int
@@ -121,6 +131,7 @@ classDiagram
   Analysis --> Comment
   Analysis --> Symbol
   Symbol --> Nested
+  Analysis --> Entry
   Analysis --> Import
   Analysis --> Test
   Test --> Call
@@ -128,6 +139,8 @@ classDiagram
   Test --> Skip
   Language ..> Analysis : 受け持ったファイルの事実を返す
 ```
+
+`Symbol.Calls`・`Units`・`IO` と `Analysis.Entries` は、関数が入出力に届くかと、やり直されうる入口から届くかを決めるための事実です。関数を持つ言語のアダプタはすべて、関数とメソッドについてこれを埋めます。`Calls` は本体から呼ぶリポジトリの関数の ID、`Units` は本体が値を使うリポジトリのユニット、`IO` は本体が入出力をするものを直接使うことです。読み方は [suggest.ja.md](suggest.ja.md) の「`idempotent` の条件」にあります。
 
 ### ファイルと役割
 
@@ -413,6 +426,14 @@ Go のテストでは、メソッドを呼んだ値の型を宣言から読み�
 ポインタでない型で宣言した、ほかのモジュールの型の値（`var r io.Reader`）は、インターフェースかもしれないので `unknown` のままです。インターフェースを返す結果（pgx の `conn.Begin` が返す `pgx.Tx` など）も同じです。インターフェースのメソッドは、製品のコードの値が持つメソッドを動かすことがあるためです。
 
 testify の suite では、`suite.Run(t, new(X))` を呼ぶテストが、`X` の `Setup…`・`BeforeTest`・`Test…` のメソッドをたどります。suite の構造体のフィールドは宣言した型で読みます。
+
+パッケージの `TestMain`（`func TestMain(m *testing.M)`）は、そのパッケージのどのテストよりも前に走ります。そのため、`TestMain` が呼ぶ製品のコードは、同じディレクトリのどのテストも呼ぶものと数えます。
+
+- 例: `TestMain` が `db.Open` を呼び、テストが `dbtest.Pool()` だけを使うとき、そのテストの対象には `db.Open` が入ります
+- `TestMain` から呼ぶヘルパーと、テストの補助のパッケージの関数も、テストのときと同じにたどります
+- `TestMain` の中の `clock` と `sleep` も、各テストの危険とします。時刻を読んだり待ったりすると、どのテストの結果も時刻に左右されるからです
+- `TestMain` の中の確かめ、`unknown`、スキップは、テストのものと数えません。テストが何を確かめるかは、テストの本体で決まるからです
+- 外部のテストのパッケージ（`package store_test`）の `TestMain` も、同じディレクトリのテストすべてに効きます。どちらのパッケージのテストも、1つのテストのバイナリになるからです
 
 言語をまたいで共有するトークナイザは持ちません。どの言語もその言語のパーサで読みます。
 

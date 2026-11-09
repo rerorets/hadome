@@ -218,6 +218,14 @@ Every finding carries `why` and `fix` written for an agent: what went wrong, why
 
 The wording names a symbol the way configuration does: the last element of the unit's path, then the name. Example: `example.com/app/store.Append` is `store.Append`. A TypeScript file at the root of the repository has the unit `.`, so only the name is written. Example: `devServer` of the root `vite.config.ts` is `devServer`. `size/` and `comments/` use the same form. Matching against base uses the whole ID.
 
+When two or more symbols would be written with the same name in this form, they are written with the shortest paths that tell them apart.
+
+- Example: `load` of SvelteKit's `src/routes/shops/[id]/+page.ts` and of `src/routes/orders/[id]/+page.ts` would both be `[id].load`. So they are written `shops/[id].load` and `orders/[id].load`
+- Path elements are added one at a time, from the name towards the repository root, until the names differ
+- Whether names collide is decided over all the symbols, units and test call targets of the version
+- Configuration can name a symbol by this form as it is, because a configured target is matched as the trailing path of the ID
+- A name that collides with nothing is written in the short form above
+
 The `message` of a hazard finding (`no-clock`, `no-sleep`, `always-true`, `no-mock`) shows the code it found on one line. A call written over several lines shows only its first line, and anything past 80 characters is cut. "…" marks what was left out. Example: `test waits by sleeping: setTimeout(() => { …`. Matching against base uses the whole code, not the shortened one.
 
 ## Self-test cases
