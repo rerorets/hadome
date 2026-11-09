@@ -1,6 +1,7 @@
 # A tag vX.Y.Z builds hadome natively on six platforms with cgo, publishes the archives and
-# SHA256SUMS as a GitHub release, then publishes to every ecosystem whose repository variable
-# PUBLISH_<ECOSYSTEM> is "true" (docs/maintaining/releasing.md). Run it by hand to build without
+# SHA256SUMS as a GitHub release whose notes are the version's section of CHANGELOG.md, then
+# publishes to every ecosystem whose repository variable PUBLISH_<ECOSYSTEM> is "true"
+# (docs/maintaining/releasing.md). Run it by hand to build without
 # publishing anything.
 name: release
 
@@ -35,6 +36,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A tag whose version has no section in CHANGELOG.md stops here, before anything is built or
+      # published.
+      - name: Check that CHANGELOG.md has this version
+        if: github.event_name == 'push'
+        run: packaging/release-notes.sh "${VERSION#v}" CHANGELOG.md >/dev/null
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -103,9 +109,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The body is the version's English section of CHANGELOG.md, then a link to the Japanese one.
+          notes="$RUNNER_TEMP/notes.md"
+          packaging/release-notes.sh "${VERSION#v}" CHANGELOG.md > "$notes"
+          printf '\nJapanese / 日本語: https://github.com/%s/blob/%s/CHANGELOG.ja.md\n' "$GITHUB_REPOSITORY" "$VERSION" >> "$notes"
           pre=""
           case "$VERSION" in *-*) pre=--prerelease ;; esac # v1.2.0-rc.1 is a trial, never "latest"
-          gh release create "$VERSION" dist/* --title "hadome ${VERSION#v}" --generate-notes --verify-tag $pre
+          gh release create "$VERSION" dist/* --title "hadome ${VERSION#v}" --notes-file "$notes" --verify-tag $pre
 
   npm:
     needs: release

@@ -7,7 +7,9 @@ A release starts by pushing a version tag. The `release` workflow ([.github/work
 1. Check that CI on main passes.
 2. Run `hadome mutate` on the change since the previous tag, and check that it reports no `mutation/survived` regression. If it does, merge a PR that adds the tests first.
    - When the change exceeds `mutation.max-mutants`, the mutants not tried are reported as a review (exit 3). That review does not hold back a release.
-3. Open a PR that raises the version written in `README.md` and `README.ja.md`, and merge it. Title it like `The README pins 1.2.0`.
+3. Open a PR that raises the version, and merge it. Title it like `The README pins 1.2.0`. The PR changes two things:
+   - the version written in `README.md` and `README.ja.md`
+   - the new version's section in [CHANGELOG.ja.md](../../CHANGELOG.ja.md) and [CHANGELOG.md](../../CHANGELOG.md) (see "[Changelog](#changelog)")
 4. Put a signed tag on that PR's merge commit, and push it.
 5. Check the workflow's results. Fix the cause of a failed job, then rerun only that job.
 
@@ -19,13 +21,64 @@ git push origin v1.2.0
 
 - Tag the merge commit of the version PR. The version in the README at the tagged commit then matches the release. Naming the commit keeps them matched even when another PR is merged before you tag.
 - Never delete or move a tag once it is pushed. Fix a mistake in the next patch release. The Go module proxy keeps serving the first content it saw for a tag, and npm, PyPI and crates.io cannot replace a published version. A moved tag leaves each channel with different content.
-- GitHub writes the release notes from the titles of the PRs merged since the previous tag. Write each PR title as one sentence a user can read to see what changed.
+- The GitHub release's body is the tagged version's section of `CHANGELOG.md`, followed by a link to `CHANGELOG.ja.md`.
 
 Sign the tag. GitHub then marks it Verified, which shows who tagged the release. The workflow does not check the signature, so an unsigned tag behaves the same.
 
 The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS`, then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
 
 If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions already on the registry.
+
+## Changelog
+
+The release notes are `CHANGELOG.ja.md` and `CHANGELOG.md` in the repository. They are not made with GitHub features (PR labels, generated release notes).
+
+### Who writes it, and when
+
+- The new version's section is written in the version PR. The README version and the changelog merge in the same PR.
+- An AI drafts it from the titles and descriptions of the PRs merged into main since the previous tag.
+- A person reads and edits the draft, then merges the PR.
+
+```sh
+git log --first-parent --format='%s' v1.1.0..origin/main
+```
+
+- A section's heading looks like `## 1.2.0 - 2026-12-01`: the version, a space, `-`, a space, the date. The workflow looks for the section whose heading's second word equals the version.
+- Changes waiting for the next release may be added to an `## Unreleased` section (`## 未リリース` in Japanese). The version PR rewrites that heading into the version's heading.
+- A trial version (`1.2.0-rc.1`) needs a section with its own heading too.
+
+### Grouping
+
+The groups differ in what happens to a user's CI after upgrading. Leave out empty groups.
+
+| Group (Japanese) | Group (English) | What goes in |
+|---|---|---|
+| 検出が増える変更 | Finds more | New rules, checks that look at more, changes that send more to review (exit 3). Upgrading may turn a user's CI red or stop it for review |
+| 誤検知・漏れの修正 | Fewer false findings and misses | Findings that were wrong and no longer appear, tests that were not read and now are |
+| 設定 | Configuration | New or changed `.hadome.yml` keys |
+| その他 | Other | Output, documents, distribution. Check results do not change |
+
+- One line per change, ending with the PR number. Example: "`comments/broken-reference` does not report references to paths `.gitignore` ignores. (#96)"
+- When one PR holds changes of different groups, give each group its own line.
+- Changes users cannot see (hadome's own tests, CI, dependency updates) are left out.
+
+### Choosing the version
+
+- If "Finds more" has at least one line, raise the minor version (`1.2.3` → `1.3.0`).
+- Otherwise, raise the patch version (`1.2.3` → `1.2.4`).
+- Users can then upgrade a patch version expecting no new red CI. ESLint decides the same way.
+
+### How it reaches the release
+
+- The `release` workflow takes the tagged version's section out of `CHANGELOG.md` and makes it the GitHub release's body. [packaging/release-notes.sh](../../packaging/release-notes.sh) does the extraction.
+- The body is in English. A link to `CHANGELOG.ja.md` as of the tag is added at the end.
+- If the tagged version has no section, or an empty one, the workflow fails at the first step of the build and publishes nothing. Then merge a PR that adds the section and release again as a new patch version. The tag is not moved.
+
+To check the extraction locally:
+
+```sh
+packaging/release-notes.sh 1.2.0 CHANGELOG.md
+```
 
 ## Switching an ecosystem on
 
