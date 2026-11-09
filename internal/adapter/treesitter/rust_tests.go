@@ -132,7 +132,7 @@ type rustWalk struct {
 }
 
 func (w *rustWalk) walk(body *sitter.Node) {
-	w.t.body(body, func(n *sitter.Node) bool { return rustLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.sc.f, w.sc.t, body, func(n *sitter.Node) bool { return rustLoops[n.Kind()] }, w.visit)
 }
 
 func (w *rustWalk) visit(n *sitter.Node) bool {

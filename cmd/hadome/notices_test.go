@@ -42,7 +42,42 @@ func linkedModules(t *testing.T, root string) []notices.Module {
 				Licenses: licenseFiles(t, f[2])})
 		}
 	}
-	return mods
+	return append(mods, grammarModules(t, root)...)
+}
+
+// grammarSources are where the SQL grammars of internal/adapter/sql/grammar come from. Their parsers
+// are generated into hadome's own module, so no module of the cache carries their licenses.
+var grammarSources = map[string]string{
+	"googlesql":  "https://github.com/bytebase/parser/tree/main/googlesql",
+	"mysql":      "https://github.com/antlr/grammars-v4/tree/master/sql/mysql/Positive-Technologies",
+	"plsql":      "https://github.com/antlr/grammars-v4/tree/master/sql/plsql",
+	"postgresql": "https://github.com/antlr/grammars-v4/tree/master/sql/postgresql",
+	"snowflake":  "https://github.com/antlr/grammars-v4/tree/master/sql/snowflake",
+	"sqlite":     "https://github.com/antlr/grammars-v4/tree/master/sql/sqlite",
+	"tsql":       "https://github.com/bytebase/parser/tree/main/tsql",
+}
+
+// grammarModules returns a section for each SQL grammar, with the license files of its directory.
+func grammarModules(t *testing.T, root string) []notices.Module {
+	t.Helper()
+	base := filepath.Join(root, "internal", "adapter", "sql", "grammar")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []notices.Module
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		src, ok := grammarSources[e.Name()]
+		if !ok {
+			t.Fatalf("grammar %s has no source in grammarSources", e.Name())
+		}
+		out = append(out, notices.Module{Path: "SQL grammar " + e.Name(), Source: src,
+			Licenses: licenseFiles(t, filepath.Join(base, e.Name()))})
+	}
+	return out
 }
 
 // licenseFiles reads the license and notice files at the top of dir.

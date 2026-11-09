@@ -66,12 +66,12 @@ const plainTest = `func TestAppend(t *testing.T) {
 
 func clockCases() []engine.Case {
 	withClock := plainTest + "\nfunc TestStamp(t *testing.T) {\n\t_ = time.Now()\n\tstore.Append(store.New(), \"a\")\n}\n"
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a new clock read fails", Base: tree(testFile(plainTest)), Head: tree(testFile(withClock)), WantFail: []string{"tests/no-clock"}},
 		{Name: "an existing clock read that moved passes", Base: tree(testFile(withClock)), Head: tree(testFile("\n\n\n" + withClock))},
 		{Name: "a clock read inside a string passes", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(plainTest + "\nfunc TestLog(t *testing.T) {\n\tt.Log(\"time.Now()\")\n\tstore.Append(store.New(), \"a\")\n}\n"))},
-	}
+	}, sqlClockCases()...)
 }
 
 const helperSleeps = "func pause() { time.Sleep(time.Millisecond) }\n\nfunc TestPause(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n"
@@ -80,12 +80,12 @@ func sleepCases() []engine.Case {
 	withSleep := plainTest + "\nfunc TestWait(t *testing.T) {\n\ttime.Sleep(time.Millisecond)\n\tstore.Append(store.New(), \"a\")\n}\n"
 	sleepInSource := tree(testFile(plainTest))
 	sleepInSource["store/wait.go"] = &fstest.MapFile{Data: []byte("package store\n\nimport \"time\"\n\nfunc wait() { time.Sleep(time.Millisecond) }\n")}
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a new sleep fails", Base: tree(testFile(plainTest)), Head: tree(testFile(withSleep)), WantFail: []string{"tests/no-sleep"}},
 		{Name: "a sleep in non-test code is not this rule's business", Base: tree(testFile(plainTest)), Head: sleepInSource},
 		{Name: "calling a helper that sleeps once more is not a new sleep", Base: tree(testFile(helperSleeps + "\tpause()\n}\n")),
 			Head: tree(testFile(helperSleeps + "\tpause()\n\tpause()\n}\n"))},
-	}
+	}, sqlSleepCases()...)
 }
 
 func alwaysTrueCases() []engine.Case {
@@ -105,13 +105,13 @@ func skipCases() []engine.Case {
 	with := func(skip string) string {
 		return plainTest + "\nfunc TestLater(t *testing.T) {\n\t" + skip + "\n\tstore.Append(store.New(), \"a\")\n}\n"
 	}
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a new bare skip fails", Base: tree(testFile(plainTest)), Head: tree(testFile(with("t.Skip()"))), WantFail: []string{"tests/skip-without-reason"}},
 		{Name: "a skip with a reason passes", Base: tree(testFile(plainTest)), Head: tree(testFile(with(`t.Skip("needs a running database")`)))},
 		{Name: "an empty reason fails", Base: tree(testFile(plainTest)), Head: tree(testFile(with(`t.Skip("")`))), WantFail: []string{"tests/skip-without-reason"}},
 		{Name: "a conditional skip without a reason fails", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(with("if testing.Short() {\n\t\tt.Skip()\n\t}"))), WantFail: []string{"tests/skip-without-reason"}},
-	}
+	}, sqlSkipCases()...)
 }
 
 func scopeCases() []engine.Case {
@@ -120,7 +120,7 @@ func scopeCases() []engine.Case {
 	renamed := map[string]string{"store/rows_test.go": testFile(plainTest)["store/store_test.go"]}
 	noAppend := tree(testFile(lenOnly))
 	noAppend["store/store.go"] = &fstest.MapFile{Data: []byte("package store\n\ntype Store struct{}\n\nfunc New() *Store { return &Store{} }\n\nfunc (s *Store) Len() int { return 0 }\n")}
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "deleting the only test of a target fails", Base: tree(testFile(plainTest)), Head: tree(testFile(lenOnly)), WantFail: []string{"tests/scope-shrunk"}},
 		{Name: "merging two tests of one target passes", Base: tree(testFile(twoTests)), Head: tree(testFile(plainTest))},
 		{Name: "deleting a target and its test passes", Base: tree(testFile(plainTest)), Head: noAppend},
@@ -130,7 +130,7 @@ func scopeCases() []engine.Case {
 		{Name: "deleting the only Molecule scenario of an Ansible role fails", Base: ansibleRole(true), Head: ansibleRole(false),
 			WantFail: []string{"tests/scope-shrunk"}},
 		{Name: "deleting the role with its scenario passes", Base: ansibleRole(true), Head: fstest.MapFS{}},
-	}
+	}, sqlScopeCases()...)
 }
 
 // ansibleRole is the Ansible role web, with a Molecule scenario that applies it and checks the result
@@ -147,14 +147,14 @@ func ansibleRole(scenario bool) fstest.MapFS {
 
 func unknownCases() []engine.Case {
 	opaque := plainTest + "\nfunc TestOpaque(t *testing.T) {\n\tf := pick()\n\tf.Run()\n}\n"
-	return []engine.Case{
+	return append([]engine.Case{
 		{Name: "a new test with no identifiable target needs review", Base: tree(testFile(plainTest)), Head: tree(testFile(opaque)), WantReview: []string{"tests/target-unknown"}},
 		{Name: "a test calling the package API passes", Base: tree(testFile(plainTest)), Head: tree(testFile(plainTest + "\nfunc TestNew(t *testing.T) {\n\t_ = store.New()\n}\n"))},
 		{Name: "a test reaching the API through a helper passes", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(plainTest + "\nfunc build() *store.Store { return store.New() }\n\nfunc TestHelper(t *testing.T) {\n\tif build().Len() != 0 {\n\t\tt.Fatal(\"want empty\")\n\t}\n}\n"))},
 		{Name: "a test whose package's TestMain calls the API passes", Base: tree(testFile(plainTest)),
 			Head: tree(testFile(strings.TrimPrefix(opaque, plainTest) + "\nfunc TestMain(m *testing.M) {\n\t_ = store.New()\n\tm.Run()\n}\n"))},
-	}
+	}, sqlUnknownCases()...)
 }
 
 func guardsNothingCases() []engine.Case {
@@ -175,7 +175,7 @@ func guardsNothingCases() []engine.Case {
 	existing := engine.Case{Name: "a test already on the base branch is not reported",
 		Base: tree(testFile(plainTest + "\nfunc TestUpper(t *testing.T) {\n\t_ = strings.ToUpper(\"a\")\n}\n")),
 		Head: tree(testFile("\n" + plainTest + "\nfunc TestUpper(t *testing.T) {\n\t_ = strings.ToUpper(\"a\")\n}\n"))}
-	return []engine.Case{stdlibOnly, helper, partly, reads, skipped, existing}
+	return append([]engine.Case{stdlibOnly, helper, partly, reads, skipped, existing}, sqlGuardsCases()...)
 }
 
 func duplicateCases() []engine.Case {
@@ -261,7 +261,7 @@ func noAssertionCases() []engine.Case {
 	existing := engine.Case{Name: "a test already on the base branch is not reported",
 		Base: tree(testFile(plainTest + "\nfunc TestAppendOnly(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n}\n")),
 		Head: tree(testFile("\n" + plainTest + "\nfunc TestAppendOnly(t *testing.T) {\n\tstore.Append(store.New(), \"a\")\n}\n"))}
-	return []engine.Case{none, helper, handed, configured, skipped, existing}
+	return append([]engine.Case{none, helper, handed, configured, skipped, existing}, sqlNoAssertionCases()...)
 }
 
 const checkSrc = `package check

@@ -185,7 +185,8 @@
           "java",
           "kotlin",
           "terraform",
-          "ansible"
+          "ansible",
+          "sql"
         ],
         "type": "string"
       },
@@ -372,6 +373,55 @@
                 "type": "string"
               },
               "type": "array"
+            },
+            "sql-sinks": {
+              "additionalProperties": false,
+              "description": "Calls whose arguments take SQL, in addition to the built-in table of each language. A string passed to such a call is read as SQL even without a statement head, and a value that is not a string literal passed to it counts as unresolved. Write an entry as the test writes the callee: a bare name (run) matches every call with that name, a dotted one (db.run) only that callee. Any change needs a person's review.",
+              "properties": {
+                "go": {
+                  "description": "Calls that take SQL in go tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "java": {
+                  "description": "Calls that take SQL in java tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "kotlin": {
+                  "description": "Calls that take SQL in kotlin tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "python": {
+                  "description": "Calls that take SQL in python tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "rust": {
+                  "description": "Calls that take SQL in rust tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "typescript": {
+                  "description": "Calls that take SQL in typescript tests.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
             }
           },
           "type": "object"
@@ -385,6 +435,76 @@
         1
       ],
       "type": "integer"
+    },
+    "sql": {
+      "additionalProperties": false,
+      "description": "The SQL databases whose .sql files define objects that tests call. Omitted: every .sql file is one database, whose dialect is decided from the markers in its files.",
+      "properties": {
+        "databases": {
+          "description": "Databases: sets of objects whose names share one namespace. With two or more, the name is part of the IDs of their objects. Adding, removing or changing one needs a person's review, except adding to paths.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "catalog": {
+                "description": "The database (BigQuery: project) name. The database part of qualified names is compared only when it is set.",
+                "type": "string"
+              },
+              "default-schema": {
+                "description": "The schema of unqualified definitions, for dialects whose connection decides it (MySQL, Oracle, BigQuery).",
+                "type": "string"
+              },
+              "dialect": {
+                "description": "The dialect of the database's files. When set, it wins over the markers in the files. Omitted: decided from the markers.",
+                "enum": [
+                  "postgresql",
+                  "mysql",
+                  "bigquery"
+                ],
+                "type": "string"
+              },
+              "name": {
+                "description": "The database's name. With two or more databases, it is part of the unit ID (.sql/\u003cname\u003e).",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$",
+                "type": "string"
+              },
+              "order": {
+                "description": "Globs giving the order the database's files are applied in. Omitted: the natural order of their paths.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "paths": {
+                "description": "Globs of the database's .sql files; ** is directories at any depth. Omitted: every .sql file. Removing an entry reads fewer files, so it needs a person's review.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "search-path": {
+                "description": "The schemas unqualified names are searched in, in order, as the database searches them.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "tests": {
+                "description": "Globs of the test files whose SQL is resolved against this database.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [

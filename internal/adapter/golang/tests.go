@@ -9,49 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/facts"
 )
-
-// tables are the hazard tables: the built-in entries plus those the configuration adds.
-// Configuration can add entries, never remove them.
-type tables struct {
-	calls map[string]facts.HazardCategory // "<import path>.<Name>" -> category
-	mocks map[string]bool                 // import paths of mocking libraries
-	io    ioTable
-	// asserts are the functions configuration adds to the assertions, "<import path>.<Name>".
-	asserts map[string]bool
-}
-
-func newTables(c config.Config) *tables {
-	t := &tables{
-		calls: map[string]facts.HazardCategory{
-			"time.Now": facts.HazardClock, "time.Since": facts.HazardClock, "time.Until": facts.HazardClock,
-			"time.Sleep": facts.HazardSleep,
-		},
-		mocks: map[string]bool{
-			"github.com/golang/mock/gomock":      true,
-			"go.uber.org/mock/gomock":            true,
-			"github.com/stretchr/testify/mock":   true,
-			"github.com/vektra/mockery/v2/mocks": true,
-		},
-		io:      newIOTable(c.IO),
-		asserts: map[string]bool{},
-	}
-	for _, e := range c.Assertions {
-		t.asserts[e] = true
-	}
-	for _, e := range c.Hazards["clock"] {
-		t.calls[e] = facts.HazardClock
-	}
-	for _, e := range c.Hazards["sleep"] {
-		t.calls[e] = facts.HazardSleep
-	}
-	for _, e := range c.Hazards["mock"] {
-		t.mocks[e] = true
-	}
-	return t
-}
 
 // failing are the methods of the testing tool that fail the test.
 var failing = map[string]bool{"Error": true, "Errorf": true, "Fatal": true, "Fatalf": true, "Fail": true, "FailNow": true}
@@ -122,6 +81,11 @@ type walker struct {
 	recv, suiteType string
 	// trace collects what a function of the product code reaches; it is nil for a test.
 	trace *trace
+	// texts are the strings the test holds; sinkKeys those passed to a call that takes SQL; and
+	// pendingStrs the strings a helper about to be walked is given, by parameter.
+	texts       map[textKey]*textCount
+	sinkKeys    map[textKey]bool
+	pendingStrs map[string][]textKey
 }
 
 type callCount struct {
@@ -146,6 +110,7 @@ func extractTests(rd reading, pf parsedFile, helpers map[string]helper, main *te
 		ast.Inspect(fn.Body, w.visit)
 		main.give(w)
 		w.test.Calls = w.callFacts()
+		w.test.Texts = w.textFacts()
 		out = append(out, w.test)
 	}
 	return out
@@ -235,10 +200,13 @@ func (w *walker) collectTParams(ft *ast.FuncType, body *ast.BlockStmt) {
 }
 
 func (w *walker) visit(n ast.Node) bool {
+	if !w.visitText(n) || w.statement(n) {
+		return false
+	}
 	switch n := n.(type) {
 	case *ast.AssignStmt:
 		w.recordVars(n)
-	case *ast.GenDecl: // var and type declarations inside the test
+	case *ast.GenDecl: // var, const and type declarations inside the test
 		w.recordDecl(n)
 	case *ast.FuncLit:
 		w.funcLit(n)
@@ -249,6 +217,7 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
+		w.sinkCall(n)
 	case *ast.SelectorExpr:
 		w.fields[n.Sel] = true
 		if !w.callees[n] {
@@ -256,32 +225,36 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 	case *ast.Ident:
 		w.readIdent(n)
+	}
+	return true
+}
+
+// statement walks the clauses of a loop or a branching statement, each as often as it runs, and
+// reports whether n was one.
+func (w *walker) statement(n ast.Node) bool {
+	switch n := n.(type) {
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)
-		return false
 	case *ast.RangeStmt:
 		w.inspect(n.X)
 		w.recordRange(n)
 		w.inLoop(n.Body)
-		return false
 	case *ast.IfStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Cond)
 		w.inBranch(n.Body, n.Else)
-		return false
 	case *ast.SwitchStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Tag)
 		w.inBranch(n.Body)
-		return false
 	case *ast.TypeSwitchStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Assign)
 		w.inBranch(n.Body)
-		return false
 	case *ast.SelectStmt:
 		w.inBranch(n.Body)
+	default:
 		return false
 	}
 	return true
@@ -328,7 +301,9 @@ func (w *walker) followHelper(name string, c *ast.CallExpr) {
 		return
 	}
 	w.walking[name] = true
-	w.walkHelper(h, w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c))
+	args, passed := w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c)
+	w.pendStrs(h.decl.Type, c)
+	w.walkHelper(h, args, passed)
 	delete(w.walking, name)
 }
 

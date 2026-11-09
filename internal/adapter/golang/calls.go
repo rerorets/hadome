@@ -3,7 +3,6 @@ package golang
 import (
 	"go/ast"
 	"go/token"
-	"go/types"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,6 +120,10 @@ func (w *walker) bindParams(ft *ast.FuncType, passed map[string]*vtype) {
 			w.local.vars[n.Name] = t
 		}
 	}
+	for name, keys := range w.pendingStrs {
+		w.local.strs[name] = keys
+	}
+	w.pendingStrs = nil
 }
 
 // funcLit walks a function literal in its own block, which sees the names around it.
@@ -345,45 +348,12 @@ func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 		case fn:
 			w.record(p+"."+name, c)
 		case support:
-			w.followSupport(p+"."+name, h, c)
+			w.followSupport(h, c)
 		case w.idx.types[p+"."+name]: // a conversion runs no code of the package
 		default: // a function variable, or a package hadome did not read
 			w.test.Unresolved++
 		}
 	}
-}
-
-// alwaysTrue recognises testify assertions that cannot fail: True(t, true) and Equal(t, x, x) where
-// x calls nothing.
-func alwaysTrue(name string, c *ast.CallExpr) bool {
-	switch name {
-	case "True":
-		if len(c.Args) >= 2 {
-			id, ok := c.Args[1].(*ast.Ident)
-			return ok && id.Name == "true"
-		}
-	case "False":
-		if len(c.Args) >= 2 {
-			id, ok := c.Args[1].(*ast.Ident)
-			return ok && id.Name == "false"
-		}
-	case "Equal", "Exactly", "EqualValues":
-		return len(c.Args) >= 3 && types.ExprString(c.Args[1]) == types.ExprString(c.Args[2]) && !holdsCall(c.Args[1])
-	}
-	return false
-}
-
-// holdsCall reports whether an expression calls something. Two calls spelled the same may return
-// different values, so comparing them is a check that can fail, not a value compared with itself.
-func holdsCall(e ast.Expr) bool {
-	found := false
-	ast.Inspect(e, func(n ast.Node) bool {
-		if _, ok := n.(*ast.CallExpr); ok {
-			found = true
-		}
-		return !found
-	})
-	return found
 }
 
 func firstString(c *ast.CallExpr) string {

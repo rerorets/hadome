@@ -44,13 +44,16 @@ type index struct {
 	// scopes maps a function or method ID to the position of its scope parameter among the call's
 	// arguments, or -1 when it takes none (docs/design/rules-tests.md defines the scope).
 	scopes map[string]int
+	// strs are the package-level constants and variables whose value is a string expression, by
+	// "<import path>.<Name>", or "<test package key>.<Name>" for those of test files.
+	strs map[string]strDecl
 }
 
 func buildIndex(files []parsedFile, modules map[string]string, helpers map[string]map[string]helper) *index {
 	idx := &index{funcs: map[string]bool{}, methods: map[string]bool{}, results: map[string][]declRef{}, types: map[string]bool{},
 		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, testVars: map[string]declRef{},
 		values: map[string]bool{}, varDecls: map[string]declRef{}, consts: map[string]bool{},
-		scopes: map[string]int{}, support: map[string]map[string]helper{}}
+		scopes: map[string]int{}, support: map[string]map[string]helper{}, strs: map[string]strDecl{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
@@ -60,9 +63,11 @@ func buildIndex(files []parsedFile, modules map[string]string, helpers map[strin
 			in.samePkg = !strings.HasSuffix(pf.file.Name.Name, "_test")
 			in.testKey = helperKey(pf)
 			in.helpers = helpers[in.testKey]
+			idx.addStrs(pf, in)
 			idx.addTestDecls(pf.file, in)
 			continue
 		}
+		idx.addStrs(pf, in)
 		if pf.support {
 			idx.addSupport(pf)
 			continue

@@ -94,6 +94,8 @@ rules:                         # 任意。既定と違うものだけ
   tests:
     io: [example.com/acme/db]  # 組み込みの表に足す。表から項目を取り除くことはない
     assertions: [acme.MustEqual] # assert とみなす関数を足す（tests/no-assertion）。足すには人の確認が要る。組み込みの項目は消せない
+    sql-sinks:                 # SQL を取る呼び出しを言語ごとに足す（adapters-sql.ja.md）。変えるには人の確認が要る
+      typescript: [db.run]
   size:
     file-lines: 300            # 上限。上げるには人の確認が要る
   comments:
@@ -109,6 +111,13 @@ files:                         # 任意。言語の慣習から外れた配置�
   generated: ["gen/**"]        # 生成されたコードとして扱う。足すには人の確認が要る
   ansible: ["deploy/*.yml"]    # 配置から外れた Ansible のプレイブック。消すには人の確認が要る
   product: ["e2e/server/**"]   # テストの補助の既定から外し、製品のコードとして読む。変えるには人の確認が要る
+
+sql:                           # 任意。SQL のデータベース（adapters-sql.ja.md）。省くと、すべての .sql を1つのデータベースとして読む
+  databases:
+    - name: main               # 名前を変えるには人の確認が要る
+      dialect: postgresql      # 方言。省くと印から決める。変えるには人の確認が要る
+      paths: ["db/**/*.sql"]   # このデータベースの .sql。消すには人の確認が要る
+      search-path: [billing, public] # 修飾の無い名前を探す順。変えるには人の確認が要る
 
 mutation:                      # 任意。hadome mutate（mutation.ja.md）
   test: [go, test, ./...]      # 必須。テストのコマンド。推測はしない。変えるには人の確認が要る
@@ -190,6 +199,9 @@ gates:                         # 任意。製品固有の門番
 | `files.ansible` | 項目を消すこと | `LooserWhenRemoved` | 合うファイルが読まれなくなり、すべてのルールから外れる |
 | `files.product` | 項目を足すことも消すことも | `LooserAlways` | 消すと、合っていたファイルが製品のコードから外れる。足すと、ファイルは対象や大きさとコメントのルールに入る一方で、テストはそのファイルの中の危険を自分のものとして数えなくなる。どちらが厳しいかを hadome には決められない |
 | `rules.comments.entry-points` | 項目を足すこと。項目の中身を変えることも、足したものとして数える | `LooserWhenAdded` | 合うシンボルに doc コメントを求めなくなる |
+| `sql.databases` | データベースを足すことも消すことも。中身は `paths` 以外のキーを変えること | `LooserAlways`。キーごとに `LooserWhenChanged` | 名前の解決が変わる。どちらの向きが緩いかを hadome には決められない |
+| `sql.databases[].paths` | 項目を消すこと | `LooserWhenRemoved` | 合うファイルが読まれなくなる |
+| `rules.tests.sql-sinks` | 項目を足すことも消すことも | `LooserAlways` | SQL として読む文字列と、解決できない名前の数え方が、どちらの向きにも変わる |
 
 **hadome を入れる変更**: base に `.hadome.yml` が無く head で足す変更は、hadome を入れる変更とみなします。この変更では `config/loosened` を出しません。
 
@@ -230,6 +242,7 @@ classDiagram
     +Variants []Variant
     +Looser Direction
     +Identity []string
+    +Unique bool
     +OmittedIsWidest bool
     +OmittedIsOff bool
   }
@@ -257,6 +270,8 @@ classDiagram
     +Size Limits
     +TodoForm string
     +EntryPoints []EntryPoint
+    +Databases []Database
+    +SQLSinks map[string][]string
     +Diagram *Diagram
     +OwnDiagram *Diagram
     +Layers []string
@@ -272,6 +287,16 @@ classDiagram
   class EntryPoint {
     +Names []string
     +Paths []string
+  }
+  class Database {
+    +Name string
+    +Dialect string
+    +Paths []string
+    +SearchPath []string
+    +DefaultSchema string
+    +Catalog string
+    +Order []string
+    +Tests []string
   }
   class Gate {
     +ID string
@@ -310,6 +335,7 @@ classDiagram
   Variant --> Key
   Config --> Invariant
   Config --> Gate
+  Config --> Database
   Config --> EntryPoint
   functions ..> Key : Spec をたどる
   functions ..> Config
@@ -320,7 +346,8 @@ classDiagram
 - **読み込み**: YAML を位置付きの構文木に解析し、`Spec` に照らしてたどります。そのため、どの誤りもファイル、行、キー、許される値、例を持ちます。知らないキー、型の誤り、知らない不変条件の種類は誤りです
 - **誤りの報告**: 1つのファイルの誤りは、最初の1つだけでなくまとめて報告します
 - **公開したスキーマ**: リポジトリの `schema/hadome.schema.json` は `JSONSchema()` の出力です。両者が違うとテストが落ちるので、公開したスキーマはずれません
-- **glob**: glob を取る値（`files.tests`、`files.generated`、`files.ansible`、`files.product`、`rules.comments.entry-points` の `names` と `paths`、門番の `paths`）は、glob として読めなければ誤りにします。読めない glob は何にも合わず、黙って効かなくなるためです
+- **glob**: glob を取る値（`files.tests`、`files.generated`、`files.ansible`、`files.product`、`rules.comments.entry-points` の `names` と `paths`、門番の `paths`、`sql.databases` の `paths`・`order`・`tests`）は、glob として読めなければ誤りにします。読めない glob は何にも合わず、黙って効かなくなるためです
+- **重複**: `sql.databases` の `name` は1つのファイルの中で重ねられません。同じ名前の2つのデータベースは、どちらのオブジェクトの ID かを決められないためです
 - **綴りの誤り**: 綴りを誤ったキーに、2文字以内の編集で届く既知のキーがあれば、その候補を出します。例には、候補のキーの書き方を出します（`did you mean invariants?`）。候補が無ければ、囲んでいる階層の書き方を出します。仕様のすべてのキーが例を持つことは、テストで確かめます
 - **層の合わせ方**: 仕様に沿って、値の形ごとに次のように合わせます
   - mapping はキーごとに合わせる

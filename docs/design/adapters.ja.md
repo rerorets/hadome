@@ -172,6 +172,7 @@ classDiagram
 | Kotlin | Java と同じ |
 | Terraform | `*.tftest.hcl`（[adapters-iac.ja.md](adapters-iac.ja.md)） |
 | Ansible | `molecule/<シナリオ>/` の下のファイル（[adapters-iac.ja.md](adapters-iac.ja.md)） |
+| SQL | テストの補助のディレクトリの下の `*.sql`（[adapters-sql.ja.md](adapters-sql.ja.md)） |
 
 慣習から外れた配置のリポジトリのために、設定で役割を足せます。
 
@@ -397,6 +398,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | TypeScript、Python、Rust、Java、Kotlin | tree-sitter の文法 |
 | Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
 | Ansible | 設定を読むのと同じ YAML のパーサ（`goccy/go-yaml`）。C への依存は無い |
+| SQL | 方言ごとの公開された ANTLR の文法から作った、純粋な Go のパーサ（[adapters-sql.ja.md](adapters-sql.ja.md)） |
 
 Go のテストでは、メソッドを呼んだ値の型を宣言から読みます。型の検査はせず、ほかのモジュールも読みません。次の値の型が分かります。
 
@@ -455,4 +457,4 @@ testify の suite では、`suite.Run(t, new(X))` を呼ぶテストが、`X` �
 - すべてのモジュールの仕組みを完全に解決すること（動的な import、Python のパスの操作）。解決できない import は `unknown` として報告する
 - 型の情報（呼び出しがファイルをまたいで何に解決されるか）。ルールは構文だけを扱う
 - ミューテーションの分析
-- この文書と [adapters-iac.ja.md](adapters-iac.ja.md) に無い言語
+- この文書と [adapters-iac.ja.md](adapters-iac.ja.md)、[adapters-sql.ja.md](adapters-sql.ja.md) に無い言語

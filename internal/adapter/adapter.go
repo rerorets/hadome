@@ -10,6 +10,7 @@ import (
 
 	"github.com/rerorets/hadome/internal/adapter/ansible"
 	"github.com/rerorets/hadome/internal/adapter/golang"
+	"github.com/rerorets/hadome/internal/adapter/sql"
 	"github.com/rerorets/hadome/internal/adapter/terraform"
 	"github.com/rerorets/hadome/internal/adapter/treesitter"
 	"github.com/rerorets/hadome/internal/adapter/walk"
@@ -34,6 +35,12 @@ type configuredClaimer interface {
 	ClaimsConfigured(c config.Config, path string) bool
 }
 
+// linker is a language that reads what the other languages found, after every language has been
+// read: the SQL adapter reads the strings tests hold as SQL.
+type linker interface {
+	Link(v engine.Version, c config.Config, a *facts.Analysis) error
+}
+
 // claims reports whether the language claims the file under this configuration.
 func claims(l Language, c config.Config, p string) bool {
 	if cc, ok := l.(configuredClaimer); ok {
@@ -53,7 +60,7 @@ func New() Analyzer {
 	for _, l := range treesitter.Languages() { // a different type with and without cgo
 		langs = append(langs, l)
 	}
-	langs = append(langs, terraform.Adapter{}, ansible.Adapter{})
+	langs = append(langs, terraform.Adapter{}, ansible.Adapter{}, sql.New())
 	return Analyzer{Languages: langs}
 }
 
@@ -83,6 +90,13 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 			return nil, err
 		}
 		merge(a, la)
+	}
+	for _, l := range an.Languages {
+		if lk, ok := l.(linker); ok && enabled(c, l.Name()) {
+			if err := lk.Link(v, c, a); err != nil {
+				return nil, err
+			}
+		}
 	}
 	sortAnalysis(a)
 	return a, nil

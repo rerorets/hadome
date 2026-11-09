@@ -134,7 +134,7 @@ type tsWalk struct {
 }
 
 func (w *tsWalk) walk(body *sitter.Node) {
-	w.t.body(body, func(n *sitter.Node) bool { return tsLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.tf.f, w.tf.t, body, func(n *sitter.Node) bool { return tsLoops[n.Kind()] }, w.visit)
 }
 
 func (w *tsWalk) visit(n *sitter.Node) bool {

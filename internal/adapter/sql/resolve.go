@@ -1,0 +1,162 @@
+package sql
+
+import (
+	"strings"
+)
+
+// outcome is what a name in a test resolved to.
+type outcome int
+
+const (
+	unresolved outcome = iota
+	builtin
+	found
+)
+
+// resolve finds the object a name in a test names, the way the database would: qualified names
+// directly, unqualified ones by the search order, the default schema, or the only object of that
+// name. A built-in function or a system schema counts nothing.
+func (db *database) resolve(d Dialect, ref Reference) (*object, outcome) {
+	if len(ref.Name) == 0 {
+		return nil, unresolved
+	}
+	parts := make([]string, len(ref.Name))
+	for i, p := range ref.Name {
+		parts[i] = d.Fold(p)
+	}
+	if inSystemSchema(d.Builtins(), parts) {
+		return nil, builtin
+	}
+	switch len(parts) {
+	case 1:
+		return db.unqualified(d, parts[0], ref.Use == UseCall)
+	case 2:
+		return db.twoParts(d, parts[0], parts[1])
+	case 3:
+		return db.threeParts(d, parts)
+	}
+	return nil, unresolved
+}
+
+// twoParts resolves schema.name, or an Oracle package's routine written pkg.routine: the package in
+// the default schema, or in the only schema that has it.
+func (db *database) twoParts(d Dialect, first, second string) (*object, outcome) {
+	if o := db.objects[first+"."+second]; o != nil {
+		return o, found
+	}
+	if s := db.schemaFor(d); s != "" {
+		if o := db.objects[s+"."+first+"."+second]; o != nil && o.pkg {
+			return o, found
+		}
+	}
+	return db.only(func(o *object) bool { return o.pkg && strings.HasSuffix(o.key, "."+first+"."+second) })
+}
+
+// threeParts resolves schema.package.routine, or catalog.schema.name, whose catalog is compared only
+// when the configuration names one.
+func (db *database) threeParts(d Dialect, parts []string) (*object, outcome) {
+	if o := db.objects[strings.Join(parts, ".")]; o != nil && o.pkg {
+		return o, found
+	}
+	if db.cfg.Catalog != "" && parts[0] != d.Fold(Ident{Text: db.cfg.Catalog}) {
+		return nil, unresolved
+	}
+	if o := db.objects[parts[1]+"."+parts[2]]; o != nil {
+		return o, found
+	}
+	return nil, unresolved
+}
+
+// inSystemSchema reports whether a qualified name is in one of the dialect's system schemas, or its
+// first part starts like a built-in package (DBMS_ in Oracle).
+func inSystemSchema(b Builtins, parts []string) bool {
+	if len(parts) < 2 {
+		return false
+	}
+	return b.Schemas[parts[len(parts)-2]] || len(parts) >= 3 && b.Schemas[parts[len(parts)-3]] || hasPrefix(parts[0], b.Prefixes)
+}
+
+func (db *database) unqualified(d Dialect, name string, call bool) (*object, outcome) {
+	b := d.Builtins()
+	if call && b.Functions[name] {
+		return nil, builtin
+	}
+	if o := db.lookup(d, name); o != nil {
+		return o, found
+	}
+	if hasPrefix(name, b.Prefixes) {
+		return nil, builtin
+	}
+	if len(db.cfg.SearchPath) > 0 {
+		return nil, unresolved // the database searches only its search order
+	}
+	return db.only(func(o *object) bool { return !o.pkg && lastPart(o.key) == name })
+}
+
+// lookup finds an unqualified name in the search order, then in the default schema.
+func (db *database) lookup(d Dialect, name string) *object {
+	for _, s := range db.cfg.SearchPath {
+		if o := db.objects[d.Fold(Ident{Text: s})+"."+name]; o != nil {
+			return o
+		}
+	}
+	if s := db.schemaFor(d); s != "" {
+		return db.objects[s+"."+name]
+	}
+	return db.objects[name]
+}
+
+// only returns the object matching, when exactly one does.
+func (db *database) only(match func(*object) bool) (*object, outcome) {
+	var hit *object
+	for _, o := range db.objects {
+		if match(o) {
+			if hit != nil {
+				return nil, unresolved
+			}
+			hit = o
+		}
+	}
+	if hit == nil {
+		return nil, unresolved
+	}
+	return hit, found
+}
+
+func lastPart(key string) string { return key[strings.LastIndex(key, ".")+1:] }
+
+func hasPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// triggered returns the routines a write to the table runs: its triggers for the event, or the
+// routines PostgreSQL triggers execute.
+func (db *database) triggered(table, event string) []*object {
+	var out []*object
+	fires := func(events []string) bool {
+		for _, e := range events {
+			if e == event || event == "MERGE" && (e == "INSERT" || e == "UPDATE" || e == "DELETE") {
+				return true
+			}
+		}
+		return false
+	}
+	for _, o := range db.objects {
+		if o.kind == KindTrigger && o.on == table && fires(o.events) {
+			out = append(out, o)
+		}
+	}
+	for _, t := range db.triggers {
+		if t.on == table && fires(t.events) {
+			if o := db.objects[t.executes]; o != nil {
+				out = append(out, o)
+			}
+		}
+	}
+	return out
+}

@@ -9,7 +9,7 @@ Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues). Sen
 | People who use hadome | [README](README.md), [three layers for trusting tests](docs/model.md), [product-specific gates](docs/external-gates.md) |
 | Agents working in a user's repository | [The guide for agents](docs/for-agents.md). The block `hadome agents` writes is `cmd/hadome/agents.en.md` |
 | People who build hadome | This document, [the design documents](docs/design), [the dependency diagram](docs/design/dependencies.md) |
-| Maintainers | [Releasing](docs/maintaining/releasing.md), [the JVM plugins](packaging/jvm/README.md) |
+| Maintainers | [Releasing](docs/maintaining/releasing.md), [SQL grammars](docs/maintaining/sql-grammars.md), [the JVM plugins](packaging/jvm/README.md) |
 | People who found a vulnerability | [Security](SECURITY.md) |
 
 ## Running it locally
@@ -19,12 +19,13 @@ With Go and a C compiler, the build reads all eight languages. Without a C compi
 ```sh
 go test ./...                           # the build that reads eight languages (cgo)
 CGO_ENABLED=0 go test ./...             # the build that reads Go, Terraform and Ansible only
+go test -tags sqlgrammars ./internal/adapter/sql/...  # the build with the readers of SQL dialects that are not enabled
 go run ./cmd/hadome self-test           # every rule's self-test
 go run ./cmd/hadome check --format json # hadome checks itself
 packaging/smoke.sh 0.0.0-local          # build, install and run every package
 ```
 
-CI runs on every pull request and every push to main: the first three on Linux, macOS and Windows, and `hadome check` and `packaging/smoke.sh` on Linux.
+CI runs on every pull request and every push to main: the first two and the self-tests on Linux, macOS and Windows, and the tests and vet with the tag `sqlgrammars`, `hadome check` and `packaging/smoke.sh` on Linux.
 
 ### Hooks
 

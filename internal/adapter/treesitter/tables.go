@@ -14,6 +14,10 @@ type tables struct {
 	io    []string                        // units that perform input or output, and everything under them
 	// asserts are the functions configuration adds to the assertions, as tests call them.
 	asserts map[string]bool
+	// lang is the language's name in configuration, and sqlSinks the calls that take SQL that
+	// configuration adds for it (rules.tests.sql-sinks).
+	lang     string
+	sqlSinks []string
 }
 
 // with returns a copy with the configuration's entries added. Configuration never removes any.

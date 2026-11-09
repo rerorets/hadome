@@ -7,9 +7,9 @@ flowchart TB
   cmd["cmd/hadome"] --> adapter["internal/adapter"] & gate["internal/gate"] & rules["internal/rules/..."]
   cmd --> suggest["internal/suggest"] & source["internal/source"] & engine["internal/engine"] & config["internal/config"]
   cmd --> mutation["internal/mutation"]
-  adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"] & terraform["internal/adapter/terraform"] & ansible["internal/adapter/ansible"]
-  adapter & golang & treesitter --> walk["internal/adapter/walk"]
-  adapter & golang & treesitter & terraform & ansible --> engine & config & facts["internal/facts"]
+  adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"] & terraform["internal/adapter/terraform"] & ansible["internal/adapter/ansible"] & sqladapter["internal/adapter/sql/..."]
+  adapter & golang & treesitter & sqladapter --> walk["internal/adapter/walk"]
+  adapter & golang & treesitter & terraform & ansible & sqladapter --> engine & config & facts["internal/facts"]
   engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
   rules --> engine & config & facts
@@ -26,3 +26,4 @@ flowchart TB
 - `cmd/hadome` is the only place that puts the pieces together
 - Only the test that writes and checks `THIRD_PARTY_NOTICES` uses `notices`. `notices` imports nothing of hadome, and no other unit imports it
 - `packaging/` is the distribution: it imports nothing of the Go code, and its units (the installer and the plugins) are one box
+- `internal/adapter/sql/...` is the SQL adapter and, under it, each dialect's generated parser (`grammar/`) ([adapters-sql.md](adapters-sql.md))

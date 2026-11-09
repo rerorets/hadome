@@ -32,6 +32,9 @@ type file struct {
 	// lifted are the nodes a repairer took out of the source before the reading root comes from.
 	// They belong to an earlier reading of the same bytes, so their positions and text are src's.
 	lifted []*sitter.Node
+	// consts are the file's constants that hold a string, by name (see stringConsts); nil
+	// until a test first reads a name of the file.
+	stringConsts map[string]*sitter.Node
 }
 
 func (f *file) text(n *sitter.Node) string { return n.Utf8Text(f.src) }
@@ -90,6 +93,7 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	}
 	l.r.index(v, files)
 	t := l.tables.with(c)
+	t.lang, t.sqlSinks = l.name, c.SQLSinks[l.name]
 	a := &facts.Analysis{}
 	// Symbols come first: tests need to know each target's parameters.
 	for _, f := range files {

@@ -35,12 +35,14 @@ type block struct {
 	// still hides a package or package-level variable of the same name.
 	vars map[string]*vtype
 	// types holds the types declared inside the function.
-	types  map[string]ast.Expr
+	types map[string]ast.Expr
+	// strs maps a variable to the strings it holds (textKey), or to nil once it holds something else.
+	strs   map[string][]textKey
 	parent *block
 }
 
 func newBlock(parent *block) *block {
-	return &block{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, parent: parent}
+	return &block{vars: map[string]*vtype{}, types: map[string]ast.Expr{}, strs: map[string][]textKey{}, parent: parent}
 }
 
 // lookup finds the variable of the name in the innermost function that declares it.

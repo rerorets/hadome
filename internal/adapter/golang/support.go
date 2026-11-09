@@ -75,16 +75,16 @@ func (s scope) supportFunc(e ast.Expr) (helper, bool) {
 // followSupport walks a function of a test support package at each call, as if it were part of the
 // test. Its names resolve in its own package: its file's imports, and the package's other
 // functions as helpers.
-func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
+func (w *walker) followSupport(h helper, c *ast.CallExpr) {
 	w.test.CallsSupport = true
 	// A test in the support package's own directory is that package's test.
 	w.test.TestsSupport = w.test.TestsSupport || path.Dir(w.test.Path) == path.Dir(h.path)
-	if w.walking[id] {
-		return
-	}
-	w.walking[id] = true
+	// No guard against walking the function again inside itself is needed: it reaches other support
+	// packages only through their import paths, and Go forbids a package importing itself, directly or
+	// through another. Its own package's functions are helpers, which have their guard.
 	prevScope, prevPath, prevArgs := w.scope, w.curPath, w.args
 	args, passed := w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c)
+	w.pendStrs(h.decl.Type, c)
 	w.scope = scope{idx: w.idx, pkgPath: h.pkgPath, imports: h.imports, samePkg: true,
 		helpers: w.idx.support[h.pkgPath], local: newBlock(nil)}
 	w.curPath, w.args = h.path, args
@@ -92,7 +92,6 @@ func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
 	w.bindParams(h.decl.Type, passed)
 	ast.Inspect(h.decl.Body, w.visit)
 	w.scope, w.curPath, w.args = prevScope, prevPath, prevArgs
-	delete(w.walking, id)
 }
 
 // resultType is the type of the helper's n-th result, read in the helper's own file.
