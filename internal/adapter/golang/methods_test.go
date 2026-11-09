@@ -343,11 +343,40 @@ func TestOtherPackageVar(t *testing.T) {
 
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
+// In the repository of a database library itself, its packages are the product's code: the result
+// of one of their functions that hadome did not read is not taken for the library's known type, so
+// a method called on it stays unresolved.
+func TestGoDatabaseLibraryResultsInTheLibrarysOwnRepository(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module github.com/jackc/pgx/v5\n")},
+		"pgxpool/pool_test.go": {Data: []byte(`package pgxpool_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+)
+
+func TestConnect(t *testing.T) {
+	conn, _ := pgx.Connect(context.Background(), "dsn")
+	_ = conn.Close(context.Background())
+}
+`)},
+	}
+	if got, want := callsByTest(t, tree), "TestConnect calls=[] unresolved=2"; got != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
 // A method of a value of another module's concrete type runs that module's code, so it is neither a
 // target nor unresolved: a value declared with a pointer type, one made by a composite literal, and
 // the results of the database libraries' constructors, transactions and queries. A value of another
 // module's type that may be an interface (declared without a pointer, or a result that is one) still
-// counts as unresolved, because it may hold a value of the product.
+// counts as unresolved, because it may hold a value of the product. So does a value of a package of
+// the repository that hadome did not read, and an error a query returns beside its rows.
 func TestGoMethodsOfExternalConcreteValuesAreNotUnresolved(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
@@ -364,6 +393,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
+
+	"example.com/app/gen"
 )
 
 type fixture struct{ db *sql.DB }
@@ -426,17 +457,26 @@ func TestInterfaces(t *testing.T) {
 	conn, _ := pgx.Connect(ctx, "dsn")
 	tx, _ := conn.Begin(ctx)
 	_ = tx.Commit(ctx)
+	db, _ := sql.Open("driver", "dsn")
+	_, err := db.Query("SELECT 1")
+	_ = err.Error()
+}
+
+func TestUnreadPackage(t *testing.T) {
+	var m *gen.Maker
+	m.Make()
 }
 `)},
 	}
 	want := strings.Join([]string{
 		"TestFieldAndParam calls=[] unresolved=0",
 		"TestHelperDB calls=[example.com/app/store.Store.Append×1] unresolved=0",
-		"TestInterfaces calls=[] unresolved=2",
+		"TestInterfaces calls=[] unresolved=3",
 		"TestLiteral calls=[] unresolved=0",
 		"TestOpenedDB calls=[] unresolved=0",
 		"TestPgx calls=[] unresolved=0",
 		"TestSqlx calls=[] unresolved=0",
+		"TestUnreadPackage calls=[] unresolved=1",
 	}, "\n")
 	if got := callsByTest(t, tree); got != want {
 		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)

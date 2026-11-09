@@ -234,14 +234,11 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 }
 
 // joinedNames reports whether a reference is file names joined by "/" meaning "or", such as
-// README/CLAUDE.md for "README.md or CLAUDE.md": it starts with none of ./, ../ and /, its first
-// part is not a directory at the root (then it is a path through that directory), and every part
-// between the slashes is the name of a file somewhere, or is once .md is added. named reports
-// whether a file of the name exists outside the skipped directories.
+// README/CLAUDE.md for "README.md or CLAUDE.md": no part between the slashes is empty, . or ..
+// (so it starts with none of ./, ../ and /), its first part is not a directory at the root (then it
+// is a path through that directory), and every part is the name of a file somewhere, or is once .md
+// is added. named reports whether a file of the name exists outside the skipped directories.
 func joinedNames(fsys fs.FS, ref string, named func(string) (bool, error)) (bool, error) {
-	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") || strings.HasPrefix(ref, "/") {
-		return false, nil
-	}
 	parts := strings.Split(ref, "/")
 	if st, err := fs.Stat(fsys, parts[0]); err == nil && st.IsDir() {
 		return false, nil

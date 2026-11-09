@@ -496,7 +496,17 @@ def test_timeout(a):
 @pytest.mark.parametrize("a", [2], ids=["one"])
 def test_other(a):
     assert add(a, 0) == a
+
+
+def test_body_x():
+    assert add(pytest.param(1, id="x").values[0], 0) == 1
+
+
+def test_body_y():
+    assert add(pytest.param(1, id="y").values[0], 0) == 1
 `)), `
+test_body_x
+test_body_y
 test_ids test_plain
 test_other
 test_param test_param_id
@@ -519,6 +529,10 @@ class CalcTest {
   @Test
   @DisplayName("adds two numbers")
   void addsNamed() { assertEquals(3, Calc.add(1, 2)); }
+
+  @Test
+  @org.junit.jupiter.api.DisplayName("adds both")
+  void addsQualified() { assertEquals(3, Calc.add(1, 2)); }
 
   @Test
   @Timeout(5)
@@ -546,7 +560,7 @@ class CalcTest {
   void repeatedMore() { assertEquals(3, Calc.add(1, 2)); }
 }
 `)), `
-CalcTest.adds CalcTest.addsNamed
+CalcTest.adds CalcTest.addsNamed CalcTest.addsQualified
 CalcTest.addsInTime
 CalcTest.addsTagged
 CalcTest.one CalcTest.oneNamed
@@ -584,6 +598,12 @@ class CalcTest {
     @ValueSource(ints = [1])
     fun oneNamed(a: Int) { assertEquals(a, add(a, 0)) }
 
+    @RepeatedTest(name)
+    fun repeatedByConstant() { assertEquals(3, add(1, 2)) }
+
+    @RepeatedTest
+    fun repeatedBare() { assertEquals(3, add(1, 2)) }
+
     @Nested
     @ParameterizedClass
     @ValueSource(ints = [5])
@@ -604,7 +624,9 @@ class CalcTest {
 CalcTest.Named.adds CalcTest.Plain.adds
 CalcTest.adds CalcTest.addsNamed
 CalcTest.addsInTime
-CalcTest.one CalcTest.oneNamed`)
+CalcTest.one CalcTest.oneNamed
+CalcTest.repeatedBare
+CalcTest.repeatedByConstant`)
 	})
 	t.Run("rust", func(t *testing.T) {
 		expect(t, bodies(t, "rust", tree(

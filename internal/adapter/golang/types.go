@@ -278,7 +278,7 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 	case *ast.SelectorExpr:
 		if s.isPackage(f.X) {
 			if p := s.imports[f.X.(*ast.Ident).Name]; !s.idx.internal(p) {
-				return externalResult(p, f.Sel.Name, n, false)
+				return externalResult(p, f.Sel.Name, false)
 			}
 			return nil
 		}
@@ -288,7 +288,7 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 		case t.id != "":
 			return s.idx.result(t.id+"."+f.Sel.Name, n)
 		case t.ext != "":
-			return externalResult(t.ext, f.Sel.Name, n, true)
+			return externalResult(t.ext, f.Sel.Name, true)
 		}
 	}
 	return nil

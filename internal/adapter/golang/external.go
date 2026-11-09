@@ -79,8 +79,8 @@ func (s scope) external(e ast.Expr) *vtype {
 	if !ok {
 		return nil
 	}
-	x, ok := sel.X.(*ast.Ident)
-	if !ok || s.shadowed(x.Name) {
+	x, ok := sel.X.(*ast.Ident) // code that compiles never names a type through a variable
+	if !ok {
 		return nil
 	}
 	p, ok := s.imports[x.Name]
@@ -93,10 +93,7 @@ func (s scope) external(e ast.Expr) *vtype {
 // externalResult returns the concrete type of the first result of name called on owner, when
 // externalResults knows it. owner is an import path for a function of a package, or the ext of a
 // value's type for a method.
-func externalResult(owner, name string, n int, method bool) *vtype {
-	if n != 0 {
-		return nil
-	}
+func externalResult(owner, name string, method bool) *vtype {
 	key := unversioned(owner)
 	if method {
 		dot := strings.LastIndex(owner, ".")
