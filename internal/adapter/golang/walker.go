@@ -23,5 +23,6 @@ func newWalker(rd reading, pf parsedFile, helpers map[string]helper) *walker {
 		fset: rd.fset, tables: rd.tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
 		walking: map[string]bool{}, curPath: pf.path,
 		callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
+		texts: map[textKey]*textCount{}, sinkKeys: map[textKey]bool{},
 	}
 }

@@ -21,6 +21,9 @@ type tables struct {
 	io    ioTable
 	// asserts are the functions configuration adds to the assertions, "<import path>.<Name>".
 	asserts map[string]bool
+	// sinks are the calls configuration adds to those that take SQL: a function or method name, or a
+	// callee as written (db.Run).
+	sinks map[string]bool
 }
 
 func newTables(c config.Config) *tables {
@@ -37,6 +40,10 @@ func newTables(c config.Config) *tables {
 		},
 		io:      newIOTable(c.IO),
 		asserts: map[string]bool{},
+		sinks:   map[string]bool{},
+	}
+	for _, e := range c.SQLSinks["go"] {
+		t.sinks[e] = true
 	}
 	for _, e := range c.Assertions {
 		t.asserts[e] = true
@@ -122,6 +129,11 @@ type walker struct {
 	recv, suiteType string
 	// trace collects what a function of the product code reaches; it is nil for a test.
 	trace *trace
+	// texts are the strings the test holds; sinkKeys those passed to a call that takes SQL; and
+	// pendingStrs the strings a helper about to be walked is given, by parameter.
+	texts       map[textKey]*textCount
+	sinkKeys    map[textKey]bool
+	pendingStrs map[string][]textKey
 }
 
 type callCount struct {
@@ -146,6 +158,7 @@ func extractTests(rd reading, pf parsedFile, helpers map[string]helper, main *te
 		ast.Inspect(fn.Body, w.visit)
 		main.give(w)
 		w.test.Calls = w.callFacts()
+		w.test.Texts = w.textFacts()
 		out = append(out, w.test)
 	}
 	return out
@@ -238,8 +251,12 @@ func (w *walker) visit(n ast.Node) bool {
 	switch n := n.(type) {
 	case *ast.AssignStmt:
 		w.recordVars(n)
-	case *ast.GenDecl: // var and type declarations inside the test
+		if n.Tok == token.DEFINE || n.Tok == token.ASSIGN {
+			w.bindStrs(n.Lhs, n.Rhs, n.Tok == token.DEFINE)
+		}
+	case *ast.GenDecl: // var, const and type declarations inside the test
 		w.recordDecl(n)
+		w.bindDecl(n)
 	case *ast.FuncLit:
 		w.funcLit(n)
 		return false
@@ -249,6 +266,7 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 		w.callees[ast.Unparen(n.Fun)] = true
 		w.call(n)
+		w.sinkCall(n)
 	case *ast.SelectorExpr:
 		w.fields[n.Sel] = true
 		if !w.callees[n] {
@@ -256,6 +274,13 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 	case *ast.Ident:
 		w.readIdent(n)
+		w.readConst(n)
+	case *ast.BasicLit:
+		w.literal(n)
+	case *ast.BinaryExpr:
+		if w.concat(n) {
+			return false
+		}
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)
@@ -328,7 +353,9 @@ func (w *walker) followHelper(name string, c *ast.CallExpr) {
 		return
 	}
 	w.walking[name] = true
-	w.walkHelper(h, w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c))
+	args, passed := w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c)
+	w.pendStrs(h.decl.Type, c)
+	w.walkHelper(h, args, passed)
 	delete(w.walking, name)
 }
 

@@ -22,6 +22,7 @@ type testFacts struct {
 	// setups are the setups of the variables declared outside the test that the walk used, which
 	// are part of the test's Body.
 	setups []codeIn
+	texts  textCollector
 }
 
 type callCount struct {
@@ -137,13 +138,24 @@ func (t *testFacts) done() facts.Test {
 		t.test.Calls = append(t.test.Calls, facts.Call{Target: id, Times: cc.times, Scopes: len(cc.scopes)})
 	}
 	sort.Slice(t.test.Calls, func(i, j int) bool { return t.test.Calls[i].Target < t.test.Calls[j].Target })
+	t.test.Texts = t.texts.done()
 	return t.test
 }
 
+// bodyIn walks a test body, or a helper's, written in f; tb are the tables of f's language. The
+// strings it reaches belong to the test (see textCollector).
+func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+	in, inTables := t.texts.in, t.texts.tables
+	t.texts.in, t.texts.tables = f, tb
+	t.body(n, isLoop, visit)
+	t.texts.in, t.texts.tables = in, inTables
+}
+
 // body walks a test body. visit handles one node and returns false to skip its children; loops
-// are tracked here for every language.
+// are tracked here for every language, and so are the strings the walk reaches.
 func (t *testFacts) body(n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
 	walk(n, func(c *sitter.Node) bool {
+		t.texts.note(c, t.loops)
 		if c != n && isLoop(c) {
 			t.loops++
 			for i := uint(0); i < c.ChildCount(); i++ {

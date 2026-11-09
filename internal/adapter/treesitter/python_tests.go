@@ -207,7 +207,7 @@ type pyWalk struct {
 }
 
 func (w *pyWalk) walk(body *sitter.Node) {
-	w.t.body(body, func(n *sitter.Node) bool { return pyLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.pf.f, w.pf.t, body, func(n *sitter.Node) bool { return pyLoops[n.Kind()] }, w.visit)
 }
 
 func (w *pyWalk) visit(n *sitter.Node) bool {

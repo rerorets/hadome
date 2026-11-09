@@ -219,7 +219,7 @@ type jvmWalk struct {
 }
 
 func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
-	w.t.body(body, func(n *sitter.Node) bool { return loops[n.Kind()] }, visit)
+	w.t.bodyIn(w.jf.f, w.jf.t, body, func(n *sitter.Node) bool { return loops[n.Kind()] }, visit)
 }
 
 // invoke handles a call to name on obj ("" for an unqualified call). It reports hazards,

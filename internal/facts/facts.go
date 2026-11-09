@@ -123,6 +123,12 @@ const (
 	// Terraform variable or output, an Ansible role's default. Rules that measure functions do not
 	// count it.
 	SymbolValue SymbolKind = "value"
+	// SymbolRoutine is a database object that runs logic when a test names it: an SQL function,
+	// procedure, view, trigger or task. Rules that measure functions do not count it.
+	SymbolRoutine SymbolKind = "routine"
+	// SymbolRelation is a database object that holds values: a table, sequence or stream. A test
+	// naming it reads it.
+	SymbolRelation SymbolKind = "relation"
 )
 
 // Symbol is a function, method, named type or value of non-test, non-generated code. ID is unique within a
@@ -242,7 +248,34 @@ type Test struct {
 	Body string
 	// Declared holds the "key: value" lines of the test's doc comment, values by key, in order.
 	Declared map[string][]string
+	// Texts are the strings the test holds, for the adapters of languages written inside strings
+	// (SQL) to read after every language has been read. The adapter of the test's own language knows
+	// nothing of what they say.
+	Texts []Text
 }
+
+// Text is one string a test holds: a literal in its body or in a helper it follows, or a constant
+// of its file that it reads.
+type Text struct {
+	Path string
+	Line int
+	// Value is the string's content without quotes. Literals joined with + (or written next to each
+	// other) are one Value. Empty when Dynamic.
+	Value string
+	// Holes are the byte offsets in Value where something that is not a literal was interpolated or
+	// joined: ${…}, an f-string's {…}, "…" + name.
+	Holes []int
+	// Sink is TextSinkSQL when the string was passed to an argument that takes SQL, empty otherwise.
+	Sink string
+	// Dynamic is true when a value that is not a string literal was passed to an argument that takes
+	// SQL, such as query(buildSQL(id)).
+	Dynamic bool
+	// Times counts the places the string is used; one inside a loop counts twice.
+	Times int
+}
+
+// TextSinkSQL is the Sink of a string passed to an argument that takes SQL.
+const TextSinkSQL = "sql"
 
 // Call is one symbol a test calls.
 type Call struct {

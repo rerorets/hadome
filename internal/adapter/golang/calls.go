@@ -121,6 +121,10 @@ func (w *walker) bindParams(ft *ast.FuncType, passed map[string]*vtype) {
 			w.local.vars[n.Name] = t
 		}
 	}
+	for name, keys := range w.pendingStrs {
+		w.local.strs[name] = keys
+	}
+	w.pendingStrs = nil
 }
 
 // funcLit walks a function literal in its own block, which sees the names around it.
