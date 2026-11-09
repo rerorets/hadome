@@ -11,9 +11,9 @@ import (
 	"go/build"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
@@ -41,6 +41,8 @@ type Mutate struct {
 	// Lang is the language of the progress lines (en or ja). Empty means messages in head's
 	// configuration, as for the report.
 	Lang string
+	// Trees is the working directory the versions are copied into, kept between runs (TreesFor).
+	Trees string
 }
 
 // Run tries the mutants of head, then base's counterparts of head's survivors, and compares the two
@@ -72,6 +74,10 @@ func (m *Mutate) Run(src engine.Source) (engine.Report, error) {
 	headFacts, err := m.Analyzer.Analyze(hv, headCfg)
 	if err != nil {
 		return engine.Report{}, err
+	}
+	if hasPackages(headCfg.Mutation.Test) && !hasGo(headFacts) {
+		return engine.Report{}, fmt.Errorf("configuration of %s: mutation.test holds %s, which only Go tests fill, and %s has no Go file; "+
+			"narrow with {tests} instead (hadome explain mutation.test)", hv.Label, packagesHole, hv.Label)
 	}
 	vs := versions{base: bv, head: hv, baseFacts: baseFacts, headFacts: headFacts}
 	lang := m.Lang
@@ -121,15 +127,20 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 	if len(mutants) == 0 {
 		return found, nil
 	}
-	head, err := m.runner(hv, c, 0)
+	release, err := m.hold()
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(head.dir)
+	defer release()
+	head, err := m.runner("head", hv, marks(vs.headFacts, mutants), c, lang)
+	if err != nil {
+		return nil, err
+	}
 	callers := testsCalling(vs.headFacts)
 	var survivors []facts.Mutant
 	for i, mu := range mutants {
-		out, err := head.try(mu, callers[mu.Func])
+		names, pkgs := callers.of(mu.Func, c.Test)
+		out, err := head.try(mu, names, pkgs)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +150,7 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 			found[hv.Label] = append(found[hv.Label], finding(mu))
 		}
 	}
-	baseSurvivors, err := m.inBase(bv, vs.baseFacts, survivors, c, head.Timeout)
+	baseSurvivors, err := m.inBase(bv, vs.baseFacts, survivors, c, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +160,7 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 
 // inBase tries base's counterparts of head's survivors. A counterpart that survives in base too is a
 // gap that was already there; the engine then leaves the head survivor alone.
-func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors []facts.Mutant, c config.Mutation, timeout time.Duration) ([]engine.Finding, error) {
+func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors []facts.Mutant, c config.Mutation, lang string) ([]engine.Finding, error) {
 	if len(survivors) == 0 {
 		return nil, nil
 	}
@@ -180,15 +191,15 @@ func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors 
 	if len(counterparts) == 0 {
 		return nil, nil
 	}
-	base, err := m.runner(bv, c, timeout)
+	base, err := m.runner("base", bv, marks(baseFacts, counterparts), c, lang)
 	if err != nil {
 		return nil, fmt.Errorf("base: %w", err)
 	}
-	defer os.RemoveAll(base.dir)
 	callers := testsCalling(baseFacts)
 	var out []engine.Finding
 	for _, mu := range counterparts {
-		o, err := base.try(mu, callers[mu.Func])
+		names, pkgs := callers.of(mu.Func, c.Test)
+		o, err := base.try(mu, names, pkgs)
 		if err != nil {
 			return nil, err
 		}
@@ -199,50 +210,91 @@ func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors 
 	return out, nil
 }
 
-// runner copies a version and runs its tests once with nothing broken. timeout, when not zero, is
-// the limit already worked out for head.
-func (m *Mutate) runner(v engine.Version, c config.Mutation, timeout time.Duration) (*Runner, error) {
-	dir, err := copyVersion(v)
+// runner copies a version into its directory under Trees, named by its role (head or base), and runs its tests once with nothing
+// broken. The files holding mutants get, in each run before breaking, a comment of their language.
+func (m *Mutate) runner(role string, v engine.Version, marked map[string]string, c config.Mutation, lang string) (*Runner, error) {
+	dir := filepath.Join(m.Trees, role)
+	if err := writeTree(v, dir); err != nil {
+		return nil, err
+	}
+	skipped := func(cmd []string) {
+		fmt.Fprintln(m.Progress, engine.T("mutate: %s fails with nothing broken, so it judges no mutant; they go to the next command",
+			strings.Join(cmd, " ")).In(lang))
+	}
+	r, err := newRunner(dir, c, marked, skipped)
 	if err != nil {
 		return nil, err
 	}
-	r := &Runner{Test: c.Test, Sep: c.TestsSeparator, dir: dir}
-	if c.Timeout != "" {
-		if r.Timeout, err = time.ParseDuration(c.Timeout); err != nil {
-			os.RemoveAll(dir)
-			return nil, err
-		}
-	}
-	took, err := r.clean()
-	if err != nil {
-		os.RemoveAll(dir)
+	if err := r.clean(); err != nil {
 		return nil, err
-	}
-	switch {
-	case r.Timeout != 0:
-	case timeout != 0:
-		r.Timeout = timeout
-	default:
-		r.Timeout = 3*took + time.Second // three times a clean run; the second covers a run of almost nothing
 	}
 	return r, nil
 }
 
-// testsCalling maps each function to the names of the active tests that call it.
-func testsCalling(a *facts.Analysis) map[string][]string {
-	out := map[string][]string{}
+// marks gives each file holding a mutant the line comment of its language.
+func marks(a *facts.Analysis, mutants []facts.Mutant) map[string]string {
+	languages := map[string]string{}
+	for _, f := range a.Files {
+		languages[f.Path] = f.Language
+	}
+	out := map[string]string{}
+	for _, mu := range mutants {
+		out[mu.Path] = lineComment(languages[mu.Path])
+	}
+	return out
+}
+
+// hold takes the lock of the working directory, so that no other hadome mutate copies into it.
+func (m *Mutate) hold() (release func(), err error) {
+	if m.Trees == "" {
+		return nil, errors.New("no working directory to copy the versions into")
+	}
+	if err := os.MkdirAll(m.Trees, 0o755); err != nil {
+		return nil, err
+	}
+	return lock(filepath.Join(m.Trees, "lock"))
+}
+
+// callers maps each function to the active tests that call it.
+type callers map[string][]facts.Test
+
+// testsCalling maps each function to the active tests that call it.
+func testsCalling(a *facts.Analysis) callers {
+	out := callers{}
 	for _, t := range a.Tests {
 		if t.Skip.Skipped {
 			continue
 		}
 		for _, c := range t.Calls {
-			out[c.Target] = append(out[c.Target], t.Name)
+			out[c.Target] = append(out[c.Target], t)
 		}
 	}
 	for k := range out {
-		sort.Strings(out[k])
+		sort.SliceStable(out[k], func(i, j int) bool { return out[k][i].Name < out[k][j].Name })
 	}
 	return out
+}
+
+// of returns the names of the tests that call a function, and their packages when the test command
+// narrows by package and they can be narrowed so.
+func (c callers) of(fn string, test []string) (names, pkgs []string) {
+	for _, t := range c[fn] {
+		names = append(names, t.Name)
+	}
+	if hasPackages(test) {
+		pkgs = goPackages(test, c[fn])
+	}
+	return names, pkgs
+}
+
+// hasGo reports whether a version has a Go file.
+func hasGo(a *facts.Analysis) bool {
+	for _, f := range a.Files {
+		if f.Language == "go" {
+			return true
+		}
+	}
+	return false
 }
 
 func finding(m facts.Mutant) engine.Finding {

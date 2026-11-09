@@ -2,15 +2,19 @@ package mutation
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"io/fs"
+	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -26,88 +30,186 @@ const (
 	Unbuilt
 )
 
+// The placeholders of the test command.
+const (
+	testsHole    = "{tests}"
+	packagesHole = config.PackagesPlaceholder
+	// allPackages is what {packages} becomes in the stages that run every package.
+	allPackages = "./..."
+)
+
 // Runner runs the test command in a copy of one version. It never writes to the repository's
 // working tree: only the copy is broken, and each mutant is restored before the next.
 type Runner struct {
-	Test    []string // the configured command; an element may hold {tests}
-	Sep     string   // what joins test names in {tests}
+	Test []string // the configured command; an element may hold {tests}, or be {packages}
+	Sep  string   // what joins test names in {tests}
+	// Timeout is the configured limit of every run. Zero means a limit per command, worked out from
+	// that command's run before anything is broken.
 	Timeout time.Duration
 	dir     string
+	// marked are the files holding mutants, with the line comment of their language. Each run before
+	// breaking adds a comment to them, so that caches keyed by contents miss there as they do for a
+	// mutant, and the run is not measured shorter than a mutant's.
+	marked map[string]string
+	mark   string // unique to this runner, so that no two runs before breaking add the same comment
+	runs   int
+	before map[string]baseline // by command
+	// skipped is told once of each narrowed command that fails with nothing broken.
+	skipped func(cmd []string)
 }
 
-// copyVersion writes a version's files into a fresh temporary directory.
-func copyVersion(v engine.Version) (string, error) {
-	dir, err := os.MkdirTemp("", "hadome-mutate-")
-	if err != nil {
-		return "", err
-	}
-	err = fs.WalkDir(v.FS, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		data, err := fs.ReadFile(v.FS, p)
-		if err != nil {
-			return err
-		}
-		dst := filepath.Join(dir, filepath.FromSlash(p))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(dst, data, 0o644)
-	})
-	if err != nil {
-		os.RemoveAll(dir)
-		return "", err
-	}
-	return dir, nil
+// baseline is what a command did with nothing broken.
+type baseline struct {
+	passed bool
+	limit  time.Duration // of a run of this command with a mutant
+	out    string
 }
 
-// clean runs every test once on the unbroken copy and reports how long it took. Failing tests make
-// every mutant look caught, so they stop the run.
-func (r *Runner) clean() (time.Duration, error) {
-	start := time.Now()
-	limit := r.Timeout
-	if limit == 0 {
-		limit = time.Hour // nothing is known yet; a hung clean run still ends
+func newRunner(dir string, c config.Mutation, marked map[string]string, skipped func([]string)) (*Runner, error) {
+	var timeout time.Duration
+	if c.Timeout != "" {
+		var err error
+		if timeout, err = time.ParseDuration(c.Timeout); err != nil {
+			return nil, err
+		}
 	}
-	out, ok, err := r.run(r.full(), limit)
-	if err != nil {
-		return 0, err
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
 	}
-	if !ok {
-		return 0, errors.New("the tests fail with nothing broken, so no mutant can be judged; fix the tests first:\n" + tail(out))
-	}
-	return time.Since(start), nil
+	return &Runner{Test: c.Test, Sep: c.TestsSeparator, Timeout: timeout, dir: dir, marked: marked, mark: hex.EncodeToString(b),
+		before: map[string]baseline{}, skipped: skipped}, nil
 }
 
-// try applies one mutant, runs the tests (only those named, when the command holds {tests}), and
-// restores the file. A survivor of a narrowed run is run again with every test.
-func (r *Runner) try(m facts.Mutant, tests []string) (Outcome, error) {
+// clean runs every test once on the unbroken copy. Failing tests make every mutant look caught, so
+// they stop the run.
+func (r *Runner) clean() error {
+	b, err := r.baseline(fill(r.Test, r.Sep, nil, nil))
+	if err != nil {
+		return err
+	}
+	if !b.passed {
+		return errors.New("the tests fail with nothing broken, so no mutant can be judged; fix the tests first:\n" + tail(b.out))
+	}
+	return nil
+}
+
+// try applies one mutant and runs the stages from the narrowest: tests names the tests that call the
+// broken function, pkgs the packages they are in (nil when they cannot be narrowed by package). A
+// stage that fails catches the mutant; one whose command fails with nothing broken is passed over.
+// The file is restored afterwards.
+func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
 	p := filepath.Join(r.dir, filepath.FromSlash(m.Path))
 	orig, err := os.ReadFile(p)
 	if err != nil {
 		return Caught, err
 	}
 	broken := append(append(append([]byte{}, orig[:m.Start]...), m.Replacement...), orig[m.End:]...)
-	if err := os.WriteFile(p, broken, 0o644); err != nil {
-		return Caught, err
-	}
 	defer os.WriteFile(p, orig, 0o644)
-	cmd := r.full()
-	narrowed := r.narrowable() && len(tests) > 0
-	if narrowed {
-		cmd = r.narrow(tests)
-	}
-	_, passed, err := r.run(cmd, r.Timeout)
-	if err != nil || !passed {
-		return Caught, err
-	}
-	if narrowed {
-		if _, passed, err = r.run(r.full(), r.Timeout); err != nil || !passed {
+	for _, cmd := range stages(r.Test, r.Sep, tests, pkgs) {
+		b, err := r.baseline(cmd)
+		if err != nil {
+			return Caught, err
+		}
+		if !b.passed {
+			continue
+		}
+		if err := os.WriteFile(p, broken, 0o644); err != nil {
+			return Caught, err
+		}
+		_, passed, err := r.run(cmd, b.limit)
+		if err != nil || !passed {
+			return Caught, err
+		}
+		// The next stage's run before breaking, when it has not run yet, needs the unbroken file.
+		if err := os.WriteFile(p, orig, 0o644); err != nil {
 			return Caught, err
 		}
 	}
 	return Survived, nil
+}
+
+// baseline runs a command once with nothing broken, the first time it is asked for, with a comment
+// added to every file that holds a mutant.
+func (r *Runner) baseline(cmd []string) (baseline, error) {
+	key := strings.Join(cmd, "\x00")
+	if b, ok := r.before[key]; ok {
+		return b, nil
+	}
+	restore, err := r.addMarks()
+	if err != nil {
+		return baseline{}, err
+	}
+	limit := r.Timeout
+	if limit == 0 {
+		limit = time.Hour // nothing is known yet; a hung run still ends
+	}
+	start := time.Now()
+	out, passed, err := r.run(cmd, limit)
+	took := time.Since(start)
+	if rerr := restore(); err == nil {
+		err = rerr
+	}
+	if err != nil {
+		return baseline{}, err
+	}
+	b := baseline{passed: passed, limit: r.Timeout, out: out}
+	if b.limit == 0 {
+		b.limit = 3*took + time.Second // three times a clean run; the second covers a run of almost nothing
+	}
+	r.before[key] = b
+	if !passed && r.skipped != nil && key != strings.Join(fill(r.Test, r.Sep, nil, nil), "\x00") {
+		r.skipped(cmd)
+	}
+	return b, nil
+}
+
+// addMarks appends a comment unique to this run to every file holding a mutant, and returns what
+// takes them out again.
+func (r *Runner) addMarks() (func() error, error) {
+	r.runs++
+	origs := map[string][]byte{}
+	restore := func() error {
+		var first error
+		for p, data := range origs {
+			if err := os.WriteFile(p, data, 0o644); err != nil && first == nil {
+				first = err
+			}
+		}
+		return first
+	}
+	files := make([]string, 0, len(r.marked))
+	for f := range r.marked {
+		files = append(files, f)
+	}
+	slices.Sort(files)
+	for _, f := range files {
+		p := filepath.Join(r.dir, filepath.FromSlash(f))
+		data, err := os.ReadFile(p)
+		if err != nil {
+			restore()
+			return nil, err
+		}
+		origs[p] = data
+		marked := append([]byte{}, data...)
+		if len(marked) > 0 && marked[len(marked)-1] != '\n' {
+			marked = append(marked, '\n')
+		}
+		marked = fmt.Appendf(marked, "%s hadome mutate baseline %s-%d\n", r.marked[f], r.mark, r.runs)
+		if err := os.WriteFile(p, marked, 0o644); err != nil {
+			restore()
+			return nil, err
+		}
+	}
+	return restore, nil
+}
+
+// lineComment is how a line comment starts in a language that has mutants.
+func lineComment(language string) string {
+	if language == "python" {
+		return "#"
+	}
+	return "//"
 }
 
 // run starts a command in the copy and reports whether it passed. A run that times out did not
@@ -131,37 +233,112 @@ func (r *Runner) run(argv []string, limit time.Duration) (string, bool, error) {
 	return string(out), true, nil
 }
 
-func (r *Runner) narrowable() bool {
-	for _, a := range r.Test {
-		if strings.Contains(a, "{tests}") {
-			return true
+// stages are the commands that judge a mutant, narrowest first and without repeats: the tests that
+// call the broken function in their packages, the same tests in every package, then every test.
+// Each runs a part of the tests the next one runs.
+func stages(test []string, sep string, tests, pkgs []string) [][]string {
+	var out [][]string
+	add := func(cmd []string) {
+		for _, c := range out {
+			if slices.Equal(c, cmd) {
+				return
+			}
 		}
+		out = append(out, cmd)
 	}
-	return false
-}
-
-// narrow fills {tests} with the names, joined by the separator.
-func (r *Runner) narrow(tests []string) []string {
-	out := make([]string, len(r.Test))
-	for i, a := range r.Test {
-		out[i] = strings.ReplaceAll(a, "{tests}", strings.Join(tests, r.Sep))
+	if len(tests) > 0 {
+		if len(pkgs) > 0 {
+			add(fill(test, sep, tests, pkgs))
+		}
+		add(fill(test, sep, tests, nil))
 	}
+	add(fill(test, sep, nil, nil))
 	return out
 }
 
-// full is the command with {tests} taken out: the element that holds it, and the flag before it.
-func (r *Runner) full() []string {
+// fill puts the tests and the packages into the command. No tests takes {tests} out: the element
+// that holds it, and the flag before it. No packages puts every package in place of {packages}.
+func fill(test []string, sep string, tests, pkgs []string) []string {
 	var out []string
-	for i, a := range r.Test {
-		if strings.Contains(a, "{tests}") {
-			if i > 0 && strings.HasPrefix(r.Test[i-1], "-") && len(out) > 0 {
+	for i, a := range test {
+		switch {
+		case a == packagesHole && len(pkgs) == 0:
+			out = append(out, allPackages)
+		case a == packagesHole:
+			out = append(out, pkgs...)
+		case strings.Contains(a, testsHole) && len(tests) == 0:
+			if i > 0 && strings.HasPrefix(test[i-1], "-") && len(out) > 0 {
 				out = out[:len(out)-1]
 			}
-			continue
+		case strings.Contains(a, testsHole):
+			out = append(out, strings.ReplaceAll(a, testsHole, strings.Join(tests, sep)))
+		default:
+			out = append(out, a)
 		}
-		out = append(out, a)
 	}
 	return out
+}
+
+// hasPackages reports whether the command narrows by package.
+func hasPackages(test []string) bool { return slices.Contains(test, packagesHole) }
+
+// goPackages are the Go packages of the tests, as go test names them from the directory it runs in:
+// the repository root, or the directory of -C in the command. It returns nil when a test is not a Go
+// test or is outside that directory: narrowing by package would leave it out.
+func goPackages(test []string, tests []facts.Test) []string {
+	root, ok := goDir(test)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, t := range tests {
+		if !strings.HasSuffix(t.Path, "_test.go") {
+			return nil
+		}
+		dir := path.Dir(t.Path)
+		switch {
+		case root == ".":
+		case dir == root:
+			dir = "."
+		case strings.HasPrefix(dir, root+"/"):
+			dir = strings.TrimPrefix(dir, root+"/")
+		default:
+			return nil
+		}
+		pkg := "./" + dir
+		if dir == "." {
+			pkg = "."
+		}
+		if !slices.Contains(out, pkg) {
+			out = append(out, pkg)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// goDir is the directory, relative to the root of the copy, that the command's -C makes go run in.
+// It is not ok when that directory cannot be seen from the root.
+func goDir(test []string) (string, bool) {
+	dir := "."
+	for i, a := range test {
+		var v string
+		switch {
+		case a == "-C" && i+1 < len(test):
+			v = test[i+1]
+		case strings.HasPrefix(a, "-C="):
+			v = strings.TrimPrefix(a, "-C=")
+		default:
+			continue
+		}
+		if filepath.IsAbs(v) || path.IsAbs(filepath.ToSlash(v)) {
+			return "", false
+		}
+		if dir = path.Join(dir, filepath.ToSlash(v)); dir == ".." || strings.HasPrefix(dir, "../") {
+			return "", false
+		}
+	}
+	return dir, true
 }
 
 func tail(s string) string {

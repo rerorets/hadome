@@ -27,27 +27,45 @@ const catchChanges = "stand-in-tests-catch-changes"
 // differs from FILE.unbroken, the copy of it written with the version: tests that catch every break
 // of those files and of nothing else. Cases about what mutate does with the outcomes use it, so they
 // do not wait for go test to build the module again for every mutant.
+//
+// The comment a run before breaking adds at the end of the file is not a break: tests do not see
+// comments.
+//
+// It also stands in for what the package's own tests need (see stand_in_test.go): the stages a
+// mutant runs in (mutation.StandInStages) and a second hadome mutate holding the lock
+// (mutation.StandInHoldLock).
 func TestMain(m *testing.M) {
-	if len(os.Args) > 1 && os.Args[1] == catchChanges {
-		for _, f := range os.Args[2:] {
-			now, err := os.ReadFile(f)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(2)
-			}
-			was, err := os.ReadFile(f + ".unbroken")
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(2)
-			}
-			if string(now) != string(was) {
-				fmt.Println("FAIL:", f, "is broken")
-				os.Exit(1)
-			}
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case catchChanges:
+			os.Exit(standInCatch(os.Args[2:]))
+		case mutation.StandInStages:
+			os.Exit(mutation.StandInStage(os.Args[2:]))
+		case mutation.StandInHoldLock:
+			os.Exit(mutation.StandInHold(os.Args[2]))
 		}
-		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func standInCatch(files []string) int {
+	for _, f := range files {
+		now, err := os.ReadFile(f)
+		if err != nil {
+			fmt.Println(err)
+			return 2
+		}
+		was, err := os.ReadFile(f + ".unbroken")
+		if err != nil {
+			fmt.Println(err)
+			return 2
+		}
+		if mutation.WithoutBaselineMark(string(now)) != string(was) {
+			fmt.Println("FAIL:", f, "is broken")
+			return 1
+		}
+	}
+	return 0
 }
 
 // standIn is a version whose test command is the test binary standing in for tests that catch
@@ -116,7 +134,7 @@ func dir(t *testing.T, files map[string]string) string {
 func run(t *testing.T, base, head map[string]string) (engine.Report, error) {
 	t.Helper()
 	an := adapter.New()
-	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: io.Discard}
+	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Trees: t.TempDir(), Progress: io.Discard}
 	return m.Run(source.Dirs{BaseDir: dir(t, base), HeadDir: dir(t, head)})
 }
 
@@ -144,7 +162,7 @@ func TestProgressNamesTheLineInTheChosenLanguage(t *testing.T) {
 			head[".hadome.yml"] += tc.messages
 			var progress strings.Builder
 			an := adapter.New()
-			m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress, Lang: tc.flag}
+			m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Trees: t.TempDir(), Progress: &progress, Lang: tc.flag}
 			if _, err := m.Run(source.Dirs{BaseDir: dir(t, standIn(t, calc, strong)), HeadDir: dir(t, head)}); err != nil {
 				t.Fatal(err)
 			}
@@ -237,7 +255,7 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 		head["calc/log.go"] = "//go:build ignore\n\npackage calc\n\nimport \"fmt\"\n\n// Log says hello.\nfunc Log() {\n\tfmt.Println(\"hello\")\n}\n"
 		var progress strings.Builder
 		an := adapter.New()
-		m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress}
+		m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Trees: t.TempDir(), Progress: &progress}
 		r, err := m.Run(source.Dirs{BaseDir: dir(t, base), HeadDir: dir(t, head)})
 		if err != nil {
 			t.Fatal(err)
@@ -299,7 +317,7 @@ func (untranslatable) Unmutated([]facts.Symbol) []string { return []string{"Cobo
 func TestALanguageWithoutMutantsGoesToReview(t *testing.T) {
 	t.Parallel()
 	an := adapter.New()
-	m := &mutation.Mutate{Analyzer: an, Mutator: untranslatable{an}, Workdir: t.TempDir(), Progress: io.Discard}
+	m := &mutation.Mutate{Analyzer: an, Mutator: untranslatable{an}, Workdir: t.TempDir(), Trees: t.TempDir(), Progress: io.Discard}
 	touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
 	r, err := m.Run(source.Dirs{BaseDir: dir(t, standIn(t, calc, strong)), HeadDir: dir(t, standIn(t, touched, strong))})
 	if err != nil {

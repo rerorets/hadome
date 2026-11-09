@@ -8,6 +8,7 @@ import (
 	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/mutation"
+	"github.com/rerorets/hadome/internal/source"
 )
 
 // mutate is hadome mutate: like check, it compares base with head and prints the same report, but
@@ -28,8 +29,17 @@ func mutate(args []string, stdout, stderr io.Writer) int {
 	if !ok {
 		return engine.ExitConfig
 	}
+	root := "." // the repository hadome runs in, or the head directory
+	if d, ok := src.(source.Dirs); ok {
+		root = d.HeadDir
+	}
+	trees, err := mutation.TreesFor(root)
+	if err != nil {
+		fmt.Fprintln(stderr, "hadome: mutate could not run, so it does not pass:", err)
+		return engine.ExitConfig
+	}
 	an := adapter.New()
-	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: ".", Progress: stderr, Lang: *lang}
+	m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: ".", Progress: stderr, Lang: *lang, Trees: trees}
 	r, err := m.Run(src)
 	if err != nil {
 		fmt.Fprintln(stderr, "hadome: mutate could not run, so it does not pass:", err)

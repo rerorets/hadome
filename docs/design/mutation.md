@@ -9,7 +9,7 @@ The `tests/` rules only see what a test calls. A test can call code without chec
 Does:
 
 - Picks the functions the change touched, and asks the adapters to make mutants of them
-- Copies the version's tree to disk, applies the mutants one at a time, and runs the test command from configuration
+- Copies the version's tree into a working directory fixed per repository, applies the mutants one at a time, and runs the test command from configuration
 - Reports as regressions only the mutants that survive in head and that the change added
 
 Does not:
@@ -102,6 +102,7 @@ classDiagram
   class Mutate {
     +Analyzer engine.Analyzer
     +Mutator Mutator
+    +Trees string
     +Run(src engine.Source) (engine.Report, error)
   }
   class Runner {
@@ -123,7 +124,8 @@ classDiagram
 
 - `Mutant` is a language-neutral fact, so it lives in `facts`. That lets the adapters make mutants without depending on `internal/mutation`
 - The adapters implement `Mutator`, because only they read syntax trees. `Unmutated` lists the languages that have no way of breaking code; functions touched in them go to a person's review as untried. A mutant is a range of text and what replaces it; the adapters run no code, so their invariants (no code run, no process started) still hold
-- `Runner` lives in this package. It copies the version's tree to disk, applies a mutant, runs the test command and restores the file. Like the gates (`internal/gate`), starting processes happens outside the engine
+- `Mutate.Trees` is the working directory the versions' trees are copied into (see "The working directory" below). The `hadome mutate` command works it out with `TreesFor` and passes it; tests pass a temporary directory
+- `Runner` lives in this package. It copies the version's tree into the working directory, applies a mutant, runs the test command and restores the file. Like the gates (`internal/gate`), starting processes happens outside the engine
 - The report's shape, exception markers and exit codes are the engine's, used as they are. After trying the mutants, `Mutate` hands the results to `engine.Check` as one rule (`mutation/survived`) that returns them per version. The rules of "How to compare" below are exactly the engine's comparison of findings
 - `hadome check` does not know `mutation/survived`, so it would report that rule's exception markers as naming an unknown rule or as unused. `engine.Engine.Elsewhere` names the rules another command reports: `check` leaves `mutation/survived` to `mutate`, and `mutate` leaves every other rule to `check`. Markers of those rules are left alone
 
@@ -213,7 +215,7 @@ These are the rules of `MatchFile` in `go/build`. The environment matched agains
 
 Like the other rules, only what the change added is a regression.
 
-1. In head, run every mutant in the places to break. A caught one is done. When the configuration has `{tests}`, narrow the tests run (see "Narrowing the tests run" below)
+1. In head, run every mutant in the places to break. A caught one is done. When the configuration has `{tests}` or `{packages}`, narrow the tests run (see "Narrowing the tests run" below)
 2. For each surviving mutant, look for a mutant with the same anchor in base
 3. If base has none (a new function, a new line or a rewritten line), it is a regression: adding code means adding a test that guards it
 4. If base has one, run it in base too. If base caught it, it is a regression (the tests got weaker). If it survived in base as well, it is an old gap and is not reported
@@ -224,16 +226,50 @@ Base runs only what survived in head, so most of the time is one run of head.
 
 The number of mutants depends on the size of the change, not on the number of tests. But trying each mutant runs the whole test command, so in a repository with many tests each run is long. For example, if the whole suite takes 5 minutes, 15 mutants take 75 minutes.
 
-So hadome can run only the tests that call the broken function. Which test calls which function is known from the `Test.Calls` the adapters read.
+So hadome can run only the tests that call the broken function. Which test calls which function is known from the `Test.Calls` the adapters read. How test names and packages are passed differs between languages, so hadome does not guess it. Configuration writes these into `test`:
 
-1. Configuration writes `{tests}` into `test` (for example `[go, test, ./..., -run, "{tests}"]`). How test names are passed differs between languages, so hadome does not guess it
-2. For each mutant, the names of the tests that call the broken function go into `{tests}`. The names go in as they are, joined by `tests-separator` (default `|`)
-3. A mutant that survives the narrowed run is run again with `{tests}` taken out (all the tests). Only one that survives that too counts as survived
-4. A mutant with no test found calling the broken function runs with all the tests from the start
+| Placeholder | What goes in | Example |
+|---|---|---|
+| `{tests}` | The names of the tests that call the broken function, as they are, joined by `tests-separator` | `-run, "^({tests})$"` |
+| `{packages}` | The packages those tests are in, spread into one element per package (see "Packages" below) | `go, test, "{packages}"` |
 
-Step 3 is there because `Test.Calls` can miss calls. If a test that calls the function indirectly is left out, the run with all the tests catches it, so no false survivor reaches the report. Only survivors run with all the tests, so most of the time is in the narrowed runs. With no `{tests}` in the configuration, every run uses all the tests.
+For each mutant, the stages below run from the narrowest. When the tests fail in a stage, the mutant is caught there. Only a mutant that passes every stage up to the last survived.
 
-The command with `{tests}` taken out drops the element holding `{tests}`, and the element before it when that one is a flag (starts with `-`). In the example above it becomes `[go, test, ./...]`.
+| Stage | Tests run | `{packages}` | `{tests}` |
+|---|---|---|---|
+| 1 | The tests that call the broken function, only in the packages they are in | the packages | the names |
+| 2 | The tests that call the broken function, in every package | every package | the names |
+| 3 | All the tests | every package | taken out |
+
+- A stage that uses a placeholder the configuration does not have is the same command as the stage before. The same command runs only once. For example, with only `{tests}`, stages 2 and 3 run; with neither, only stage 3 runs
+- A mutant with no test found calling the broken function runs only stage 3
+- Every stage's command also runs once before anything is broken (see "One run before breaking" below). A stage whose command fails then is not used to judge the mutant, which goes to the next stage: whether it failed because of the break or would fail anyway cannot be told
+
+Stacking the stages gives the same verdict as stage 3 alone.
+
+- **Caught in an earlier stage.** The tests each stage runs are part of the tests the next stage runs. A test that failed in an earlier stage runs and fails in the next one as well. So a mutant caught in an earlier stage is caught in stage 3 too
+- **Passed an earlier stage.** The next stage checks it again. When `Test.Calls` misses an indirect call and leaves that test out, stage 3 runs it, so no false survivor reaches the report
+- **Time.** Most mutants are caught in a narrow stage. Only those that pass the narrow stages run all the tests
+
+The command with `{tests}` taken out drops the element holding `{tests}`, and the element before it when that one is a flag (starts with `-`). For example, stage 3 of `[go, test, "{packages}", -run, "^({tests})$"]` is `[go, test, ./...]`.
+
+#### Packages
+
+What a package is differs between languages. hadome defines `{packages}` for Go only.
+
+| Language | Package | `{packages}` in stage 1 | `{packages}` in stages 2 and 3 |
+|---|---|---|---|
+| Go | The directory of the `_test.go` file | `./store`, `./worker/queue`; the root directory is `.` | `./...` |
+| TypeScript, Python, Rust, Java, Kotlin | Not defined | — | — |
+
+- `{packages}` takes a whole element. For example, `"{packages}"` is accepted and `"./{packages}/..."` is not, because it spreads into one element per package. It cannot be written twice either
+- When the test command has `-C <directory>` (or `-C=<directory>`), the paths are seen from that directory. A test outside it is not put into any package
+- When a test that calls the broken function is not a Go test, or is not put into a package, the mutant skips stage 1: narrowing by package would leave that test out
+
+`{packages}` cannot be used outside Go. So that no placeholder silently does nothing, these are configuration errors:
+
+- `{packages}` in a configuration whose `languages` lacks `go`. `hadome config check` and every command that reads the configuration stop with exit code `2`
+- `{packages}` in a configuration without `languages` when head has no Go file. `hadome mutate` stops with exit code `2`
 
 A regression is reported as `mutation/survived`.
 
@@ -255,7 +291,7 @@ A replacement may not change behaviour at all (an **equivalent mutant**), such a
 ```yaml
 mutation:
   test: [go, test, ./...]   # required; run in the root of the version's copy for each mutant
-  timeout: 2m               # optional; the limit of one test run. Default: three times one run before breaking anything
+  timeout: 2m               # optional; the limit of one test run. Default: three times one run of the same command before breaking anything
   max-mutants: 100          # optional; how many mutants one run tries at most. Default: 100
 ```
 
@@ -265,23 +301,67 @@ An example that narrows the tests:
 
 ```yaml
 mutation:
-  test: [go, test, ./..., -run, "^({tests})$"]   # {tests} gets the names of the tests that call the broken function
-  tests-separator: "|"                          # optional; what joins the names. Default: "|"
+  test: [go, test, "{packages}", -run, "^({tests})$"]   # {packages} gets the tests' packages, {tests} their names
+  tests-separator: "|"                                 # optional; what joins the names. Default: "|"
 ```
 
-- Before breaking anything, the test command runs once in head. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
-- A timeout counts as caught: a mutant that made the tests stop finishing did not let them pass
-- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
+- **One run before breaking.** Each stage's command runs once before anything is broken: per version (head and base), the first time the command is needed, and the result is kept for the rest of the run
+  - Stage 3 (all the tests) runs before any mutant is tried. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
+  - When the command of stage 1 or 2 fails, that stage is not used and the mutant goes to the next stage (see "Narrowing the tests run" above). A progress line names the command and says the stage was skipped
+- **The comment added in the run before breaking.** In the run before breaking, a one-line comment is added at the end of every file that holds a mutant, and removed afterwards
+  - The comment holds a mark used for that run only. For example: `// hadome mutate baseline 9c1e04d2-3`
+  - The language decides how the comment is written: `#` in Python, `//` in the other languages
+  - Why: build caches and test result caches are looked up by file contents. With the same contents as before, only the run before breaking hits the cache and is measured short. The limit then becomes too short, and a timeout wrongly catches a mutant. With the comment, the cache misses in the same files where a mutant makes it miss
+- **The time limit.** Per command, three times that command's run before breaking, plus one second. For example, stage 1's limit comes from stage 1's command and stage 3's from all the tests. When `timeout` is written, every stage uses it
+- **A timeout** counts as caught: a mutant that made the tests stop finishing did not let them pass
+- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` or `{packages}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
 - Adding `mutation` when base has none does not loosen anything, because base did not run `mutate` at all (`OmittedIsOff`)
+
+## The working directory
+
+The versions' trees are copied into a directory fixed per repository and per version role (head and base). With the same path every time, build caches looked up by path hit in the next run too. For example, a Go test program holds the path it was built from.
+
+| What | Path |
+|---|---|
+| Copy of head | `<cache directory>/hadome/mutate/<repository mark>/head` |
+| Copy of base | `<cache directory>/hadome/mutate/<repository mark>/base` |
+| Lock file | `<cache directory>/hadome/mutate/<repository mark>/lock` |
+
+- The **cache directory** is what Go's `os.UserCacheDir` returns. For example: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, `%LocalAppData%` on Windows
+- The **repository mark** is the first 16 characters of the SHA-256 of the repository root's absolute path, with symbolic links followed. The root is the directory `hadome mutate` runs in when comparing revisions, and the head directory when comparing with `--head-dir`
+
+### Making the contents match
+
+At the start of a run, the copy is made exactly the same as the version, so that nothing left by an earlier run changes the result.
+
+| File in the copy | What happens |
+|---|---|
+| Not in the version | Removed. This removes build output of earlier runs and broken files left by a run that stopped halfway. Directories not in the version are removed too |
+| Different from the version | Written again |
+| Same as the version | Left alone, so that caches looked up by modification time hit too |
+
+- hadome never removes the copies: the next run uses them. When they are no longer needed, `<cache directory>/hadome/mutate` can be removed by hand
+
+### Never two at once
+
+Two `hadome mutate` runs on the same repository at once would fight over the copies. So the second stops instead of waiting.
+
+- The second stops with exit code `2`. Its message names the process number of the one running and the path of the lock file. Waiting would leave the user unable to see why nothing moves
+- The lock is an operating system file lock on the lock file: `flock` on Unix, and opening it so that no one else can open it on Windows
+- When the process ends, even when it crashes, the operating system releases the lock. So a stale lock never stops a run. The lock file itself stays, and the next run uses it when no lock is held
 
 ## Invariants
 
 1. When the tests fail on a tree with nothing broken, `hadome mutate` gives no result and returns exit code `2`
-2. The repository's working tree is never changed. Only a version copied to a temporary directory is broken
+2. The repository's working tree is never changed. Only a version copied to the working directory is broken
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
 5. Mutants that could not be tried (beyond the limit, in a file outside the build, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
+7. Stacking the stages gives the same verdict as stage 3 (all the tests) alone. A mutant caught in a narrow stage is caught in stage 3 too
+8. A command that fails before anything is broken never catches a mutant
+9. Before the tests run, the copy always holds exactly the version
+10. Two `hadome mutate` runs never run tests on the same repository at once
 
 ## Deliberately left out
 
@@ -290,6 +370,8 @@ mutation:
 - A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
+- Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
+- Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
 - Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart. Every mutant of another language runs the tests
 - Asking `go list` which files are in the build. Starting a command depends on module downloads and caches. What syntax cannot tell (a `mutation.test` that calls a shell script that changes the environment, and the like) is not told apart
 - Trying files outside the build in another environment (running again with `CGO_ENABLED=0`, and the like). The test command in configuration decides the environment the tests run in; hadome does not guess it
