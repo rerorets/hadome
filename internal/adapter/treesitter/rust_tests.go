@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	rustTestAttrs = set("test", "tokio::test", "async_std::test", "rstest", "sqlx::test", "test_log::test")
-	rustLoops     = set("for_expression", "while_expression", "loop_expression")
+	rustTestAttrs = set("test", "tokio::test", "async_std::test", "rstest", "rstest::rstest", "sqlx::test", "test_log::test",
+		"test_case", "test_case::test_case", "test_matrix", "test_case::test_matrix")
+	rustLoops = set("for_expression", "while_expression", "loop_expression")
 )
 
 // rustScope is what the code of one test module binds.
@@ -112,6 +113,24 @@ func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
 		if a == "should_panic" || strings.HasPrefix(a, "should_panic(") {
 			t.test.Asserts++ // the test fails unless it panics
 		}
+	}
+	cases, ignored := 0, 0
+	for _, a := range nodes[:len(nodes)-1] {
+		c, ok := rustTestCase(sc.f, a)
+		if !ok {
+			continue
+		}
+		cases++
+		switch {
+		case c.ignored:
+			ignored++
+			t.skipIf(c.reason, a)
+		case c.expects:
+			t.test.Asserts++ // the case fails unless the function returns what follows =>
+		}
+	}
+	if cases > 0 && ignored == cases {
+		t.skip(t.test.Skip.Reason, fn)
 	}
 	for _, m := range sc.mocks {
 		t.fileHazard(facts.HazardMock, m)
@@ -278,4 +297,52 @@ func (w *rustWalk) scoped(p, name string) string {
 		return loc + "." + name
 	}
 	return ""
+}
+
+// rustCase is one #[test_case(inputs => result ; "description")] of the test-case crate.
+type rustCase struct {
+	expects bool   // => names what the function must return or do
+	ignored bool   // => ignore or => inconclusive: the case does not run
+	reason  string // the reason of => ignore["reason"]
+}
+
+// rustTestCase reads an attribute item as a case of the test-case crate.
+func rustTestCase(f *file, item *sitter.Node) (rustCase, bool) {
+	var c rustCase
+	if item.Kind() != "attribute_item" || item.NamedChildCount() == 0 {
+		return c, false
+	}
+	attr := item.NamedChild(0)
+	args := rustCaseArgs(f, attr)
+	if args == nil {
+		return c, false
+	}
+	for i := uint(0); i+1 < args.ChildCount(); i++ {
+		if args.Child(i).Kind() != "=>" {
+			continue
+		}
+		c.expects = true
+		if next := args.Child(i + 1); next.Kind() == "identifier" && (f.text(next) == "ignore" || f.text(next) == "inconclusive") {
+			c.ignored = true
+			if r := args.Child(i + 2); r != nil && r.Kind() == "token_tree" && r.NamedChildCount() > 0 {
+				c.reason = unquote(f.text(r.NamedChild(0)))
+			}
+		}
+		break
+	}
+	return c, true
+}
+
+// rustCaseArgs returns the arguments of a #[test_case(...)] attribute, or nil for any other one.
+func rustCaseArgs(f *file, attr *sitter.Node) *sitter.Node {
+	if attr.Kind() != "attribute" || attr.NamedChildCount() < 2 {
+		return nil
+	}
+	if p := f.text(attr.NamedChild(0)); p != "test_case" && p != "test_case::test_case" {
+		return nil
+	}
+	if args := attr.NamedChild(1); args.Kind() == "token_tree" {
+		return args
+	}
+	return nil
 }

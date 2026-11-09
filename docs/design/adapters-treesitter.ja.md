@@ -170,7 +170,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 |---|---|---|---|---|
 | TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下、テストの補助のファイル | 名前と関数を渡す `it` か `test` の呼び出し（下の注） | `.skip`、`xit`、`xtest`、`.todo`、`.fixme`、または `describe.skip`・`xdescribe` の中。一部の場合だけのスキップは `.skipIf(条件)`・`.runIf(条件)` と、Playwright の `test.skip(条件, 説明)`・`test.fixme(条件, 説明)` | スキップの行かその前の行のコメント。Playwright の `test.skip` は条件の後の説明 |
 | Python | `test_*.py`、`*_test.py` | モジュールの直下か、テストのクラスの中の、名前が `test` で始まる関数。テストのクラスは、名前が `Test` で始まるクラスと、`unittest.TestCase` を継承するクラス（下の注） | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
-| Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
+| Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]`、`#[test_case(…)]`、`#[test_matrix(…)]` の付いた関数（`rstest::rstest` や `test_case::test_case` のように crate の名前を付けたものも） | `#[ignore]`。`#[test_case(… => ignore)]` と `=> inconclusive` の case は動かないので、一部の case なら一部の場合だけのスキップ、すべての case ならスキップ | `#[ignore = "…"]`。`=> ignore["…"]` |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 | Kotlin | Java と同じ | Java と同じアノテーションの付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 
