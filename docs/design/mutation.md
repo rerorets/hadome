@@ -350,6 +350,24 @@ Two `hadome mutate` runs on the same repository at once would fight over the cop
 - The lock is an operating system file lock on the lock file: `flock` on Unix, and opening it so that no one else can open it on Windows
 - When the process ends, even when it crashes, the operating system releases the lock. So a stale lock never stops a run. The lock file itself stays, and the next run uses it when no lock is held
 
+## The test processes
+
+One run of the test command is not one process but a tree of processes. For example, `go test` builds and starts a test program (`calc.test`) for each package, and starts `compile` and `link` to build them. Stopping `go` alone leaves the others running without a parent. Test programs that stopped finishing, left behind mutant after mutant, slow the machine down and in the end stop it.
+
+So hadome ends the tree as a whole.
+
+| When | What hadome does |
+|---|---|
+| The time limit is reached | Ends the whole tree. The mutant counts as caught |
+| An interrupt (Ctrl-C, `SIGTERM`, `SIGHUP`) | Ends the whole tree, then ends itself by the same signal |
+| The command exits | Ends whatever is left of the tree, without a word. The command's exit code decides the result |
+
+- **How.** On Unix (macOS, Linux), the command starts in a process group of its own, and the whole group is ended with `SIGKILL`. On Windows, the command is put in a job object, and the whole job is ended
+  - On Windows, the command starts suspended and runs only once it is in the job, so that it cannot start a child before it is in the job
+- **Why hadome takes the interrupt.** The command is outside the terminal's process group, so the terminal's Ctrl-C does not reach it. hadome takes it instead and ends the tree. A signal hadome was started ignoring (`SIGHUP` under `nohup`, and the like) stays ignored
+- **Why leftovers are ended without a word.** A process the test command leaves behind (a server it started, a daemon of the build tool) gets into the next mutant's run and makes its result flaky. For a command that leaves one every time, reporting it would only repeat the same line
+- **When hadome crashes on Windows.** The job is made to end what it holds when its last handle closes (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`). However hadome ends, the tree does not stay
+
 ## Invariants
 
 1. When the tests fail on a tree with nothing broken, `hadome mutate` gives no result and returns exit code `2`
@@ -362,6 +380,7 @@ Two `hadome mutate` runs on the same repository at once would fight over the cop
 8. A command that fails before anything is broken never catches a mutant
 9. Before the tests run, the copy always holds exactly the version
 10. Two `hadome mutate` runs never run tests on the same repository at once
+11. No process the test command started is running after that run ends, whether it ends by the time limit, an interrupt or the command exiting
 
 ## Deliberately left out
 
@@ -371,6 +390,7 @@ Two `hadome mutate` runs on the same repository at once would fight over the cop
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
 - Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
+- Ending the tree when hadome itself is stopped with `SIGKILL` on Unix. `SIGKILL` cannot be caught, so hadome stops before it ends the tree. macOS has no way to end children when their parent ends
 - Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
 - Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart. Every mutant of another language runs the tests
 - Asking `go list` which files are in the build. Starting a command depends on module downloads and caches. What syntax cannot tell (a `mutation.test` that calls a shell script that changes the environment, and the like) is not told apart

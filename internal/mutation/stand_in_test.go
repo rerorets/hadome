@@ -2,9 +2,12 @@ package mutation
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +29,19 @@ const (
 	// `<binary> stand-in-unwritable-lock PATH` tries the lock at PATH twice and prints each
 	// attempt's error, or "taken". No test starts it on Windows.
 	StandInUnwritableLock = "stand-in-unwritable-lock"
+	// StandInTree makes the binary a test command that starts a process of its own:
+	// `<binary> stand-in-tree MODE WATCH HOLD` starts StandInLeaf with WATCH and HOLD, its standard
+	// error being the command's own when HOLD is "hold", waits until it is ready and says
+	// "leaf PID". Then, with MODE hang, it blocks forever; with MODE exit, it exits 0, leaving the
+	// leaf running.
+	StandInTree = "stand-in-tree"
+	// StandInLeaf makes the binary the process StandInTree starts: `<binary> stand-in-leaf WATCH
+	// HOLD` says "ready" and blocks forever (StandInLeafRun says how on each platform).
+	StandInLeaf = "stand-in-leaf"
+	// StandInRunTree makes the binary a hadome mutate running a test command:
+	// `<binary> stand-in-run-tree WATCH` runs StandInTree in mode hang with WATCH, its output going
+	// to standard output, until the binary is ended by a signal. No test starts it on Windows.
+	StandInRunTree = "stand-in-run-tree"
 )
 
 // StandInStage is the test command of StandInStages.
@@ -67,6 +83,84 @@ func StandInHold(path string) int {
 	fmt.Println("held")
 	io.Copy(io.Discard, os.Stdin)
 	return 0
+}
+
+// StandInTreeRoot is the test command of StandInTree.
+func StandInTreeRoot(mode, watch, hold string) int {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	leaf := exec.Command(exe, StandInLeaf, watch, hold)
+	if hold == "hold" {
+		leaf.Stderr = os.Stderr
+	}
+	out, err := leaf.StdoutPipe()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	if err := leaf.Start(); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
+		fmt.Printf("the leaf said %q\n", line)
+		return 2
+	}
+	fmt.Printf("leaf %d\n", leaf.Process.Pid)
+	if mode == "hang" {
+		blockForever()
+	}
+	return 0
+}
+
+// StandInRunTreeRun is the hadome mutate of StandInRunTree.
+func StandInRunTreeRun(watch string) int {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	dir, err := os.MkdirTemp("", "stand-in-run-tree")
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	defer os.RemoveAll(dir)
+	_, err = runTree(context.Background(), dir, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
+	fmt.Println("the run ended without a signal:", err)
+	return 2
+}
+
+// blockForever reads a pipe no one writes to. It holds the pipe's writing end itself, so the read
+// never reaches the end.
+func blockForever() {
+	r, w, err := os.Pipe()
+	if err != nil {
+		os.Exit(2)
+	}
+	r.Read(make([]byte, 1))
+	w.Close()
+}
+
+// lines is a writer that hands each complete line written to it, without its newline, to line.
+type lines struct {
+	line func(string)
+	buf  []byte
+}
+
+func (l *lines) Write(p []byte) (int, error) {
+	l.buf = append(l.buf, p...)
+	for {
+		i := slices.Index(l.buf, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		l.line(string(l.buf[:i]))
+		l.buf = l.buf[i+1:]
+	}
 }
 
 // WithoutBaselineMark is a file's contents without the comment a run before breaking adds at its end.

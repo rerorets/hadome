@@ -1,11 +1,13 @@
 package mutation
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -217,20 +219,46 @@ func lineComment(language string) string {
 func (r *Runner) run(argv []string, limit time.Duration) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
+	var out bytes.Buffer
+	passed, err := runTree(ctx, r.dir, argv, &out)
+	return out.String(), passed, err
+}
+
+// runTree runs a command in dir until it ends or ctx is done, writing what it prints to out, and
+// reports whether it passed. The command is the root of a tree of processes, such as go test and
+// the test binaries it starts, and nothing of the tree outlives the run: ctx being done ends the
+// whole tree, and whatever the command leaves running when it exits is ended without a word.
+func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (bool, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = r.dir
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = out, out
 	cmd.WaitDelay = 5 * time.Second // a child that keeps the output open must not hang the run
-	out, err := cmd.CombinedOutput()
+	tree, err := ownTree(cmd)
+	if err != nil {
+		return false, err
+	}
+	defer tree.end()
+	if err := cmd.Start(); err != nil {
+		return false, err // the command could not start: a configuration problem
+	}
+	if err := tree.started(); err != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return false, err
+	}
+	err = cmd.Wait()
 	var exit *exec.ExitError
 	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return string(out), false, nil
+	case ctx.Err() != nil:
+		return false, nil
 	case errors.As(err, &exit):
-		return string(out), false, nil
+		return false, nil
+	case errors.Is(err, exec.ErrWaitDelay):
+		return true, nil // the command passed, and what kept its output open is ended with the tree
 	case err != nil:
-		return string(out), false, err // the command could not start: a configuration problem
+		return false, err
 	}
-	return string(out), true, nil
+	return true, nil
 }
 
 // stages are the commands that judge a mutant, narrowest first and without repeats: the tests that
