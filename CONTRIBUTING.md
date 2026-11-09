@@ -19,12 +19,13 @@ With Go and a C compiler, the build reads all eight languages. Without a C compi
 ```sh
 go test ./...                           # the build that reads eight languages (cgo)
 CGO_ENABLED=0 go test ./...             # the build that reads Go, Terraform and Ansible only
+go test -tags sqlgrammars ./internal/adapter/sql/...  # the build with the readers of SQL dialects that are not enabled
 go run ./cmd/hadome self-test           # every rule's self-test
 go run ./cmd/hadome check --format json # hadome checks itself
 packaging/smoke.sh 0.0.0-local          # build, install and run every package
 ```
 
-CI runs on every pull request and every push to main: the first three on Linux, macOS and Windows, and `hadome check` and `packaging/smoke.sh` on Linux.
+CI runs on every pull request and every push to main: the first two and the self-tests on Linux, macOS and Windows, and the tests and vet with the tag `sqlgrammars`, `hadome check` and `packaging/smoke.sh` on Linux.
 
 ### Hooks
 

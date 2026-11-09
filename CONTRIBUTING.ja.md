@@ -21,12 +21,13 @@ GoとCコンパイラがあれば、8言語すべてを読むビルドになり�
 ```sh
 go test ./...                           # 8言語を読むビルド（cgo あり）
 CGO_ENABLED=0 go test ./...             # Go・Terraform・Ansible だけを読むビルド
+go test -tags sqlgrammars ./internal/adapter/sql/...  # 有効でない SQL 方言の読み手も入れたビルド
 go run ./cmd/hadome self-test           # 各ルールの自己テスト
 go run ./cmd/hadome check --format json # hadome で hadome 自身を検査する
 packaging/smoke.sh 0.0.0-local          # 全パッケージを作り、入れて動かす
 ```
 
-CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の3つはLinux・macOS・Windowsで、`hadome check`と`packaging/smoke.sh`はLinuxで動かします。
+CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の2つと自己テストはLinux・macOS・Windowsで動かします。タグ `sqlgrammars` を付けたテストと vet、`hadome check`、`packaging/smoke.sh` はLinuxで動かします。
 
 ### フック
 

@@ -1,5 +1,5 @@
 # Every push and pull request: tests in both builds on three operating systems, the rules' own
-# self-tests, and hadome checking itself against the base branch.
+# self-tests, the readers of every SQL dialect, and hadome checking itself against the base branch.
 name: ci
 
 on:
@@ -32,6 +32,25 @@ jobs:
         run: go test ./...
       - name: Self-test every rule
         run: go run ./cmd/hadome self-test
+
+  # The readers of SQL dialects that are not enabled are built only with the tag sqlgrammars. They
+  # are pure Go, so one system checks them, in a job of its own so that it runs beside the others.
+  # The grammars in the cache key give the job a build cache of its own: the cache the other jobs
+  # save holds none of the grammars of dialects that are not enabled.
+  sql-grammars:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            internal/adapter/sql/grammar/**/*.go
+      - name: Test and vet every SQL dialect
+        run: |
+          go test -tags sqlgrammars ./internal/adapter/sql/...
+          go vet -tags sqlgrammars ./internal/adapter/sql/...
 
   # hadome checks itself on one system: the result does not depend on it. Exit code 3 does not fail
   # the job. What needs a person's review is shown on the pull request instead, and the person who
