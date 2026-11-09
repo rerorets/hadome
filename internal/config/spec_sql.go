@@ -22,6 +22,8 @@ var sqlSinksKey = func() Key {
 // enabled once it has passed its trial on real public code (docs/design/adapters-sql.md).
 var SQLDialects = []Value{
 	{"postgresql", "PostgreSQL."},
+	{"mysql", "MySQL and MariaDB."},
+	{"bigquery", "BigQuery (GoogleSQL)."},
 }
 
 // sqlKey describes the SQL databases of the repository. Every key that changes how names are resolved

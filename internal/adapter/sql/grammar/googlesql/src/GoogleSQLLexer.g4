@@ -39,7 +39,9 @@ LE_OPERATOR: '<=';
 GT_OPERATOR: '>';
 GE_OPERATOR: '>=';
 KL_OPERATOR: '<<';
-KR_OPERATOR: '>>';
+// hadome: >> is two > tokens, so that ARRAY<STRUCT<x INT64>> closes both types; the parser joins
+// them back into the shift operator
+// KR_OPERATOR: '>>';
 PLUS_OPERATOR: '+';
 MINUS_OPERATOR: '-';
 MULTIPLY_OPERATOR: '*';

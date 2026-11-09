@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -10,7 +11,6 @@ import (
 // calls and relations. Every dialect is one value of it, with its own grammar and tables.
 type tableDialect struct {
 	name     string
-	grammar  Grammar
 	lex      lexical
 	splitter splitter
 	markers  []*regexp.Regexp
@@ -77,8 +77,14 @@ func (d tableDialect) Markers(src []byte) []Marker {
 
 func (d tableDialect) Split(src []byte) []Statement { return d.splitter.split(string(src), d.lex) }
 
+// Parse reads a piece with the dialect's grammar. A dialect that is not enabled has no grammar in
+// a build without -tags sqlgrammars, so it reads nothing.
 func (d tableDialect) Parse(s Statement) (*Node, error) {
-	return d.grammar.Parse(s.Text, s.Start, s.Line)
+	g, ok := grammars[d.name]
+	if !ok {
+		return nil, fmt.Errorf("this build of hadome has no grammar for %s", d.name)
+	}
+	return g.Parse(s.Text, s.Start, s.Line)
 }
 
 func (d tableDialect) Fold(id Ident) string { return d.fold(id) }
@@ -92,7 +98,10 @@ func (d tableDialect) statements(t *Node) []*Node {
 	var out []*Node
 	for _, s := range t.All(func(n *Node) bool { return slices.Contains(d.rules.statements, n.Rule) }) {
 		out = append(out, s)
-		if blk := s.Find(func(n *Node) bool { return slices.Contains(d.rules.blocks, n.Rule) }); blk != nil {
+		if toks := s.Tokens(); len(toks) > 0 && strings.EqualFold(toks[0].Text, "CREATE") {
+			continue // a routine's body runs when it is called, not when its file is applied
+		}
+		for _, blk := range s.All(func(n *Node) bool { return slices.Contains(d.rules.blocks, n.Rule) }) {
 			out = append(out, d.statements(blk)...)
 		}
 	}

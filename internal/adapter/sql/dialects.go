@@ -40,9 +40,8 @@ var pgCast = re(`(?i)::\s*(text|int|int2|int4|int8|integer|bigint|smallint|numer
 	`tsquery|xml|citext|ltree|hstore)\b`)
 
 var postgresqlDialect = tableDialect{
-	name:    "postgresql",
-	grammar: postgresqlGrammar,
-	lex:     lexical{nestedBlocks: true, dollarQuotes: true},
+	name: "postgresql",
+	lex:  lexical{nestedBlocks: true, dollarQuotes: true},
 	splitter: splitter{
 		commands: re(`^\s*\\`),
 		copyData: true,
@@ -76,7 +75,6 @@ var postgresqlDialect = tableDialect{
 var mysqlDialect = tableDialect{
 	name:            "mysql",
 	renameWithoutTo: true,
-	grammar:         mysqlGrammar,
 	lex:             lexical{hashComments: true, doubleStrings: true, backslash: true},
 	splitter: splitter{
 		commands:  re(`(?i)^\s*(source\s+\S+|\\\.\s+\S+|\\[a-z]\b.*)\s*;?\s*$`),
@@ -109,9 +107,8 @@ var mysqlDialect = tableDialect{
 }
 
 var sqliteDialect = tableDialect{
-	name:    "sqlite",
-	grammar: sqliteGrammar,
-	lex:     lexical{},
+	name: "sqlite",
+	lex:  lexical{},
 	splitter: splitter{
 		commands: re(`^\s*\.[a-z]`),
 	},
@@ -140,7 +137,6 @@ var sqliteDialect = tableDialect{
 var tsqlDialect = tableDialect{
 	name:           "tsql",
 	alterRedefines: true,
-	grammar:        tsqlGrammar,
 	lex:            lexical{},
 	splitter: splitter{
 		commands:  re(`^\s*:[A-Za-z]`),
@@ -175,9 +171,8 @@ var tsqlDialect = tableDialect{
 }
 
 var oracleDialect = tableDialect{
-	name:    "oracle",
-	grammar: oracleGrammar,
-	lex:     lexical{qQuotes: true},
+	name: "oracle",
+	lex:  lexical{qQuotes: true},
 	splitter: splitter{
 		commands: re(`(?i)^\s*(@@?\S+|(SET|PROMPT|REM|REMARK|SPOOL|WHENEVER|EXIT|QUIT|DEFINE|UNDEFINE|COLUMN|TTITLE|BTITLE|` +
 			`BREAK|COMPUTE|CONNECT|CONN|DISCONNECT|SHOW|PAUSE|ACCEPT|HOST|VARIABLE|PRINT|CLEAR|EXEC|EXECUTE|SQLBLANKLINES)\b.*)$`),
@@ -242,9 +237,8 @@ func oracleCall(n *Node) (*Node, []string, bool) {
 }
 
 var bigqueryDialect = tableDialect{
-	name:    "bigquery",
-	grammar: bigqueryGrammar,
-	lex:     lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
+	name: "bigquery",
+	lex:  lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
 	markers: []*regexp.Regexp{
 		re("`[^`.\n]+\\.[^`\n]+`"), re(`(?i)\bCREATE\s+(OR\s+REPLACE\s+)?(TEMP(ORARY)?\s+)?TABLE\s+FUNCTION\b`),
 		re(`(?i)\bLANGUAGE\s+js\b`), re(`(?i)\bOPTIONS\s*\(`),
@@ -258,19 +252,19 @@ var bigqueryDialect = tableDialect{
 	},
 	rules: rules{
 		statements: []string{"unterminated_sql_statement", "unterminated_script_statement"},
-		blocks:     []string{"begin_end_block"},
+		blocks:     []string{"begin_end_block", "statement_list"},
 		names:      []string{"path_expression", "maybe_dashed_path_expression"},
 		params:     []string{"function_parameter", "procedure_parameter"},
-		calls:      []callRule{{"function_call_expression_with_clauses", []string{"function_name_from_keyword", "path_expression"}}},
-		relations:  []nameRule{{"table_path_expression", []string{"table_path_expression_base", "maybe_dashed_path_expression"}}},
-		ctes:       []nameRule{{"with_clause_entry", []string{"identifier"}}},
+		calls: []callRule{{"function_call_expression_with_clauses", []string{"function_name_from_keyword", "path_expression"}},
+			{"tvf_prefix_no_args", []string{"path_expression"}}},
+		relations: []nameRule{{"table_path_expression", []string{"table_path_expression_base", "maybe_dashed_path_expression"}}},
+		ctes:      []nameRule{{"with_clause_entry", []string{"identifier"}}},
 	},
 }
 
 var snowflakeDialect = tableDialect{
-	name:    "snowflake",
-	grammar: snowflakeGrammar,
-	lex:     lexical{dollarQuotes: true},
+	name: "snowflake",
+	lex:  lexical{dollarQuotes: true},
 	splitter: splitter{
 		commands: re(`^\s*!\w`),
 	},

@@ -79,39 +79,6 @@ func TestSQLClaimsFilesEndingInSQL(t *testing.T) {
 
 // viewpoint: behaviour
 // target: sql.Adapter.Analyze
-// guards: same-rules-every-language
-// Each dialect's definitions become symbols named schema.name inside the database's unit, with the
-// dialect's rules for case and quotes, and the kinds of objects that run logic or hold values.
-func TestDefinitionsBecomeSymbolsInEachDialect(t *testing.T) {
-	cases := []struct {
-		dialect, src string
-		want         []string
-	}{
-		{"postgresql", "CREATE FUNCTION billing.is_active(account_id int) RETURNS boolean LANGUAGE sql AS $$ SELECT true $$;\n" +
-			"CREATE VIEW reports.daily AS SELECT 1 AS n;\nCREATE TABLE accounts (id int);\nCREATE INDEX accounts_id ON accounts (id);\n",
-			[]string{".sql/billing.is_active", ".sql/public.accounts", ".sql/reports.daily"}},
-		{"mysql", "CREATE TABLE `accounts` (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB;\n" +
-			"CREATE PROCEDURE billing.Close_Account(IN account_id INT) BEGIN UPDATE accounts SET id = id; END;\n",
-			[]string{".sql/accounts", ".sql/billing.close_account"}},
-		{"sqlite", "CREATE TABLE accounts (id INTEGER PRIMARY KEY AUTOINCREMENT);\nCREATE VIEW Open_Accounts AS SELECT id FROM accounts;\n",
-			[]string{".sql/main.accounts", ".sql/main.open_accounts"}},
-		{"tsql", "CREATE PROCEDURE [dbo].[CloseAccount] @AccountId int AS BEGIN SELECT 1; SELECT 2; END\nGO\n" +
-			"CREATE TABLE Accounts (id int)\nGO\n",
-			[]string{".sql/dbo.accounts", ".sql/dbo.closeaccount"}},
-		{"oracle", "CREATE OR REPLACE FUNCTION billing.is_active(p_id NUMBER) RETURN NUMBER IS BEGIN RETURN 1; END;\n/\n" +
-			"CREATE TABLE \"Mixed\" (id NUMBER);\n",
-			[]string{".sql/BILLING.IS_ACTIVE", ".sql/Mixed"}},
-	}
-	for _, c := range cases {
-		an := analyze(t, sql.New(), version("db/schema.sql", c.src), dialect(c.dialect))
-		if got := symbolIDs(an); !slices.Equal(got, c.want) {
-			t.Errorf("%s: symbols %v, want %v (unread %v)", c.dialect, got, c.want, unread(an))
-		}
-	}
-}
-
-// viewpoint: behaviour
-// target: sql.Adapter.Analyze
 // Functions, procedures, views and triggers are routines or views a test calls; tables and sequences
 // are relations it reads.
 func TestObjectKindsDecideTheSymbolKind(t *testing.T) {
@@ -179,31 +146,11 @@ func TestMigrationsLeaveTheObjectsThatRemain(t *testing.T) {
 
 // viewpoint: behaviour
 // target: sql.Adapter.Analyze
-// What the client reads splits a file before the grammar: GO between T-SQL batches, DELIMITER around
-// MySQL bodies, / after Oracle blocks.
-func TestClientSeparatorsSplitStatements(t *testing.T) {
-	cases := []struct {
-		dialect, src string
-		want         []string
-	}{
-		{"tsql", "CREATE PROCEDURE dbo.a AS SELECT 1\nGO\nCREATE PROCEDURE dbo.b AS SELECT 2\nGO 2\n",
-			[]string{".sql/dbo.a", ".sql/dbo.b"}},
-		{"mysql", "DELIMITER //\nCREATE PROCEDURE a() BEGIN SELECT 1; SELECT 2; END //\nDELIMITER ;\nCREATE TABLE t (id INT);\n",
-			[]string{".sql/a", ".sql/t"}},
-		{"oracle", "CREATE OR REPLACE PROCEDURE billing.a IS BEGIN NULL; NULL; END;\n/\n" +
-			"CREATE OR REPLACE PACKAGE billing.accounts_pkg AS\n  FUNCTION is_active(p NUMBER) RETURN NUMBER;\n" +
-			"  PROCEDURE close_it(p NUMBER);\nEND accounts_pkg;\n/\n" +
-			"CREATE OR REPLACE PACKAGE BODY billing.accounts_pkg AS\n  FUNCTION is_active(p NUMBER) RETURN NUMBER IS BEGIN RETURN 1; END;\n" +
-			"  PROCEDURE close_it(p NUMBER) IS BEGIN NULL; END;\n  PROCEDURE hidden IS BEGIN NULL; END;\nEND accounts_pkg;\n/\n",
-			[]string{".sql/BILLING.A", ".sql/BILLING.ACCOUNTS_PKG.CLOSE_IT", ".sql/BILLING.ACCOUNTS_PKG.IS_ACTIVE"}},
-		{"postgresql", "\\set ON_ERROR_STOP on\nCOPY t (id) FROM stdin;\n1\n2\n\\.\nCREATE TABLE t (id int);\n",
-			[]string{".sql/public.t"}},
-	}
-	for _, c := range cases {
-		an := analyze(t, sql.New(), version("db/schema.sql", c.src), dialect(c.dialect))
-		if got := symbolIDs(an); !slices.Equal(got, c.want) {
-			t.Errorf("%s: symbols %v, want %v (unread %v)", c.dialect, got, c.want, unread(an))
-		}
+// psql's meta-commands and the data lines after COPY … FROM stdin are not SQL the grammar reads.
+func TestPsqlFormsAreNotRead(t *testing.T) {
+	an := analyze(t, sql.New(), version("db/schema.sql", "\\set ON_ERROR_STOP on\nCOPY t (id) FROM stdin;\n1\n2\n\\.\nCREATE TABLE t (id int);\n"), postgres())
+	if got, want := symbolIDs(an), []string{".sql/public.t"}; !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
 	}
 }
 
@@ -324,6 +271,10 @@ func TestTestStringsBecomeCallsAndReads(t *testing.T) {
 		{"a hole where a value goes", []facts.Text{{Path: "a", Line: 1, Value: "SELECT billing.is_active(, 3600)", Holes: []int{25}, Times: 1}},
 			[]string{".sql/billing.is_active"}, 0, 0},
 		{"a hole where a name goes", []facts.Text{{Path: "a", Line: 1, Value: "SELECT * FROM ", Holes: []int{14}, Times: 1}}, nil, 0, 1},
+		{"a string without a statement head passed to SQL that does not read", []facts.Text{{Path: "a", Line: 1, Value: "job-",
+			Holes: []int{4}, Sink: facts.TextSinkSQL, Times: 1}}, nil, 0, 0},
+		{"a word like a statement head that does not start a statement", []facts.Text{{Path: "a", Line: 1, Value: "refresh-",
+			Holes: []int{8}, Times: 1}, {Path: "a", Line: 2, Value: "table=", Holes: []int{6}, Times: 1}}, nil, 0, 0},
 		{"a value that is not a literal", []facts.Text{{Path: "a", Line: 1, Dynamic: true, Sink: facts.TextSinkSQL, Times: 1}}, nil, 0, 1},
 		{"a name absent from the database", []facts.Text{text("SELECT * FROM ledgers")}, nil, 0, 1},
 		{"only built-ins", []facts.Text{text("SELECT 1"), text("SELECT now(), lower('A')")}, nil, 0, 0},
@@ -377,16 +328,6 @@ func TestNamesFoldByTheDialectsRules(t *testing.T) {
 	if got.Reads != 1 || got.Unresolved != 1 {
 		t.Errorf("postgresql: reads %d unresolved %d, want 1 and 1", got.Reads, got.Unresolved)
 	}
-	got = linked(t, dialect("oracle"), []facts.Text{text("SELECT billing.is_active(1) FROM dual")},
-		"db/a.sql", "CREATE FUNCTION BILLING.IS_ACTIVE(p NUMBER) RETURN NUMBER IS BEGIN RETURN 1; END;\n/\n")
-	if want := []string{".sql/BILLING.IS_ACTIVE"}; !slices.Equal(targets(got), want) {
-		t.Errorf("oracle: calls %v, want %v", targets(got), want)
-	}
-	got = linked(t, dialect("tsql"), []facts.Text{text("EXEC [dbo].[CloseAccount] @AccountId = 1")},
-		"db/a.sql", "CREATE PROCEDURE dbo.closeaccount @AccountId int AS SELECT 1\nGO\n")
-	if want := []string{".sql/dbo.closeaccount"}; !slices.Equal(targets(got), want) {
-		t.Errorf("tsql: calls %v, want %v", targets(got), want)
-	}
 }
 
 // viewpoint: behaviour
@@ -399,11 +340,6 @@ func TestWritesCallTheTriggersTheyRun(t *testing.T) {
 	got := linked(t, postgres(), []facts.Text{text("INSERT INTO accounts (id) VALUES (1)"), text("DELETE FROM accounts")}, "db/a.sql", pg)
 	if want := []string{".sql/public.audit"}; !slices.Equal(targets(got), want) || got.Calls[0].Times != 1 || got.Reads != 2 {
 		t.Errorf("postgresql: calls %+v reads %d, want one call of audit and 2 reads", got.Calls, got.Reads)
-	}
-	lite := "CREATE TABLE accounts (id INTEGER PRIMARY KEY AUTOINCREMENT);\nCREATE TRIGGER stamp AFTER UPDATE ON accounts BEGIN SELECT 1; END;\n"
-	got = linked(t, dialect("sqlite"), []facts.Text{text("UPDATE accounts SET id = 2")}, "db/a.sql", lite)
-	if want := []string{".sql/main.stamp"}; !slices.Equal(targets(got), want) {
-		t.Errorf("sqlite: calls %v, want %v", targets(got), want)
 	}
 }
 
@@ -434,10 +370,6 @@ func TestHazardsInTestSQL(t *testing.T) {
 	sort.Strings(cats)
 	if want := []string{"clock", "mock", "sleep"}; !slices.Equal(cats, want) {
 		t.Errorf("hazards %v, want %v", cats, want)
-	}
-	got = linked(t, dialect("tsql"), []facts.Text{text("WAITFOR DELAY '00:00:01'")}, "db/a.sql", "CREATE TABLE dbo.t (id int)\nGO\n")
-	if len(got.Hazards) != 1 || got.Hazards[0].Category != facts.HazardSleep {
-		t.Errorf("tsql hazards %+v, want one sleep", got.Hazards)
 	}
 }
 
@@ -472,49 +404,65 @@ func TestTestsWrittenInSQL(t *testing.T) {
 	if ts := tests["test/empty.sql"]; ts.Asserts != 0 {
 		t.Errorf("pgTAP without asserts: %d asserts", ts.Asserts)
 	}
+}
 
-	an = analyze(t, sql.New(), version(
-		"db/schema.sql", "CREATE PROCEDURE dbo.CloseAccount @AccountId int AS SELECT 1\nGO\n",
-		"tests/close.sql", "EXEC tSQLt.NewTestClass 'CloseTests';\nGO\n"+
-			"CREATE PROCEDURE CloseTests.[test closes] AS BEGIN EXEC tSQLt.FakeTable 'dbo.Accounts'; EXEC dbo.CloseAccount 1; "+
-			"EXEC tSQLt.AssertEquals 1, 1; END\nGO\n",
-	), dialect("tsql"))
-	if len(an.Tests) != 1 || an.Tests[0].Asserts != 1 || !slices.Equal(targets(an.Tests[0]), []string{".sql/dbo.closeaccount"}) ||
-		len(an.Tests[0].Hazards) != 1 || an.Tests[0].Hazards[0].Category != facts.HazardMock {
-		t.Errorf("tSQLt: %+v, want one test calling dbo.closeaccount with one assert and one mock", an.Tests)
-	}
-
-	an = analyze(t, sql.New(), version(
-		"db/schema.sql", "CREATE OR REPLACE FUNCTION billing.is_active(p NUMBER) RETURN NUMBER IS BEGIN RETURN 1; END;\n/\n",
-		"tests/accounts_test.sql", "CREATE OR REPLACE PACKAGE accounts_test AS\n  --%suite\n\n  --%test\n  PROCEDURE active;\n\n"+
-			"  --%test\n  --%disabled\n  PROCEDURE later;\nEND;\n/\n"+
-			"CREATE OR REPLACE PACKAGE BODY accounts_test AS\n  PROCEDURE active IS BEGIN ut.expect(billing.is_active(1)).to_equal(1); END;\n"+
-			"  PROCEDURE later IS BEGIN NULL; END;\nEND;\n/\n",
-	), dialect("oracle"))
-	byName := map[string]facts.Test{}
-	for _, ts := range an.Tests {
-		byName[ts.Name] = ts
-	}
-	if ts := byName["ACCOUNTS_TEST.ACTIVE"]; ts.Asserts != 1 || !slices.Equal(targets(ts), []string{".sql/BILLING.IS_ACTIVE"}) {
-		t.Errorf("utPLSQL active: %+v", ts)
-	}
-	if ts := byName["ACCOUNTS_TEST.LATER"]; !ts.Skip.Skipped || ts.Skip.Reason != "" {
-		t.Errorf("utPLSQL later: skip %+v, want skipped without a reason", ts.Skip)
+// viewpoint: behaviour
+// target: sql.Adapter.Analyze
+// MySQL: bodies between DELIMITER lines keep their own ;, a handler or a routine may be one RETURN,
+// and words the grammar has tokens for but no rule (SEQUENCE, SKIP) are names.
+func TestMySQLDefinitions(t *testing.T) {
+	src := "DELIMITER //\nCREATE FUNCTION billing.skip(p INT) RETURNS INT DETERMINISTIC\nBEGIN\n" +
+		"  DECLARE EXIT HANDLER FOR NOT FOUND RETURN 0;\n  RETURN p;\nEND //\nDELIMITER ;\n" +
+		"CREATE FUNCTION billing.one() RETURNS INT DETERMINISTIC RETURN 1;\n" +
+		"CREATE TABLE `sequence` (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB;\n"
+	an := analyze(t, sql.New(), version("db/V1__a.sql", src), config.Config{})
+	if got, want := symbolIDs(an), []string{".sql/billing.one", ".sql/billing.skip", ".sql/sequence"}; !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
 	}
 }
 
 // viewpoint: behaviour
-// target: sql.EnabledDialects
-// The dialects the configuration accepts are exactly the enabled ones: a dialect that has not passed
-// its trial cannot be chosen.
-func TestConfigurationAcceptsTheEnabledDialects(t *testing.T) {
-	var accepted []string
-	for _, v := range config.SQLDialects {
-		accepted = append(accepted, v.Name)
+// target: sql.Adapter.Link
+// MySQL test SQL: a WITH name hides, a backquoted name is the same object, a function is called.
+func TestMySQLTestStrings(t *testing.T) {
+	src := "CREATE TABLE `accounts` (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB;\n" +
+		"CREATE FUNCTION is_open(account_id INT) RETURNS INT DETERMINISTIC RETURN 1;\n"
+	got := linked(t, dialect("mysql"), []facts.Text{text("WITH a AS (SELECT 1 AS id) SELECT is_open(id) FROM a"),
+		text("SELECT * FROM `accounts` WHERE id = ?")}, "db/V1__a.sql", src)
+	if want := []string{".sql/is_open"}; !slices.Equal(targets(got), want) || got.Reads != 1 || got.Unresolved != 0 {
+		t.Errorf("calls %v reads %d unresolved %d, want %v, 1, 0", targets(got), got.Reads, got.Unresolved, want)
 	}
-	sort.Strings(accepted)
-	if got := sql.EnabledDialects(); !slices.Equal(got, accepted) {
-		t.Errorf("enabled %v, configuration accepts %v", got, accepted)
+}
+
+// viewpoint: behaviour
+// target: sql.Adapter.Analyze
+// BigQuery: definitions inside a script's blocks count, a routine's body does not, and the forms real
+// code writes read: QUALIFY without WHERE, USING with a list, ARRAY<STRUCT<…>> closed by >>, a
+// table-valued function in FROM.
+func TestBigQueryDefinitions(t *testing.T) {
+	src := "CREATE PROCEDURE ds.p() BEGIN CREATE TABLE ds.inner_t (a INT64); END;\n" +
+		"IF TRUE THEN CREATE TABLE ds.made (a INT64); END IF;\n" +
+		"CREATE TABLE `proj.ds.t` (a ARRAY<STRUCT<x INT64, y STRING>>) OPTIONS(description = 'rows');\n" +
+		"CREATE TABLE FUNCTION ds.tvf(n INT64) AS SELECT n AS a;\n" +
+		"CREATE VIEW ds.v AS SELECT a.x FROM `proj.ds.t` a JOIN ds.made USING (a, b) QUALIFY ROW_NUMBER() OVER (PARTITION BY a.x) = 1;\n" +
+		"CREATE VIEW ds.w AS SELECT * FROM ds.tvf(1);\n"
+	an := analyze(t, sql.New(), version("bq/V1__a.sql", src), config.Config{})
+	want := []string{".sql/ds.made", ".sql/ds.p", ".sql/ds.t", ".sql/ds.tvf", ".sql/ds.v", ".sql/ds.w"}
+	if got := symbolIDs(an); !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.Adapter.Link
+// BigQuery test SQL: a table-valued function in FROM is called, and `proj.ds.v` is ds.v when the
+// configuration names no catalog.
+func TestBigQueryTestStrings(t *testing.T) {
+	src := "CREATE TABLE FUNCTION ds.tvf(account_id INT64) AS SELECT account_id AS a;\nCREATE VIEW `proj.ds.v` AS SELECT 1 AS a;\n"
+	got := linked(t, dialect("bigquery"), []facts.Text{text("SELECT * FROM `other.ds.tvf`(@account)"), text("SELECT a FROM ds.v")},
+		"bq/V1__a.sql", src)
+	if want := []string{".sql/ds.tvf", ".sql/ds.v"}; !slices.Equal(targets(got), want) || got.Unresolved != 0 {
+		t.Errorf("calls %v unresolved %d, want %v and none", targets(got), got.Unresolved, want)
 	}
 }
 

@@ -3,6 +3,8 @@ package sql
 import (
 	"sort"
 	"strings"
+
+	"github.com/rerorets/hadome/internal/config"
 )
 
 // Dialect reads one SQL dialect: which files are written in it, how its files split into what the
@@ -27,30 +29,28 @@ type Dialect interface {
 	Hazards() []HazardEntry
 }
 
-// dialectEntry is one row of the dialect table. Enabled is true once the dialect has passed its trial
-// on real public code; a dialect that is not enabled cannot be chosen, and files whose markers
-// point to it are unread.
-type dialectEntry struct {
-	Dialect Dialect
-	Enabled bool
+// dialects are every dialect hadome has a reader for, in the order markers are reported.
+var dialects = []Dialect{
+	postgresqlDialect, mysqlDialect, sqliteDialect, tsqlDialect, oracleDialect, bigqueryDialect, snowflakeDialect,
 }
 
-// dialects are every dialect hadome has a reader for, in the order markers are reported.
-var dialects = []dialectEntry{
-	{postgresqlDialect, true},
-	{mysqlDialect, false},
-	{sqliteDialect, false},
-	{tsqlDialect, false},
-	{oracleDialect, false},
-	{bigqueryDialect, false},
-	{snowflakeDialect, false},
+// enabled reports whether a dialect can be chosen: the configuration's dialects (config.SQLDialects)
+// are the enabled ones. A dialect is enabled once it has passed its trial on real code; files whose
+// markers point to one that is not are unread.
+func enabled(name string) bool {
+	for _, v := range config.SQLDialects {
+		if v.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // dialectNamed returns the dialect with the name and whether it is enabled.
 func dialectNamed(name string) (Dialect, bool) {
-	for _, e := range dialects {
-		if e.Dialect.Name() == name {
-			return e.Dialect, e.Enabled
+	for _, d := range dialects {
+		if d.Name() == name {
+			return d, enabled(name)
 		}
 	}
 	return nil, false
@@ -59,9 +59,9 @@ func dialectNamed(name string) (Dialect, bool) {
 // EnabledDialects returns the names of the dialects that can be chosen, sorted.
 func EnabledDialects() []string {
 	var out []string
-	for _, e := range dialects {
-		if e.Enabled {
-			out = append(out, e.Dialect.Name())
+	for _, d := range dialects {
+		if enabled(d.Name()) {
+			out = append(out, d.Name())
 		}
 	}
 	sort.Strings(out)

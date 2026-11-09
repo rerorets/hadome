@@ -48,7 +48,7 @@ txid_current inet_client_addr host masklen netmask network family abbrev broadca
 array_ndims to_tsvector to_tsquery plainto_tsquery phraseto_tsquery websearch_to_tsquery ts_rank ts_rank_cd ts_headline
 setweight strip tsvector_to_array lower_inc upper_inc lower_inf upper_inf isempty range_merge daterange tsrange
 tstzrange int4range int8range numrange row format_type obj_description col_description to_regclass to_regproc
-to_regtype exists any all some`)
+to_regtype exists any all some hashtext hashtextextended make_interval`)
 
 var mysqlFunctions = words2(strings.ToLower, standardFunctions, `
 adddate addtime aes_decrypt aes_encrypt any_value benchmark bin bit_count cast char charset coercibility collation

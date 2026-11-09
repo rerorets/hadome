@@ -42,4 +42,9 @@ ANTLR_JAR=/path/to/antlr-4.13.1-complete.jar internal/adapter/sql/grammar/genera
 
 ## 方言を有効にする条件
 
-方言は、実際の公開されたコードで試しを通るまで有効にしません（[adapters-sql.ja.md](../design/adapters-sql.ja.md) の「方言を有効にする条件」）。有効にするかどうかは、`internal/adapter/sql/dialect.go` の方言の表の `Enabled` と、`internal/config` の `SQLDialects` の2か所で決まります。2か所が食い違うと、`TestConfigurationAcceptsTheEnabledDialects` が落ちます。
+方言は、実際のコードで試しを通るまで有効にしません（[adapters-sql.ja.md](../design/adapters-sql.ja.md) の「方言を有効にする条件」）。
+
+- 方言ごとの文法は `internal/adapter/sql/grammar_<方言>.go` がビルドに入れます。有効でない方言のファイルには `//go:build sqlgrammars` があり、ふつうのビルドには入りません
+- 有効でない方言の読み手を試すときと、その単体テスト（`dialects_test.go`）を流すときは、タグを付けます: `go test -tags sqlgrammars ./internal/adapter/sql/`
+- 方言を有効にするときは、次の2か所を変えます。`grammar_<方言>.go` の `//go:build` の行を消すことと、`internal/config` の `SQLDialects` に方言を足すことです。`SQLDialects` に載った方言が有効な方言です
+- 2か所が食い違うと、`TestTheBuildLinksTheGrammarsOfEnabledDialects` が落ちます

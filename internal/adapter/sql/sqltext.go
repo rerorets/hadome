@@ -8,7 +8,9 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// firstWord returns the first word of text outside comments.
+// firstWord returns the first word of text outside comments, when a statement could start with it:
+// the end of the text, a space, ( or ; follows it. "refresh-" + key and "table=" + name start with
+// no word.
 func firstWord(text string, lx lexical) string {
 	masked := scan(text, lx).Masked
 	s := strings.TrimLeft(masked, " \t\r\n(")
@@ -17,6 +19,9 @@ func firstWord(text string, lx lexical) string {
 	})
 	if end < 0 {
 		return s
+	}
+	if !strings.ContainsRune(" \t\r\n(;", rune(s[end])) {
+		return ""
 	}
 	return s[:end]
 }

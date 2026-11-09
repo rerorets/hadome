@@ -456,7 +456,9 @@
               "dialect": {
                 "description": "The dialect of the database's files. When set, it wins over the markers in the files. Omitted: decided from the markers.",
                 "enum": [
-                  "postgresql"
+                  "postgresql",
+                  "mysql",
+                  "bigquery"
                 ],
                 "type": "string"
               },

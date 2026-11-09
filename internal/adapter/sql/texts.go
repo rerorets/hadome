@@ -248,8 +248,8 @@ func merge(t *facts.Test, e *effect) {
 func readText(db *database, tx facts.Text) (reading, bool) {
 	d := db.dialect.(tableDialect)
 	text := callEscape(tx.Value, d.name)
-	head := firstWord(text, d.lex)
-	if !statementHeads[strings.ToUpper(head)] && tx.Sink != facts.TextSinkSQL {
+	hasHead := statementHeads[strings.ToUpper(firstWord(text, d.lex))]
+	if !hasHead && tx.Sink != facts.TextSinkSQL {
 		return reading{}, false
 	}
 	r := reading{db: db}
@@ -264,8 +264,10 @@ func readText(db *database, tx facts.Text) (reading, bool) {
 		trees = append(trees, t)
 	}
 	if trees == nil {
-		// A string with a hole that does not read most likely has the hole where a name goes.
-		r.guessed = len(tx.Holes) > 0 || mentions(db, d, text)
+		// A statement with a hole that does not read most likely has the hole where a name goes. A
+		// string without a statement head that does not read may not be SQL at all: only a word
+		// naming an object makes it count.
+		r.guessed = hasHead && len(tx.Holes) > 0 || mentions(db, d, text)
 		return r, true
 	}
 	r.sql = true

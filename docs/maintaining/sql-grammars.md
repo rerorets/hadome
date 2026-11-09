@@ -42,4 +42,9 @@ ANTLR_JAR=/path/to/antlr-4.13.1-complete.jar internal/adapter/sql/grammar/genera
 
 ## When a dialect is enabled
 
-A dialect is not enabled until it passes a trial on real public code ("When a dialect is enabled" in [adapters-sql.md](../design/adapters-sql.md)). Two places decide whether it is enabled: `Enabled` in the dialect table of `internal/adapter/sql/dialect.go`, and `SQLDialects` in `internal/config`. When they disagree, `TestConfigurationAcceptsTheEnabledDialects` fails.
+A dialect is not enabled until it passes a trial on real code ("When a dialect is enabled" in [adapters-sql.md](../design/adapters-sql.md)).
+
+- `internal/adapter/sql/grammar_<dialect>.go` puts each dialect's grammar into the build. The file of a dialect that is not enabled has `//go:build sqlgrammars`, so the usual build leaves it out
+- To try the reader of a dialect that is not enabled, and to run its unit tests (`dialects_test.go`), add the tag: `go test -tags sqlgrammars ./internal/adapter/sql/`
+- Enabling a dialect changes two places: remove the `//go:build` line of `grammar_<dialect>.go`, and add the dialect to `SQLDialects` in `internal/config`. The dialects in `SQLDialects` are the enabled ones
+- When the two disagree, `TestTheBuildLinksTheGrammarsOfEnabledDialects` fails

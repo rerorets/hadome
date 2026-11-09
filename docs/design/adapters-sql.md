@@ -142,19 +142,21 @@ hadome has readers for these seven dialects. A dialect is enabled after it meets
 | Dialect | Name (configuration) | Grammar | Enabled | Why |
 |---|---|---|---|---|
 | PostgreSQL | `postgresql` | `sql/postgresql` of grammars-v4 | Enabled | Functions and procedures often hold product logic |
-| MySQL, MariaDB | `mysql` | `sql/mysql/Positive-Technologies` of grammars-v4 | Not enabled | Widely used. MariaDB is read by the same reader as MySQL |
+| MySQL, MariaDB | `mysql` | `sql/mysql/Positive-Technologies` of grammars-v4 | Enabled | Widely used. MariaDB is read by the same reader as MySQL |
 | SQLite | `sqlite` | `sql/sqlite` of grammars-v4 | Not enabled | Widely used as an embedded database. Has views, triggers and tables |
 | SQL Server | `tsql` | `tsql` of bytebase/parser (`sql/tsql` of grammars-v4, made faster) | Not enabled | Procedures often hold product logic |
 | Oracle | `oracle` | `sql/plsql` of grammars-v4 | Not enabled | Packages and procedures often hold product logic |
-| BigQuery | `bigquery` | `googlesql` of bytebase/parser | Not enabled | Used for data processing. Functions, table functions and procedures are written in SQL |
+| BigQuery | `bigquery` | `googlesql` of bytebase/parser | Enabled | Used for data processing. Functions, table functions and procedures are written in SQL |
 | Snowflake | `snowflake` | `sql/snowflake` of grammars-v4 | Not enabled | Used for data processing. Functions, procedures and tasks are written in SQL |
 
 - Every grammar has a `hadome:` comment wherever it differs from the original grammar ([sql-grammars.md](../maintaining/sql-grammars.md))
-- The readers of dialects that are not enabled are in hadome too. Choosing such a dialect in the configuration is a configuration error (exit code `2`)
+- The hadome binary holds the grammars of the enabled dialects only. The grammar of a dialect that is not enabled is built in only with the build tag `sqlgrammars`, for trials and for the unit tests of that dialect's reader
+- Choosing a dialect that is not enabled in the configuration is a configuration error (exit code `2`). A file whose markers point to a dialect that is not enabled is unread
+- Enabling a dialect is putting its grammar into every build and adding it to the dialects the configuration accepts. Nothing else changes ([sql-grammars.md](../maintaining/sql-grammars.md))
 
 ### When a dialect is enabled
 
-A dialect is enabled after both of the following have been confirmed on real public code.
+A dialect is enabled after both of the following have been confirmed on real code.
 
 - Definitions are read correctly: no symbol missed, no symbol made up
 - SQL names in tests are resolved correctly: nothing mistaken, nothing missed
@@ -584,7 +586,7 @@ The self-test cases pass SQL from Go tests, which every build reads. Name resolu
 5. A name in a test string becomes `Calls` or `Reads` only when it certainly matches a database object. What cannot be decided is counted as unresolved, or not read as SQL. Nothing is matched by guessing
 6. A file whose dialect is not decided is reported as unread. A dialect is never picked by guessing
 7. Adding a dialect, an object kind, a language that hands over test SQL, or a way of writing tests in SQL does not change the `facts` types or the interfaces `internal/adapter` sees. What is added is only an implementation of `Dialect` or `Framework`, a row of the `ObjectKind` table, or `Test.Texts` filled by another language adapter
-8. A dialect is not enabled until it has passed a trial on real public code
+8. A dialect is not enabled until it has passed a trial on real code
 
 ## What is deliberately left out
 

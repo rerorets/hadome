@@ -97,9 +97,9 @@ func databaseOf(dbs []*database, p string) *database {
 // markerDialects returns the names of the dialects whose markers src has.
 func markerDialects(src []byte) []string {
 	var out []string
-	for _, e := range dialects {
-		if len(e.Dialect.Markers(src)) > 0 {
-			out = append(out, e.Dialect.Name())
+	for _, d := range dialects {
+		if len(d.Markers(src)) > 0 {
+			out = append(out, d.Name())
 		}
 	}
 	return out

@@ -142,19 +142,21 @@ classDiagram
 | 方言 | 名前（設定） | 文法 | 有効 | 理由 |
 |---|---|---|---|---|
 | PostgreSQL | `postgresql` | grammars-v4 の `sql/postgresql` | 有効 | 関数と手続きを製品のロジックとして使うことが多い |
-| MySQL、MariaDB | `mysql` | grammars-v4 の `sql/mysql/Positive-Technologies` | 有効でない | 広く使われる。MariaDB は MySQL と同じ読み手で読む |
+| MySQL、MariaDB | `mysql` | grammars-v4 の `sql/mysql/Positive-Technologies` | 有効 | 広く使われる。MariaDB は MySQL と同じ読み手で読む |
 | SQLite | `sqlite` | grammars-v4 の `sql/sqlite` | 有効でない | アプリに組み込むデータベースとして広く使われる。ビュー、トリガ、テーブルを持つ |
 | SQL Server | `tsql` | bytebase/parser の `tsql`（grammars-v4 の `sql/tsql` を速くしたもの） | 有効でない | 手続きを製品のロジックとして使うことが多い |
 | Oracle | `oracle` | grammars-v4 の `sql/plsql` | 有効でない | パッケージと手続きを製品のロジックとして使うことが多い |
-| BigQuery | `bigquery` | bytebase/parser の `googlesql` | 有効でない | データの処理で使う。関数、テーブル関数、手続きを SQL で書く |
+| BigQuery | `bigquery` | bytebase/parser の `googlesql` | 有効 | データの処理で使う。関数、テーブル関数、手続きを SQL で書く |
 | Snowflake | `snowflake` | grammars-v4 の `sql/snowflake` | 有効でない | データの処理で使う。関数、手続き、タスクを SQL で書く |
 
 - どの文法も、元の文法から直したところに `hadome:` のコメントがあります（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）
-- 有効でない方言の読み手も hadome に入っています。設定でその方言を選ぶと、設定の誤り（終了コード `2`）になります
+- hadome のバイナリには、有効な方言の文法だけが入ります。有効でない方言の文法は、ビルドのタグ `sqlgrammars` を付けたときだけ入ります。試しと、その方言の読み手の単体テストに使います
+- 有効でない方言を設定で選ぶと、設定の誤り（終了コード `2`）になります。有効でない方言を印が指すファイルは、読めなかったファイルになります
+- 方言を有効にするときは、その方言の文法をすべてのビルドに入れ、設定が受け付ける方言の一覧に足します。ほかは変わりません（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）
 
 ### 方言を有効にする条件
 
-方言を有効にするのは、次の2つを、実際の公開されたコードで確かめた後です。
+方言を有効にするのは、次の2つを、実際のコードで確かめた後です。
 
 - 定義を正しく読めること。シンボルの抜けと、無いシンボルの作り出しが無いこと
 - テストの中の SQL の名指しを正しく解決できること。取り違えと見落としが無いこと
@@ -584,7 +586,7 @@ sql:
 5. テストの文字列の名前は、データベースのオブジェクトに確かに当たるときだけ `Calls` か `Reads` になる。当たるかどうか決まらないものは、未解決と数えるか、SQL でないとして読まない。推測で当てることはない
 6. 方言の決まらないファイルは、読めなかったと報告する。推測で方言を選ぶことはない
 7. 方言、オブジェクトの種類、テストの SQL を渡す言語、SQL で書いたテストの書き方を足しても、`facts` の型と `internal/adapter` が見るインターフェースは変わらない。足すのは `Dialect` か `Framework` の実装、`ObjectKind` の表の行、ほかの言語のアダプタが埋める `Test.Texts` だけである
-8. 方言は、実際の公開されたコードでの試しを通るまで有効にしない
+8. 方言は、実際のコードでの試しを通るまで有効にしない
 
 ## 意図して入れなかったもの
 

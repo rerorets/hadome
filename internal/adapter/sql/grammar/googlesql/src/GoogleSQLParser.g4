@@ -1567,24 +1567,19 @@ tvf_with_suffixes:
 	tvf_prefix_no_args RR_BRACKET_SYMBOL hint? pivot_or_unpivot_clause_and_aliases?
 	| tvf_prefix RR_BRACKET_SYMBOL hint? pivot_or_unpivot_clause_and_aliases?;
 
+// hadome: BigQuery takes QUALIFY without WHERE, GROUP BY or HAVING, so it is not an error here
 pivot_or_unpivot_clause_and_aliases:
 	AS_SYMBOL identifier
 	| identifier
 	| AS_SYMBOL identifier pivot_clause as_alias?
 	| AS_SYMBOL identifier unpivot_clause as_alias?
-	| AS_SYMBOL identifier qualify_clause_nonreserved {
-				 p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil); 
-		}
+	| AS_SYMBOL identifier qualify_clause_nonreserved
 	| identifier pivot_clause as_alias
 	| identifier unpivot_clause as_alias
-	| identifier qualify_clause_nonreserved {
-				 p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil); 
-		}
+	| identifier qualify_clause_nonreserved
 	| pivot_clause as_alias?
 	| unpivot_clause as_alias?
-	| qualify_clause_nonreserved {
-				 p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil); 
-		};
+	| qualify_clause_nonreserved;
 
 as_alias: AS_SYMBOL? identifier;
 
@@ -1663,9 +1658,10 @@ on_or_using_clause_list: on_or_using_clause+;
 
 on_or_using_clause: on_clause | using_clause;
 
+// hadome: USING names a list of columns, USING (a, b)
 using_clause:
 	USING_SYMBOL LR_BRACKET_SYMBOL identifier (
-		DOT_SYMBOL identifier
+		COMMA_SYMBOL identifier
 	)* RR_BRACKET_SYMBOL;
 
 join_hint: HASH_SYMBOL | LOOKUP_SYMBOL;
@@ -1680,21 +1676,19 @@ opt_at_system_time:
 
 opt_with_offset_and_alias: WITH_SYMBOL OFFSET_SYMBOL as_alias?;
 
+// hadome: BigQuery takes QUALIFY without WHERE, GROUP BY or HAVING, so it is not an error here
 opt_pivot_or_unpivot_clause_and_alias:
 	AS_SYMBOL identifier
 	| identifier
 	| AS_SYMBOL identifier pivot_clause as_alias?
 	| AS_SYMBOL identifier unpivot_clause as_alias?
-	| AS_SYMBOL identifier qualify_clause_nonreserved {p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil)
-		}
+	| AS_SYMBOL identifier qualify_clause_nonreserved
 	| identifier pivot_clause as_alias?
 	| identifier unpivot_clause as_alias?
-	| identifier qualify_clause_nonreserved {p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil)
-		}
+	| identifier qualify_clause_nonreserved
 	| pivot_clause as_alias?
 	| unpivot_clause as_alias?
-	| qualify_clause_nonreserved {p.NotifyErrorListeners("QUALIFY clause must be used in conjunction with WHERE or GROUP BY or HAVING clause", nil, nil)
-		};
+	| qualify_clause_nonreserved;
 
 table_path_expression_base:
 	unnest_expression
@@ -1845,8 +1839,9 @@ pivot_value_list: pivot_value (COMMA_SYMBOL pivot_value)*;
 
 pivot_value: expression as_alias?;
 
+// hadome: a table-valued function's name is followed by its opening parenthesis, ds.tvf(1)
 tvf_prefix_no_args:
-	path_expression
+	path_expression LR_BRACKET_SYMBOL
 	| IF_SYMBOL LR_BRACKET_SYMBOL;
 
 join_type:
@@ -2055,7 +2050,8 @@ comparative_operator:
 	| GT_OPERATOR
 	| GE_OPERATOR;
 
-shift_operator: KL_OPERATOR | KR_OPERATOR;
+// hadome: >> is lexed as two > (GoogleSQLLexer.g4)
+shift_operator: KL_OPERATOR | GT_OPERATOR GT_OPERATOR;
 
 additive_operator: PLUS_OPERATOR | MINUS_OPERATOR;
 
