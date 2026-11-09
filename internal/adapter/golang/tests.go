@@ -200,7 +200,7 @@ func (w *walker) collectTParams(ft *ast.FuncType, body *ast.BlockStmt) {
 }
 
 func (w *walker) visit(n ast.Node) bool {
-	if !w.visitText(n) {
+	if !w.visitText(n) || w.statement(n) {
 		return false
 	}
 	switch n := n.(type) {
@@ -225,32 +225,36 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 	case *ast.Ident:
 		w.readIdent(n)
+	}
+	return true
+}
+
+// statement walks the clauses of a loop or a branching statement, each as often as it runs, and
+// reports whether n was one.
+func (w *walker) statement(n ast.Node) bool {
+	switch n := n.(type) {
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)
-		return false
 	case *ast.RangeStmt:
 		w.inspect(n.X)
 		w.recordRange(n)
 		w.inLoop(n.Body)
-		return false
 	case *ast.IfStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Cond)
 		w.inBranch(n.Body, n.Else)
-		return false
 	case *ast.SwitchStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Tag)
 		w.inBranch(n.Body)
-		return false
 	case *ast.TypeSwitchStmt:
 		w.inspect(n.Init)
 		w.inspect(n.Assign)
 		w.inBranch(n.Body)
-		return false
 	case *ast.SelectStmt:
 		w.inBranch(n.Body)
+	default:
 		return false
 	}
 	return true

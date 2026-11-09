@@ -156,11 +156,9 @@ func precededByComment(src []byte, offset int) bool {
 var describedBy = regexp.MustCompile(`(?i)\bCOMMENT\s*=?\s*['"]|\bdescription\s*=\s*['"r]|\bMS_Description\b`)
 
 // describes reports whether the definition's statement gives the object a description: MySQL's
-// COMMENT = '…', BigQuery's OPTIONS(description = …).
+// COMMENT = '…', BigQuery's OPTIONS(description = …). The definition's lines are those of a
+// statement parsed from f, so they are always within it.
 func describes(f *sqlFile, def Definition) bool {
 	lines := strings.Split(string(f.src), "\n")
-	if def.Line < 1 || def.EndLine > len(lines) || def.EndLine < def.Line {
-		return false
-	}
 	return describedBy.MatchString(strings.Join(lines[def.Line-1:def.EndLine], "\n"))
 }

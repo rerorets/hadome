@@ -148,10 +148,8 @@ func (w *walker) stringPart(p ast.Expr, in scope, at string, depth int) (facts.T
 		if p.Kind != token.STRING {
 			return facts.Text{}, false
 		}
-		s, err := strconv.Unquote(p.Value)
-		if err != nil {
-			return facts.Text{}, false
-		}
+		// Only files that parse are walked, and the parser rejects every literal Unquote cannot read.
+		s, _ := strconv.Unquote(p.Value)
 		return facts.Text{Path: at, Line: w.line(p), Value: s}, true
 	case *ast.Ident:
 		if d, ok := in.strDecl(p.Name); ok && depth < maxDepth {

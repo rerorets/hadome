@@ -214,7 +214,7 @@ func (db *database) decided(a, b string) bool {
 
 // naturalLess compares paths with runs of digits compared as numbers: V2__ before V10__.
 func naturalLess(a, b string) bool {
-	for a != "" && b != "" {
+	for {
 		da, db := digits.FindStringIndex(a), digits.FindStringIndex(b)
 		if da == nil || db == nil || da[0] != db[0] || a[:da[0]] != b[:db[0]] {
 			return a < b
@@ -228,7 +228,6 @@ func naturalLess(a, b string) bool {
 		}
 		a, b = a[da[1]:], b[db[1]:]
 	}
-	return len(a) < len(b)
 }
 
 // schemaFor returns the schema of an unqualified definition.
