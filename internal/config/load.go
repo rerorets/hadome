@@ -48,6 +48,11 @@ type Config struct {
 	OwnDiagram *Diagram
 	// Layers are the files that were read, earliest layer first. Empty means built-in settings only.
 	Layers []string
+	// Databases are the SQL databases of sql.databases, in order. Empty means every .sql file is one
+	// database whose dialect is decided from its files.
+	Databases []Database
+	// SQLSinks are the calls that take SQL added by rules.tests.sql-sinks, by language name.
+	SQLSinks map[string][]string
 
 	raw map[string]any
 	// lines are the lines of .hadome.yml by key path (rules.size.params, rules.tests.io[0]).
@@ -82,6 +87,24 @@ func (i Invariant) Key() string {
 // ("example.com/app/store.Append"): the ID is the target, or ends with it after a path separator.
 func TargetNames(target, id string) bool {
 	return id == target || strings.HasSuffix(id, "/"+target)
+}
+
+// Database is one SQL database of sql.databases: a set of objects whose names share one namespace.
+type Database struct {
+	Name    string
+	Dialect string // empty: decided from the markers in its files
+	// Paths are globs of the database's .sql files; empty means every .sql file.
+	Paths []string
+	// SearchPath is the order unqualified names are searched in.
+	SearchPath []string
+	// DefaultSchema is the schema of unqualified definitions.
+	DefaultSchema string
+	// Catalog is the database (project) name; the database part of names is compared only when set.
+	Catalog string
+	// Order are globs giving the order the database's files are applied in.
+	Order []string
+	// Tests are globs of test files whose SQL is resolved against this database.
+	Tests []string
 }
 
 // EntryPoint names symbols a framework calls by name: a symbol whose name without its unit matches

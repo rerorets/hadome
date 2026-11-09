@@ -83,6 +83,8 @@ type Key struct {
 	Looser   Direction
 	// Identity names the fields that identify an entry of a list of objects across versions.
 	Identity []string
+	// Unique means two entries of the list may not have the same identity in one file.
+	Unique bool
 	// OmittedIsWidest means leaving the key out covers everything, so omitting it never loosens.
 	OmittedIsWidest bool
 	// OmittedIsOff means leaving the object out turns its feature off, so adding the object to a base
@@ -125,6 +127,7 @@ var MessageLanguages = []Value{
 var Languages = []Value{
 	{"go", "Go"}, {"typescript", "TypeScript and JavaScript"}, {"python", "Python"},
 	{"rust", "Rust"}, {"java", "Java"}, {"kotlin", "Kotlin"}, {"terraform", "Terraform"}, {"ansible", "Ansible"},
+	{"sql", "SQL in .sql files, and the SQL strings of tests"},
 }
 
 func stringList(name, doc, example string, looser Direction, elem ...Key) Key {
@@ -222,6 +225,7 @@ var rulesKey = Key{
 				"Write an entry as the test calls it (acme.MustEqual), or in Go as <import path>.<Name>. "+
 				"Entries can be added, never removed from the built-in table.",
 				"assertions: [acme.MustEqual]", LooserWhenAdded),
+			sqlSinksKey,
 		},
 	}, sizeKey, commentsKey, depsKey},
 }
@@ -304,6 +308,7 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 		invariantKey,
 		rulesKey,
 		filesKey,
+		sqlKey,
 		gateKey,
 		mutationKey,
 	}}

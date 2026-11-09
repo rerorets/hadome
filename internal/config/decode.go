@@ -32,6 +32,18 @@ func decode(raw map[string]any, layers []string) Config {
 	}
 	c.IO = textList(tests["io"])
 	c.Assertions = textList(tests["assertions"])
+	for lang, v := range object(tests["sql-sinks"]) {
+		if c.SQLSinks == nil {
+			c.SQLSinks = map[string][]string{}
+		}
+		c.SQLSinks[lang] = textList(v)
+	}
+	for _, v := range list(object(raw["sql"])["databases"]) {
+		m := object(v)
+		c.Databases = append(c.Databases, Database{Name: str(m["name"]), Dialect: str(m["dialect"]),
+			Paths: textList(m["paths"]), SearchPath: textList(m["search-path"]), DefaultSchema: str(m["default-schema"]),
+			Catalog: str(m["catalog"]), Order: textList(m["order"]), Tests: textList(m["tests"])})
+	}
 	if m, ok := raw["mutation"].(map[string]any); ok {
 		c.Mutation = &Mutation{Test: textList(m["test"]), Timeout: str(m["timeout"]),
 			MaxMutants: intOr(m["max-mutants"], 100), TestsSeparator: str(orDefault(m["tests-separator"], "|"))}
@@ -188,7 +200,7 @@ func diffList(out *[]Change, base, head []any, k Key, path string) {
 			*out = append(*out, Change{Key: path, Removed: id, Looser: k.Looser != LooserNever && k.Looser != LooserWhenAdded})
 		}
 	}
-	if k.Looser == LooserWhenChanged {
+	if k.Looser == LooserWhenChanged || fieldDirections(k) {
 		diffChanged(out, base, head, k, path)
 	}
 	for id := range h {
@@ -206,10 +218,56 @@ func diffChanged(out *[]Change, base, head []any, k Key, path string) {
 	}
 	for _, v := range head {
 		id := identityOf(v, *k.Elem, k.Identity)
-		if old, ok := byID[id]; ok && !reflect.DeepEqual(old, v) {
+		old, ok := byID[id]
+		switch {
+		case !ok || reflect.DeepEqual(old, v):
+		case fieldDirections(k):
+			*out = append(*out, diffEntry(object(old), object(v), *k.Elem, path, id)...)
+		default:
 			*out = append(*out, Change{Key: path, Removed: fmtValue(old), Added: fmtValue(v), Looser: true})
 		}
 	}
+}
+
+// fieldDirections reports whether the entries of a list of objects say, field by field, which
+// change loosens: an entry that keeps its identity is then compared field by field.
+func fieldDirections(k Key) bool {
+	if k.Elem == nil || k.Elem.Kind != KindObject {
+		return false
+	}
+	for _, f := range k.Elem.Fields {
+		if f.Looser != LooserNever {
+			return true
+		}
+	}
+	return false
+}
+
+// diffEntry compares two versions of one list entry field by field, each by its own direction. The
+// changes are listed under <list>.<field>, each value prefixed with the entry's identity.
+func diffEntry(base, head map[string]any, elem Key, path, id string) []Change {
+	var out []Change
+	for _, f := range elem.Fields {
+		var sub []Change
+		p := joinPath(path, f.Name)
+		switch {
+		case f.Kind == KindList:
+			diffList(&sub, list(base[f.Name]), list(head[f.Name]), f, p)
+		case !reflect.DeepEqual(base[f.Name], head[f.Name]):
+			sub = append(sub, Change{Key: p, Removed: fmtValue(base[f.Name]), Added: fmtValue(head[f.Name]),
+				Looser: f.Looser == LooserWhenChanged || f.Looser == LooserAlways})
+		}
+		for _, c := range sub {
+			if c.Removed != "" {
+				c.Removed = id + ": " + c.Removed
+			}
+			if c.Added != "" {
+				c.Added = id + ": " + c.Added
+			}
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // diffArrows compares what the diagrams allow, arrow by arrow, by the labels at their ends: a new

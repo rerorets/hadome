@@ -145,12 +145,20 @@ func (v *validator) list(n ast.Node, path string, k Key) any {
 		v.fail(n, path, fmt.Sprintf("needs at least %d entries, got %d", k.MinItems, len(seq.Values)), k)
 	}
 	out := make([]any, 0, len(seq.Values))
+	seen := map[string]bool{}
 	for i, el := range seq.Values {
 		elem := *k.Elem
 		if elem.Example == "" {
 			elem.Example = k.Example
 		}
-		out = append(out, v.value(el, fmt.Sprintf("%s[%d]", path, i), elem))
+		val := v.value(el, fmt.Sprintf("%s[%d]", path, i), elem)
+		if id := identityOf(val, elem, k.Identity); k.Unique && val != nil {
+			if seen[id] {
+				v.fail(el, fmt.Sprintf("%s[%d]", path, i), fmt.Sprintf("%s appears twice; each entry needs its own", id), k)
+			}
+			seen[id] = true
+		}
+		out = append(out, val)
 	}
 	return out
 }
