@@ -179,6 +179,15 @@ var reference = regexp.MustCompile("(?:^|[\\s(\\[`\"'・、（「『【：　])(
 func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 	var names map[string]bool // the version's file names, read at the first bare name that is not at the root
 	var ignore *gitignore     // the version's .gitignore files, read at the first missing target
+	named := func(name string) (bool, error) {
+		if names == nil {
+			var err error
+			if names, err = fileNames(in.Version.FS); err != nil {
+				return false, err
+			}
+		}
+		return names[name], nil
+	}
 	var out []engine.Finding
 	for _, l := range lines(in.Facts) {
 		for _, m := range reference.FindAllStringSubmatch(l.text, -1) {
@@ -191,13 +200,19 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 				continue
 			}
 			if !strings.Contains(ref, "/") {
-				if names == nil {
-					var err error
-					if names, err = fileNames(in.Version.FS); err != nil {
-						return nil, err
-					}
+				ok, err := named(ref)
+				if err != nil {
+					return nil, err
 				}
-				if names[ref] {
+				if ok {
+					continue
+				}
+			} else {
+				ok, err := joinedNames(in.Version.FS, ref, named)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
 					continue
 				}
 			}
@@ -216,6 +231,34 @@ func (r brokenReference) Find(in engine.Input) ([]engine.Finding, error) {
 		}
 	}
 	return out, nil
+}
+
+// joinedNames reports whether a reference is file names joined by "/" meaning "or", such as
+// README/CLAUDE.md for "README.md or CLAUDE.md": it starts with none of ./, ../ and /, its first
+// part is not a directory at the root (then it is a path through that directory), and every part
+// between the slashes is the name of a file somewhere, or is once .md is added. named reports
+// whether a file of the name exists outside the skipped directories.
+func joinedNames(fsys fs.FS, ref string, named func(string) (bool, error)) (bool, error) {
+	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") || strings.HasPrefix(ref, "/") {
+		return false, nil
+	}
+	parts := strings.Split(ref, "/")
+	if st, err := fs.Stat(fsys, parts[0]); err == nil && st.IsDir() {
+		return false, nil
+	}
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return false, nil
+		}
+		ok, err := named(part)
+		if err == nil && !ok && !strings.HasSuffix(part, ".md") {
+			ok, err = named(part + ".md")
+		}
+		if err != nil || !ok {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // fileNames returns the names of the files outside the directories the adapters skip.
