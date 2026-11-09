@@ -47,9 +47,13 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 	defer cancel()
 	pid := 0
 	var endErr error
+	var said []string // what the command said besides its leaf, to show when it said no leaf
 	out := &lines{line: func(l string) {
 		n, ok := strings.CutPrefix(l, "leaf ")
 		if !ok {
+			if l != "" && pid == 0 {
+				said = append(said, l)
+			}
 			return
 		}
 		pid, _ = strconv.Atoi(n)
@@ -68,7 +72,7 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 		t.Fatal(err)
 	}
 	if pid == 0 {
-		t.Fatal("the test command never said its leaf was ready")
+		t.Fatalf("the test command never said its leaf was ready; it said %q", said)
 	}
 	if mode != "hang" {
 		endErr = w.ended()

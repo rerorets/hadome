@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -33,8 +33,11 @@ const (
 	errPipeConnected  = syscall.Errno(535) // ERROR_PIPE_CONNECTED: the client came before the wait
 )
 
-func watchLeaf(t *testing.T) *leafWatch {
-	return &leafWatch{arg: `\\.\pipe\hadome-leaf-` + filepath.Base(t.TempDir())}
+// leaves numbers the pipes of this test binary, which tests running at once share.
+var leaves atomic.Int64
+
+func watchLeaf(*testing.T) *leafWatch {
+	return &leafWatch{arg: fmt.Sprintf(`\\.\pipe\hadome-leaf-%d-%d`, os.Getpid(), leaves.Add(1))}
 }
 
 func (w *leafWatch) seen(pid int) {
