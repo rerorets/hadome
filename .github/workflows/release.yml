@@ -121,32 +121,30 @@ jobs:
     needs: release
     if: github.event_name == 'push' && vars.PUBLISH_NPM == 'true'
     runs-on: ubuntu-24.04
-    environment: release # holds the publishing secrets; only tags v[0-9]* may deploy to it
+    environment: release # the npm trusted publishers accept only this environment; only tags v[0-9]* may deploy to it
     permissions:
-      id-token: write # npm provenance
+      id-token: write # npm trusted publishing (OIDC) and provenance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { name: release, path: dist }
+      # No registry-url: it would write an .npmrc that reads a token, and this job has none. npm
+      # trades the job's OIDC token for a short-lived one that can only stage.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          registry-url: https://registry.npmjs.org
-      - name: Build and publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          package-manager-cache: false
+      - name: Install an npm that can stage through trusted publishing
+        run: |
+          npm install -g npm@11.21.1
+          npm --version
+      # The packages are staged, not published: a maintainer approves each one with 2FA
+      # (docs/maintaining/releasing.md).
+      - name: Build and stage
         run: |
           packaging/extract.sh dist bins
           node packaging/npm/build.mjs "${VERSION#v}" bins npm
-          tag=latest
-          case "$VERSION" in *-*) tag=next ;; esac # a trial version never becomes what `npm install hadome` gets
-          # A version already on the registry is skipped, so re-running the job after a partial publish
-          # finishes it. The platform packages go first: the launcher is useless without them.
-          for dir in npm/hadome-* npm/hadome; do
-            name=$(node -p "require('./$dir/package.json').name")
-            if npm view "$name@${VERSION#v}" version >/dev/null 2>&1; then echo "skip: $name@${VERSION#v} is published"; continue; fi
-            (cd "$dir" && npm publish --provenance --access public --tag "$tag")
-          done
+          packaging/npm/stage.sh "${VERSION#v}" npm
 
   pypi:
     needs: release
