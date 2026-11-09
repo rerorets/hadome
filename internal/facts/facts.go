@@ -207,9 +207,12 @@ type Test struct {
 	// product without calling one of its functions, so what it guards cannot be named.
 	Drives bool
 	// CallsSupport is true when the test calls a function of the repository's test support code
-	// (a helper under test/, conftest.py, a testutil package). That code is no target, so a test of
-	// such a helper itself calls the repository without having a target.
+	// (a helper under test/, conftest.py, a testutil package). That code is no target.
 	CallsSupport bool
+	// TestsSupport is true when the test's file is the own test of the support code it calls: in
+	// the same directory, named like it (test/clock.test.ts for test/clock.ts), or for Go in the
+	// support package's directory. Such a test checks that support code, so it has no target.
+	TestsSupport bool
 	// Asserts counts the calls that check something: assertions, and calls that fail the test.
 	Asserts int
 	// AssertsUnknown is true when the test hands its testing tool (Go's t, Python's self) to code the

@@ -85,6 +85,7 @@ classDiagram
     +Reads int
     +Drives bool
     +CallsSupport bool
+    +TestsSupport bool
     +Asserts int
     +AssertsUnknown bool
     +Body string
@@ -184,6 +185,7 @@ Go test support packages:
 - The functions of a support package are not targets, need no doc comment for `comments/missing-doc`, and are not in the dependency diagram
 - When a test calls a function of a support package, the walk follows into it. Its calls resolve through the support package's own imports. For example, if `storetest.New(t)` calls `store.Open()`, a test calling `storetest.New(t)` guards `store.Open`
   - A test that calls a function of a support package has `Test.CallsSupport` set. So do TypeScript's and Python's support files ([adapters-treesitter.md](adapters-treesitter.md))
+  - When the test is in the support package's own directory, it is that package's own test, and `Test.TestsSupport` is set too. For example, `internal/testutil/zone_test.go` calling `testutil.Zone()`
   - A support function's result is read by its declared type. If `s := storetest.New(t)` gives a `*store.Store`, `s.Append()` calls `store.Store.Append`
   - Methods of types declared in a support package are not followed. A call of one counts as unresolved
   - Hazards inside (clock, sleep, mock) are the test's, reported at the lines of the support package's file

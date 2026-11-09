@@ -85,6 +85,7 @@ classDiagram
     +Reads int
     +Drives bool
     +CallsSupport bool
+    +TestsSupport bool
     +Asserts int
     +AssertsUnknown bool
     +Body string
@@ -186,6 +187,7 @@ Go のテストの補助のパッケージ:
 - 補助のパッケージの関数は、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません
 - テストが補助のパッケージの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のパッケージ自身の import で解決します。例: `storetest.New(t)` が `store.Open()` を呼ぶなら、`storetest.New(t)` を呼ぶテストは `store.Open` を守ります
   - 補助のパッケージの関数を呼んだテストは、`Test.CallsSupport` を真にします。TypeScript と Python の補助のファイルも同じです（[adapters-treesitter.ja.md](adapters-treesitter.ja.md)）
+  - そのテストが補助のパッケージと同じディレクトリにあれば、そのパッケージ自身のテストとして `Test.TestsSupport` も真にします。例: `internal/testutil/zone_test.go` が `testutil.Zone()` を呼ぶとき
   - 補助のパッケージの関数の結果は、宣言した型で読みます。`s := storetest.New(t)` の結果が `*store.Store` なら、`s.Append()` は `store.Store.Append` を呼びます
   - 補助のパッケージで宣言した型のメソッドは、たどりません。呼ぶと未解決と数えます
   - 中の危険（時計、待ち、モック）は、そのテストのものとして、補助のパッケージのファイルの行で報告します

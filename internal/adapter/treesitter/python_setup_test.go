@@ -278,21 +278,19 @@ TestSetupWins.test_add calls=[src/app/store.Ledger.add] unresolved=0`)
 // viewpoint: behaviour
 // target: the Python and TypeScript readers
 // A test that calls a function of a test support file is marked as calling support code, whether
-// or not that function reaches the product; a test that calls none is not.
+// or not that function reaches the product; a test that calls none is not. Only a test whose file
+// is that support file's own test (same directory, same name without the test marker) is marked as
+// testing it; a test in another file, or in a file named after something else, is not.
 func TestTestsThatCallSupportCodeAreMarked(t *testing.T) {
 	marked := func(a []string) string {
 		var out []string
 		for _, ts := range analyze(t, a[0], tree(a[1:]...)).Tests {
-			out = append(out, fmt.Sprintf("%s support=%v", ts.Name, ts.CallsSupport))
+			out = append(out, fmt.Sprintf("%s support=%v own=%v", ts.Name, ts.CallsSupport, ts.TestsSupport))
 		}
 		sort.Strings(out)
 		return strings.Join(out, "\n")
 	}
-	expect(t, marked([]string{"python",
-		"src/app/__init__.py", "",
-		"src/app/store.py", "def rows():\n    return [1]\n",
-		"tests/helpers.py", "import os\n\n\ndef force_zone(zone):\n    os.environ[\"TZ\"] = zone\n",
-		"tests/test_helpers_itself.py", `import os
+	pyTest := `import os
 
 from tests.helpers import force_zone
 from app.store import rows
@@ -305,11 +303,18 @@ def test_zone():
 
 def test_rows():
     assert rows() == [1]
-`}), "test_rows support=false\ntest_zone support=true")
-	expect(t, marked([]string{"typescript",
-		"src/rows.ts", "export function rows() { return [1]; }\n",
-		"test/clock.ts", "export function forceZone(zone: string) { process.env.TZ = zone; }\n",
-		"test/clock.test.ts", `import { forceZone } from "./clock";
+`
+	expect(t, marked([]string{"python",
+		"src/app/__init__.py", "",
+		"src/app/store.py", "def rows():\n    return [1]\n",
+		"tests/helpers.py", "import os\n\n\ndef force_zone(zone):\n    os.environ[\"TZ\"] = zone\n",
+		"tests/test_helpers.py", pyTest,
+		"tests/test_store.py", strings.ReplaceAll(pyTest, "def test_", "def test_store_"),
+	}), `test_rows support=false own=false
+test_store_rows support=false own=false
+test_store_zone support=true own=false
+test_zone support=true own=true`)
+	tsTest := `import { forceZone } from "./clock";
 import { rows } from "../src/rows";
 
 it("sets the zone", () => {
@@ -320,7 +325,16 @@ it("sets the zone", () => {
 it("lists rows", () => {
   expect(rows()).toEqual([1]);
 });
-`}), "lists rows support=false\nsets the zone support=true")
+`
+	expect(t, marked([]string{"typescript",
+		"src/rows.ts", "export function rows() { return [1]; }\n",
+		"test/clock.ts", "export function forceZone(zone: string) { process.env.TZ = zone; }\n",
+		"test/clock.test.ts", tsTest,
+		"test/rows.test.ts", strings.ReplaceAll(tsTest, `it("`, `it("rows `),
+	}), `lists rows support=false own=false
+rows lists rows support=false own=false
+rows sets the zone support=true own=false
+sets the zone support=true own=true`)
 }
 
 // viewpoint: behaviour

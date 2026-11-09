@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"path"
 	"sort"
 	"strings"
 
@@ -280,6 +281,33 @@ func (t *testFacts) fingerprint(nodes []*sitter.Node, name *sitter.Node, context
 		}
 	}
 	t.test.Body = facts.Fingerprint(toks)
+}
+
+// callsSupport records that the test calls a function of the support file at support, and whether
+// the test's file is that support file's own test: in the same directory, with the same name once
+// the test marker is left out (clock.test.ts and test_clock.py for clock.ts and clock.py).
+func (t *testFacts) callsSupport(support string) {
+	t.test.CallsSupport = true
+	if path.Dir(t.test.Path) == path.Dir(support) && testedName(path.Base(t.test.Path)) == stemOf(path.Base(support)) {
+		t.test.TestsSupport = true
+	}
+}
+
+// stemOf is a file name without its extension.
+func stemOf(name string) string {
+	return strings.TrimSuffix(name, path.Ext(name))
+}
+
+// testedName is the name of the file a test file is named after: its stem without the test
+// marker (.test, .spec, _test, or a test_ prefix).
+func testedName(name string) string {
+	stem := stemOf(name)
+	for _, suffix := range []string{".test", ".spec", "_test"} {
+		if s, ok := strings.CutSuffix(stem, suffix); ok {
+			return s
+		}
+	}
+	return strings.TrimPrefix(stem, "test_")
 }
 
 // codeIn is a node with the file that holds it.
