@@ -31,11 +31,13 @@ func (t *trace) usesUnit(p string) {
 	}
 }
 
-// routeMethods are the names of the calls that register a handler for a path: net/http's ServeMux
-// and the routers built like it.
+// routeMethods are the names of the calls that register a handler with a string: a path for
+// net/http's ServeMux and the routers built like it, a task type for asynq's ServeMux, a subject
+// for NATS's Subscribe and QueueSubscribe, a schedule for robfig/cron's AddFunc.
 var routeMethods = map[string]bool{"Handle": true, "HandleFunc": true, "Get": true, "Post": true, "Put": true,
 	"Patch": true, "Delete": true, "Head": true, "Options": true, "Method": true, "MethodFunc": true, "Any": true,
-	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
+	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
+	"Subscribe": true, "QueueSubscribe": true, "AddFunc": true}
 
 // route records the handlers a call registers with a string path: mux.HandleFunc("/orders",
 // h.CreateOrder). A function or method named there is an entry point; a function literal written
@@ -133,7 +135,7 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 			continue
 		}
 		s := &syms[i]
-		s.Traced, s.IO, s.Calls = true, t.io, callIDs(w)
+		s.IO, s.Calls = t.io, callIDs(w)
 		for u := range t.units {
 			if u != pf.pkgPath {
 				s.Units = append(s.Units, u)

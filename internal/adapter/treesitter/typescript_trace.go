@@ -5,7 +5,6 @@ package treesitter
 import (
 	"path"
 	"regexp"
-	"sort"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -15,11 +14,6 @@ import (
 
 // What the functions of TypeScript product code reach, and the entry points that can be retried
 // (docs/design/suggest.md, "Conditions of idempotent").
-
-// tracer is a reader that also fills in Symbol.Calls, Units and IO and lists Analysis.Entries.
-type tracer interface {
-	trace(files []*file, t *tables, a *facts.Analysis)
-}
 
 // tsImported is what a name imported at the top of a file stands for.
 type tsImported struct {
@@ -35,13 +29,6 @@ type tsTrace struct {
 	bindings map[string]tsImported
 	top      map[string]*sitter.Node // names declared at the top of the file, and their declarations
 	funcs    map[string]bool         // the IDs of the version's functions and methods
-}
-
-// reached is what a piece of code reaches.
-type reached struct {
-	io    bool
-	calls map[string]bool
-	units map[string]bool
 }
 
 func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
@@ -66,19 +53,10 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			}
 			got := tr.reach(body)
 			s := &a.Symbols[i]
-			s.Traced, s.IO, s.Calls, s.Units = true, got.io, keys(got.calls), keys(got.units)
+			s.IO, s.Calls, s.Units = got.io, keys(got.calls), keys(got.units)
 		}
 		a.Entries = append(a.Entries, tr.entries()...)
 	}
-}
-
-func keys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // bind reads the imports and the top-level declarations of the file.
@@ -174,7 +152,7 @@ func (tr *tsTrace) bodies() map[string]*sitter.Node {
 // A value declared at the top of the file (const db = drizzle(pool)) gives what its initial value
 // reaches.
 func (tr *tsTrace) reach(n *sitter.Node) reached {
-	got := reached{calls: map[string]bool{}, units: map[string]bool{}}
+	got := newReached()
 	tr.reachInto(n, &got, true)
 	return got
 }
@@ -185,7 +163,7 @@ func (tr *tsTrace) reachInto(n *sitter.Node, got *reached, values bool) {
 		if tsGlobalIO(f, x) != "" {
 			got.io = true
 		}
-		if x.Kind() != "identifier" {
+		if x.Kind() != "identifier" && x.Kind() != "shorthand_property_identifier" {
 			return true
 		}
 		name := f.text(x)
@@ -234,7 +212,10 @@ var (
 	tsNextRoute    = regexp.MustCompile(`(^|/)app/(.+/)?route\.[cm]?[jt]sx?$`)
 	tsNextAPI      = regexp.MustCompile(`(^|/)pages/api/`)
 	tsHTTPVerbs    = set("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD")
-	tsRouteMethods = set("get", "post", "put", "patch", "delete", "all", "use", "on")
+	tsRouteMethods = set("get", "post", "put", "patch", "delete", "all", "use", "on", "schedule", "consume")
+	// tsConsumerKeys are the options that hand a consumer its handler: kafkajs's run({ eachMessage })
+	// and sqs-consumer's Consumer.create({ handleMessage }).
+	tsConsumerKeys = set("eachMessage", "eachBatch", "handleMessage", "handleMessageBatch")
 )
 
 // entries lists the entry points of the file: the exports a framework serves by their file's name,
@@ -261,8 +242,15 @@ func (tr *tsTrace) entries() []facts.Entry {
 		}
 	}
 	walk(f.root, func(x *sitter.Node) bool {
-		if x.Kind() == "call_expression" {
+		switch x.Kind() {
+		case "call_expression":
 			out = append(out, tr.route(x)...)
+			out = append(out, tr.consumer(x)...)
+		case "new_expression": // BullMQ's new Worker('orders', processor)
+			args := arguments(x.ChildByFieldName("arguments"))
+			if f.field(x, "constructor") == "Worker" && len(args) >= 2 && args[0].Kind() == "string" {
+				out = append(out, tr.handler(args[1])...)
+			}
 		}
 		return true
 	})
@@ -325,13 +313,46 @@ func (tr *tsTrace) route(call *sitter.Node) []facts.Entry {
 	return out
 }
 
+// consumer returns the handlers a queue consumer is given: Bull's queue.process(handler) and the
+// handler options of kafkajs and sqs-consumer.
+func (tr *tsTrace) consumer(call *sitter.Node) []facts.Entry {
+	f := tr.f
+	fn := call.ChildByFieldName("function")
+	if fn == nil || fn.Kind() != "member_expression" {
+		return nil
+	}
+	var out []facts.Entry
+	args := arguments(call.ChildByFieldName("arguments"))
+	switch f.field(fn, "property") {
+	case "process":
+		for _, a := range args {
+			out = append(out, tr.handler(a)...)
+		}
+	case "run", "create":
+		for _, a := range args {
+			if a.Kind() != "object" {
+				continue
+			}
+			for _, p := range named(a) {
+				if p.Kind() == "pair" && tsConsumerKeys[f.field(p, "key")] {
+					out = append(out, tr.handler(p.ChildByFieldName("value"))...)
+				}
+				if p.Kind() == "shorthand_property_identifier" && tsConsumerKeys[f.text(p)] {
+					out = append(out, tr.handler(p)...)
+				}
+			}
+		}
+	}
+	return out
+}
+
 // handler returns the entry a handler value is: a function of the repository it names, or the code
 // of a function written in place. Anything else is no entry.
 func (tr *tsTrace) handler(a *sitter.Node) []facts.Entry {
 	switch a.Kind() {
 	case "arrow_function", "function_expression", "function":
 		return []facts.Entry{{Path: tr.f.path, Line: line(a), Calls: keys(tr.reach(a).calls)}}
-	case "identifier":
+	case "identifier", "shorthand_property_identifier":
 		got := tr.reach(a)
 		var out []facts.Entry
 		for _, id := range keys(got.calls) {

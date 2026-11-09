@@ -168,6 +168,30 @@ func TestIdempotentCandidatesAreReachedFromAnEntryPoint(t *testing.T) {
 
 // viewpoint: behaviour
 // target: suggest.Candidates
+// Go's queue subscriptions and schedules are entry points: a function given to NATS's Subscribe or
+// QueueSubscribe with a subject, or to robfig/cron's AddFunc with a schedule.
+func TestGoQueueConsumersAndSchedulesAreEntryPoints(t *testing.T) {
+	got := goCandidates(t, map[string]string{
+		"store/store.go": "package store\n\nimport \"database/sql\"\n\nvar db *sql.DB\n\n" +
+			"func CreateInvoice() { _, _ = db.Exec(\"insert\") }\n" +
+			"func AddReminder() { _, _ = db.Exec(\"insert\") }\n" +
+			"func InsertDigest() { _, _ = db.Exec(\"insert\") }\n" +
+			"func CreateUnused() { _, _ = db.Exec(\"insert\") }\n",
+		"jobs/jobs.go": "package jobs\n\nimport \"example.com/app/store\"\n\n" +
+			"type conn interface{ Subscribe(string, func()) }\n\n" +
+			"func Start(nc conn, q interface{ QueueSubscribe(string, string, func()) }, c interface{ AddFunc(string, func()) }) {\n" +
+			"\tnc.Subscribe(\"invoices\", store.CreateInvoice)\n" +
+			"\tq.QueueSubscribe(\"reminders\", \"workers\", store.AddReminder)\n" +
+			"\tc.AddFunc(\"@daily\", func() { store.InsertDigest() })\n}\n",
+	})
+	want := "idempotent store.AddReminder\nidempotent store.CreateInvoice\nidempotent store.InsertDigest"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: suggest.Candidates
 // Two candidates whose targets would read the same (store.DeleteRow in shops/store and in
 // orders/store) are written with the shortest paths that tell them apart, so they stay two.
 func TestCandidatesThatWouldReadTheSameAreToldApart(t *testing.T) {

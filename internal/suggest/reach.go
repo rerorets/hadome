@@ -11,17 +11,13 @@ import (
 type reach struct {
 	io      map[string]bool // function IDs that reach input or output
 	unitIO  map[string]bool // units that reach input or output through their imports
-	unitOf  map[string]string
 	reached map[string]bool // function IDs an entry point reaches
 	entries bool            // whether the version has any entry point
 }
 
 func newReach(a *facts.Analysis) *reach {
-	r := &reach{io: map[string]bool{}, unitIO: unitsReachingIO(a), unitOf: map[string]string{},
+	r := &reach{io: map[string]bool{}, unitIO: unitsReachingIO(a),
 		reached: map[string]bool{}, entries: len(a.Entries) > 0}
-	for _, f := range a.Files {
-		r.unitOf[f.Path] = f.Unit
-	}
 	syms := map[string]facts.Symbol{}
 	for _, s := range a.Symbols {
 		if s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod {
@@ -45,7 +41,7 @@ func (r *reach) spreadIO(syms map[string]facts.Symbol) {
 	for changed := true; changed; {
 		changed = false
 		for _, s := range syms {
-			if !r.io[s.ID] && s.Traced && slices.ContainsFunc(s.Calls, func(c string) bool { return r.io[c] }) {
+			if !r.io[s.ID] && slices.ContainsFunc(s.Calls, func(c string) bool { return r.io[c] }) {
 				r.io[s.ID], changed = true, true
 			}
 		}
@@ -72,11 +68,8 @@ func (r *reach) fromEntries(entries []facts.Entry, syms map[string]facts.Symbol)
 }
 
 // ownIO reports whether a function reaches input or output without looking at the functions it
-// calls. A function the adapter did not trace is decided by its unit.
+// calls.
 func (r *reach) ownIO(s facts.Symbol) bool {
-	if !s.Traced {
-		return r.unitIO[r.unitOf[s.Path]]
-	}
 	if s.IO {
 		return true
 	}
@@ -89,9 +82,9 @@ func (r *reach) ownIO(s facts.Symbol) bool {
 }
 
 // retried reports whether a symbol reaches input or output and, when the version has an entry
-// point and the symbol was traced, whether an entry point reaches it.
+// point, whether an entry point reaches it.
 func (r *reach) retried(s facts.Symbol) bool {
-	return r.io[s.ID] && (!s.Traced || !r.entries || r.reached[s.ID])
+	return r.io[s.ID] && (!r.entries || r.reached[s.ID])
 }
 
 // unitsReachingIO are the units that import something that does input or output, or import a unit

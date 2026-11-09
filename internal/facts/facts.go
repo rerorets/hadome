@@ -153,9 +153,6 @@ type Symbol struct {
 	Nested []Nested
 	// Methods counts the methods of an interface.
 	Methods int
-	// Traced is true when the adapter read Calls, Units and IO of a function or method. Without
-	// it they say nothing, not that the function calls nothing.
-	Traced bool
 	// Calls are the IDs of the repository's functions and methods the body calls, as far as the
 	// adapter can tell which one is called.
 	Calls []string

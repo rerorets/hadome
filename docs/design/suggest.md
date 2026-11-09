@@ -52,33 +52,53 @@ Deciding by the name alone makes functions that only return a value candidates t
 
 - Example: a `CreateOrder` that a handler calls and that writes to the database is a candidate
 - Example: a `createAuthCookie` that only builds a value fails (b), so it is not a candidate
-- Example: a `Register` that only registers routes fails (b) too, so it is not a candidate
+- Example: a `Register` that only registers routes fails (b) too, so it is not a candidate. A call that registers a route or a subscription is not input or output
 - **A repository with no entry point**: in a repository with no recognisable entry point at all, such as a library, (a) and (b) alone decide
+- The three conditions mean the same in every language hadome reads
 
-**What does input or output**: the same knowledge `tests/purity-lost` uses ([adapters.md](adapters.md)'s io table, and the configuration's `io`).
+**What does input or output**: the same knowledge `tests/purity-lost` uses ([adapters.md](adapters.md)'s io table, and the configuration's `io`). A body reaches input or output when it uses one of these.
 
-| Language | What reaches input or output when the body uses it |
+| Language | What reaches input or output |
 |---|---|
-| Go | A function of a package in the io table (`sql.Open`, `http.Get`). A method of a value whose type is from a package in the io table (`s.db.ExecContext(…)` when the field is a `*sql.DB`). A variable of another package of the repository, when that package reaches input or output |
-| TypeScript | A name imported from a package in the io table. A global input or output API (`fetch` and the like). A value that is not a function (such as `db`), imported from a module of the repository whose unit reaches input or output |
+| Go | A function of a package in the io table (`sql.Open`, `http.Get`). A method of a value whose type is from a package in the io table (`s.db.ExecContext(…)` when the field is a `*sql.DB`) |
+| TypeScript | A name imported from a package in the io table. A global input or output API (`fetch` and the like) |
+| Python | A name imported from a module in the io table (`psycopg.connect`) |
+| Java, Kotlin | A static method of a class imported from a package in the io table, and a method of a value of such a type (a field typed `JdbcTemplate` or `Connection`) |
+| Rust | A path into a crate in the io table (`sqlx::query`) and the names `use` brings in from one. A method of a value of such a type |
 
+- In every language, using a value of a unit of the repository reaches input or output when that unit does. A value is anything but a function: a variable, a constant, a value of a class or interface that declares no such function. For example, TypeScript's `db`, or a value of a Spring Data repository interface
 - A unit reaches input or output when it has an import that does input or output, or when imports lead from it to a unit of the repository that has one
-- **Calls hadome can follow**: in Go, the calls whose callee is identified the way a test's call targets are (functions, and methods of values of declared types). In TypeScript, calls of imported names and of names declared at the top of the file. Only the name is looked at, even when a local variable hides it
+- Using a value declared at the top of the file (`const db = drizzle(pool)`, a Python module variable, a Kotlin top-level property, a Rust `const` or `static`) also uses what its initial value uses
 
-**Entry points that can be retried**: the ones recognisable from the syntax alone.
+**Calls hadome can follow**: calls whose callee the syntax decides as one function.
+
+| Language | Calls it follows |
+|---|---|
+| Go | The calls whose callee is identified the way a test's call targets are (functions, and methods of values of declared types) |
+| TypeScript | Calls of imported names and of names declared at the top of the file |
+| Python | Calls of imported names and of names the module declares. Methods on `self` and `cls`. Methods of an object made in place (`Ledger().submit(…)`) |
+| Java, Kotlin | Methods of the same class. Methods of fields, parameters and locals of declared types (constructor properties included). Static methods of imported classes and of classes of the same package. Methods of an object made with `new`. Kotlin's top-level functions |
+| Rust | Functions of the same module. Names and paths brought in with `use` (`crate::store::append`). `Self::f` and methods on `self`. Methods of parameters, locals and struct fields of declared types |
+
+- In TypeScript and Python only the name is looked at: a local variable that hides an imported name is still read as that name
+
+**Entry points that can be retried**: the ones recognisable from the syntax. They are HTTP handlers, queue consumers and scheduled jobs.
 
 | Language | Entry points |
 |---|---|
-| Go | Functions and methods whose parameters are `(http.ResponseWriter, *http.Request)` (the shape of `ServeHTTP` and `http.HandlerFunc`). Functions handed to `Handle`, `HandleFunc`, `Get`, `Post`, `Put`, `Patch`, `Delete` and the like together with a string path (`mux.HandleFunc("/orders", h.CreateOrder)`), and function literals written there |
-| TypeScript | `GET`, `POST` and the like exported by SvelteKit's `+server.*`, and `load` and `actions` of `+page.server.*` and `+layout.server.*`. `GET`, `POST` and the like exported by a Next.js `route.*` under `app/`, and the default export under `pages/api/`. The functions exported by a file that starts with `'use server'`. Functions handed to `get`, `post`, `put`, `patch`, `delete`, `all`, `use` or `on` together with a string path in Express, Hono and the like (`app.post('/orders', createOrder)`), and functions written there |
+| Go | Functions and methods whose parameters are `(http.ResponseWriter, *http.Request)` (the shape of `ServeHTTP` and `http.HandlerFunc`). Functions handed with a string to `Handle`, `HandleFunc`, `Get`, `Post`, `Put`, `Patch`, `Delete` and the like (`mux.HandleFunc("/orders", h.CreateOrder)`, asynq's `mux.HandleFunc("email:send", h)`). Functions handed to NATS's `Subscribe` and `QueueSubscribe` and to robfig/cron's `AddFunc`. Function literals written there |
+| TypeScript | `GET`, `POST` and the like exported by SvelteKit's `+server.*`, and `load` and `actions` of `+page.server.*` and `+layout.server.*`. `GET`, `POST` and the like exported by a Next.js `route.*` under `app/`, and the default export under `pages/api/`. The functions exported by a file that starts with `'use server'`. Functions handed with a string to `get`, `post`, `put`, `patch`, `delete`, `all`, `use` or `on` in Express, Hono and the like (`app.post('/orders', createOrder)`). Functions handed to node-cron's `schedule`, amqplib's `consume`, BullMQ's `new Worker('name', fn)`, Bull's `process`, kafkajs's `eachMessage` and `eachBatch`, and sqs-consumer's `handleMessage` and `handleMessageBatch`. Functions written there |
+| Python | Decorators written with a path (`@app.route`, `@app.get`, `post` and the like, `@router.post`, `@app.api_route`). `@shared_task`, `@app.task`, `@periodic_task`, `@scheduler.scheduled_job`, `@api_view`, and Dramatiq's `@actor`. View functions handed to Django's `path`, `re_path` and `url`, and the methods of a class given with `as_view()`. The methods of a view set handed to `router.register` |
+| Java, Kotlin | Spring's `@GetMapping`, `@PostMapping`, `@PutMapping`, `@PatchMapping`, `@DeleteMapping` and `@RequestMapping`. JAX-RS's `@GET`, `@POST`, `@PUT`, `@PATCH` and `@DELETE`. Methods with `@KafkaListener`, `@RabbitListener`, `@JmsListener`, `@SqsListener`, `@Scheduled` or Quarkus's `@Incoming`. Lambdas handed to Ktor's `get`, `post`, `put`, `patch`, `delete`, `head` and `options` in Kotlin |
+| Rust | Functions with an actix-web or Rocket attribute (`#[get("/")]`, `#[post(…)]` and the like). Functions and closures handed to axum's `route("/orders", post(create))`. Functions handed to actix-web's `.to(create)` |
 
 - Entry code that is not a symbol, such as the `actions` object or a function written next to a path, counts the calls in it as reached from an entry point
 
 **Deliberately left out**:
 
-- Entry points and per-function calls of Python, Java, Kotlin and Rust. In these languages (b) is decided by the unit: it holds when the symbol's unit reaches input or output. (c) is not looked at. hadome does not read per-function calls of these languages as facts yet
-- Queue consumers and scheduled jobs in Go and TypeScript. They have no fixed shape to recognise in the syntax
+- Queue consumers and scheduled jobs with no fixed form in the syntax. For example, code that receives messages in a loop, jobs registered in a configuration file, and Rust's consumers. The syntax alone cannot decide which function is the entry point. A repository whose only entry points are of this kind is decided by (a) and (b), as one with no entry point
 - Where calls of interface values, and of functions received as parameters, go. The syntax does not decide it
+- Methods of Python values without a type annotation (`self.repo.save(…)`). The syntax does not decide whose class the value is
 
 ### Where candidates appear
 

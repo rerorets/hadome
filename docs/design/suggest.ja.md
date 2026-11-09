@@ -57,33 +57,53 @@
 
 - 例: ハンドラから呼ばれ、DB に書く `CreateOrder` は候補です
 - 例: 値だけを作る `createAuthCookie` は、(b) を満たさないので候補になりません
-- 例: ルートを登録するだけの `Register` も、(b) を満たさないので候補になりません
+- 例: ルートを登録するだけの `Register` も、(b) を満たさないので候補になりません。ルートや購読を登録する呼び出しは、入出力に数えません
 - **入口が1つも無いリポジトリ**: ライブラリのように、見分けられる入口が1つも無いリポジトリでは、(a) と (b) だけで決めます
+- 3つの条件は、hadome が読むどの言語でも同じ意味です
 
-**入出力をするもの**: `tests/purity-lost` と同じ知識を使います（[adapters.ja.md](adapters.ja.md) の io の表と、設定の `io`）。
+**入出力をするもの**: `tests/purity-lost` と同じ知識を使います（[adapters.ja.md](adapters.ja.md) の io の表と、設定の `io`）。本体が次のものを使うと、入出力に届きます。
 
-| 言語 | 本体が使うと入出力に届くもの |
+| 言語 | 入出力に届くもの |
 |---|---|
-| Go | io の表にあるパッケージの関数（`sql.Open`、`http.Get`）。io の表にあるパッケージの型の値のメソッド（フィールドが `*sql.DB` なら `s.db.ExecContext(…)`）。リポジトリのほかのパッケージの変数で、そのパッケージが入出力に届くもの |
-| TypeScript | io の表にあるパッケージから import した名前。グローバルの入出力の API（`fetch` など）。リポジトリのモジュールから import した、関数でない値（`db` など）で、そのユニットが入出力に届くもの |
+| Go | io の表にあるパッケージの関数（`sql.Open`、`http.Get`）。io の表にあるパッケージの型の値のメソッド（フィールドが `*sql.DB` なら `s.db.ExecContext(…)`） |
+| TypeScript | io の表にあるパッケージから import した名前。グローバルの入出力の API（`fetch` など） |
+| Python | io の表にあるモジュールから import した名前（`psycopg.connect`） |
+| Java、Kotlin | io の表にあるパッケージから import したクラスの、静的なメソッドと、その型の値のメソッド（フィールドが `JdbcTemplate` や `Connection` のとき） |
+| Rust | io の表にあるクレートのパス（`sqlx::query`）と、そこから `use` した名前。その型の値のメソッド |
 
+- どの言語でも、リポジトリのユニットの値を使うと、そのユニットが入出力に届くときは入出力に届きます。値とは、関数でないもの（変数、定数、関数を宣言していないクラスやインターフェースの値）です。例: TypeScript の `db`、Spring Data のリポジトリのインターフェースの値
 - ユニットが入出力に届くとは、ユニットが入出力をする import を持つか、それを持つリポジトリのユニットを import でたどれることです
-- **たどれる呼び出し**: Go では、テストの呼び出し先と同じ読み方で特定できる呼び出しです（関数、宣言した型の値のメソッド）。TypeScript では、import した名前とファイルの直下で宣言した名前の呼び出しです。ローカルの変数が同じ名前を隠していても、名前だけで見ます
+- ファイルの直下で宣言した値（`const db = drizzle(pool)`、Python のモジュールの変数、Kotlin のトップレベルのプロパティ、Rust の `const` と `static`）を使うと、その初期値が使うものも使うと数えます
 
-**やり直されうる入口**: 構文だけで見分けられるものです。
+**たどれる呼び出し**: 呼んだ先の関数を、構文から1つに決められる呼び出しです。
+
+| 言語 | たどれる呼び出し |
+|---|---|
+| Go | テストの呼び出し先と同じ読み方で特定できるもの（関数、宣言した型の値のメソッド） |
+| TypeScript | import した名前と、ファイルの直下で宣言した名前の呼び出し |
+| Python | import した名前と、モジュールで宣言した名前の呼び出し。`self`・`cls` のメソッド。その場で作ったオブジェクトのメソッド（`Ledger().submit(…)`） |
+| Java、Kotlin | 同じクラスのメソッド。宣言した型を持つフィールド、引数、ローカル変数のメソッド（コンストラクタの引数のプロパティも含む）。import したクラスと同じパッケージのクラスの静的なメソッド。`new` で作ったオブジェクトのメソッド。Kotlin のトップレベルの関数 |
+| Rust | 同じモジュールの関数。`use` した名前とパス（`crate::store::append`）。`Self::f` と `self` のメソッド。宣言した型を持つ引数、ローカル変数、構造体のフィールドのメソッド |
+
+- TypeScript と Python では、名前だけで見ます。ローカルの変数が同じ名前を隠していても、import した名前として読みます
+
+**やり直されうる入口**: 構文で見分けられるものです。HTTP のハンドラ、キューの消費者、定期的に走るジョブです。
 
 | 言語 | 入口 |
 |---|---|
-| Go | 引数が `(http.ResponseWriter, *http.Request)` の関数とメソッド（`ServeHTTP` と `http.HandlerFunc` の形）。`Handle`・`HandleFunc`・`Get`・`Post`・`Put`・`Patch`・`Delete` などで、文字列のパスと一緒に渡した関数（`mux.HandleFunc("/orders", h.CreateOrder)`）と、そこに書いた関数リテラル |
-| TypeScript | SvelteKit の `+server.*` が export する `GET`・`POST` などと、`+page.server.*`・`+layout.server.*` の `load` と `actions`。Next.js の `app/` の `route.*` が export する `GET`・`POST` などと、`pages/api/` の default export。`'use server'` で始まるファイルが export する関数。Express・Hono などで、文字列のパスと一緒に `get`・`post`・`put`・`patch`・`delete`・`all`・`use`・`on` に渡した関数（`app.post('/orders', createOrder)`）と、そこに書いた関数 |
+| Go | 引数が `(http.ResponseWriter, *http.Request)` の関数とメソッド（`ServeHTTP` と `http.HandlerFunc` の形）。文字列と一緒に `Handle`・`HandleFunc`・`Get`・`Post`・`Put`・`Patch`・`Delete` などに渡した関数（`mux.HandleFunc("/orders", h.CreateOrder)`、asynq の `mux.HandleFunc("email:send", h)`）。NATS の `Subscribe`・`QueueSubscribe`、robfig/cron の `AddFunc` に渡した関数。そこに書いた関数リテラル |
+| TypeScript | SvelteKit の `+server.*` が export する `GET`・`POST` などと、`+page.server.*`・`+layout.server.*` の `load` と `actions`。Next.js の `app/` の `route.*` が export する `GET`・`POST` などと、`pages/api/` の default export。`'use server'` で始まるファイルが export する関数。Express・Hono などで、文字列と一緒に `get`・`post`・`put`・`patch`・`delete`・`all`・`use`・`on` に渡した関数（`app.post('/orders', createOrder)`）。node-cron の `schedule`、amqplib の `consume`、BullMQ の `new Worker('name', fn)`、Bull の `process`、kafkajs の `eachMessage`・`eachBatch`、sqs-consumer の `handleMessage`・`handleMessageBatch` に渡した関数。そこに書いた関数 |
+| Python | パスと一緒に書いたデコレータ（`@app.route`、`@app.get`・`post` など、`@router.post`、`@app.api_route`）。`@shared_task`、`@app.task`、`@periodic_task`、`@scheduler.scheduled_job`、`@api_view`、Dramatiq の `@actor`。Django の `path`・`re_path`・`url` に渡したビュー関数と、`as_view()` のクラスのメソッド。`router.register` に渡したビューセットのメソッド |
+| Java、Kotlin | Spring の `@GetMapping`・`@PostMapping`・`@PutMapping`・`@PatchMapping`・`@DeleteMapping`・`@RequestMapping`。JAX-RS の `@GET`・`@POST`・`@PUT`・`@PATCH`・`@DELETE`。`@KafkaListener`・`@RabbitListener`・`@JmsListener`・`@SqsListener`・`@Scheduled`・Quarkus の `@Incoming` が付いたメソッド。Kotlin の Ktor の `get`・`post`・`put`・`patch`・`delete`・`head`・`options` に渡したラムダ |
+| Rust | actix-web と Rocket の属性（`#[get("/")]`、`#[post(…)]` など）が付いた関数。axum の `route("/orders", post(create))` で渡した関数とクロージャ。actix-web の `.to(create)` で渡した関数 |
 
 - `actions` のオブジェクトや、パスと一緒に書いた関数のように、シンボルでない入口のコードは、その中の呼び出しを入口から届くものとして数えます
 
 **意図して入れなかったもの**:
 
-- Python、Java、Kotlin、Rust の入口と、関数ごとの呼び出し。これらの言語では、(b) をユニットで決めます。シンボルのユニットが入出力に届けば満たすとします。(c) は見ません。関数ごとの呼び出しを、まだ事実として読んでいないからです
-- Go と TypeScript のキューの消費者と、定期的に走るジョブ。構文で見分ける決まった形が無いためです
+- 構文に決まった形が無いキューの消費者と定期ジョブ。例: ループの中でメッセージを受け取るコード、設定ファイルで登録するジョブ、Rust の消費者。どの関数が入口かを、構文だけでは決められないからです。こうした入口しか無いリポジトリは、入口が無いものとして (a) と (b) で決めます
 - インターフェースの値や、引数で受け取った関数の呼び出しの先。どこへ行くかは、構文では決まりません
+- 型の注釈の無い Python の値のメソッド（`self.repo.save(…)`）。どのクラスの値かは、構文では決まりません
 
 ### 候補が出る場所
 

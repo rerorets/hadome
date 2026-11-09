@@ -224,7 +224,7 @@ When two or more symbols would be written with the same name in this form, they 
 - Path elements are added one at a time, from the name towards the repository root, until the names differ
 - Whether names collide is decided over all the symbols, units and test call targets of the version
 - Configuration can name a symbol by this form as it is, because a configured target is matched as the trailing path of the ID
-- A name that collides with nothing keeps the short form
+- A name that collides with nothing is written in the short form above
 
 The `message` of a hazard finding (`no-clock`, `no-sleep`, `always-true`, `no-mock`) shows the code it found on one line. A call written over several lines shows only its first line, and anything past 80 characters is cut. "…" marks what was left out. Example: `test waits by sleeping: setTimeout(() => { …`. Matching against base uses the whole code, not the shortened one.
 
