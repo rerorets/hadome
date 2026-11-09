@@ -340,3 +340,105 @@ func TestOtherPackageVar(t *testing.T) {
 		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A method of a value of another module's concrete type runs that module's code, so it is neither a
+// target nor unresolved: a value declared with a pointer type, one made by a composite literal, and
+// the results of the database libraries' constructors, transactions and queries. A value of another
+// module's type that may be an interface (declared without a pointer, or a result that is one) still
+// counts as unresolved, because it may hold a value of the product.
+func TestGoMethodsOfExternalConcreteValuesAreNotUnresolved(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(storeSource)},
+		"store/db_test.go": {Data: []byte(`package store
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"io"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jmoiron/sqlx"
+)
+
+type fixture struct{ db *sql.DB }
+
+func openDB(t *testing.T) *sql.DB {
+	t.Helper()
+	return nil
+}
+
+func TestHelperDB(t *testing.T) {
+	db := openDB(t)
+	_, _ = db.Exec("DELETE FROM entries")
+	_ = (&Store{}).Append()
+}
+
+func TestOpenedDB(t *testing.T) {
+	db, _ := sql.Open("driver", "dsn")
+	tx, _ := db.Begin()
+	rows, _ := tx.Query("SELECT 1")
+	_ = rows.Close()
+	_ = db.QueryRow("SELECT 1").Scan()
+	stmt, _ := db.Prepare("SELECT 1")
+	_ = stmt.Close()
+	conn, _ := db.Conn(context.Background())
+	_ = conn.Close()
+	_ = tx.Commit()
+}
+
+func TestFieldAndParam(t *testing.T) {
+	f := fixture{}
+	_ = f.db.Ping()
+	check := func(tx *sql.Tx) { _ = tx.Rollback() }
+	check(nil)
+}
+
+func TestSqlx(t *testing.T) {
+	db, _ := sqlx.Connect("driver", "dsn")
+	tx := db.MustBegin()
+	_ = tx.Commit()
+}
+
+func TestPgx(t *testing.T) {
+	ctx := context.Background()
+	pool, _ := pgxpool.New(ctx, "dsn")
+	c, _ := pool.Acquire(ctx)
+	c.Release()
+	conn, _ := pgx.Connect(ctx, "dsn")
+	_ = conn.Close(ctx)
+}
+
+func TestLiteral(t *testing.T) {
+	buf := &bytes.Buffer{}
+	_ = buf.String()
+}
+
+func TestInterfaces(t *testing.T) {
+	var r io.Reader
+	_, _ = r.Read(nil)
+	ctx := context.Background()
+	conn, _ := pgx.Connect(ctx, "dsn")
+	tx, _ := conn.Begin(ctx)
+	_ = tx.Commit(ctx)
+}
+`)},
+	}
+	want := strings.Join([]string{
+		"TestFieldAndParam calls=[] unresolved=0",
+		"TestHelperDB calls=[example.com/app/store.Store.Append×1] unresolved=0",
+		"TestInterfaces calls=[] unresolved=2",
+		"TestLiteral calls=[] unresolved=0",
+		"TestOpenedDB calls=[] unresolved=0",
+		"TestPgx calls=[] unresolved=0",
+		"TestSqlx calls=[] unresolved=0",
+	}, "\n")
+	if got := callsByTest(t, tree); got != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+	}
+}

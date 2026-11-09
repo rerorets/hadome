@@ -357,6 +357,17 @@ Variables are read per function. A variable or parameter declared in a helper or
 
 A method of a value whose type is unknown is `unknown`.
 
+A method of a value of another module's concrete type (a type that is not an interface) is a call into that module's code. It is neither a target nor `unknown`, the same as a call of a standard library function (`strings.ToUpper`). Since no other module is read, only these values are taken as values of a concrete type:
+
+- values declared with a pointer type (`db *sql.DB`, `func open(t *testing.T) *sql.DB`). A pointer to an interface has no methods, so a pointer type whose method is called is a concrete type
+- values made by a composite literal (`&bytes.Buffer{}`), because an interface cannot be made by a composite literal
+- results of the database libraries' functions and methods whose result types hadome knows
+  - `database/sql`: `*sql.DB` from `sql.Open`, `*sql.Tx` from `Begin`, `*sql.Conn` from `Conn`, `*sql.Stmt` from `Prepare`, `*sql.Rows` from `Query`, `*sql.Row` from `QueryRow`, and so on
+  - `sqlx`: `*sqlx.DB` from `sqlx.Connect`, `*sqlx.Tx` from `Beginx`, and so on
+  - `pgx`: `*pgx.Conn` from `pgx.Connect`, `*pgxpool.Pool` from `pgxpool.New`, `*pgxpool.Conn` from `Acquire`, and so on
+
+A value of another module's type declared without a pointer (`var r io.Reader`) stays `unknown`, because the type may be an interface. So does a result that is an interface (`pgx.Tx`, returned by pgx's `conn.Begin`). An interface's method may run a method of a value of the product's code.
+
 For a testify suite, the test that calls `suite.Run(t, new(X))` follows `X`'s `Setup…`, `BeforeTest` and `Test…` methods. The suite struct's fields are read by their declared types.
 
 There is no tokenizer shared across languages. Each language is read with its own parser.

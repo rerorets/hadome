@@ -386,6 +386,17 @@ Go のテストでは、メソッドを呼んだ値の型を宣言から読み�
 
 型が分からない値のメソッドは `unknown` になります。
 
+ほかのモジュールの具体的な型（インターフェースでない型）の値のメソッドは、そのモジュールのコードの呼び出しです。対象にも `unknown` にもしません。標準ライブラリの関数（`strings.ToUpper`）の呼び出しと同じ扱いです。ほかのモジュールは読まないので、次の値だけを具体的な型の値として扱います。
+
+- ポインタの型で宣言した値（`db *sql.DB`、`func open(t *testing.T) *sql.DB`）。インターフェースへのポインタはメソッドを持たないので、メソッドを呼べるポインタの型は具体的な型です
+- 複合リテラルで作った値（`&bytes.Buffer{}`）。インターフェースは複合リテラルで作れないためです
+- 結果の型を hadome が知っている、データベースのライブラリの関数とメソッドの結果
+  - `database/sql`: `sql.Open` の `*sql.DB`、`Begin` の `*sql.Tx`、`Conn` の `*sql.Conn`、`Prepare` の `*sql.Stmt`、`Query` の `*sql.Rows`、`QueryRow` の `*sql.Row` など
+  - `sqlx`: `sqlx.Connect` の `*sqlx.DB`、`Beginx` の `*sqlx.Tx` など
+  - `pgx`: `pgx.Connect` の `*pgx.Conn`、`pgxpool.New` の `*pgxpool.Pool`、`Acquire` の `*pgxpool.Conn` など
+
+ポインタでない型で宣言した、ほかのモジュールの型の値（`var r io.Reader`）は、インターフェースかもしれないので `unknown` のままです。インターフェースを返す結果（pgx の `conn.Begin` が返す `pgx.Tx` など）も同じです。インターフェースのメソッドは、製品のコードの値が持つメソッドを動かすことがあるためです。
+
 testify の suite では、`suite.Run(t, new(X))` を呼ぶテストが、`X` の `Setup…`・`BeforeTest`・`Test…` のメソッドをたどります。suite の構造体のフィールドは宣言した型で読みます。
 
 言語をまたいで共有するトークナイザは持ちません。どの言語もその言語のパーサで読みます。

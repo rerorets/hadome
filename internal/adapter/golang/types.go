@@ -74,6 +74,10 @@ type vtype struct {
 	// method is "<import path>.<Type>.<Method>" for a method value (f := s.Append): calling the
 	// value calls the method. It is empty for other values.
 	method string
+	// ext is "<import path>.<Type>" of a concrete type of a module outside the repository. A method
+	// called on a value of it runs that module's code, like a call of one of its functions. It is
+	// empty for other types.
+	ext string
 }
 
 // maxDepth bounds the chains of named types and package-level variables followed, so that code
@@ -123,7 +127,12 @@ func (s scope) resolve(e ast.Expr) *vtype {
 	case *ast.ParenExpr:
 		return s.resolve(e.X)
 	case *ast.StarExpr:
-		return s.resolve(e.X)
+		if t := s.resolve(e.X); t != nil {
+			return t
+		}
+		// A pointer to an interface has no methods, so a pointer whose method is called points to a
+		// concrete type.
+		return s.external(e.X)
 	case *ast.IndexExpr: // a generic type instantiated, T[int]
 		return s.resolve(e.X)
 	case *ast.IndexListExpr:
@@ -169,7 +178,10 @@ func (s scope) valueTypeAt(e ast.Expr, depth int) *vtype {
 			return s.valueTypeAt(e.X, depth+1).elem()
 		}
 	case *ast.CompositeLit:
-		return s.resolve(e.Type)
+		if t := s.resolve(e.Type); t != nil {
+			return t
+		}
+		return s.external(e.Type) // an interface cannot be made by a composite literal
 	case *ast.CallExpr:
 		return s.resultType(e, 0, depth)
 	case *ast.Ident, *ast.SelectorExpr:
@@ -265,10 +277,18 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 		return s.resolve(f.X)
 	case *ast.SelectorExpr:
 		if s.isPackage(f.X) {
+			if p := s.imports[f.X.(*ast.Ident).Name]; !s.idx.internal(p) {
+				return externalResult(p, f.Sel.Name, n, false)
+			}
 			return nil
 		}
-		if t := s.valueTypeAt(f.X, depth+1); t != nil && t.id != "" {
+		t := s.valueTypeAt(f.X, depth+1)
+		switch {
+		case t == nil:
+		case t.id != "":
 			return s.idx.result(t.id+"."+f.Sel.Name, n)
+		case t.ext != "":
+			return externalResult(t.ext, f.Sel.Name, n, true)
 		}
 	}
 	return nil

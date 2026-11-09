@@ -95,6 +95,43 @@ func TestRows(t *testing.T) {
 
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
+// An import of a database library performs input or output, whichever major version it is, so a unit
+// that reaches a database only through one is never pure. A library that only formats values does not.
+func TestGoDatabaseLibrariesPerformIO(t *testing.T) {
+	tree := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte(`package store
+
+import (
+	_ "database/sql"
+	_ "github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jmoiron/sqlx"
+	_ "github.com/google/uuid"
+)
+`)},
+	}
+	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, im := range a.Imports {
+		got = append(got, fmt.Sprintf("%s io=%t", im.ToUnit, im.IO))
+	}
+	sort.Strings(got)
+	want := strings.Join([]string{
+		"database/sql io=true",
+		"github.com/google/uuid io=false",
+		"github.com/jackc/pgx/v5/pgxpool io=true",
+		"github.com/jmoiron/sqlx io=true",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
 // A call into the repository that hadome cannot name counts as unresolved, so that a test is never
 // taken for one that calls no code of the repository. A conversion, a builtin and the standard
 // library count as neither.
