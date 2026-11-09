@@ -316,11 +316,12 @@ var mutationKey = Key{Name: "mutation", Kind: KindObject, OmittedIsOff: true,
 	Fields: []Key{
 		{Name: "test", Kind: KindList, Required: true, Looser: LooserAlways, Sequence: true, Elem: &Key{Kind: KindString},
 			Doc: "The test command, run at the root of a copy of the version for every mutant. hadome never guesses it. " +
-				"An element holding {tests} gets the names of the tests that call the broken function; a survivor is then run " +
-				"again with all the tests. Any change needs review.",
-			Example: `test: [go, test, ./..., -run, "^({tests})$"]`},
+				"An element holding {tests} gets the names of the tests that call the broken function. In Go, an element that is " +
+				"{packages} becomes the packages of those tests, one element each. A mutant runs those tests in their packages, then " +
+				"in every package ({packages} as ./...), then all the tests, and is caught by the first that fails. Any change needs review.",
+			Example: `test: [go, test, "{packages}", -run, "^({tests})$"]`},
 		{Name: "timeout", Kind: KindString, Default: "", Looser: LooserWhenChanged, Pattern: `^([0-9]+(ms|s|m|h))+$`,
-			Doc:     "The limit of one test run. Omitted: three times one run before anything is broken. A run that times out caught its mutant.",
+			Doc:     "The limit of one test run. Omitted: for each command, three times its run before anything is broken. A run that times out caught its mutant.",
 			Example: "timeout: 2m"},
 		{Name: "max-mutants", Kind: KindInt, Default: 100, Min: 1, Looser: LooserWhenLower,
 			Doc:     "How many mutants one run tries at most. Mutants beyond it are reported for review. Default 100.",

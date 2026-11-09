@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/goccy/go-yaml/parser"
@@ -131,6 +132,9 @@ func Load(product fs.FS, workdir string) (Config, error) {
 	}
 	c := decode(raw, l.layers)
 	c.lines = l.lines
+	if errs := checkMutation(c); len(errs) > 0 {
+		return Config{}, errs
+	}
 	if path, ok := object(object(raw["rules"])["deps"])["diagram"].(string); ok {
 		if c.Diagram, err = loadDiagram(product, path); err != nil {
 			return Config{}, err
@@ -139,6 +143,41 @@ func Load(product fs.FS, workdir string) (Config, error) {
 	}
 	return c, nil
 }
+
+// checkMutation finds what the specification of mutation.test cannot say: {packages} takes a
+// whole element, since it spreads into one element per package, appears once, and is filled by Go
+// tests only, so a configuration whose languages lack Go cannot use it.
+func checkMutation(c Config) Errors {
+	if c.Mutation == nil {
+		return nil
+	}
+	fail := func(i int, problem string) Errors {
+		line := c.lines[fmt.Sprintf("mutation.test[%d]", i)]
+		if line == 0 {
+			line = max(c.lines["mutation.test"], 1)
+		}
+		return Errors{{File: FileName, Line: line, Key: fmt.Sprintf("mutation.test[%d]", i), Problem: problem,
+			Example: `test: [go, test, "{packages}", -run, "^({tests})$"]`}}
+	}
+	seen := -1
+	for i, a := range c.Mutation.Test {
+		switch {
+		case a == PackagesPlaceholder && seen >= 0:
+			return fail(i, PackagesPlaceholder+" appears twice; write it once")
+		case a == PackagesPlaceholder:
+			seen = i
+		case strings.Contains(a, PackagesPlaceholder):
+			return fail(i, PackagesPlaceholder+" must be an element by itself, since it becomes one element per package")
+		}
+	}
+	if seen >= 0 && len(c.Languages) > 0 && !slices.Contains(c.Languages, "go") {
+		return fail(seen, PackagesPlaceholder+" is filled with Go packages only, and languages has no go; narrow with {tests} instead")
+	}
+	return nil
+}
+
+// PackagesPlaceholder is the element of mutation.test that becomes the packages of the tests run.
+const PackagesPlaceholder = "{packages}"
 
 // loadDiagram reads the dependency diagram from the version's tree: it is part of the repository,
 // like the code it describes.
@@ -308,8 +347,8 @@ func ForBase(base, head Config) Config {
 
 // Mutation is the mutation setting: how hadome mutate runs the tests.
 type Mutation struct {
-	Test           []string // the test command; an element may hold {tests}
-	Timeout        string   // a duration such as 2m; empty means three times a clean run
+	Test           []string // the test command; an element may hold {tests}, or be {packages}
+	Timeout        string   // a duration such as 2m; empty means three times each command's clean run
 	MaxMutants     int
 	TestsSeparator string
 }

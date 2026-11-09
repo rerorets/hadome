@@ -509,6 +509,34 @@ func TestAddingTheMutationSectionIsNotLoosening(t *testing.T) {
 	}
 }
 
+// {packages} becomes one element per package and only Go tests fill it, so it must be an element by
+// itself, written once, in a configuration whose languages include Go when it names them. Anything
+// else stops the check instead of narrowing nothing.
+func TestPackagesPlaceholderIsAWholeElementForGo(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name, yml, key string
+		line           int
+	}{
+		{"inside an element", "schema: 1\nmutation:\n  test: [go, test, \"./{packages}/...\"]\n", "mutation.test[2]", 3},
+		{"twice", "schema: 1\nmutation:\n  test: [go, test, \"{packages}\", \"{packages}\"]\n", "mutation.test[3]", 3},
+		{"languages without go", "schema: 1\nlanguages: [python]\nmutation:\n  test: [pytest, \"{packages}\"]\n", "mutation.test[1]", 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			es := loadErrors(t, tc.yml, dir)
+			if len(es) != 1 || es[0].Key != tc.key || es[0].Line != tc.line {
+				t.Errorf("want one error at %s on line %d, got %v", tc.key, tc.line, es)
+			}
+		})
+	}
+	for _, ok := range []string{
+		"schema: 1\nmutation:\n  test: [go, test, \"{packages}\", -run, \"^({tests})$\"]\n",
+		"schema: 1\nlanguages: [go, python]\nmutation:\n  test: [go, test, \"{packages}\"]\n",
+	} {
+		mustLoad(t, ok, dir)
+	}
+}
+
 // Re-classifying test support as product code moves what the rules cover both ways: the files
 // enter the size and comment rules, but tests stop counting the hazards in them as their own. So
 // adding and removing a product glob both need review.

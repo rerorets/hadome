@@ -207,14 +207,15 @@ var Japanese = map[string]string{
 
 	// hadome mutate's progress lines.
 	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
-	"caught":                        "テストが気づいた",
-	"survived":                      "どのテストも気づかない",
-	"not built":                     "ビルドに入らない",
-	"flip a comparison":             "比較を逆にする",
-	"negate a boolean":              "真偽を反転する",
-	"swap arithmetic":               "算術を入れ替える",
-	"return the zero value":         "ゼロの値を返す",
-	"remove a call statement":       "呼び出しの文を消す",
+	"mutate: %s fails with nothing broken, so it judges no mutant; they go to the next command": "変異: 何も壊さなくても %s が落ちるので、このコマンドでは変異を判定しない。次のコマンドに回す",
+	"caught":                  "テストが気づいた",
+	"survived":                "どのテストも気づかない",
+	"not built":               "ビルドに入らない",
+	"flip a comparison":       "比較を逆にする",
+	"negate a boolean":        "真偽を反転する",
+	"swap arithmetic":         "算術を入れ替える",
+	"return the zero value":   "ゼロの値を返す",
+	"remove a call statement": "呼び出しの文を消す",
 
 	// Product-specific gates of kind measure.
 	"%s: %s is no longer guarded (was: %s)":                                               "%s: %s が守られなくなった（前は %s）",

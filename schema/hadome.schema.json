@@ -211,7 +211,7 @@
           "type": "integer"
         },
         "test": {
-          "description": "The test command, run at the root of a copy of the version for every mutant. hadome never guesses it. An element holding {tests} gets the names of the tests that call the broken function; a survivor is then run again with all the tests. Any change needs review.",
+          "description": "The test command, run at the root of a copy of the version for every mutant. hadome never guesses it. An element holding {tests} gets the names of the tests that call the broken function. In Go, an element that is {packages} becomes the packages of those tests, one element each. A mutant runs those tests in their packages, then in every package ({packages} as ./...), then all the tests, and is caught by the first that fails. Any change needs review.",
           "items": {
             "type": "string"
           },
@@ -224,7 +224,7 @@
         },
         "timeout": {
           "default": "",
-          "description": "The limit of one test run. Omitted: three times one run before anything is broken. A run that times out caught its mutant.",
+          "description": "The limit of one test run. Omitted: for each command, three times its run before anything is broken. A run that times out caught its mutant.",
           "pattern": "^([0-9]+(ms|s|m|h))+$",
           "type": "string"
         }
