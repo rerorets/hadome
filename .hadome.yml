@@ -23,4 +23,4 @@ invariants:
 # `go run ./cmd/hadome mutate` breaks the functions a change touched and fails when no test
 # notices. It runs locally, not in CI: each mutant runs the tests once.
 mutation:
-  test: [go, test, ./..., -run, "^({tests})$"]
+  test: [go, test, "{packages}", -run, "^({tests})$"]
