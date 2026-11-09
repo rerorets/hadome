@@ -76,6 +76,7 @@ All are on by default and need no configuration.
   - A mock written inside a test that calls only pure units is reported. Example: `vi.spyOn` inside that test
   - Adapters mark a hazard that is outside the tests and applies to every test of the file with `Hazard.FileWide`
 - Spies count as mocks. Examples: `vi.spyOn`, `jest.spyOn`, Mockito's `@Spy`. A spy watches calls or replaces behaviour; for pure code, checking the returned value is enough for either. What counts as a mock is in each language's hazard table ([adapters-treesitter.md](adapters-treesitter.md))
+- A field annotated with Mockito's `@InjectMocks` does not count as a mock. It holds a real instance of its declared class, with the mocks injected into it. The `@Mock` fields it receives do count as mocks
 - A function made by `vi.fn()` or `jest.fn()` does not count, with `.mockImplementation(…)` or the like after it or not
   - What counts as a mock replaces something the unit reaches. Examples: `vi.mock` replaces an imported module, `vi.spyOn` a method of an object. The replacement hides the unit's side effects from the test
   - `vi.fn()` is a value the test passes to the unit as an argument. Examples: `each([1], vi.fn())`, `total({ read: vi.fn() })`. It replaces nothing the unit imports, so it hides none of the unit's side effects
