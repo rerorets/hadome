@@ -37,18 +37,18 @@ type effect struct {
 
 type callCount struct {
 	times  int
-	scopes map[string]bool
+	scopes map[string]struct{}
 }
 
 func (e *effect) call(id string, times int, scope string) {
 	cc := e.calls[id]
 	if cc == nil {
-		cc = &callCount{scopes: map[string]bool{}}
+		cc = &callCount{scopes: map[string]struct{}{}}
 		e.calls[id] = cc
 	}
 	cc.times += times
 	if scope != "" {
-		cc.scopes[scope] = true
+		cc.scopes[scope] = struct{}{}
 	}
 }
 
@@ -67,12 +67,11 @@ func linkTest(cat *catalog, t *facts.Test) {
 		}
 		var rs []reading
 		for _, db := range dbs {
-			if r, ok := readText(db, tx); ok {
-				rs = append(rs, r)
-				for _, d := range r.defs {
-					if d.Temp && d.Effect == EffectCreate {
-						temps[db.dialect.(tableDialect).key(d.Name)] = true
-					}
+			r := readText(db, tx)
+			rs = append(rs, r)
+			for _, d := range r.defs {
+				if d.Temp && d.Effect == EffectCreate {
+					temps[db.dialect.(tableDialect).key(d.Name)] = true
 				}
 			}
 		}
@@ -243,14 +242,14 @@ func merge(t *facts.Test, e *effect) {
 	}
 }
 
-// readText reads one string in the database's dialect. ok is false when the string is not SQL to
-// try: it has no statement head and was not passed to a call that takes SQL.
-func readText(db *database, tx facts.Text) (reading, bool) {
+// readText reads one string in the database's dialect. A string that is not SQL to try, with no
+// statement head and not passed to a call that takes SQL, reads as nothing.
+func readText(db *database, tx facts.Text) reading {
 	d := db.dialect.(tableDialect)
 	text := callEscape(tx.Value, d.name)
 	hasHead := statementHeads[strings.ToUpper(firstWord(text, d.lex))]
 	if !hasHead && tx.Sink != facts.TextSinkSQL {
-		return reading{}, false
+		return reading{}
 	}
 	r := reading{db: db}
 	prepared := prepare(text, tx.Holes, d)
@@ -268,7 +267,7 @@ func readText(db *database, tx facts.Text) (reading, bool) {
 		// string without a statement head that does not read may not be SQL at all: only a word
 		// naming an object makes it count.
 		r.guessed = hasHead && len(tx.Holes) > 0 || mentions(db, d, text)
-		return r, true
+		return r
 	}
 	r.sql = true
 	for _, t := range trees {
@@ -285,5 +284,5 @@ func readText(db *database, tx facts.Text) (reading, bool) {
 				Evidence: "CREATE " + key})
 		}
 	}
-	return r, true
+	return r
 }

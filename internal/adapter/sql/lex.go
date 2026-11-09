@@ -14,18 +14,17 @@ type lexical struct {
 	qQuotes       bool // Oracle's q'[…]'
 }
 
-// span is a comment, or a string body, found by scan.
-type span struct {
-	Start, End int // byte offsets, End exclusive
-	Line       int
-	Text       string // a comment's text without its delimiters
+// comment is a comment found by scan: its line and its text without its delimiters.
+type comment struct {
+	Line int
+	Text string
 }
 
 // scanned is a file with its strings and comments blanked: same length, newlines kept. Markers and
 // client commands are searched in Masked.
 type scanned struct {
 	Masked   string
-	Comments []span
+	Comments []comment
 }
 
 // scan blanks the strings and comments of src. Quote characters and dollar tags stay, so that a
@@ -42,7 +41,7 @@ type scanner struct {
 	src      string
 	b        []byte // src with what has been found blanked
 	lx       lexical
-	comments []span
+	comments []comment
 	// line is the line at offset at; the scan only moves forward, so lines are counted once.
 	line, at int
 }
@@ -78,7 +77,7 @@ func (s *scanner) comment(i int) (int, bool) {
 		return s.lineComment(i, 1), true
 	case strings.HasPrefix(rest, "/*"):
 		end := blockEnd(s.src, i, s.lx.nestedBlocks)
-		s.comments = append(s.comments, span{Start: i, End: end, Line: s.lineOf(i), Text: strings.TrimSuffix(s.src[i+2:end], "*/")})
+		s.comments = append(s.comments, comment{Line: s.lineOf(i), Text: strings.TrimSuffix(s.src[i+2:end], "*/")})
 		s.blank(i, end)
 		return end, true
 	}
@@ -95,11 +94,16 @@ func (s *scanner) literal(i int) (int, bool) {
 	case s.lx.qQuotes && isQQuote(rest):
 		return s.enclosed(i, 3, string(qClosing(rest[2]))+"'"), true
 	case c == '\'' || s.lx.doubleStrings && c == '"':
-		end := quotedEnd(s.src, i, c, s.escapes(i))
-		s.blank(i+1, end-1)
+		end, closed := quotedEnd(s.src, i, c, s.escapes(i))
+		if closed {
+			s.blank(i+1, end-1)
+		} else {
+			s.blank(i+1, end)
+		}
 		return end, true
 	case c == '"' || c == '`':
-		return quotedEnd(s.src, i, c, false), true
+		end, _ := quotedEnd(s.src, i, c, false)
+		return end, true
 	case s.lx.dollarQuotes && c == '$':
 		if tag, ok := dollarTag(rest); ok {
 			return s.enclosed(i, len(tag), tag), true
@@ -131,20 +135,22 @@ func (s *scanner) lineComment(i, width int) int {
 	if end < 0 {
 		end = len(s.src) - i
 	}
-	s.comments = append(s.comments, span{Start: i, End: i + end, Line: s.lineOf(i), Text: s.src[i+width : i+end]})
+	s.comments = append(s.comments, comment{Line: s.lineOf(i), Text: s.src[i+width : i+end]})
 	s.blank(i, i+end)
 	return i + end
 }
 
-// enclosed blanks the body of a string that opens with width bytes at i and closes with closer.
+// enclosed blanks the body of a string that opens with width bytes at i and closes with closer. A
+// string not closed runs to the end.
 func (s *scanner) enclosed(i, width int, closer string) int {
 	end := strings.Index(s.src[i+width:], closer)
 	if end < 0 {
-		end = len(s.src) - i - width
+		s.blank(i+width, len(s.src))
+		return len(s.src)
 	}
 	body := i + width + end
 	s.blank(i+width, body)
-	return min(body+len(closer), len(s.src))
+	return body + len(closer)
 }
 
 func (s *scanner) blank(from, to int) {
@@ -184,9 +190,9 @@ func blockEnd(src string, i int, nested bool) int {
 	return len(src)
 }
 
-// quotedEnd returns the offset after the quoted text starting at i: a doubled quote is part of it,
-// and with backslash so is an escaped one.
-func quotedEnd(src string, i int, q byte, backslash bool) int {
+// quotedEnd returns the offset after the quoted text starting at i, and whether a quote closes it:
+// a doubled quote is part of it, and with backslash so is an escaped one.
+func quotedEnd(src string, i int, q byte, backslash bool) (int, bool) {
 	for j := i + 1; j < len(src); j++ {
 		switch {
 		case backslash && src[j] == '\\':
@@ -196,10 +202,10 @@ func quotedEnd(src string, i int, q byte, backslash bool) int {
 				j++
 				continue
 			}
-			return j + 1
+			return j + 1, true
 		}
 	}
-	return len(src)
+	return len(src), false
 }
 
 // dollarTag returns the tag ($$ or $name$) that starts s.

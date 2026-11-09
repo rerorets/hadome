@@ -206,21 +206,27 @@ var oracleDialect = tableDialect{
 	},
 }
 
-// oracleCall reads a call written as an expression: pkg.f(1) is a general_element whose last part
-// has arguments. A name without arguments is a column, or a call that cannot be told from one.
+// oracleCall reads a call written as an expression: pkg.f(1) is a general_element whose parts up to
+// the last one with arguments name the call; pkg.f(1).total reads a field of what it returns. A name
+// without arguments is a column, or a call that cannot be told from one. The grammar writes f(1).x
+// as a general_element holding the general_element f(1), so only the outer one is read: the inner
+// one is the same call.
 func oracleCall(n *Node) (*Node, []string, bool) {
-	if n.Rule != "general_element" || n.Parent != nil && n.Parent.Rule == "general_element" {
+	if n.Rule != "general_element" || n.Parent.Rule == "general_element" {
 		return nil, nil, false
 	}
 	parts := n.All(func(m *Node) bool { return m.Rule == "general_element_part" })
-	if len(parts) == 0 {
+	end := -1
+	for i, p := range parts {
+		if p.Child("function_argument") != nil {
+			end = i
+		}
+	}
+	if end < 0 {
 		return nil, nil, false
 	}
-	last := parts[len(parts)-1]
-	argsNode := last.Child("function_argument")
-	if argsNode == nil {
-		return nil, nil, false
-	}
+	parts = parts[:end+1]
+	argsNode := parts[end].Child("function_argument")
 	name := &Node{Rule: "name", Start: n.Start, Line: n.Line}
 	for _, p := range parts {
 		for _, c := range p.Children {

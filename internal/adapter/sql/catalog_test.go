@@ -180,3 +180,85 @@ func TestWhereDefinitionsGo(t *testing.T) {
 		})
 	}
 }
+
+// viewpoint: behaviour
+// target: sql.lastLine
+// A definition ends on the last line of its statement, even when its last token spans lines.
+func TestDefinitionsEndOnTheirLastLine(t *testing.T) {
+	an := analyze(t, sql.New(), version("db/a.sql",
+		"CREATE TABLE t (id int);\nCREATE VIEW v AS SELECT 'a\nb'"), postgres())
+	var got []string
+	for _, s := range an.Symbols {
+		got = append(got, fmt.Sprintf("%s %d-%d", s.ID, s.Line, s.EndLine))
+	}
+	if want := []string{".sql/public.t 1-1", ".sql/public.v 2-3"}; !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v", got, want)
+	}
+}
+
+// symbolLines lists each symbol with its line and number of parameters.
+func symbolLines(an *facts.Analysis) []string {
+	var out []string
+	for _, s := range an.Symbols {
+		out = append(out, fmt.Sprintf("%s line=%d params=%d", s.ID, s.Line, s.Params))
+	}
+	return out
+}
+
+// viewpoint: behaviour
+// target: sql.tableDialect.definitions
+// A DROP removes every object it lists. An ALTER that renames moves the object (RENAME TO, RENAME AS,
+// MySQL's RENAME without TO, to a qualified name, up to a comma), one that renames a column, an index
+// or a key does not, and any other ALTER keeps the object where it was created.
+func TestStatementsThatChangeObjects(t *testing.T) {
+	cases := []struct {
+		name string
+		c    config.Config
+		src  string
+		want []string
+	}{
+		{"postgresql", postgres(), "CREATE TABLE a (id int);\nCREATE TABLE b (id int);\nCREATE TABLE c (id int);\n" +
+			"DROP TABLE a, b;\nALTER TABLE c ADD COLUMN x int;\nALTER TABLE c RENAME COLUMN x TO y;\n",
+			[]string{".sql/public.c line=3 params=0"}},
+		{"mysql", dialect("mysql"), "CREATE TABLE t (id INT);\nCREATE TABLE u (id INT);\nCREATE TABLE v (id INT);\n" +
+			"CREATE TABLE w (id INT);\nCREATE TABLE x (id INT);\nCREATE TABLE y (id INT);\n" +
+			"ALTER TABLE t RENAME COLUMN id TO id2;\nALTER TABLE t RENAME INDEX i TO j;\nALTER TABLE t RENAME KEY k TO k2;\n" +
+			"ALTER TABLE u RENAME u2;\nALTER TABLE v RENAME AS v2;\nALTER TABLE w RENAME TO w2;\n" +
+			"ALTER TABLE x RENAME TO other.x2;\nALTER TABLE y RENAME TO y2, ADD COLUMN z INT;\n",
+			[]string{".sql/other.x2 line=5 params=0", ".sql/t line=1 params=0", ".sql/u2 line=2 params=0",
+				".sql/v2 line=3 params=0", ".sql/w2 line=4 params=0", ".sql/y2 line=6 params=0"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			an := analyze(t, sql.New(), version("db/schema.sql", tc.src), tc.c)
+			if got := symbolLines(an); !slices.Equal(got, tc.want) {
+				t.Errorf("symbols %v, want %v (unread %v)", got, tc.want, unread(an))
+			}
+		})
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.tableDialect.describeTrigger
+// A PostgreSQL trigger runs its function on the writes it names before FOR EACH ROW, written with
+// EXECUTE FUNCTION or EXECUTE PROCEDURE, and on no other write.
+func TestPostgreSQLTriggersRunOnTheirEvents(t *testing.T) {
+	files := []string{"db/a.sql", "CREATE TABLE t (id int);\nCREATE TABLE u (id int);\n" +
+		"CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;\n" +
+		"CREATE FUNCTION g() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;\n" +
+		"CREATE TRIGGER trg BEFORE INSERT OR UPDATE ON t FOR EACH ROW WHEN (true) EXECUTE FUNCTION f();\n" +
+		"CREATE TRIGGER trg2 AFTER DELETE ON u FOR EACH ROW EXECUTE PROCEDURE g();\n"}
+	cases := map[string][]string{
+		"INSERT INTO t VALUES (1)": {".sql/public.f"},
+		"UPDATE t SET id = 2":      {".sql/public.f"},
+		"UPDATE ONLY t SET id = 3": {".sql/public.f"},
+		"DELETE FROM t":            nil,
+		"DELETE FROM u":            {".sql/public.g"},
+		"UPDATE u SET id = 2":      nil,
+	}
+	for s, want := range cases {
+		if got := targets(linked(t, postgres(), []facts.Text{text(s)}, files...)); !slices.Equal(got, want) {
+			t.Errorf("%s: calls %v, want %v", s, got, want)
+		}
+	}
+}

@@ -139,7 +139,7 @@ func (tapFramework) Tests(d Dialect, trees []*Node, src []byte) []TestDef {
 				if len(r.Args) > 0 {
 					reason = strings.Trim(r.Args[0], "'\"")
 				}
-				if isNumber(reason) {
+				if strings.Trim(reason, "0123456789") == "" {
 					reason = "" // skip(count) gives no reason
 				}
 				skip = facts.Skip{Skipped: true, Reason: reason, Line: r.Line}
@@ -159,16 +159,6 @@ func (tapFramework) Tests(d Dialect, trees []*Node, src []byte) []TestDef {
 	own := func(name string) bool { return tapOwn.MatchString(unqualified(name)) }
 	asserts := func(name string) bool { return tapAsserts.MatchString(unqualified(name)) }
 	return []TestDef{{Name: "plan", Line: 1, Nodes: trees, own: own, asserts: asserts, Skip: skip}}
-}
-
-// isNumber reports whether s is a whole number.
-func isNumber(s string) bool {
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return s != ""
 }
 
 func lastIdent(n QualifiedName) string {

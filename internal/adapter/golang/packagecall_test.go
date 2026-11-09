@@ -1,8 +1,11 @@
 package golang
 
 import (
+	"slices"
 	"testing"
 	"testing/fstest"
+
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // viewpoint: behaviour
@@ -60,5 +63,44 @@ func TestStore(t *testing.T) { suite.Run(t, new(StoreSuite)) }
 	}
 	if !found {
 		t.Errorf("no test calls store.Seed: %+v", a.Tests)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.walker.packageCall
+// An assertion that cannot fail is a hazard at its line: True(t, true), False(t, false), and Equal of
+// a value with itself when the value calls nothing.
+func TestGoAssertionsThatCannotFail(t *testing.T) {
+	a := analyzeTree(t, fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("// Package store keeps rows.\npackage store\n\n// Count counts.\nfunc Count() int { return 1 }\n")},
+		"store/store_test.go": {Data: []byte(`package store_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"example.com/app/store"
+)
+
+func TestCount(t *testing.T) {
+	n := store.Count()
+	assert.True(t, true)
+	assert.False(t, false)
+	assert.Equal(t, n, n)
+	assert.Equal(t, store.Count(), store.Count())
+	assert.True(t, n > 0)
+}
+`)},
+	})
+	var lines []int
+	for _, h := range a.Tests[0].Hazards {
+		if h.Category == facts.HazardAlwaysTrue {
+			lines = append(lines, h.Line)
+		}
+	}
+	if !slices.Equal(lines, []int{13, 14, 15}) {
+		t.Errorf("always-true hazards at lines %v, want 13, 14 and 15", lines)
 	}
 }

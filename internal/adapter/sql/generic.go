@@ -119,9 +119,10 @@ func (d tableDialect) headName(stmt *Node, after int) []*Node {
 	}
 	out := []*Node{first}
 	sibs := first.Parent.Children
-	i := slices.Index(sibs, first)
-	for j := i + 1; j+1 < len(sibs) && sibs[j].Rule == "" && sibs[j].Text == "." && slices.Contains(d.rules.names, sibs[j+1].Rule); j += 2 {
-		out = append(out, sibs[j], sibs[j+1])
+	rest := sibs[slices.Index(sibs, first)+1:]
+	for len(rest) >= 2 && rest[0].Rule == "" && rest[0].Text == "." && slices.Contains(d.rules.names, rest[1].Rule) {
+		out = append(out, rest[0], rest[1])
+		rest = rest[2:]
 	}
 	return out
 }
@@ -154,13 +155,12 @@ func splitName(s string) QualifiedName {
 			for end < len(s) && s[end] != closing {
 				end++
 			}
-			body := s[i+1 : min(end, len(s))]
-			if c == '`' && strings.Contains(body, ".") {
-				for _, p := range strings.Split(body, ".") {
-					out = append(out, Ident{Text: p, Quoted: true})
-				}
-			} else {
-				out = append(out, Ident{Text: body, Quoted: true})
+			parts := []string{s[i+1 : min(end, len(s))]}
+			if c == '`' {
+				parts = strings.Split(parts[0], ".")
+			}
+			for _, p := range parts {
+				out = append(out, Ident{Text: p, Quoted: true})
 			}
 			i = end + 1
 		default:

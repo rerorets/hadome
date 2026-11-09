@@ -2,7 +2,6 @@ package sql
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/rerorets/hadome/internal/config"
 )
@@ -46,14 +45,14 @@ func enabled(name string) bool {
 	return false
 }
 
-// dialectNamed returns the dialect with the name and whether it is enabled.
-func dialectNamed(name string) (Dialect, bool) {
+// dialectNamed returns the dialect with the name, or nil.
+func dialectNamed(name string) Dialect {
 	for _, d := range dialects {
 		if d.Name() == name {
-			return d, enabled(name)
+			return d
 		}
 	}
-	return nil, false
+	return nil
 }
 
 // EnabledDialects returns the names of the dialects that can be chosen, sorted.
@@ -148,8 +147,6 @@ type Reference struct {
 	// Args are the texts of the arguments of a call, in order.
 	Args []string
 	Line int
-	// Hole is true when the name is a hole of the host language (${…}), which no name can match.
-	Hole bool
 }
 
 // Builtins are what the dialect provides without a definition.
@@ -160,19 +157,6 @@ type Builtins struct {
 	Schemas map[string]bool
 	// Prefixes start the names of built-in relations and functions, folded (pg_ in PostgreSQL).
 	Prefixes []string
-}
-
-// Has reports whether an unqualified name, folded, is built in.
-func (b Builtins) Has(name string) bool {
-	if b.Functions[name] {
-		return true
-	}
-	for _, p := range b.Prefixes {
-		if strings.HasPrefix(name, p) {
-			return true
-		}
-	}
-	return false
 }
 
 // HazardEntry is one name or keyword sequence of the dialect that makes a test untrustworthy.

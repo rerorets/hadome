@@ -158,7 +158,7 @@ func hazardsIn(d tableDialect, t *Node, tx facts.Text) []facts.Hazard {
 		}
 	}
 	toks := words(t.Tokens())
-	for _, h := range d.hazards {
+	for _, h := range d.Hazards() {
 		if h.Call != "" {
 			parts := splitName(h.Call)
 			if calls[d.key(parts)] {

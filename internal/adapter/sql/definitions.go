@@ -135,7 +135,7 @@ func (d tableDialect) alterEffect(stmt *Node, head []string, afterName int, def 
 		d.alterRedefines && def.Kind == KindView {
 		return EffectCreate
 	}
-	if newName, ok := d.renamed(stmt, afterName); ok {
+	if newName := d.renamed(stmt, afterName); newName != nil {
 		def.NewName = newName
 		return EffectRename
 	}
@@ -154,11 +154,12 @@ func (d tableDialect) params(stmt *Node) []string {
 }
 
 // describeTrigger reads a trigger's events, its table and the routine it executes. The events are
-// written before the body: AS, BEGIN, EXECUTE, FOR EACH ROW, WHEN.
+// written before the body: AS, BEGIN, FOR EACH ROW, WHEN. PostgreSQL's EXECUTE FUNCTION f() ends the
+// statement, so no event follows it.
 func (d tableDialect) describeTrigger(stmt *Node, afterName int, def *Definition) {
 	toks := tokensFrom(stmt, afterName)
 	inHead := true
-	for i, t := range toks {
+	for _, t := range toks {
 		switch w := strings.ToUpper(t.Text); w {
 		case "AS", "BEGIN", "ROW", "WHEN":
 			inHead = false
@@ -171,9 +172,9 @@ func (d tableDialect) describeTrigger(stmt *Node, afterName int, def *Definition
 				def.On = d.nameAfter(stmt, t.End)
 			}
 		case "EXECUTE":
-			inHead = false
-			if def.Executes == nil && i+1 < len(toks) {
-				def.Executes = d.nameAfter(stmt, toks[i+1].End)
+			// EXECUTE FUNCTION f(): FUNCTION is a keyword, so the first name after EXECUTE is f.
+			if def.Executes == nil {
+				def.Executes = d.nameAfter(stmt, t.End)
 			}
 		}
 	}
@@ -214,27 +215,27 @@ func paramName(p *Node) string {
 var renameKeywords = map[string]bool{"COLUMN": true, "CONSTRAINT": true, "INDEX": true, "KEY": true}
 
 // renamed finds RENAME TO name, RENAME name (where the dialect allows it), or SET SCHEMA schema
-// after the object's name.
-func (d tableDialect) renamed(stmt *Node, after int) (QualifiedName, bool) {
+// after the object's name, and returns the new name; nil when the statement renames nothing.
+func (d tableDialect) renamed(stmt *Node, after int) QualifiedName {
 	toks := tokensFrom(stmt, after)
-	word := func(i int) string {
+	text := func(i int) string {
 		if i < len(toks) {
-			return strings.ToUpper(toks[i].Text)
+			return toks[i].Text
 		}
 		return ""
 	}
 	for i := range toks {
-		w, next := word(i), word(i+1)
+		w, next := strings.ToUpper(text(i)), strings.ToUpper(text(i+1))
 		switch {
-		case w == "RENAME" && (next == "TO" || next == "AS") && i+2 < len(toks):
-			return d.nameFrom(stmt, toks[i+1].End), true
+		case w == "RENAME" && (next == "TO" || next == "AS"):
+			return d.nameFrom(stmt, toks[i+1].End)
 		case w == "RENAME" && d.renameWithoutTo && next != "" && !renameKeywords[next]:
-			return d.nameFrom(stmt, toks[i].End), true
-		case w == "SET" && next == "SCHEMA" && i+2 < len(toks):
-			return QualifiedName{{Text: toks[i+2].Text}, {}}, true
+			return d.nameFrom(stmt, toks[i].End)
+		case w == "SET" && next == "SCHEMA":
+			return QualifiedName{{Text: text(i + 2)}, {}}
 		}
 	}
-	return nil, false
+	return nil
 }
 
 // nameFrom reads the name that starts after offset: a name node, or else the plain tokens up to the
@@ -259,8 +260,7 @@ func (d tableDialect) nameFrom(stmt *Node, offset int) QualifiedName {
 // drops returns a drop of every name the DROP statement lists.
 func (d tableDialect) drops(stmt *Node, def Definition) []Definition {
 	var out []Definition
-	toks := stmt.Tokens()
-	after := toks[0].End
+	after := stmt.Tokens()[0].End
 	for {
 		n := d.headName(stmt, after)
 		if n == nil {
@@ -271,14 +271,7 @@ func (d tableDialect) drops(stmt *Node, def Definition) []Definition {
 		out = append(out, def)
 		after = n[len(n)-1].End
 		// A drop names more objects only after a comma.
-		comma := false
-		for _, t := range toks {
-			if t.Start >= after {
-				comma = t.Text == ","
-				break
-			}
-		}
-		if !comma {
+		if next := tokensFrom(stmt, after); len(next) == 0 || next[0].Text != "," {
 			break
 		}
 	}
@@ -358,12 +351,10 @@ func (d tableDialect) packageRoutines(stmt *Node, pkg Definition) []Definition {
 	return out
 }
 
+// lastLine is the line a statement ends on. A statement holds at least one token, and the EOF token
+// belongs to the whole script, never to a statement.
 func lastLine(n *Node) int {
 	toks := n.Tokens()
-	for i := len(toks) - 1; i >= 0; i-- {
-		if toks[i].Token != "EOF" {
-			return toks[i].Line + strings.Count(toks[i].Text, "\n")
-		}
-	}
-	return n.Line
+	last := toks[len(toks)-1]
+	return last.Line + strings.Count(last.Text, "\n")
 }

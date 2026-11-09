@@ -77,7 +77,7 @@ func newDatabases(c config.Config) []*database {
 		}
 		db := &database{cfg: cfg, unit: unit, objects: map[string]*object{}}
 		if cfg.Dialect != "" {
-			db.dialect, _ = dialectNamed(cfg.Dialect)
+			db.dialect = dialectNamed(cfg.Dialect)
 		}
 		out = append(out, db)
 	}
@@ -116,11 +116,11 @@ func (db *database) decideDialects() {
 		return
 	}
 	marks := map[*sqlFile][]string{}
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 	for _, f := range db.files {
 		marks[f] = markerDialects(f.src)
 		if len(marks[f]) == 1 {
-			seen[marks[f][0]] = true
+			seen[marks[f][0]] = struct{}{}
 		}
 	}
 	var only string
@@ -138,11 +138,11 @@ func (db *database) decideDialects() {
 		default:
 			name = ""
 		}
-		if d, ok := dialectNamed(name); ok {
+		if d := dialectNamed(name); d != nil && enabled(name) {
 			f.dialect = d
 		}
 	}
-	if d, ok := dialectNamed(only); ok {
+	if d := dialectNamed(only); d != nil && enabled(only) {
 		db.dialect = d
 	}
 }
@@ -253,8 +253,6 @@ func (db *database) defKey(d Dialect, name QualifiedName) (string, bool) {
 		parts = append(parts, d.Fold(p))
 	}
 	switch len(parts) {
-	case 0:
-		return "", false
 	case 1:
 		if s := db.schemaFor(d); s != "" {
 			return s + "." + parts[0], true

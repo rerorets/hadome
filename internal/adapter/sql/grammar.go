@@ -54,7 +54,7 @@ func (g antlrGrammar) Parse(text string, base, line int) (*Node, error) {
 	if err != nil {
 		return nil, shiftError(err, line)
 	}
-	c := converter{rules: p.GetRuleNames(), symbols: p.GetSymbolicNames(), literals: p.GetLiteralNames(),
+	c := converter{rules: p.GetRuleNames(), symbols: p.GetSymbolicNames(),
 		bytes: runeOffsets(text), base: base, line: line - 1}
 	return c.node(tree, nil), nil
 }
@@ -89,7 +89,8 @@ func (quietStrategy) ReportError(p antlr.Parser, e antlr.RecognitionException) {
 func runEntry(entry func(antlr.Parser) antlr.ParseTree, p antlr.Parser) (tree antlr.ParseTree, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = syntaxAt(p, r)
+			tok := p.GetCurrentToken() // never nil: the token stream ends in EOF
+			err = fmt.Errorf("line %d:%d: syntax error at %q", tok.GetLine(), tok.GetColumn(), tok.GetText())
 		}
 	}()
 	return entry(p), nil
@@ -113,25 +114,21 @@ func runeOffsets(text string) []int {
 }
 
 type converter struct {
-	rules, symbols, literals []string
-	bytes                    []int
-	base, line               int
+	rules, symbols []string
+	bytes          []int
+	base, line     int
 }
 
+// offset is the offset in the file of a rune index. Only trees read without an error are converted,
+// so no token is one error recovery made up, and every index is from 0 to the number of runes.
 func (c converter) offset(rune int) int {
-	if rune < 0 {
-		return c.base
-	}
-	if rune >= len(c.bytes) {
-		return c.base + c.bytes[len(c.bytes)-1]
-	}
 	return c.base + c.bytes[rune]
 }
 
+// node converts a parse tree, whose nodes are all tokens or rule contexts: ANTLR builds no other.
 func (c converter) node(t antlr.Tree, parent *Node) *Node {
-	switch t := t.(type) {
-	case antlr.TerminalNode:
-		tok := t.GetSymbol()
+	if term, ok := t.(antlr.TerminalNode); ok {
+		tok := term.GetSymbol()
 		n := &Node{Text: tok.GetText(), Line: c.line + tok.GetLine(), Parent: parent,
 			Start: c.offset(tok.GetStart()), End: c.offset(tok.GetStop() + 1)}
 		n.Token = c.tokenName(tok.GetTokenType())
@@ -140,42 +137,29 @@ func (c converter) node(t antlr.Tree, parent *Node) *Node {
 			n.End = n.Start
 		}
 		return n
-	case antlr.ParserRuleContext:
-		n := &Node{Rule: c.rules[t.GetRuleIndex()], Parent: parent}
-		if s := t.GetStart(); s != nil {
-			n.Line = c.line + s.GetLine()
-			n.Start = c.offset(s.GetStart())
-		}
-		if s := t.GetStop(); s != nil && s.GetTokenType() != antlr.TokenEOF {
-			n.End = c.offset(s.GetStop() + 1)
-		} else {
-			n.End = n.Start
-		}
-		for i := 0; i < t.GetChildCount(); i++ {
-			n.Children = append(n.Children, c.node(t.GetChild(i), n))
-		}
-		return n
 	}
-	return &Node{Parent: parent}
+	rc := t.(antlr.ParserRuleContext)
+	n := &Node{Rule: c.rules[rc.GetRuleIndex()], Parent: parent}
+	if s := rc.GetStart(); s != nil {
+		n.Line = c.line + s.GetLine()
+		n.Start = c.offset(s.GetStart())
+	}
+	if s := rc.GetStop(); s != nil && s.GetTokenType() != antlr.TokenEOF {
+		n.End = c.offset(s.GetStop() + 1)
+	} else {
+		n.End = n.Start
+	}
+	for i := 0; i < rc.GetChildCount(); i++ {
+		n.Children = append(n.Children, c.node(rc.GetChild(i), n))
+	}
+	return n
 }
 
+// tokenName is the symbolic name of a token type. The grammars here define every token in their
+// lexer, so every type but EOF has one.
 func (c converter) tokenName(typ int) string {
 	if typ == antlr.TokenEOF {
 		return "EOF"
 	}
-	if typ >= 0 && typ < len(c.symbols) && c.symbols[typ] != "" {
-		return c.symbols[typ]
-	}
-	if typ >= 0 && typ < len(c.literals) && c.literals[typ] != "" {
-		return c.literals[typ]
-	}
-	return ""
-}
-
-// syntaxAt describes where the parse stopped.
-func syntaxAt(p antlr.Parser, r any) error {
-	if tok := p.GetCurrentToken(); tok != nil {
-		return fmt.Errorf("line %d:%d: syntax error at %q", tok.GetLine(), tok.GetColumn(), tok.GetText())
-	}
-	return fmt.Errorf("syntax error: %v", r)
+	return c.symbols[typ]
 }

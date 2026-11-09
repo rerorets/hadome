@@ -17,7 +17,7 @@ const (
 // directly, unqualified ones by the search order, the default schema, or the only object of that
 // name. A built-in function or a system schema counts nothing.
 func (db *database) resolve(d Dialect, ref Reference) (*object, outcome) {
-	if ref.Hole || len(ref.Name) == 0 {
+	if len(ref.Name) == 0 {
 		return nil, unresolved
 	}
 	parts := make([]string, len(ref.Name))
