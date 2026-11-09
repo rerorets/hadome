@@ -349,7 +349,7 @@ func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
 		case fn:
 			w.record(p+"."+name, c)
 		case support:
-			w.followSupport(p+"."+name, h, c)
+			w.followSupport(h, c)
 		case w.idx.types[p+"."+name]: // a conversion runs no code of the package
 		default: // a function variable, or a package hadome did not read
 			w.test.Unresolved++
