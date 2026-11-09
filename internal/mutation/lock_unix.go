@@ -26,5 +26,10 @@ func lock(path string) (release func(), err error) {
 		f.Close()
 		return nil, err
 	}
-	return func() { f.Close() }, nil
+	// Unlocking before closing releases the lock even while a child forked by another goroutine still
+	// shares the open file, until it execs.
+	return func() {
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
 }
