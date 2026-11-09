@@ -9,7 +9,7 @@ Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues). Sen
 | People who use hadome | [README](README.md), [three layers for trusting tests](docs/model.md), [product-specific gates](docs/external-gates.md) |
 | Agents working in a user's repository | [The guide for agents](docs/for-agents.md). The block `hadome agents` writes is `cmd/hadome/agents.en.md` |
 | People who build hadome | This document, [the design documents](docs/design), [the dependency diagram](docs/design/dependencies.md) |
-| Maintainers | [Releasing](docs/maintaining/releasing.md), [the JVM plugins](packaging/jvm/README.md) |
+| Maintainers | [Releasing](docs/maintaining/releasing.md), [SQL grammars](docs/maintaining/sql-grammars.md), [the JVM plugins](packaging/jvm/README.md) |
 | People who found a vulnerability | [Security](SECURITY.md) |
 
 ## Running it locally

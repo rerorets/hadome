@@ -128,7 +128,9 @@ func (r missingDoc) Find(in engine.Input) ([]engine.Finding, error) {
 	names := in.Facts.Names()
 	var out []engine.Finding
 	for _, s := range in.Facts.Symbols {
-		if !s.Exported || s.Doc || s.DocElsewhere || entryPoint(in.Config.EntryPoints, s, units[s.Path]) {
+		// Database objects are not among the kinds this rule asks a doc comment of (adapters-sql.md).
+		dbObject := s.Kind == facts.SymbolRoutine || s.Kind == facts.SymbolRelation
+		if !s.Exported || s.Doc || s.DocElsewhere || dbObject || entryPoint(in.Config.EntryPoints, s, units[s.Path]) {
 			continue
 		}
 		name := names.Short(s.ID)

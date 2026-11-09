@@ -172,7 +172,7 @@ classDiagram
 | Kotlin | Java と同じ |
 | Terraform | `*.tftest.hcl`（[adapters-iac.ja.md](adapters-iac.ja.md)） |
 | Ansible | `molecule/<シナリオ>/` の下のファイル（[adapters-iac.ja.md](adapters-iac.ja.md)） |
-| SQL（設計のみ） | テストの補助のディレクトリの下の `*.sql`（[adapters-sql.ja.md](adapters-sql.ja.md)） |
+| SQL | テストの補助のディレクトリの下の `*.sql`（[adapters-sql.ja.md](adapters-sql.ja.md)） |
 
 慣習から外れた配置のリポジトリのために、設定で役割を足せます。
 
@@ -398,7 +398,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 | TypeScript、Python、Rust、Java、Kotlin | tree-sitter の文法 |
 | Terraform | Terraform 自身が使う HCL のパーサ（`hashicorp/hcl/v2` の `hclsyntax`）。C への依存は無い |
 | Ansible | 設定を読むのと同じ YAML のパーサ（`goccy/go-yaml`）。C への依存は無い |
-| SQL（設計のみ） | 方言ごとの完全な文法。純粋な Go。依存は持ち主が決める（[adapters-sql.ja.md](adapters-sql.ja.md)） |
+| SQL | 方言ごとの公開された ANTLR の文法から作った、純粋な Go のパーサ（[adapters-sql.ja.md](adapters-sql.ja.md)） |
 
 Go のテストでは、メソッドを呼んだ値の型を宣言から読みます。型の検査はせず、ほかのモジュールも読みません。次の値の型が分かります。
 

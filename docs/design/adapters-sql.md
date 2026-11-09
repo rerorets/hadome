@@ -68,22 +68,22 @@ classDiagram
     <<interface>>
     +Name() string
     +Markers(src []byte) []Marker
-    +Split(src []byte) ([]Statement, error)
-    +Parse(s Statement) (Tree, error)
-    +Definitions(t Tree) []Definition
-    +References(t Tree) []Reference
+    +Split(src []byte) []Statement
+    +Parse(s Statement) (*Node, error)
+    +Definitions(t *Node) []Definition
+    +References(t *Node) []Reference
     +Fold(id Ident) string
     +Builtins() Builtins
     +Hazards() []HazardEntry
   }
   class Grammar {
     <<interface>>
-    +Parse(text string) (Tree, error)
+    +Parse(text string, base int, line int) (*Node, error)
   }
   class Framework {
     <<interface>>
     +Name() string
-    +Tests(d Dialect, file []Statement) []TestDef
+    +Tests(d Dialect, trees []*Node, src []byte) []TestDef
   }
   class Catalog {
     +Databases []Database
@@ -119,7 +119,7 @@ classDiagram
   Test --> Text
 ```
 
-- **Package.** Adds `internal/adapter/sql`. The dependency diagram gains `internal/adapter --> internal/adapter/sql` and arrows from `sql` to `engine`, `config` and `facts`. No other language adapter imports `sql`
+- **Package.** `internal/adapter/sql`. Each dialect's parser is under it, in `internal/adapter/sql/grammar/<dialect>`, all generated code ([sql-grammars.md](../maintaining/sql-grammars.md)). The dependency diagram draws `internal/adapter/sql/...` as one box, with an arrow from `internal/adapter` and arrows to `engine`, `config`, `facts` and `walk`. No other language adapter imports `sql`
 - **Types other packages see.** Only three things in `facts` are added: `Test.Texts` (a list of `Text`), and the symbol kinds `SymbolRoutine` (`"routine"`) and `SymbolRelation` (`"relation"`). `Dialect`, `Grammar`, `Framework`, `Catalog` and `Definition` are types inside the `sql` package and invisible outside it
 - **`Text`.** A string the test code holds. The other language adapters fill it. They know nothing about SQL. They hand over only the string's value, the positions of interpolation holes, and which call it was passed to (`Sink`)
   - `Holes` are the positions of interpolations such as `${…}` or an f-string's `{…}`
@@ -137,28 +137,31 @@ classDiagram
 
 ### Dialects in scope
 
-These seven are the candidates. Each ships only after it meets "When a dialect ships" below.
+hadome has readers for these seven dialects. A dialect is enabled after it meets "When a dialect is enabled" below. A dialect that is not enabled cannot be chosen, even though its reader is in hadome.
 
-| Dialect | Name (configuration) | Why |
-|---|---|---|
-| PostgreSQL | `postgresql` | Functions and procedures often hold product logic |
-| MySQL, MariaDB | `mysql` | Widely used. MariaDB is read by the same reader as MySQL; the reader handles the forms that differ |
-| SQLite | `sqlite` | Widely used as an embedded database. Has views, triggers and tables |
-| SQL Server | `tsql` | Procedures often hold product logic |
-| Oracle | `oracle` | Packages and procedures often hold product logic |
-| BigQuery | `bigquery` | Used for data processing. Functions, table functions and procedures are written in SQL |
-| Snowflake | `snowflake` | Used for data processing. Functions, procedures and tasks are written in SQL |
+| Dialect | Name (configuration) | Grammar | Enabled | Why |
+|---|---|---|---|---|
+| PostgreSQL | `postgresql` | `sql/postgresql` of grammars-v4 | Enabled | Functions and procedures often hold product logic |
+| MySQL, MariaDB | `mysql` | `sql/mysql/Positive-Technologies` of grammars-v4 | Not enabled | Widely used. MariaDB is read by the same reader as MySQL |
+| SQLite | `sqlite` | `sql/sqlite` of grammars-v4 | Not enabled | Widely used as an embedded database. Has views, triggers and tables |
+| SQL Server | `tsql` | `tsql` of bytebase/parser (`sql/tsql` of grammars-v4, made faster) | Not enabled | Procedures often hold product logic |
+| Oracle | `oracle` | `sql/plsql` of grammars-v4 | Not enabled | Packages and procedures often hold product logic |
+| BigQuery | `bigquery` | `googlesql` of bytebase/parser | Not enabled | Used for data processing. Functions, table functions and procedures are written in SQL |
+| Snowflake | `snowflake` | `sql/snowflake` of grammars-v4 | Not enabled | Used for data processing. Functions, procedures and tasks are written in SQL |
 
-### When a dialect ships
+- Every grammar has a `hadome:` comment wherever it differs from the original grammar ([sql-grammars.md](../maintaining/sql-grammars.md))
+- The readers of dialects that are not enabled are in hadome too. Choosing such a dialect in the configuration is a configuration error (exit code `2`)
 
-A dialect is "supported" only after both of the following have been confirmed on real public code.
+### When a dialect is enabled
+
+A dialect is enabled after both of the following have been confirmed on real public code.
 
 - Definitions are read correctly: no symbol missed, no symbol made up
 - SQL names in tests are resolved correctly: nothing mistaken, nothing missed
 
-Misses and mistakes found in a trial become self-test cases before they are fixed. Trial results are kept per dialect. Until its trial passes, a dialect's reader may be in hadome but is not enabled. A dialect that is not enabled cannot be chosen in the configuration (exit code `2`).
+Misses and mistakes found in a trial become self-test cases before they are fixed. A dialect that is not enabled cannot be chosen in the configuration (exit code `2`). A file whose markers point to a dialect that is not enabled is unread.
 
-Candidate public code for the trials is in "Public code for the trials" below.
+The public code for the trials is in "Public code for the trials" below.
 
 hadome itself never touches the network ([adapters.md](adapters.md), invariant 1). Fetching public repositories for a trial is a development activity, not something hadome does.
 
@@ -186,21 +189,17 @@ The dialect is decided per file, in this order.
 
 ## How SQL is read
 
-The recommendation is to read each dialect with that dialect's complete grammar. The grammar is implemented in pure Go, with no cgo. Concretely, the proposal is to generate Go parsers from the public per-dialect ANTLR grammars (the PostgreSQL, MySQL, SQLite, T-SQL, PL/SQL, Snowflake and other grammars in grammars-v4). Whether to take this dependency is the owner's decision ("Decisions for the owner").
+Syntax is read with pure-Go parsers made from each dialect's public ANTLR grammar. The runtime is `github.com/antlr4-go/antlr/v4`. The reasons are these.
 
-The only criteria are correctness and robustness for users. The effort to build it is not a criterion.
+- **It reads by each dialect's rules.** It reads `;` inside T-SQL and PL/SQL bodies, `GO` and `DELIMITER` as the dialect's grammar says. A statement it cannot read is known to be an error
+- **It needs no cgo.** Test strings also come from Go tests. A build without cgo ([distribution.md](distribution.md)) still reads Go, Terraform and Ansible. If the SQL reader needed cgo, that build could not read the SQL of Go tests, and the same repository would give different results
 
-| Option | Correctness | Robustness | Verdict |
-|---|---|---|---|
-| **A complete grammar per dialect (pure Go)** | Reads `;` inside T-SQL and PL/SQL bodies, `GO` and `DELIMITER` by the dialect's rules. A statement it cannot read is known to be an error | Gives the same facts in builds without cgo | **Recommended** |
-| One tree-sitter SQL grammar (reads many dialects loosely) | One grammar cannot tell all dialect differences apart (quoting, case, body forms). It reads on past errors, so it drops names silently | Needs cgo. In a build without cgo, SQL in Go tests could not be read either. Whether the grammar's ABI is readable by the bindings hadome uses (ABI 14 and below) is unverified | Not recommended |
-| PostgreSQL's own parser (libpg_query, cgo) | The most exact for PostgreSQL | PostgreSQL only. Needs cgo | A candidate `Grammar` for PostgreSQL, to compare in the trial |
-| A purpose-built hand-written reader | Can be exact for statement heads and name positions. For dialects with bodies, where a statement ends depends on how complete the grammar is | Pure Go | Not recommended |
+These are the rules of reading.
 
-- **Why pure Go.** Test strings also come from Go tests. A build without cgo ([distribution.md](distribution.md)) still reads Go, Terraform and Ansible. If the SQL reader needed cgo, that build could not read the SQL of Go tests, and the same repository would give different results
+- **Two passes.** It reads with ANTLR's fast prediction (SLL) first, and reads again with the full prediction (LL) only when that finds an error. No input reads with SLL and fails with LL, so the result is the same as reading with LL alone
 - **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong
-- **Speed.** Complete dialect grammars are large, so reading speed is measured in the trial. For a dialect that is too slow, the `Grammar` implementation is replaced. Nothing outside `Dialect` changes
 - **Bodies.** Function bodies (inside PostgreSQL's `$$`, the JavaScript or Python bodies of BigQuery and Snowflake) are not read, because calls from a body to other objects are not facts. T-SQL and PL/SQL bodies are part of the statement, so they are parsed to find where the statement ends
+- **Output.** The error reports the ANTLR runtime writes to standard output are stopped, so that they never mix with hadome's output
 
 ### Splitting statements
 
@@ -208,16 +207,19 @@ SQL files contain forms that the client reads, not the database. `Dialect.Split`
 
 | Dialect | Client form | Handling |
 |---|---|---|
-| PostgreSQL | psql meta-commands (`\set`, `\i`, `\connect`) | Removed from the statements. The file `\i` includes is not followed |
-| MySQL | `DELIMITER //` | Switches the delimiter and splits the following statements with it |
-| SQL Server | `GO` alone on a line (also `GO 5`) | Batch separator |
-| Oracle | `/` alone on a line, SQL*Plus commands (`SET`, `PROMPT`, `@file`) | `/` separates. Commands are removed from the statements |
+| PostgreSQL | psql meta-commands (`\set`, `\i`, `\connect`), the data lines after `COPY … FROM stdin` (up to `\.`) | Removed from the statements. The file `\i` includes is not followed |
+| MySQL | `DELIMITER //`, `source file` | `DELIMITER` switches the delimiter and splits the following statements with it. `source` is removed from the statements |
+| SQLite | Dot commands such as `.headers on` | Removed from the statements |
+| SQL Server | `GO` alone on a line (also `GO 5`), sqlcmd commands (`:r`, `:setvar`) | `GO` separates batches. sqlcmd commands are removed from the statements |
+| Oracle | `/` alone on a line, SQL*Plus commands (`SET`, `PROMPT`, `@file`) | `/` separates. Commands are removed only where a statement may start (after `;` or `/`), because the `SET` of an `UPDATE` is part of the statement |
 | Snowflake | SnowSQL commands such as `!set` | Removed from the statements |
 
 Some migration tools write markers as comments.
 
 - For dbmate's `-- migrate:up` and `-- migrate:down` and goose's `-- +goose Up` and `-- +goose Down`, only the `up` side is read
 - Liquibase's `--changeset` and `--rollback` stay comments. Statements after `--rollback` are inside the comment and are not read
+- A UTF-8 byte order mark becomes spaces. Editors on Windows put it at the start of files. As spaces, it changes no line or offset
+- psql variables (`:name`, `:'name'`) cannot be read, because the client decides their values. A file holding them is unread
 
 ## Files and roles
 
@@ -384,7 +386,7 @@ Strings are read as SQL under these conditions.
 |---|---|
 | The first word outside strings and comments is a statement head of the dialect (`SELECT`, `WITH`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CALL`, `EXEC`/`EXECUTE`, `VALUES`, `TABLE`, `REFRESH`, `TRUNCATE`, `BEGIN`, `DECLARE`, `CREATE`, `DROP`, `ALTER`), and it reads to the end as statements | Read as SQL |
 | `Sink` is `sql`, and it reads to the end as statements | Read as SQL (even without a statement head) |
-| It starts with a statement head or `Sink` is `sql`, it does not read as statements, and it contains a word equal to the name of a database object | Counts one unresolved |
+| It starts with a statement head or `Sink` is `sql`, it does not read as statements, and it has a hole or contains a word equal to the name of a database object | Counts one unresolved |
 | `Dynamic` is true | Counts one unresolved |
 | Anything else | Not SQL; not read |
 
@@ -398,21 +400,21 @@ Strings are read as SQL under these conditions.
 **Holes and parameters**
 
 - A hole is read as a parameter in a value position. Example: `` `SELECT billing.is_active(${id}, 3600)` `` reads
-- A hole in a name position (`` `SELECT * FROM ${table}` ``) does not read as a statement. So it is unresolved by the table above
-- Driver parameter forms (`$1`, `?`, `:name`, `@p1`, `%s`, `%(name)s`) are read as value-position parameters in every dialect
+- A hole is read as the value `0`. A hole in a name position (`` `SELECT * FROM ${table}` ``) does not read as a statement. So it is unresolved by the table above
+- Driver parameter forms (`$1`, `?`, `:name`, `@p1`, `%s`, `%(name)s`) are read as the value `0`. Where the dialect uses the form in its own syntax, it is read as it is. Examples: PostgreSQL's `?` (a `jsonb` operator), the `@name` variables of SQL Server and MySQL, `::` casts
 
 ### Which database resolves a name
 
 - With one database, strings are read in its dialect and resolved against it
 - With two or more, they are resolved against the database whose `sql.databases[].tests` globs match. Without those, every database whose dialect can read the string is tried. A name matching objects in two or more databases is unresolved
-- When the repository has no SQL database at all (no `.sql` files and no configuration), test strings are not read. There is no dialect and nothing to resolve against
+- When the repository has no SQL database at all (no `.sql` files and no configuration), test strings are not read. Strings passed to calls that take SQL are not counted as unresolved either. With no dialect and nothing to resolve against, nothing can be said for certain
 
 ### Resolving names
 
 | Name | Resolution |
 |---|---|
 | Qualified (`billing.is_active`) | The object with the same normalized name |
-| Unqualified, with a search order (`search-path`) configured | The object in the first schema of the search order that has it, the same order the database searches |
+| Unqualified, with a search order (`search-path`) configured | The object in the first schema of the search order that has it, the same order the database searches. Unresolved when no schema of the search order has it |
 | Unqualified, without a search order | The object in the dialect's default schema if there is one. Otherwise the object, if the database has exactly one with that name. With two or more, unresolved |
 | Same name as a built-in function | When unqualified, the built-in; nothing counts. PostgreSQL also searches the system schema first |
 | A name matching no object of the database and no built-in | Counts one unresolved. It may be an object created by an ORM or another tool, and the test may be checking the product |
@@ -447,12 +449,14 @@ Tests are read from test `*.sql` files written in one of the following ways. Eac
 
 | Way | Dialect | What a test is | Assert | Skip | Mock |
 |---|---|---|---|---|---|
-| pgTAP | PostgreSQL | A file calling `plan(…)` or `no_plan()` is one test. Each function whose name starts with `test`, run by `runtests()`, is one test | `ok`, `is`, `isnt`, `matches`, `throws_ok`, `lives_ok`, `results_eq`, `has_…` and others | `skip(reason, count)` | None |
+| pgTAP | PostgreSQL | A file calling `plan(…)` or `no_plan()` is one test | `ok`, `is`, `isnt`, `matches`, `throws_ok`, `lives_ok`, `results_eq`, `has_…` and others | `skip(reason, count)` | None |
 | myTAP | MySQL | Same as pgTAP | Same as pgTAP | Same as pgTAP | None |
 | tSQLt | SQL Server | Procedures whose names start with `test` in a schema created by `tSQLt.NewTestClass` | `tSQLt.Assert…`, `tSQLt.Fail`, `tSQLt.ExpectException` | None | `tSQLt.FakeTable`, `SpyProcedure`, `FakeFunction` |
 | utPLSQL | Oracle | Procedures annotated `--%test` in a package annotated `--%suite`. Bodies are in the package body | `ut.expect(…).to_…` | `--%disabled(reason)` | None |
 
 - What a test calls is decided from the names in its statements, by the same rules as "SQL in tests"
+- Objects a test file creates are that test's setup. Naming them does not count as naming product objects. Example: a table a pgTAP file creates with `CREATE TABLE` and checks with `has_table`
+- The functions of the way of writing tests (pgTAP's `ok`, tSQLt's `tSQLt.AssertEquals` and the like) count as asserts or mocks, never as unresolved
 - BigQuery and Snowflake have no widely used way of writing tests, so they are not in the table. dbt tests are in "What is deliberately left out"
 
 ## SQL in product code
@@ -537,12 +541,13 @@ sql:
 | `order` | The order files are applied in | Changing it needs a person's review |
 | `tests` | Globs of test files resolved against this database | Changing it needs a person's review |
 
+- When `languages` is written, SQL is read when it lists `sql`. When it is not written, SQL is read whenever there are `.sql` files
 - For keys that change name resolution, hadome cannot tell which direction loosens. So every change to them goes to a person's review (`config/loosened`)
 - Calls that take SQL can be added per language with `rules.tests.sql-sinks`. Adding one makes more strings read as SQL and changes how unresolved names are counted, so it goes to a person's review
 
 ## Public code for the trials
 
-Each dialect is tried on public code that has definitions, and on public code with tests that check them through SQL. The following are candidates; none is brought into the repository. They are fetched locally, hadome is run on them, and the results are checked.
+Each dialect is tried on public code that has definitions, and on public code with tests that check them through SQL. None is brought into the repository. They are fetched locally, hadome is run on them, and the results are checked.
 
 | Dialect | Definitions | Names in tests |
 |---|---|---|
@@ -559,17 +564,16 @@ Each dialect is tried on public code that has definitions, and on public code wi
 
 ## Self-test cases
 
+The self-test cases pass SQL from Go tests, which every build reads. Name resolution and how definitions are read are checked by the unit tests of `internal/adapter/sql`.
+
 | Rule | Cases |
 |---|---|
-| `tests/scope-shrunk` | Deleting the only TypeScript test guarding an SQL function fails · deleting the function and its test passes · redefining the function in a new migration file passes · renaming the function passes · deleting the only Python test guarding a view fails · deleting the only test guarding an Oracle package routine fails · deleting the only test writing to a table with a trigger fails · deleting the only pgTAP test fails |
-| `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test that only reads a table passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins (`SELECT 1`, `SELECT now()`) fails · a test with only strings that do not read as SQL and contain no object name fails · in a repository without `.sql` files it fails |
-| `tests/target-unknown` | A new test naming only names absent from the database returns `3` · a new test passing only SQL with a hole in a name position returns `3` · a new test passing only non-literal values to a call that takes SQL returns `3` · SQL with a hole in a value position resolves and passes |
-| Name resolution | An unqualified name resolves by the search order · an unqualified name in two schemas is unresolved · quoted names are case-sensitive (PostgreSQL) · unquoted names are upper-cased (Oracle, Snowflake) · `[dbo].[Proc]` equals `dbo.proc` (SQL Server) · `` `proj.ds.fn` `` equals `ds.fn` (BigQuery, without `catalog`) · a `WITH` name hides · the column `t.is_active` does not count · `"select a plan"` counts nothing |
-| Definitions | A dropped function is not a symbol · `DROP` in `V10__` is applied after `CREATE` in `V2__` · `DROP` in `.down.sql` is not read · dbmate's `migrate:down` side is not read · procedures separated by `GO` are read · `;` in a body delimited by `DELIMITER` does not split the statement · Oracle packages separated by `/` are read · no symbol comes from a `CREATE` inside a `$$` body · overloads are one symbol |
-| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` · one already in base does not |
-| `tests/no-mock` | A test recreating a product function with `CREATE OR REPLACE` is a hazard · mocks in a test calling an SQL function are not reported, as it calls an impure unit |
-| `tests/no-clock`, `tests/no-sleep` | `now()` in test SQL is `clock` · `pg_sleep` and `WAITFOR DELAY` are `sleep` · `now()` in a string that is not SQL does not count |
-| `tests/no-assertion`, `tests/skip-without-reason` | A pgTAP file without asserts fails · a utPLSQL `--%disabled` without a reason fails |
+| `tests/scope-shrunk` | Deleting the only Go test guarding an SQL function fails · deleting the function and its test passes · redefining the function in a new migration file passes · renaming the function passes · deleting the only test writing to a table with a trigger fails · deleting the only pgTAP test fails |
+| `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins fails · in a repository without `.sql` files it fails |
+| `tests/target-unknown` | A new test naming only names absent from the database returns `3` · a new test passing only non-literal values to a call that takes SQL returns `3` · SQL with a driver's parameter in a value position resolves and passes |
+| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` |
+| `tests/no-clock`, `tests/no-sleep` | `now()` in test SQL is `clock` · `pg_sleep` is `sleep` · `now()` in a string that is not SQL does not count |
+| `tests/no-assertion`, `tests/skip-without-reason` | A pgTAP file without asserts fails · a pgTAP `skip` without a reason fails |
 
 ## Invariants
 
@@ -593,12 +597,7 @@ Each dialect is tried on public code that has definitions, and on public code wi
 - **Reading the order from Liquibase XML or YAML changelogs or sqitch plan files.** The order can be written with `order`
 - **SQL inside Terraform and Ansible.** Such as Ansible's `postgresql_query` tasks. To add it, that adapter fills `Test.Texts`. The SQL adapter does not change
 - **Dialects not listed here** (Db2, Redshift, ClickHouse, Spark SQL and others). To add one, add a `Dialect` implementation and pass the same trial
-
-## Decisions for the owner
-
-| Question | Options | Recommendation |
-|---|---|---|
-| The dependency for reading syntax | (a) Pure-Go parsers generated from per-dialect ANTLR grammars (the `antlr4-go/antlr` runtime and code generated from grammars-v4) (b) One tree-sitter SQL grammar (c) libpg_query for PostgreSQL only | (a). It gives the same facts in builds without cgo and reads by each dialect's rules. Each grammar's license, the size of the generated code, reading speed, and whether a BigQuery grammar exists are unverified. Deciding after checking them in the trial seems safest |
-| New configuration keys | `sql.databases` and `rules.tests.sql-sinks` | Adding them as in "Configuration" above seems right |
-| Types added to `facts` | `Test.Texts`, `SymbolRoutine`, `SymbolRelation` | Adding them seems right. The same `Text` serves other embedded languages (GraphQL and the like) |
-| Test SQL in repositories without `.sql` | (a) Do not read it (b) Count strings passed to calls that take SQL as unresolved | (a). With no dialect and nothing to resolve against, nothing can be said for certain |
+- **pgTAP's xUnit style.** The asserts of the functions starting with `test` that `runtests()` runs are inside function bodies (PL/pgSQL). Bodies are not read, so tests written this way are not read
+- **Reading with one tree-sitter SQL grammar.** One grammar cannot tell all dialect differences apart (quoting, case, body forms). It reads on past errors, so it drops names silently. It also needs cgo, so a build without cgo would give different results
+- **Reading with PostgreSQL's own parser (libpg_query).** The most exact for PostgreSQL, but PostgreSQL only, and it needs cgo
+- **A purpose-built hand-written reader.** For dialects with bodies, where a statement ends depends on how complete the grammar is. It cannot tell an unreadable statement for an error

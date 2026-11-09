@@ -68,22 +68,22 @@ classDiagram
     <<interface>>
     +Name() string
     +Markers(src []byte) []Marker
-    +Split(src []byte) ([]Statement, error)
-    +Parse(s Statement) (Tree, error)
-    +Definitions(t Tree) []Definition
-    +References(t Tree) []Reference
+    +Split(src []byte) []Statement
+    +Parse(s Statement) (*Node, error)
+    +Definitions(t *Node) []Definition
+    +References(t *Node) []Reference
     +Fold(id Ident) string
     +Builtins() Builtins
     +Hazards() []HazardEntry
   }
   class Grammar {
     <<interface>>
-    +Parse(text string) (Tree, error)
+    +Parse(text string, base int, line int) (*Node, error)
   }
   class Framework {
     <<interface>>
     +Name() string
-    +Tests(d Dialect, file []Statement) []TestDef
+    +Tests(d Dialect, trees []*Node, src []byte) []TestDef
   }
   class Catalog {
     +Databases []Database
@@ -119,7 +119,7 @@ classDiagram
   Test --> Text
 ```
 
-- **パッケージ。** `internal/adapter/sql` を足します。依存の図に `internal/adapter --> internal/adapter/sql` と、`sql` から `engine`、`config`、`facts` への矢印を足します。ほかの言語のアダプタは `sql` を import しません
+- **パッケージ。** `internal/adapter/sql` です。方言ごとのパーサは、その下の `internal/adapter/sql/grammar/<方言>` にあり、どれも生成したコードです（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）。依存の図では、`internal/adapter/sql/...` を1つの箱にし、`internal/adapter` からの矢印と、`engine`、`config`、`facts`、`walk` への矢印を引きます。ほかの言語のアダプタは `sql` を import しません
 - **ほかのパッケージから見える型。** 増えるのは `facts` の3つだけです。`Test.Texts`（`Text` の並び）、シンボルの種類 `SymbolRoutine`（`"routine"`）と `SymbolRelation`（`"relation"`）です。`Dialect`、`Grammar`、`Framework`、`Catalog`、`Definition` は `sql` パッケージの中の型で、外からは見えません
 - **`Text`。** テストのコードが持つ文字列です。ほかの言語のアダプタが埋めます。アダプタは SQL を知りません。文字列の値と、埋め込みの穴の位置と、どの呼び出しに渡したか（`Sink`）だけを渡します
   - `Holes` は、`${…}` や f 文字列の `{…}` のような埋め込みの位置です
@@ -137,28 +137,31 @@ classDiagram
 
 ### 対象にする方言
 
-次の7つを候補にします。どれも、下の「方言を出す条件」を満たしてから出します。
+次の7つの方言の読み手を持ちます。方言は、下の「方言を有効にする条件」を満たしてから有効にします。有効でない方言は、読み手が hadome に入っていても選べません。
 
-| 方言 | 名前（設定） | 理由 |
-|---|---|---|
-| PostgreSQL | `postgresql` | 関数と手続きを製品のロジックとして使うことが多い |
-| MySQL、MariaDB | `mysql` | 広く使われる。MariaDB は MySQL と同じ読み手で読み、違う書き方は読み手の中で受け持つ |
-| SQLite | `sqlite` | アプリに組み込むデータベースとして広く使われる。ビュー、トリガ、テーブルを持つ |
-| SQL Server | `tsql` | 手続きを製品のロジックとして使うことが多い |
-| Oracle | `oracle` | パッケージと手続きを製品のロジックとして使うことが多い |
-| BigQuery | `bigquery` | データの処理で使う。関数、テーブル関数、手続きを SQL で書く |
-| Snowflake | `snowflake` | データの処理で使う。関数、手続き、タスクを SQL で書く |
+| 方言 | 名前（設定） | 文法 | 有効 | 理由 |
+|---|---|---|---|---|
+| PostgreSQL | `postgresql` | grammars-v4 の `sql/postgresql` | 有効 | 関数と手続きを製品のロジックとして使うことが多い |
+| MySQL、MariaDB | `mysql` | grammars-v4 の `sql/mysql/Positive-Technologies` | 有効でない | 広く使われる。MariaDB は MySQL と同じ読み手で読む |
+| SQLite | `sqlite` | grammars-v4 の `sql/sqlite` | 有効でない | アプリに組み込むデータベースとして広く使われる。ビュー、トリガ、テーブルを持つ |
+| SQL Server | `tsql` | bytebase/parser の `tsql`（grammars-v4 の `sql/tsql` を速くしたもの） | 有効でない | 手続きを製品のロジックとして使うことが多い |
+| Oracle | `oracle` | grammars-v4 の `sql/plsql` | 有効でない | パッケージと手続きを製品のロジックとして使うことが多い |
+| BigQuery | `bigquery` | bytebase/parser の `googlesql` | 有効でない | データの処理で使う。関数、テーブル関数、手続きを SQL で書く |
+| Snowflake | `snowflake` | grammars-v4 の `sql/snowflake` | 有効でない | データの処理で使う。関数、手続き、タスクを SQL で書く |
 
-### 方言を出す条件
+- どの文法も、元の文法から直したところに `hadome:` のコメントがあります（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）
+- 有効でない方言の読み手も hadome に入っています。設定でその方言を選ぶと、設定の誤り（終了コード `2`）になります
 
-方言を「対応した」と言えるのは、次の2つを、実際の公開されたコードで確かめた後です。
+### 方言を有効にする条件
+
+方言を有効にするのは、次の2つを、実際の公開されたコードで確かめた後です。
 
 - 定義を正しく読めること。シンボルの抜けと、無いシンボルの作り出しが無いこと
 - テストの中の SQL の名指しを正しく解決できること。取り違えと見落としが無いこと
 
-試しで見つけた抜けや取り違えは、自己テストの事例にしてから直します。試しの結果は方言ごとに残します。試しを通るまで、その方言の読み手は hadome に入れても有効にしません。有効にしていない方言は設定で選べません（終了コード `2`）。
+試しで見つけた抜けや取り違えは、自己テストの事例にしてから直します。有効にしていない方言は設定で選べません（終了コード `2`）。有効にしていない方言を印が指すファイルは、読めなかったファイルにします。
 
-試しに使う公開のコードの候補は、後述の「試しに使う公開のコード」にあります。
+試しに使う公開のコードは、後述の「試しに使う公開のコード」にあります。
 
 hadome そのものはネットワークに触れません（[adapters.ja.md](adapters.ja.md) の不変条件1）。試しのために公開のリポジトリを手元に取ってくるのは開発の作業で、hadome の動きではありません。
 
@@ -186,21 +189,17 @@ hadome そのものはネットワークに触れません（[adapters.ja.md](ad
 
 ## 読み方
 
-方言ごとに、その方言の完全な文法で読むことを勧めます。文法は cgo の要らない純粋な Go の実装にします。具体的には公開されている方言ごとの ANTLR の文法（grammars-v4 にある PostgreSQL、MySQL、SQLite、T-SQL、PL/SQL、Snowflake などの文法）から Go のパーサを作る案です。この依存を入れるかは持ち主が決めます（「持ち主に決めてもらうこと」）。
+構文は、方言ごとの公開された ANTLR の文法から作った、純粋な Go のパーサで読みます。ランタイムは `github.com/antlr4-go/antlr/v4` です。理由は次のとおりです。
 
-選び方の基準は利用者にとっての正しさと頑丈さだけです。作る手間は基準にしません。
+- **方言の決まりどおりに読める。** T-SQL と PL/SQL の本体の中の `;`、`GO`、`DELIMITER` を、方言の文法のとおりに読みます。読めない文は誤りとして分かります
+- **cgo が要らない。** テストの文字列は Go のテストからも来ます。cgo なしのビルド（[distribution.ja.md](distribution.ja.md)）でも、Go、Terraform、Ansible は読めます。SQL の読み手が cgo を要ると、そのビルドでは Go のテストの SQL を読めず、同じリポジトリで結果が変わります
 
-| 案 | 正しさ | 頑丈さ | 判断 |
-|---|---|---|---|
-| **方言ごとの完全な文法（純粋な Go）** | T-SQL と PL/SQL の本体の中の `;`、`GO`、`DELIMITER` を、方言の決まりどおりに読める。読めない文は誤りとして分かる | cgo なしのビルドでも同じ事実が出る | **勧める** |
-| 1つの tree-sitter の SQL の文法（多くの方言をゆるく読む） | 方言の違い（引用符、大文字小文字、本体の書き方）を1つの文法で区別しきれない。誤りを挟んで先を読むので、名前を黙って落とす | cgo が要る。cgo なしのビルドでは Go のテストの SQL も読めなくなる。文法の ABI が hadome の使うバインディング（ABI 14 まで）で読めるかは未確認 | 勧めない |
-| PostgreSQL 自身のパーサ（libpg_query、cgo） | PostgreSQL では最も正確 | PostgreSQL だけ。cgo が要る | PostgreSQL の `Grammar` の候補として、試しで比べる |
-| 目的に絞った手書きの読み手 | 文の頭と名前の位置だけなら正確にできる。本体を持つ方言では、どこまでが1つの文かの判断が文法の完全さに左右される | 純粋な Go | 勧めない |
+読み方の決まりは次のとおりです。
 
-- **純粋な Go にする理由。** テストの文字列は Go のテストからも来ます。cgo なしのビルド（[distribution.ja.md](distribution.ja.md)）でも、Go、Terraform、Ansible は読めます。SQL の読み手が cgo を要ると、そのビルドでは Go のテストの SQL を読めず、同じリポジトリで結果が変わります
+- **2段で読む。** まず ANTLR の速い予測（SLL）で読み、誤りがあったときだけ完全な予測（LL）で読み直します。SLL で読めて LL で読めない入力は無いので、結果は LL だけで読んだときと同じです
 - **読めない文。** 文法が読めない文が1つでもあるファイルは、ファイルごと読めなかったファイル（`Unread`）にします。読めない文が `DROP` や名前の変更かもしれず、ほかの文から作ったシンボルが誤りになり得るからです
-- **速さ。** 方言の完全な文法は大きいので、読む速さを試しで測ります。遅すぎる方言は `Grammar` の実装を替えます。`Dialect` の外は変わりません
 - **本体。** 関数の本体（PostgreSQL の `$$` の中、BigQuery と Snowflake の JavaScript や Python の本体）は読みません。本体の中からほかのオブジェクトへの呼び出しは、事実にしないからです。T-SQL と PL/SQL の本体は文の一部なので、文の終わりを決めるために構文として読みます
+- **出力。** ANTLR のランタイムが標準出力に書く誤りの報告は止めます。hadome の出力に混ざらないようにするためです
 
 ### 文の区切り
 
@@ -208,16 +207,19 @@ SQL のファイルには、データベースではなくクライアントが�
 
 | 方言 | クライアントの書き方 | 扱い |
 |---|---|---|
-| PostgreSQL | psql のメタコマンド（`\set`、`\i`、`\connect`） | 文から外す。`\i` の読み込み先はたどらない |
-| MySQL | `DELIMITER //` | 区切りの記号を替えて、以後の文を区切る |
-| SQL Server | 1行だけの `GO`（`GO 5` も） | バッチの区切り |
-| Oracle | 1行だけの `/`、SQL*Plus のコマンド（`SET`、`PROMPT`、`@file`） | `/` は区切り。コマンドは文から外す |
+| PostgreSQL | psql のメタコマンド（`\set`、`\i`、`\connect`）、`COPY … FROM stdin` の後のデータの行（`\.` まで） | 文から外す。`\i` の読み込み先はたどらない |
+| MySQL | `DELIMITER //`、`source file` | `DELIMITER` は区切りの記号を替えて、以後の文を区切る。`source` は文から外す |
+| SQLite | `.headers on` などのドットのコマンド | 文から外す |
+| SQL Server | 1行だけの `GO`（`GO 5` も）、sqlcmd のコマンド（`:r`、`:setvar`） | `GO` はバッチの区切り。sqlcmd のコマンドは文から外す |
+| Oracle | 1行だけの `/`、SQL*Plus のコマンド（`SET`、`PROMPT`、`@file`） | `/` は区切り。コマンドは、文の始まる位置（`;` か `/` の後）にあるときだけ文から外す。`UPDATE` の中の `SET` は文の一部だから |
 | Snowflake | SnowSQL の `!set` などのコマンド | 文から外す |
 
 移行のツールが印をコメントで書くものもあります。
 
 - dbmate の `-- migrate:up` と `-- migrate:down`、goose の `-- +goose Up` と `-- +goose Down` は、`up` の側だけを読みます
 - Liquibase の `--changeset` と `--rollback` はコメントのままです。`--rollback` の後の文はコメントの中なので読みません
+- UTF-8 の BOM は空白に替えます。Windows の編集ソフトがファイルの先頭に付けるからです。空白にするので、行と位置は変わりません
+- psql の変数（`:name`、`:'name'`）は、値がクライアントで決まるので読めません。それを含むファイルは読めなかったファイルになります
 
 ## ファイルと役割
 
@@ -384,7 +386,7 @@ SQL のファイルには、データベースではなくクライアントが�
 |---|---|
 | 文字列とコメントを除いた最初の語が、方言の文の頭（`SELECT`、`WITH`、`INSERT`、`UPDATE`、`DELETE`、`MERGE`、`CALL`、`EXEC`・`EXECUTE`、`VALUES`、`TABLE`、`REFRESH`、`TRUNCATE`、`BEGIN`、`DECLARE`、`CREATE`、`DROP`、`ALTER`）で、文として最後まで読める | SQL として読む |
 | `Sink` が `sql` で、文として最後まで読める | SQL として読む（頭が文の頭でなくても） |
-| 文の頭で始まるか `Sink` が `sql` で、文として読めない。そして文字列の中に、データベースのオブジェクトの名前と同じ語がある | 未解決を1つ数える |
+| 文の頭で始まるか `Sink` が `sql` で、文として読めない。そして穴があるか、文字列の中にデータベースのオブジェクトの名前と同じ語がある | 未解決を1つ数える |
 | `Dynamic` が真 | 未解決を1つ数える |
 | それ以外 | SQL ではないとして読まない |
 
@@ -398,21 +400,21 @@ SQL のファイルには、データベースではなくクライアントが�
 **穴とパラメタ**
 
 - 穴は値の位置のパラメタとして読みます。例: `` `SELECT billing.is_active(${id}, 3600)` `` は読めます
-- 名前の位置の穴（`` `SELECT * FROM ${table}` ``）は、文として読めません。そのため、上の表で未解決になります
-- ドライバのパラメタの書き方（`$1`、`?`、`:name`、`@p1`、`%s`、`%(name)s`）は、どの方言でも値の位置のパラメタとして読みます
+- 穴は値 `0` として読みます。名前の位置の穴（`` `SELECT * FROM ${table}` ``）は、文として読めません。そのため、上の表で未解決になります
+- ドライバのパラメタの書き方（`$1`、`?`、`:name`、`@p1`、`%s`、`%(name)s`）は、値 `0` として読みます。方言がその書き方を自分の構文に使うときは、そのまま読みます。例: PostgreSQL の `?`（`jsonb` の演算子）、SQL Server と MySQL の `@name`（変数）、`::` の型変換
 
 ### どのデータベースで解決するか
 
 - データベースが1つなら、その方言で読み、そのデータベースで解決します
 - 2つ以上なら、設定の `sql.databases[].tests` の glob に合うデータベースで解決します。書いていなければ、文字列を読める方言のデータベースをすべて試します。名前が2つ以上のデータベースのオブジェクトに当たるときは、未解決にします
-- リポジトリに SQL のデータベースが1つも無い（`.sql` のファイルも設定も無い）ときは、テストの文字列を読みません。方言が分からず、名前を解決する先も無いからです
+- リポジトリに SQL のデータベースが1つも無い（`.sql` のファイルも設定も無い）ときは、テストの文字列を読みません。SQL を受け取る呼び出しに渡した文字列も、未解決と数えません。方言が分からず、名前を解決する先も無いので、確かに言えることが無いからです
 
 ### 名前の解決
 
 | 名指し | 解決 |
 |---|---|
 | 修飾した名前（`billing.is_active`） | 正規化した名前が同じオブジェクト |
-| 修飾の無い名前で、検索の順（`search-path`）を設定した | 検索の順で最初に見つかるスキーマのオブジェクト。データベースが名前を探すのと同じ順です |
+| 修飾の無い名前で、検索の順（`search-path`）を設定した | 検索の順で最初に見つかるスキーマのオブジェクト。データベースが名前を探すのと同じ順です。検索の順のどのスキーマにも無ければ未解決 |
 | 修飾の無い名前で、検索の順を設定していない | 方言の既定のスキーマにあればそれ。無ければ、その名前のオブジェクトがデータベースに1つだけのときはそれ。2つ以上なら未解決 |
 | 組み込みの関数と同じ名前 | 修飾していなければ組み込みとして、何も数えない。PostgreSQL がシステムのスキーマを先に探すのと同じです |
 | データベースのどのオブジェクトにも、組み込みにも当たらない名前 | 未解決を1つ数える。ORM や別のツールで作ったオブジェクトかもしれず、製品を確かめているかもしれないからです |
@@ -447,12 +449,14 @@ SQL のファイルには、データベースではなくクライアントが�
 
 | 書き方 | 方言 | テストとは | assert | スキップ | モック |
 |---|---|---|---|---|---|
-| pgTAP | PostgreSQL | `plan(…)` か `no_plan()` を呼ぶファイルは、ファイルが1つのテスト。`runtests()` で動かす、名前が `test` で始まる関数は、関数ごとに1つのテスト | `ok`、`is`、`isnt`、`matches`、`throws_ok`、`lives_ok`、`results_eq`、`has_…` など | `skip(理由, 数)` | 無い |
+| pgTAP | PostgreSQL | `plan(…)` か `no_plan()` を呼ぶファイルは、ファイルが1つのテスト | `ok`、`is`、`isnt`、`matches`、`throws_ok`、`lives_ok`、`results_eq`、`has_…` など | `skip(理由, 数)` | 無い |
 | myTAP | MySQL | pgTAP と同じ | pgTAP と同じ | pgTAP と同じ | 無い |
 | tSQLt | SQL Server | `tSQLt.NewTestClass` で作ったスキーマの、名前が `test` で始まる手続き | `tSQLt.Assert…`、`tSQLt.Fail`、`tSQLt.ExpectException` | 無い | `tSQLt.FakeTable`、`SpyProcedure`、`FakeFunction` |
 | utPLSQL | Oracle | `--%suite` を付けたパッケージの、`--%test` を付けた手続き。本体はパッケージ本体 | `ut.expect(…).to_…` | `--%disabled(理由)` | 無い |
 
 - テストが呼ぶものは、テストの文の中の名指しから、「テストの中の SQL」と同じ決まりで決めます
+- テストのファイルが作るオブジェクトは、そのテストの下ごしらえです。名指しても製品のオブジェクトとは数えません。例: pgTAP のファイルが `CREATE TABLE` で作り、`has_table` で確かめるテーブル
+- テストの書き方の関数（pgTAP の `ok`、tSQLt の `tSQLt.AssertEquals` など）は、assert やモックとして数え、未解決とは数えません
 - BigQuery と Snowflake には広く使われるテストの書き方が無いので、表にありません。dbt のテストは「意図して入れなかったもの」です
 
 ## 製品のコードの中の SQL
@@ -537,12 +541,13 @@ sql:
 | `order` | ファイルを当てる順 | 変えるのは人の確認 |
 | `tests` | このデータベースで解決するテストのファイルの glob | 変えるのは人の確認 |
 
+- `languages` を書くときは、`sql` を入れると SQL を読みます。書かないときは、`.sql` のファイルがあれば読みます
 - 名前の解決を変えるキーは、どちらに変えると緩むかを hadome が言えません。そのため、変える変更はどれも人の確認（`config/loosened`）にします
 - SQL を受け取る呼び出しは、言語ごとに `rules.tests.sql-sinks` で足せます。足すと SQL として読む文字列が増え、未解決の数え方も変わるので、人の確認にします
 
 ## 試しに使う公開のコード
 
-方言ごとに、定義を持つ公開のコードと、それを SQL で確かめるテストを持つ公開のコードで試します。下は候補で、どれもリポジトリに取り込みません。手元に取ってきて hadome を当て、結果を確かめます。
+方言ごとに、定義を持つ公開のコードと、それを SQL で確かめるテストを持つ公開のコードで試します。どれもリポジトリに取り込みません。手元に取ってきて hadome を当て、結果を確かめます。
 
 | 方言 | 定義の試し | テストの名指しの試し |
 |---|---|---|
@@ -559,17 +564,16 @@ sql:
 
 ## 自己テストの事例
 
+自己テストの事例は、どのビルドでも読める Go のテストで SQL を渡します。名前の解決と定義の読み方は、`internal/adapter/sql` の単体テストが確かめます。
+
 | ルール | 事例 |
 |---|---|
-| `tests/scope-shrunk` | SQL の関数を守る唯一の TypeScript のテストを消すと落ちる · 関数とそのテストを消すと通る · 同じ関数を新しい移行のファイルで定義し直しても通る · 関数の名前を変えると通る · ビューを守る唯一の Python のテストを消すと落ちる · Oracle のパッケージの手続きを守る唯一のテストを消すと落ちる · トリガのあるテーブルに書き込む唯一のテストを消すと落ちる · 唯一の pgTAP のテストを消すと落ちる |
-| `tests/guards-nothing` | SQL の関数を呼ぶ文字列を渡すテストは通る · テーブルだけを読むテストは通る · 定数に置いた SQL を渡すテストは通る · ヘルパーの中で SQL を渡すテストは通る · 組み込みの関数だけを呼ぶ SQL（`SELECT 1`、`SELECT now()`）を渡す新しいテストは落ちる · SQL として読めない、オブジェクトの名前を含まない文字列だけのテストは落ちる · `.sql` のファイルが無いリポジトリでは落ちる |
-| `tests/target-unknown` | データベースに無い名前だけを名指す新しいテストは `3` を返す · 名前の位置に穴のある SQL だけを渡す新しいテストは `3` を返す · SQL を受け取る呼び出しにリテラルでない値だけを渡す新しいテストは `3` を返す · 値の位置に穴のある SQL は解決して通る |
-| 名前の解決 | 修飾の無い名前を検索の順で解決する · 2つのスキーマにある修飾の無い名前は未解決 · 引用符の名前は大文字小文字を区別する（PostgreSQL） · 引用符の無い名前を大文字にする（Oracle、Snowflake） · `[dbo].[Proc]` と `dbo.proc` は同じ（SQL Server） · `` `proj.ds.fn` `` と `ds.fn` は同じ（BigQuery、`catalog` が無いとき） · `WITH` の名前は隠す · 列の `t.is_active` は数えない · `"select a plan"` は何も数えない |
-| 定義 | `DROP` した関数はシンボルにならない · `V10__` の `DROP` は `V2__` の `CREATE` より後に当てる · `.down.sql` の `DROP` は読まない · dbmate の `migrate:down` の側は読まない · `GO` で区切った手続きを読む · `DELIMITER` で区切った本体の `;` で文を切らない · `/` で区切った Oracle のパッケージを読む · `$$` の本体の中の `CREATE` からシンボルを作らない · 多重定義を1つのシンボルにまとめる |
-| `unknown/unread` | 印が2つの方言を指すファイルは `3` を返す · 設定で方言を書くと読む · 読めない文のあるファイルは `3` を返す · base にあるものは返さない |
-| `tests/no-mock` | テストが製品の関数を `CREATE OR REPLACE` で作り直すと危険になる · SQL の関数を呼ぶテストのモックは、純粋でないユニットとして報告しない |
-| `tests/no-clock`、`tests/no-sleep` | テストの SQL の `now()` は `clock` · `pg_sleep` と `WAITFOR DELAY` は `sleep` · SQL でない文字列の `now()` は数えない |
-| `tests/no-assertion`、`tests/skip-without-reason` | assert の無い pgTAP のファイルは落ちる · 理由の無い utPLSQL の `--%disabled` は落ちる |
+| `tests/scope-shrunk` | SQL の関数を守る唯一の Go のテストを消すと落ちる · 関数とそのテストを消すと通る · 同じ関数を新しい移行のファイルで定義し直しても通る · 関数の名前を変えると通る · トリガのあるテーブルに書き込む唯一のテストを消すと落ちる · 唯一の pgTAP のテストを消すと落ちる |
+| `tests/guards-nothing` | SQL の関数を呼ぶ文字列を渡すテストは通る · 定数に置いた SQL を渡すテストは通る · ヘルパーの中で SQL を渡すテストは通る · 組み込みの関数だけを呼ぶ SQL を渡す新しいテストは落ちる · `.sql` のファイルが無いリポジトリでは落ちる |
+| `tests/target-unknown` | データベースに無い名前だけを名指す新しいテストは `3` を返す · SQL を受け取る呼び出しにリテラルでない値だけを渡す新しいテストは `3` を返す · 値の位置にドライバのパラメタのある SQL は解決して通る |
+| `unknown/unread` | 印が2つの方言を指すファイルは `3` を返す · 設定で方言を書くと読む · 読めない文のあるファイルは `3` を返す |
+| `tests/no-clock`、`tests/no-sleep` | テストの SQL の `now()` は `clock` · `pg_sleep` は `sleep` · SQL でない文字列の `now()` は数えない |
+| `tests/no-assertion`、`tests/skip-without-reason` | assert の無い pgTAP のファイルは落ちる · 理由の無い pgTAP の `skip` は落ちる |
 
 ## 不変条件
 
@@ -593,12 +597,7 @@ sql:
 - **Liquibase の XML や YAML の変更履歴、sqitch の計画のファイルから順を読むこと。** 順は `order` で書けます
 - **Terraform と Ansible の中の SQL。** Ansible の `postgresql_query` のタスクなどです。足すときは、そのアダプタが `Test.Texts` を埋めます。SQL のアダプタは変わりません
 - **ここに無い方言**（Db2、Redshift、ClickHouse、Spark SQL など）。足すときは `Dialect` の実装を足し、同じ試しを通します
-
-## 持ち主に決めてもらうこと
-
-| 問い | 選べるもの | 勧め |
-|---|---|---|
-| 構文を読む部分の依存 | (a) 方言ごとの ANTLR の文法から作る純粋な Go のパーサ（ランタイム `antlr4-go/antlr` と、grammars-v4 の文法から作るコード） (b) 1つの tree-sitter の SQL の文法 (c) PostgreSQL だけ libpg_query | (a)。cgo なしのビルドでも同じ事実が出て、方言の決まりどおりに読めるからです。文法ごとのライセンス、作るコードの大きさ、読む速さ、BigQuery の文法があるかは未確認です。試しで確かめてから決めるのがよさそうです |
-| 新しい設定のキー | `sql.databases` と `rules.tests.sql-sinks` | 上の「設定」のとおりに足すのがよさそうです |
-| `facts` に足す型 | `Test.Texts`、`SymbolRoutine`、`SymbolRelation` | 足すのがよさそうです。ほかの言語の埋め込みの言語（GraphQL など）にも同じ `Text` を使えます |
-| `.sql` の無いリポジトリのテストの SQL | (a) 読まない (b) SQL を受け取る呼び出しに渡した文字列を未解決と数える | (a)。方言も解決する先も無いので、確かに言えることがありません |
+- **pgTAP の xUnit の書き方。** `runtests()` で動かす `test` で始まる関数の assert は、関数の本体（PL/pgSQL）の中にあります。本体は読まないので、この書き方のテストは読みません
+- **1つの tree-sitter の SQL の文法で読むこと。** 1つの文法では方言の違い（引用符、大文字小文字、本体の書き方）を区別しきれません。誤りを挟んで先を読むので、名前を黙って落とします。cgo も要るので、cgo なしのビルドで結果が変わります
+- **PostgreSQL 自身のパーサ（libpg_query）で読むこと。** PostgreSQL では最も正確ですが、PostgreSQL だけで、cgo が要ります
+- **目的に絞った手書きの読み手。** 本体を持つ方言では、どこまでが1つの文かの判断が文法の完全さに左右されます。読めない文を誤りとして見分けられません

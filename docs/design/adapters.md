@@ -172,7 +172,7 @@ Test file conventions:
 | Kotlin | Same as Java |
 | Terraform | `*.tftest.hcl` ([adapters-iac.md](adapters-iac.md)) |
 | Ansible | Files under `molecule/<scenario>/` ([adapters-iac.md](adapters-iac.md)) |
-| SQL (design only) | `*.sql` under test support directories ([adapters-sql.md](adapters-sql.md)) |
+| SQL | `*.sql` under test support directories ([adapters-sql.md](adapters-sql.md)) |
 
 For repositories laid out against the conventions, configuration can add roles.
 
@@ -369,7 +369,7 @@ What decides whether a fact can block is whether the adapter identified it, not 
 | TypeScript, Python, Rust, Java, Kotlin | tree-sitter grammars |
 | Terraform | The HCL parser Terraform itself uses (`hclsyntax` of `hashicorp/hcl/v2`). No dependency on C |
 | Ansible | The YAML parser that reads the configuration (`goccy/go-yaml`). No dependency on C |
-| SQL (design only) | A complete grammar per dialect, in pure Go. The owner decides the dependency ([adapters-sql.md](adapters-sql.md)) |
+| SQL | Pure-Go parsers made from each dialect's public ANTLR grammar ([adapters-sql.md](adapters-sql.md)) |
 
 A Go test reads the type of a value it calls a method on from declarations. It runs no type checker and reads no other module. These values have a known type:
 

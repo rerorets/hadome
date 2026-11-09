@@ -36,6 +36,15 @@ func (unread) Cases() []engine.Case {
 			Head: mod("store/a.go", "package store\n", "store/b.go", broken), WantReview: []string{"unknown/unread"}},
 		{Name: "one already unread in base does not", Base: mod("store/b.go", broken), Head: mod("store/b.go", broken)},
 		{Name: "a file of no supported language is not unread", Base: mod(), Head: mod("notes.txt", "hello")},
+		{Name: "a new SQL file whose markers point to two dialects needs review", Base: mod(),
+			Head:       mod("db/a.sql", "CREATE TABLE `t` (id INT) ENGINE=InnoDB;\nCREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n"),
+			WantReview: []string{"unknown/unread"}},
+		{Name: "the dialect set in the configuration makes it read", Base: mod(),
+			Head: mod("db/a.sql", "CREATE TABLE t (id int);\nCREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+				".hadome.yml", "schema: 1\nsql:\n  databases:\n    - name: main\n      dialect: postgresql\n")},
+		{Name: "a new SQL file with a statement that does not parse needs review", Base: mod(),
+			Head:       mod("db/a.sql", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\nCREATE TABLE t (id int;\n"),
+			WantReview: []string{"unknown/unread"}},
 	}
 }
 
@@ -46,12 +55,17 @@ func (r unread) Find(in engine.Input) ([]engine.Finding, error) {
 		if !f.Unread {
 			continue
 		}
-		out = append(out, engine.Finding{
+		finding := engine.Finding{
 			Rule: r.ID(), File: f.Path, Review: true,
 			Message: engine.T("hadome could not read %s", f.Path),
 			Why:     engine.T("it does not parse, or this build of hadome has no reader for %s; no rule saw what it does", f.Language),
 			Fix:     engine.T("make it parse, or use a build of hadome that reads %s (every prebuilt binary does)", f.Language),
-		})
+		}
+		if f.Language == "sql" {
+			finding.Why = engine.T("its dialect is not decided, or one of its statements does not parse in that dialect; no rule saw what it does")
+			finding.Fix = engine.T("give its database a dialect in sql.databases, or make every statement parse")
+		}
+		out = append(out, finding)
 	}
 	return out, nil
 }

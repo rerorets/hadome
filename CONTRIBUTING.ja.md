@@ -11,7 +11,7 @@
 | hadomeを使う人 | [README](README.ja.md)、[テストを信じるための3つの段](docs/model.ja.md)、[製品固有の門番](docs/external-gates.ja.md) |
 | 利用者のリポジトリで動くエージェント | [エージェント向けの手引き](docs/for-agents.ja.md)。`hadome agents`が書き込むブロックの中身は`cmd/hadome/agents.ja.md` |
 | hadomeを作る人 | この文書、[設計書](docs/design)、[依存の図](docs/design/dependencies.ja.md) |
-| メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
+| メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[SQL の文法](docs/maintaining/sql-grammars.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
 | 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md) |
 
 ## 手元で動かす

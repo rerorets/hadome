@@ -53,9 +53,9 @@ func escape(s string) string {
 const rule = "================================================================================\n"
 
 const header = "Third-party software in hadome\n\n" +
-	"The hadome executable is built from the Go standard library and the modules below. Each section\n" +
-	"gives a module, its version, where its source code can be downloaded, and its license as the module\n" +
-	"ships it. hadome itself is under the MIT license in LICENSE.\n\n" +
+	"The hadome executable is built from the Go standard library, the modules below, and parsers generated\n" +
+	"from the SQL grammars below. Each section gives a module or grammar, its version, where its source\n" +
+	"can be downloaded, and its license as it ships it. hadome itself is under the MIT license in LICENSE.\n\n" +
 	"This file is generated: go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices\n"
 
 // title is the first line of a module's section.
