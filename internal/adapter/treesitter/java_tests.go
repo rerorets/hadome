@@ -145,7 +145,7 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	}
 	body := n.ChildByFieldName("body")
 	var methods []*sitter.Node
-	scope := outer.nested()
+	scope := outer.nested().withInputs(anns)
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
@@ -183,7 +183,7 @@ func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
 
 func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
-	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
+	t.fingerprint(append(append([]*sitter.Node{}, scope.inputs...), m), m.ChildByFieldName("name"))
 	skip := classSkip
 	for k := range jvmSkipAnnotations {
 		if a, ok := anns[k]; ok {

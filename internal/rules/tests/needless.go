@@ -86,7 +86,11 @@ func (r noAssertion) Find(in engine.Input) ([]engine.Finding, error) {
 type duplicate struct{}
 
 func (duplicate) ID() string           { return "tests/duplicate" }
-func (duplicate) Cases() []engine.Case { return duplicateCases() }
+func (duplicate) Cases() []engine.Case { return append(duplicateCases(), languageDuplicateCases...) }
+
+// languageDuplicateCases are cases in languages only a cgo build reads; see duplicate_cases_cgo.go.
+var languageDuplicateCases []engine.Case
+
 func (duplicate) About() engine.About {
 	return engine.About{Finds: engine.T("tests with the same body, ignoring names, comments and whitespace, and, in different files, the same known targets; a new copy is a regression"),
 		Why: engine.T("checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy"),

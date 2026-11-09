@@ -292,14 +292,14 @@ Names in type positions (type annotations, TypeScript's `import type`, generic t
 
 For `tests/duplicate`, the adapter makes a fingerprint of the sequence of tokens in each test's body and stores it in `Test.Body`. The test's name, comments and whitespace are not part of it. Literals are, with their values, so tests that differ in even one input have different fingerprints.
 
-A parameterised test writes its inputs outside its body. So the parameters, and the decorators or annotations on the test, are part of the fingerprint too.
+A parameterised test writes its inputs outside its body. So the parameters, and the decorators or annotations on the test, are part of the fingerprint too. A parameterised suite (`describe.each`, a class with `@pytest.mark.parametrize`, `@ParameterizedClass`) writes the inputs of every test in it on the suite. So the inputs of the suites around a test are part of its fingerprint too.
 
 | Language | What the fingerprint covers |
 |---|---|
 | Go | From the parameters to the closing brace. The semicolons Go's scanner adds at line ends are left out, because they depend on where the lines break |
-| Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body. For a test in a class, also the bodies of the `setUp` and the like and the `autouse=True` fixtures that run for that class |
+| Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body. For a test in a class, also the class's decorators and the bodies of the `setUp` and the like and the `autouse=True` fixtures that run for that class |
 | TypeScript | The `it("name", …)` call, without the name's string. Also the bodies of `beforeEach` and `beforeAll` in the enclosing `describe` blocks, the tables of `.each`, and the statements that set up the outer variables the test uses |
-| Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body |
+| Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body. The annotations of the `@ParameterizedClass` classes around the test too |
 | Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
 
 In Python and TypeScript, the setup that runs before a test is part of the fingerprint too. Tests with the same body under different setup check different things. For example, `TestA` and `TestB` in one file hold tests with the same body and build different things in `setUp`. Or tests with the same body in different `describe` blocks each use their own block's `const KEYS = …`.

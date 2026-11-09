@@ -306,3 +306,147 @@ hooked says hi
 plain says hi plain says hi twice`)
 	})
 }
+
+// viewpoint: behaviour
+// target: the Python, TypeScript, Java and Kotlin readers
+// A parameterised suite (describe.each, a class under @pytest.mark.parametrize or
+// @ParameterizedClass) writes the inputs of every test in it outside the test. Two such suites with
+// the same test and other inputs check other values, so their tests have different fingerprints.
+// With the same inputs they are copies and share one.
+func TestParameterisedSuitesGiveTheirInputs(t *testing.T) {
+	t.Run("typescript", func(t *testing.T) {
+		expect(t, bodies(t, "typescript", tree(
+			"src/calc.ts", "export function add(a: number, b: number) { return a + b; }\n",
+			"src/calc.test.ts", `import { add } from "./calc";
+
+describe.each([[1, 2]])("small %i", (a, b) => {
+  it("adds", () => { expect(add(a, b)).toBe(a + b); });
+});
+
+describe.each([[5, 6]])("large %i", (a, b) => {
+  it("adds", () => { expect(add(a, b)).toBe(a + b); });
+});
+
+describe.each([[5, 6]])("large again %i", (a, b) => {
+  it("adds", () => { expect(add(a, b)).toBe(a + b); });
+});
+`)), `
+large %i adds large again %i adds
+small %i adds`)
+	})
+	t.Run("python", func(t *testing.T) {
+		expect(t, bodies(t, "python", tree(
+			"src/app/__init__.py", "",
+			"src/app/calc.py", "def add(a, b):\n    return a + b\n",
+			"tests/test_calc.py", `import pytest
+from app.calc import add
+
+
+@pytest.mark.parametrize("a", [1])
+class TestSmall:
+    def test_add(self, a):
+        assert add(a, 0) == a
+
+
+@pytest.mark.parametrize("a", [9])
+class TestLarge:
+    def test_add(self, a):
+        assert add(a, 0) == a
+
+
+@pytest.mark.parametrize("a", [9])
+class TestLargeAgain:
+    def test_add(self, a):
+        assert add(a, 0) == a
+`)), `
+TestLarge.test_add TestLargeAgain.test_add
+TestSmall.test_add`)
+	})
+	t.Run("java", func(t *testing.T) {
+		expect(t, bodies(t, "java", tree(
+			"src/main/java/app/Calc.java", "package app;\n\npublic class Calc {\n  public static int add(int a, int b) { return a + b; }\n}\n",
+			"src/test/java/app/CalcTest.java", `package app;
+
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.ValueSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class CalcTest {
+  @Nested
+  @ParameterizedClass
+  @ValueSource(ints = {1})
+  class Small {
+    @Parameter int a;
+
+    @Test
+    void adds() { assertEquals(a, Calc.add(a, 0)); }
+  }
+
+  @Nested
+  @ParameterizedClass
+  @ValueSource(ints = {9})
+  class Large {
+    @Parameter int a;
+
+    @Test
+    void adds() { assertEquals(a, Calc.add(a, 0)); }
+  }
+
+  @Nested
+  @ParameterizedClass
+  @ValueSource(ints = {9})
+  class LargeAgain {
+    @Parameter int a;
+
+    @Test
+    void adds() { assertEquals(a, Calc.add(a, 0)); }
+  }
+}
+`)), `
+CalcTest.Large.adds CalcTest.LargeAgain.adds
+CalcTest.Small.adds`)
+	})
+	t.Run("kotlin", func(t *testing.T) {
+		expect(t, bodies(t, "kotlin", tree(
+			"src/main/kotlin/app/Calc.kt", "package app\n\nfun add(a: Int, b: Int) = a + b\n",
+			"src/test/kotlin/app/CalcTest.kt", `package app
+
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.ValueSource
+import kotlin.test.assertEquals
+
+class CalcTest {
+    @Nested
+    @ParameterizedClass
+    @ValueSource(ints = [1])
+    inner class Small(val a: Int) {
+        @Test
+        fun adds() { assertEquals(a, add(a, 0)) }
+    }
+
+    @Nested
+    @ParameterizedClass
+    @ValueSource(ints = [9])
+    inner class Large(val a: Int) {
+        @Test
+        fun adds() { assertEquals(a, add(a, 0)) }
+    }
+
+    @Nested
+    @ParameterizedClass
+    @ValueSource(ints = [9])
+    inner class LargeAgain(val a: Int) {
+        @Test
+        fun adds() { assertEquals(a, add(a, 0)) }
+    }
+}
+`)), `
+CalcTest.Large.adds CalcTest.LargeAgain.adds
+CalcTest.Small.adds`)
+	})
+}
