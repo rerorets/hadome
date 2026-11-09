@@ -15,7 +15,7 @@ A TypeScript test that passes the following string guards `billing.is_active`.
 const { rows } = await pool.query("SELECT billing.is_active(1, 3600) AS ok");
 ```
 
-Today hadome does not read SQL. So `tests/guards-nothing` fails this test as one that calls no product code. And deleting the last test that guards `billing.is_active` makes `tests/scope-shrunk` say nothing. The design in this document makes both right.
+This test checks `billing.is_active`, defined in `db/functions.sql`. This adapter reads the objects defined in `.sql` files as symbols, and the SQL strings in tests as calls to them. So this test guards `billing.is_active`. Deleting the last test that guards `billing.is_active` makes `tests/scope-shrunk` report a regression.
 
 ## Responsibility
 
@@ -405,7 +405,7 @@ Strings are read as SQL under these conditions.
 
 - With one database, strings are read in its dialect and resolved against it
 - With two or more, they are resolved against the database whose `sql.databases[].tests` globs match. Without those, every database whose dialect can read the string is tried. A name matching objects in two or more databases is unresolved
-- When the repository has no SQL database at all (no `.sql` files and no configuration), test strings are not read. There is no dialect and nothing to resolve against. Results in such repositories stay as they are today
+- When the repository has no SQL database at all (no `.sql` files and no configuration), test strings are not read. There is no dialect and nothing to resolve against
 
 ### Resolving names
 
@@ -466,7 +466,7 @@ SQL in the strings of product code (code that is not a test) is not read.
 
 - Each `.sql` file counts as using, from the database's unit, the global I/O API `database` (an `Import` with `Global` and `IO` true). Database objects run only inside the database
 - So a database unit is never pure, and `tests/purity-lost` never fires for it
-- A test calling SQL objects calls a unit that is not pure. `tests/no-mock` does not report that test's mocks. Tests calling only pure units are reported as before
+- A test calling SQL objects calls a unit that is not pure. `tests/no-mock` does not report that test's mocks. Tests calling only pure units are reported
 - SQL names become `Calls` or `Reads`, so the test is not one that drives the application from outside (`Drives`). Which objects it guards can be named
 - The test file's imports (`pg` and the like) still do not count toward purity
 
@@ -479,7 +479,7 @@ SQL in the strings of product code (code that is not a test) is not read.
 | `tests/target-unknown` | A new test whose names are all unresolved returns `3` |
 | `tests/invariant-unguarded` | SQL objects can be invariant targets (`billing.is_active`). `guards:` works as in other languages |
 | `tests/no-clock`, `tests/no-sleep`, `tests/no-mock` | "Hazards" above |
-| `tests/no-assertion`, `tests/skip-without-reason`, `tests/duplicate` | Apply to tests written in SQL. For tests in other languages, the test's own language decides, as before |
+| `tests/no-assertion`, `tests/skip-without-reason`, `tests/duplicate` | Apply to tests written in SQL. For tests in other languages, the test's own language decides |
 | `comments/missing-doc` | Does not apply. `routine` and `relation` are not among its kinds |
 | `comments/todo-format`, `comments/broken-reference` | Apply to comments in `.sql` |
 | `size/file-lines` | Applies to `.sql` files |
@@ -488,7 +488,7 @@ SQL in the strings of product code (code that is not a test) is not read.
 | `unknown/unread` | Files of unknown dialect, files with an unreadable statement |
 | `hadome mutate` | Does not mutate. Applying broken SQL would need a step that rebuilds the database before the tests, and hadome does not know it |
 
-`Symbol.Doc` is filled. The preceding comment lines, `COMMENT ON`, `COMMENT = '…'`, BigQuery's `OPTIONS(description=…)` and SQL Server's `MS_Description` extended property count as doc. No rule reads it today; if SQL objects are later asked for descriptions, the facts need not change.
+`Symbol.Doc` is filled. The preceding comment lines, `COMMENT ON`, `COMMENT = '…'`, BigQuery's `OPTIONS(description=…)` and SQL Server's `MS_Description` extended property count as doc. No rule reads `Symbol.Doc`. It is filled so that a rule asking SQL objects for descriptions can be added without changing the facts.
 
 ## Comments
 
@@ -562,7 +562,7 @@ Each dialect is tried on public code that has definitions, and on public code wi
 | Rule | Cases |
 |---|---|
 | `tests/scope-shrunk` | Deleting the only TypeScript test guarding an SQL function fails · deleting the function and its test passes · redefining the function in a new migration file passes · renaming the function passes · deleting the only Python test guarding a view fails · deleting the only test guarding an Oracle package routine fails · deleting the only test writing to a table with a trigger fails · deleting the only pgTAP test fails |
-| `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test that only reads a table passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins (`SELECT 1`, `SELECT now()`) fails · a test with only strings that do not read as SQL and contain no object name fails · in a repository without `.sql` files it fails as today |
+| `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test that only reads a table passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins (`SELECT 1`, `SELECT now()`) fails · a test with only strings that do not read as SQL and contain no object name fails · in a repository without `.sql` files it fails |
 | `tests/target-unknown` | A new test naming only names absent from the database returns `3` · a new test passing only SQL with a hole in a name position returns `3` · a new test passing only non-literal values to a call that takes SQL returns `3` · SQL with a hole in a value position resolves and passes |
 | Name resolution | An unqualified name resolves by the search order · an unqualified name in two schemas is unresolved · quoted names are case-sensitive (PostgreSQL) · unquoted names are upper-cased (Oracle, Snowflake) · `[dbo].[Proc]` equals `dbo.proc` (SQL Server) · `` `proj.ds.fn` `` equals `ds.fn` (BigQuery, without `catalog`) · a `WITH` name hides · the column `t.is_active` does not count · `"select a plan"` counts nothing |
 | Definitions | A dropped function is not a symbol · `DROP` in `V10__` is applied after `CREATE` in `V2__` · `DROP` in `.down.sql` is not read · dbmate's `migrate:down` side is not read · procedures separated by `GO` are read · `;` in a body delimited by `DELIMITER` does not split the statement · Oracle packages separated by `/` are read · no symbol comes from a `CREATE` inside a `$$` body · overloads are one symbol |
@@ -588,7 +588,7 @@ Each dialect is tried on public code that has definitions, and on public code wi
 - **Names inside function bodies.** Calls between product objects are not facts in other languages either
 - **Telling overloads apart by parameter type.** It needs type inference over call arguments
 - **Making row-level security policies, check constraints, defaults and generated columns symbols.** They are logic, but tests have no way of naming them. Triggers are the only thing a write to a table can be said to run
-- **Guessing SQL from ORM models or query builders.** Things like `knex('accounts').where(…)` are not read. ORM models are product code, which the other language adapters handle as they are
+- **Guessing SQL from ORM models or query builders.** Things like `knex('accounts').where(…)` are not read. ORM models are product code, which the other language adapters handle
 - **Following what psql's `\i` and SQL*Plus's `@file` include.** The included files are read as `.sql` files themselves
 - **Reading the order from Liquibase XML or YAML changelogs or sqitch plan files.** The order can be written with `order`
 - **SQL inside Terraform and Ansible.** Such as Ansible's `postgresql_query` tasks. To add it, that adapter fills `Test.Texts`. The SQL adapter does not change
@@ -601,4 +601,4 @@ Each dialect is tried on public code that has definitions, and on public code wi
 | The dependency for reading syntax | (a) Pure-Go parsers generated from per-dialect ANTLR grammars (the `antlr4-go/antlr` runtime and code generated from grammars-v4) (b) One tree-sitter SQL grammar (c) libpg_query for PostgreSQL only | (a). It gives the same facts in builds without cgo and reads by each dialect's rules. Each grammar's license, the size of the generated code, reading speed, and whether a BigQuery grammar exists are unverified. Deciding after checking them in the trial seems safest |
 | New configuration keys | `sql.databases` and `rules.tests.sql-sinks` | Adding them as in "Configuration" above seems right |
 | Types added to `facts` | `Test.Texts`, `SymbolRoutine`, `SymbolRelation` | Adding them seems right. The same `Text` serves other embedded languages (GraphQL and the like) |
-| Test SQL in repositories without `.sql` | (a) Keep not reading it, as today (b) Count strings passed to calls that take SQL as unresolved | (a). With no dialect and nothing to resolve against, nothing can be said for certain |
+| Test SQL in repositories without `.sql` | (a) Do not read it (b) Count strings passed to calls that take SQL as unresolved | (a). With no dialect and nothing to resolve against, nothing can be said for certain |
