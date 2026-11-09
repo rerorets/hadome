@@ -33,7 +33,8 @@ const catchChanges = "stand-in-tests-catch-changes"
 //
 // It also stands in for what the package's own tests need (see stand_in_test.go): the stages a
 // mutant runs in (mutation.StandInStages) and a second hadome mutate holding the lock
-// (mutation.StandInHoldLock).
+// (mutation.StandInHoldLock), and one that cannot write the lock
+// (mutation.StandInUnwritableLock).
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -43,6 +44,8 @@ func TestMain(m *testing.M) {
 			os.Exit(mutation.StandInStage(os.Args[2:]))
 		case mutation.StandInHoldLock:
 			os.Exit(mutation.StandInHold(os.Args[2]))
+		case mutation.StandInUnwritableLock:
+			os.Exit(mutation.StandInUnwritable(os.Args[2]))
 		}
 	}
 	os.Exit(m.Run())

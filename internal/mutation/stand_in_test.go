@@ -22,6 +22,10 @@ const (
 	// takes the lock at PATH, says "held" and holds it until its standard input closes or it is
 	// killed.
 	StandInHoldLock = "stand-in-hold-lock"
+	// StandInUnwritableLock makes the binary a hadome mutate that cannot write files:
+	// `<binary> stand-in-unwritable-lock PATH` tries the lock at PATH twice and prints each
+	// attempt's error, or "taken". No test starts it on Windows.
+	StandInUnwritableLock = "stand-in-unwritable-lock"
 )
 
 // StandInStage is the test command of StandInStages.
