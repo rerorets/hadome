@@ -302,6 +302,21 @@ A parameterised test writes its inputs outside its body. So the parameters, and 
 | Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body. The annotations of the `@ParameterizedClass` classes around the test too |
 | Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
 
+A test's name can also be written in annotations or arguments outside its body. What only gives the test a name is left out of the fingerprint, like the test's own name. Something only gives a name when changing or removing it changes neither what the test runs nor what it checks. Anything that changes how many times the test runs, its inputs, its time limit or which runs include it does not only give a name.
+
+| Language | What only gives a name, left out of the fingerprint |
+|---|---|
+| Java / Kotlin | `@DisplayName`. The `name` element of `@ParameterizedTest`, `@RepeatedTest` and `@ParameterizedClass` (`@ParameterizedTest(name = "{0}")` is the same as `@ParameterizedTest`) |
+| Python | The `ids=` argument of `@pytest.mark.parametrize`. The `id=` argument of `pytest.param` |
+| Rust | The description of an rstest case (`::small` in `#[case::small(1)]`) |
+
+These change how the test runs rather than its name, so they are part of the fingerprint:
+
+- inputs (`@ValueSource`, the values of `@pytest.mark.parametrize`, `#[case(1)]`)
+- the number of runs (the `value` of `@RepeatedTest`)
+- time limits (`@Timeout`, `@pytest.mark.timeout`)
+- tags that decide which runs include the test (`@Tag`, `@pytest.mark.slow`)
+
 In Python and TypeScript, the setup that runs before a test is part of the fingerprint too. Tests with the same body under different setup check different things. For example, `TestA` and `TestB` in one file hold tests with the same body and build different things in `setUp`. Or tests with the same body in different `describe` blocks each use their own block's `const KEYS = …`.
 
 ### What a test guards
@@ -383,7 +398,7 @@ Full parsers are used for every language because what users get (accurate functi
 3. Text inside a string literal or a comment is never reported as code (no hazard, import or symbol comes from it)
 4. A file no adapter claims is still listed with role `other`
 5. Configuration can add hazard entries but never remove built-in ones
-6. A test body's fingerprint does not change when the name, comments or whitespace change. It changes when any literal changes
+6. A test body's fingerprint does not change when the name, the annotations and arguments that only give a name, comments or whitespace change. It changes when any literal changes
 
 ## Deliberately left out
 

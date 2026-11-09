@@ -318,6 +318,21 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | Java / Kotlin | アノテーション（`@ValueSource`）から本体の終わりまで。テストを囲む `@ParameterizedClass` のクラスのアノテーションも入れる |
 | Rust | 関数の前の属性（`#[case(1)]`）から本体の終わりまで |
 
+テストの名前は、テストの本体の外の注釈や引数にも書けます。名前だけを付けるものは、テストの名前と同じく指紋に入れません。名前だけを付けるものとは、変えても、取り除いても、テストが動かすものと確かめるものが変わらないものです。テストを動かす回、入力、時間の上限、どの実行に含めるかを変えるものは、名前を付けるものではありません。
+
+| 言語 | 指紋に入れない、名前だけを付けるもの |
+|---|---|
+| Java / Kotlin | `@DisplayName`。`@ParameterizedTest`・`@RepeatedTest`・`@ParameterizedClass` の `name` の要素（`@ParameterizedTest(name = "{0}")` は `@ParameterizedTest` と同じ） |
+| Python | `@pytest.mark.parametrize` の `ids=` の引数。`pytest.param` の `id=` の引数 |
+| Rust | rstest の case の説明（`#[case::small(1)]` の `::small`） |
+
+次のものは、名前ではなくテストの動き方を変えるので、指紋に入れます。
+
+- 入力（`@ValueSource`、`@pytest.mark.parametrize` の値、`#[case(1)]`）
+- 回数（`@RepeatedTest` の `value`）
+- 時間の上限（`@Timeout`、`@pytest.mark.timeout`）
+- どの実行に含めるかを決めるタグ（`@Tag`、`@pytest.mark.slow`）
+
 Python と TypeScript では、テストの前に走る準備も指紋に入れます。本体が同じでも、準備が違えば別のものを確かめているからです。例: 同じファイルの `TestA` と `TestB` が、同じ本体のテストを持ち、`setUp` で別のものを作るとき。別の `describe` の中で、同じ本体のテストが、それぞれの `describe` の `const KEYS = …` を使うとき。
 
 ### テストが守るもの
@@ -412,7 +427,7 @@ testify の suite では、`suite.Run(t, new(X))` を呼ぶテストが、`X` �
 3. 文字列リテラルやコメントの中の文字は、コードとして報告しない（そこから危険、import、シンボルは生まれない）
 4. どのアダプタも受け持たないファイルも、役割 `other` で一覧に載る
 5. 設定は危険の項目を足せるが、組み込みの項目は消せない
-6. テストの本体の指紋は、名前、コメント、空白を変えても変わらない。リテラルを1つでも変えると変わる
+6. テストの本体の指紋は、名前、名前だけを付ける注釈と引数、コメント、空白を変えても変わらない。リテラルを1つでも変えると変わる
 
 ## 意図して入れなかったもの
 

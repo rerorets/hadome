@@ -137,7 +137,8 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 			}
 		}
 	}
-	t.fingerprint(append(inputs, n), def.ChildByFieldName("name"), context...)
+	nodes := append(inputs, n)
+	t.fingerprint(nodes, append(pyNameOnly(f, nodes), def.ChildByFieldName("name")), context...)
 	for _, d := range []*sitter.Node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
 			pf.decorators(t, d)

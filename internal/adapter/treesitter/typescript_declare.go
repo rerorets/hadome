@@ -223,7 +223,7 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 	for _, p := range sc.preludes {
 		context = append(context, codeIn{tf.f, p})
 	}
-	t.fingerprint([]*sitter.Node{at}, d.name, append(context, t.setups...)...)
+	t.fingerprint([]*sitter.Node{at}, []*sitter.Node{d.name}, append(context, t.setups...)...)
 	return t.done()
 }
 
