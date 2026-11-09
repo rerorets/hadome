@@ -9,56 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/facts"
 )
-
-// tables are the hazard tables: the built-in entries plus those the configuration adds.
-// Configuration can add entries, never remove them.
-type tables struct {
-	calls map[string]facts.HazardCategory // "<import path>.<Name>" -> category
-	mocks map[string]bool                 // import paths of mocking libraries
-	io    ioTable
-	// asserts are the functions configuration adds to the assertions, "<import path>.<Name>".
-	asserts map[string]bool
-	// sinks are the calls configuration adds to those that take SQL: a function or method name, or a
-	// callee as written (db.Run).
-	sinks map[string]bool
-}
-
-func newTables(c config.Config) *tables {
-	t := &tables{
-		calls: map[string]facts.HazardCategory{
-			"time.Now": facts.HazardClock, "time.Since": facts.HazardClock, "time.Until": facts.HazardClock,
-			"time.Sleep": facts.HazardSleep,
-		},
-		mocks: map[string]bool{
-			"github.com/golang/mock/gomock":      true,
-			"go.uber.org/mock/gomock":            true,
-			"github.com/stretchr/testify/mock":   true,
-			"github.com/vektra/mockery/v2/mocks": true,
-		},
-		io:      newIOTable(c.IO),
-		asserts: map[string]bool{},
-		sinks:   map[string]bool{},
-	}
-	for _, e := range c.SQLSinks["go"] {
-		t.sinks[e] = true
-	}
-	for _, e := range c.Assertions {
-		t.asserts[e] = true
-	}
-	for _, e := range c.Hazards["clock"] {
-		t.calls[e] = facts.HazardClock
-	}
-	for _, e := range c.Hazards["sleep"] {
-		t.calls[e] = facts.HazardSleep
-	}
-	for _, e := range c.Hazards["mock"] {
-		t.mocks[e] = true
-	}
-	return t
-}
 
 // failing are the methods of the testing tool that fail the test.
 var failing = map[string]bool{"Error": true, "Errorf": true, "Fatal": true, "Fatalf": true, "Fail": true, "FailNow": true}
@@ -248,15 +200,14 @@ func (w *walker) collectTParams(ft *ast.FuncType, body *ast.BlockStmt) {
 }
 
 func (w *walker) visit(n ast.Node) bool {
+	if !w.visitText(n) {
+		return false
+	}
 	switch n := n.(type) {
 	case *ast.AssignStmt:
 		w.recordVars(n)
-		if n.Tok == token.DEFINE || n.Tok == token.ASSIGN {
-			w.bindStrs(n.Lhs, n.Rhs, n.Tok == token.DEFINE)
-		}
 	case *ast.GenDecl: // var, const and type declarations inside the test
 		w.recordDecl(n)
-		w.bindDecl(n)
 	case *ast.FuncLit:
 		w.funcLit(n)
 		return false
@@ -274,13 +225,6 @@ func (w *walker) visit(n ast.Node) bool {
 		}
 	case *ast.Ident:
 		w.readIdent(n)
-		w.readConst(n)
-	case *ast.BasicLit:
-		w.literal(n)
-	case *ast.BinaryExpr:
-		if w.concat(n) {
-			return false
-		}
 	case *ast.ForStmt:
 		w.inspect(n.Init)
 		w.inLoop(n.Cond, n.Post, n.Body)

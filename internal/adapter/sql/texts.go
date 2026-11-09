@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 
@@ -117,12 +116,12 @@ func databasesFor(cat *catalog, testPath string) []*database {
 
 // apply adds what one string says. A name that resolves in two or more databases is unresolved.
 func (e *effect) apply(rs []reading, tx facts.Text, temps map[string]bool) {
-	times := max(tx.Times, 1)
 	var sqlReadings []reading
 	guessed := false
 	for _, r := range rs {
 		if r.sql {
 			sqlReadings = append(sqlReadings, r)
+			e.hazards = append(e.hazards, r.hazards...)
 		}
 		guessed = guessed || r.guessed
 	}
@@ -132,39 +131,41 @@ func (e *effect) apply(rs []reading, tx facts.Text, temps map[string]bool) {
 		}
 		return
 	}
-	for _, r := range sqlReadings {
-		e.hazards = append(e.hazards, r.hazards...)
-	}
-	// Each reference is resolved in every database that read the string.
+	// The readings of one string differ only in the database they resolve against, so their
+	// references line up.
 	base := sqlReadings[0]
+	d := base.db.dialect.(tableDialect)
 	for ri, ref := range base.refs {
-		d := base.db.dialect.(tableDialect)
 		if len(ref.Name) == 1 && temps[d.key(ref.Name)] {
 			continue
 		}
-		var hits []*object
-		var hitDB *database
-		isBuiltin := false
-		for _, r := range sqlReadings {
-			if ri >= len(r.refs) {
-				continue
-			}
-			o, out := r.db.resolve(r.db.dialect, r.refs[ri])
-			switch out {
-			case found:
-				hits = append(hits, o)
-				hitDB = r.db
-			case builtin:
-				isBuiltin = true
-			}
+		e.resolveIn(sqlReadings, ri, ref, max(tx.Times, 1))
+	}
+}
+
+// resolveIn resolves the ri-th reference in every database that read the string. It is a fact only
+// when exactly one database has the object.
+func (e *effect) resolveIn(readings []reading, ri int, ref Reference, times int) {
+	var hits []*object
+	var hitDB *database
+	isBuiltin := false
+	for _, r := range readings {
+		if ri >= len(r.refs) {
+			continue
 		}
-		switch {
-		case len(hits) == 1:
-			e.use(hitDB, hits[0], ref, times)
-		case len(hits) == 0 && isBuiltin:
-		default:
-			e.unresolved++
+		switch o, out := r.db.resolve(r.db.dialect, r.refs[ri]); out {
+		case found:
+			hits, hitDB = append(hits, o), r.db
+		case builtin:
+			isBuiltin = true
 		}
+	}
+	switch {
+	case len(hits) == 1:
+		e.use(hitDB, hits[0], ref, times)
+	case len(hits) == 0 && isBuiltin:
+	default:
+		e.unresolved++
 	}
 }
 
@@ -283,156 +284,4 @@ func readText(db *database, tx facts.Text) (reading, bool) {
 		}
 	}
 	return r, true
-}
-
-// firstWord returns the first word of text outside comments.
-func firstWord(text string, lx lexical) string {
-	masked := scan(text, lx).Masked
-	s := strings.TrimLeft(masked, " \t\r\n(")
-	end := strings.IndexFunc(s, func(r rune) bool {
-		return !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
-	})
-	if end < 0 {
-		return s
-	}
-	return s[:end]
-}
-
-var jdbcCall = regexp.MustCompile(`(?is)^\s*\{\s*(\?\s*=\s*)?call\s+(.*?)\s*\}\s*$`)
-
-// callEscape turns JDBC's {call p(?)} into the dialect's call statement.
-func callEscape(text, dialect string) string {
-	m := jdbcCall.FindStringSubmatch(text)
-	if m == nil {
-		return text
-	}
-	if dialect == "tsql" {
-		return "EXEC " + m[2]
-	}
-	return "CALL " + m[2]
-}
-
-var driverParam = regexp.MustCompile(`\$\d+|\?|%\(\w+\)s|%s|@\w+|:[A-Za-z_]\w*`)
-
-// prepare turns the holes of the host language and the drivers' parameters ($1, ?, :name, @p,
-// %s) into a value, 0, so that the grammar reads them where a value goes. A hole where a name goes
-// then does not read, which is what makes the string unresolved.
-func prepare(text string, holes []int, d tableDialect) string {
-	masked := scan(text, d.lex).Masked
-	var sb strings.Builder
-	last := 0
-	insert := map[int]bool{}
-	for _, h := range holes {
-		if h >= 0 && h <= len(text) {
-			insert[h] = true
-		}
-	}
-	for i := 0; i <= len(text); i++ {
-		if insert[i] && !insideString(text, masked, i) {
-			sb.WriteString(text[last:i])
-			sb.WriteString(" 0 ")
-			last = i
-		}
-	}
-	sb.WriteString(text[last:])
-	out := sb.String()
-	masked = scan(out, d.lex).Masked
-	var res strings.Builder
-	last = 0
-	for _, m := range driverParam.FindAllStringIndex(masked, -1) {
-		p := masked[m[0]:m[1]]
-		keep := false
-		switch {
-		case p == "?" && m[1] < len(masked) && (masked[m[1]] == '|' || masked[m[1]] == '&'):
-			keep = true // PostgreSQL's jsonb ?| and ?& operators
-		case p[0] == '@' && (d.name == "tsql" || d.name == "mysql" || d.name == "bigquery"):
-			keep = d.name != "bigquery" // T-SQL and MySQL variables; BigQuery's @name is a parameter
-		case p[0] == ':' && m[0] > 0 && (masked[m[0]-1] == ':' || isWordByte(masked[m[0]-1])):
-			keep = true // a :: cast, or a:b
-		case p[0] == '$' && d.name != "postgresql" && d.name != "snowflake":
-			keep = false
-		}
-		if keep {
-			continue
-		}
-		res.WriteString(out[last:m[0]])
-		res.WriteString("0")
-		last = m[1]
-	}
-	res.WriteString(out[last:])
-	return res.String()
-}
-
-func isWordByte(c byte) bool {
-	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
-}
-
-// insideString reports whether offset i of text is inside a string literal: the masked text has
-// blanks there while the text does not, or it sits between quotes.
-func insideString(text, masked string, i int) bool {
-	quotes := strings.Count(masked[:min(i, len(masked))], "'")
-	return quotes%2 == 1
-}
-
-var wordRe = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_$]*`)
-
-// mentions reports whether text holds a word equal to the last part of one of the database's object
-// names.
-func mentions(db *database, d tableDialect, text string) bool {
-	names := map[string]bool{}
-	for k := range db.objects {
-		names[lastPart(k)] = true
-	}
-	for _, w := range wordRe.FindAllString(text, -1) {
-		if names[d.fold(Ident{Text: w})] {
-			return true
-		}
-	}
-	return false
-}
-
-// hazardsIn finds the dialect's hazards among the calls and keywords of a tree.
-func hazardsIn(d tableDialect, t *Node, tx facts.Text) []facts.Hazard {
-	var out []facts.Hazard
-	add := func(cat, evidence string) {
-		h := facts.Hazard{Category: facts.HazardCategory(cat), Path: tx.Path, Line: tx.Line, Evidence: evidence}
-		for _, have := range out {
-			if have == h {
-				return
-			}
-		}
-		out = append(out, h)
-	}
-	calls := map[string]bool{}
-	for _, r := range d.References(t) {
-		if r.Use == UseCall {
-			calls[d.key(r.Name)] = true
-		}
-	}
-	toks := words(t.Tokens())
-	for _, h := range d.hazards {
-		if h.Call != "" {
-			parts := splitName(h.Call)
-			if calls[d.key(parts)] {
-				add(h.Category, h.Call)
-			}
-			continue
-		}
-		for i := range toks {
-			if i+len(h.Keywords) <= len(toks) && equalWords(toks[i:i+len(h.Keywords)], h.Keywords) {
-				add(h.Category, strings.Join(h.Keywords, " "))
-				break
-			}
-		}
-	}
-	return out
-}
-
-func equalWords(a, b []string) bool {
-	for i := range b {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

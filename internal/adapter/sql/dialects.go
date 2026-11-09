@@ -74,9 +74,10 @@ var postgresqlDialect = tableDialect{
 }
 
 var mysqlDialect = tableDialect{
-	name:    "mysql",
-	grammar: mysqlGrammar,
-	lex:     lexical{hashComments: true, doubleStrings: true, backslash: true},
+	name:            "mysql",
+	renameWithoutTo: true,
+	grammar:         mysqlGrammar,
+	lex:             lexical{hashComments: true, doubleStrings: true, backslash: true},
 	splitter: splitter{
 		commands:  re(`(?i)^\s*(source\s+\S+|\\\.\s+\S+|\\[a-z]\b.*)\s*;?\s*$`),
 		delimiter: true,
@@ -137,9 +138,10 @@ var sqliteDialect = tableDialect{
 }
 
 var tsqlDialect = tableDialect{
-	name:    "tsql",
-	grammar: tsqlGrammar,
-	lex:     lexical{},
+	name:           "tsql",
+	alterRedefines: true,
+	grammar:        tsqlGrammar,
+	lex:            lexical{},
 	splitter: splitter{
 		commands:  re(`^\s*:[A-Za-z]`),
 		separator: re(`(?i)^\s*GO(\s+\d+)?\s*;?\s*$`),

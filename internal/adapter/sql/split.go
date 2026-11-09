@@ -35,59 +35,74 @@ var (
 
 // split blanks the client forms of src and cuts it at the separators.
 func (s splitter) split(src string, lx lexical) []Statement {
-	text := []byte(src)
-	blankRange := func(from, to int) {
-		for i := from; i < to; i++ {
-			if text[i] != '\n' {
-				text[i] = ' '
-			}
-		}
-	}
-	blankDownSections(src, blankRange)
+	w := &splitWork{text: []byte(src), delim: ";", atStart: true}
+	blankDownSections(src, w.blank)
 	if s.copyData {
-		blankCopyData(string(text), blankRange)
+		blankCopyData(string(w.text), w.blank)
 	}
-	masked := scan(string(text), lx).Masked
-	var cuts []int
-	delim := ";"
 	offset := 0
-	atStart := true
-	for _, ln := range strings.SplitAfter(masked, "\n") {
+	for _, ln := range strings.SplitAfter(scan(string(w.text), lx).Masked, "\n") {
 		body := strings.TrimRight(ln, "\r\n")
-		end := offset + len(body)
-		trimmed := strings.TrimSpace(body)
-		switch {
-		case s.delimiter && delimiterLine.MatchString(body):
-			delim = delimiterLine.FindStringSubmatch(body)[1]
-			blankRange(offset, end)
-		case s.commands != nil && s.commands.MatchString(body) && (s.keep == nil || !s.keep.MatchString(body)) &&
-			(!s.commandsAtStart || atStart):
-			blankRange(offset, end)
-		case s.separator != nil && s.separator.MatchString(body):
-			blankRange(offset, end)
-			cuts = append(cuts, offset)
-			atStart = true
-		case delim != ";":
-			// A statement ended by the changed delimiter: the grammar reads ;, so the delimiter
-			// becomes ; and spaces. A ; inside the body stays and is the body's own.
-			for i := strings.Index(body, delim); i >= 0; {
-				at := offset + i
-				text[at] = ';'
-				blankRange(at+1, at+len(delim))
-				next := strings.Index(body[i+len(delim):], delim)
-				if next < 0 {
-					break
-				}
-				i += len(delim) + next
-			}
-		}
-		if trimmed != "" {
-			atStart = strings.HasSuffix(trimmed, ";") || (s.separator != nil && s.separator.MatchString(body)) ||
-				(s.commands != nil && s.commands.MatchString(body) && atStart)
+		s.line(w, body, offset)
+		if trimmed := strings.TrimSpace(body); trimmed != "" {
+			w.atStart = strings.HasSuffix(trimmed, ";") || s.isSeparator(body) || s.isCommand(body) && w.atStart
 		}
 		offset += len(ln)
 	}
-	return pieces(string(text), cuts)
+	return pieces(string(w.text), w.cuts)
+}
+
+// splitWork is the state of one split: the text being blanked, where it is cut, the delimiter in
+// force, and whether the next line may start a statement.
+type splitWork struct {
+	text    []byte
+	cuts    []int
+	delim   string
+	atStart bool
+}
+
+func (w *splitWork) blank(from, to int) {
+	for i := from; i < to; i++ {
+		if w.text[i] != '\n' {
+			w.text[i] = ' '
+		}
+	}
+}
+
+// line handles one line of the masked text, which starts at offset.
+func (s splitter) line(w *splitWork, body string, offset int) {
+	end := offset + len(body)
+	switch {
+	case s.delimiter && delimiterLine.MatchString(body):
+		w.delim = delimiterLine.FindStringSubmatch(body)[1]
+		w.blank(offset, end)
+	case s.isCommand(body) && (!s.commandsAtStart || w.atStart):
+		w.blank(offset, end)
+	case s.isSeparator(body):
+		w.blank(offset, end)
+		w.cuts = append(w.cuts, offset)
+	case w.delim != ";":
+		// A statement ended by the changed delimiter: the grammar reads ;, so the delimiter becomes ;
+		// and spaces. A ; inside the body stays and is the body's own.
+		for i := 0; ; {
+			next := strings.Index(body[i:], w.delim)
+			if next < 0 {
+				break
+			}
+			at := offset + i + next
+			w.text[at] = ';'
+			w.blank(at+1, at+len(w.delim))
+			i += next + len(w.delim)
+		}
+	}
+}
+
+func (s splitter) isCommand(body string) bool {
+	return s.commands != nil && s.commands.MatchString(body) && (s.keep == nil || !s.keep.MatchString(body))
+}
+
+func (s splitter) isSeparator(body string) bool {
+	return s.separator != nil && s.separator.MatchString(body)
 }
 
 // blankDownSections blanks the parts of dbmate and goose migrations that undo them.

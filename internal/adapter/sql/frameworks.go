@@ -54,36 +54,15 @@ func testFacts(f *sqlFile, td TestDef) facts.Test {
 		t.Hazards = append(t.Hazards, m)
 	}
 	e := &effect{calls: map[string]*callCount{}}
+	fixtures := fixtures(f, d, td.Nodes)
 	var tokens []string
-	// Objects a test file creates are its fixtures: names of them are not product code.
-	fixtures := map[string]bool{}
-	for _, n := range td.Nodes {
-		for _, def := range d.Definitions(n) {
-			if key, ok := f.db.defKey(d, def.Name); ok && def.Effect == EffectCreate {
-				fixtures[key] = true
-			}
-		}
-	}
 	for _, n := range td.Nodes {
 		for _, ref := range d.References(n) {
-			if key, ok := f.db.defKey(d, ref.Name); ok && fixtures[key] {
-				continue
-			}
-			o, out := f.db.resolve(d, ref)
-			name := strings.ToLower(d.key(ref.Name))
-			switch {
-			case out == found:
-				e.use(f.db, o, ref, 1)
-			case ref.Use == UseCall && td.asserts != nil && td.asserts(name):
-				t.Asserts++
-			case ref.Use == UseCall && td.own(name):
-			case out == unresolved:
-				e.unresolved++
+			if key, ok := f.db.defKey(d, ref.Name); !ok || !fixtures[key] {
+				t.Asserts += refFact(f, d, td, ref, e)
 			}
 		}
-		for _, h := range hazardsIn(d, n, facts.Text{Path: f.path, Line: n.Line}) {
-			e.hazards = append(e.hazards, h)
-		}
+		e.hazards = append(e.hazards, hazardsIn(d, n, facts.Text{Path: f.path, Line: n.Line})...)
 		for _, tk := range n.Tokens() {
 			tokens = append(tokens, tk.Text)
 		}
@@ -91,6 +70,37 @@ func testFacts(f *sqlFile, td TestDef) facts.Test {
 	merge(&t, e)
 	t.Body = facts.Fingerprint(tokens)
 	return t
+}
+
+// fixtures returns the keys of the objects a test's statements create: its setup, whose names are
+// not product code.
+func fixtures(f *sqlFile, d tableDialect, nodes []*Node) map[string]bool {
+	out := map[string]bool{}
+	for _, n := range nodes {
+		for _, def := range d.Definitions(n) {
+			if key, ok := f.db.defKey(d, def.Name); ok && def.Effect == EffectCreate {
+				out[key] = true
+			}
+		}
+	}
+	return out
+}
+
+// refFact adds what one name of a test written in SQL is: a product object, or the framework's
+// assertion (it returns 1 then), or the framework's own function, or unresolved.
+func refFact(f *sqlFile, d tableDialect, td TestDef, ref Reference, e *effect) int {
+	o, out := f.db.resolve(d, ref)
+	name := strings.ToLower(d.key(ref.Name))
+	switch {
+	case out == found:
+		e.use(f.db, o, ref, 1)
+	case ref.Use == UseCall && td.asserts != nil && td.asserts(name):
+		return 1
+	case ref.Use == UseCall && td.own(name):
+	case out == unresolved:
+		e.unresolved++
+	}
+	return 0
 }
 
 // tapFramework is pgTAP and myTAP: a file that calls plan(…) or no_plan() is one test.
@@ -187,32 +197,41 @@ func (tsqltFramework) Tests(d Dialect, trees []*Node, src []byte) []TestDef {
 	for _, m := range newTestClass.FindAllStringSubmatch(string(src), -1) {
 		classes[strings.ToLower(m[1])] = true
 	}
-	own := func(name string) bool { return strings.HasPrefix(name, "tsqlt.") }
 	var out []TestDef
 	for _, t := range trees {
 		for _, stmt := range td.statements(t) {
 			for _, def := range td.definitions(stmt) {
-				if def.Kind != KindProcedure || def.Effect != EffectCreate || len(def.Name) != 2 {
-					continue
+				if isTSQLtTest(def, classes) {
+					out = append(out, tsqltTest(td, stmt, def))
 				}
-				if !classes[strings.ToLower(def.Name[0].Text)] || !strings.HasPrefix(strings.ToLower(def.Name[1].Text), "test") {
-					continue
-				}
-				tdef := TestDef{Name: def.Name[0].Text + "." + def.Name[1].Text, Line: def.Line, Nodes: []*Node{stmt}, own: own}
-				for _, r := range td.References(stmt) {
-					name := strings.ToLower(td.key(r.Name))
-					switch {
-					case strings.HasPrefix(name, "tsqlt.assert") || name == "tsqlt.fail" || strings.HasPrefix(name, "tsqlt.expectexception"):
-						tdef.Asserts++
-					case name == "tsqlt.faketable" || name == "tsqlt.spyprocedure" || name == "tsqlt.fakefunction":
-						tdef.Mocks = append(tdef.Mocks, facts.Hazard{Category: facts.HazardMock, Line: r.Line, Evidence: name})
-					}
-				}
-				out = append(out, tdef)
 			}
 		}
 	}
 	return out
+}
+
+// isTSQLtTest reports whether a definition creates a procedure whose name starts with test in a
+// test class.
+func isTSQLtTest(def Definition, classes map[string]bool) bool {
+	return def.Kind == KindProcedure && def.Effect == EffectCreate && len(def.Name) == 2 &&
+		classes[strings.ToLower(def.Name[0].Text)] && strings.HasPrefix(strings.ToLower(def.Name[1].Text), "test")
+}
+
+var tsqltFakes = map[string]bool{"tsqlt.faketable": true, "tsqlt.spyprocedure": true, "tsqlt.fakefunction": true}
+
+// tsqltTest is the test a tSQLt test procedure is, with the fakes it makes as mocks.
+func tsqltTest(td tableDialect, stmt *Node, def Definition) TestDef {
+	t := TestDef{Name: def.Name[0].Text + "." + def.Name[1].Text, Line: def.Line, Nodes: []*Node{stmt},
+		own: func(name string) bool { return strings.HasPrefix(name, "tsqlt.") },
+		asserts: func(name string) bool {
+			return strings.HasPrefix(name, "tsqlt.assert") || name == "tsqlt.fail" || strings.HasPrefix(name, "tsqlt.expectexception")
+		}}
+	for _, r := range td.References(stmt) {
+		if name := strings.ToLower(td.key(r.Name)); tsqltFakes[name] {
+			t.Mocks = append(t.Mocks, facts.Hazard{Category: facts.HazardMock, Line: r.Line, Evidence: name})
+		}
+	}
+	return t
 }
 
 // utplsqlFramework is utPLSQL: procedures annotated --%test in a package annotated --%suite. Their
@@ -231,14 +250,45 @@ func (utplsqlFramework) Tests(d Dialect, trees []*Node, src []byte) []TestDef {
 	if d.Name() != "oracle" || !suiteNote.Match(src) {
 		return nil
 	}
-	td := tableDialectOf(d)
-	lines := strings.Split(string(src), "\n")
-	type note struct {
-		line     int
-		disabled *facts.Skip
+	suite := readSuite(tableDialectOf(d), trees, strings.Split(string(src), "\n"))
+	var names []string
+	for k := range suite.tests {
+		names = append(names, k)
 	}
-	tests := map[string]note{} // package.procedure -> its annotation
-	bodies := map[string]*Node{}
+	sort.Strings(names)
+	var out []TestDef
+	for _, k := range names {
+		note := suite.tests[k]
+		t := TestDef{Name: k, Line: note.line,
+			own: func(name string) bool { return strings.HasPrefix(name, "ut.") || strings.HasPrefix(name, "ut3.") },
+			asserts: func(name string) bool {
+				return strings.HasPrefix(name, "ut.expect") || strings.HasPrefix(name, "ut3.ut.expect")
+			}}
+		if note.disabled != nil {
+			t.Skip = *note.disabled
+		}
+		if b := suite.bodies[k]; b != nil {
+			t.Nodes = []*Node{b}
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// utSuite is what a utPLSQL file declares: the annotated procedures of its package specifications
+// and the procedure bodies of its package bodies, by package.procedure.
+type utSuite struct {
+	tests  map[string]utNote
+	bodies map[string]*Node
+}
+
+type utNote struct {
+	line     int
+	disabled *facts.Skip
+}
+
+func readSuite(td tableDialect, trees []*Node, lines []string) utSuite {
+	suite := utSuite{tests: map[string]utNote{}, bodies: map[string]*Node{}}
 	for _, t := range trees {
 		for _, stmt := range td.statements(t) {
 			defs := td.definitions(stmt)
@@ -249,46 +299,20 @@ func (utplsqlFramework) Tests(d Dialect, trees []*Node, src []byte) []TestDef {
 			switch defs[0].Kind {
 			case KindPackage:
 				for _, def := range defs[1:] {
-					n, ok := annotated(lines, def.Line)
-					if ok {
-						tests[pkg+"."+strings.ToUpper(lastIdent(def.Name))] = note{line: def.Line, disabled: n}
+					if skip, ok := annotated(lines, def.Line); ok {
+						suite.tests[pkg+"."+strings.ToUpper(lastIdent(def.Name))] = utNote{line: def.Line, disabled: skip}
 					}
 				}
 			case KindPackageBody:
 				for _, b := range stmt.All(func(m *Node) bool { return m.Rule == "procedure_body" }) {
 					if id := b.Child("identifier"); id != nil {
-						bodies[pkg+"."+strings.ToUpper(td.nameOf(id).last())] = b
+						suite.bodies[pkg+"."+strings.ToUpper(td.nameOf(id).last())] = b
 					}
 				}
 			}
 		}
 	}
-	own := func(name string) bool {
-		return name == "ut.expect" || strings.HasPrefix(name, "ut.") || strings.HasPrefix(name, "ut3.")
-	}
-	var names []string
-	for k := range tests {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	var out []TestDef
-	for _, k := range names {
-		n := tests[k]
-		tdef := TestDef{Name: k, Line: n.line, own: own}
-		if n.disabled != nil {
-			tdef.Skip = *n.disabled
-		}
-		if b := bodies[k]; b != nil {
-			tdef.Nodes = []*Node{b}
-			for _, r := range td.References(b) {
-				if strings.EqualFold(td.key(r.Name), "ut.expect") || strings.EqualFold(lastIdent(r.Name), "expect") {
-					tdef.Asserts++
-				}
-			}
-		}
-		out = append(out, tdef)
-	}
-	return out
+	return suite
 }
 
 // annotated reads the utPLSQL annotations right above a line: whether it is a --%test, and the

@@ -8,6 +8,7 @@ import (
 // Dialect reads one SQL dialect: which files are written in it, how its files split into what the
 // grammar reads, and which objects a tree defines and names. Adding a dialect is adding one
 // implementation and registering it in dialects.
+// gate:allow size/interface-methods reason: the design (adapters-sql.md) fixes these nine methods, so that a new dialect changes nothing outside its own implementation
 type Dialect interface {
 	Name() string
 	// Markers returns the dialect's markers found in src outside strings and comments.

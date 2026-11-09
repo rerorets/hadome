@@ -3,7 +3,6 @@ package golang
 import (
 	"go/ast"
 	"go/token"
-	"go/types"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,46 +32,6 @@ type strDecl struct {
 	value ast.Expr
 	path  string
 	in    scope
-}
-
-// sinkRule says where a call that takes SQL has its SQL argument. ctx is true when a context may
-// come first (pgx's Query(ctx, sql), database/sql's QueryContext(ctx, sql)); dest is true when the
-// destination comes before the SQL (sqlx's Select(dest, sql)).
-type sinkRule struct {
-	ctx, dest bool
-	// sqlx marks the methods whose names are too common to take for SQL unless sqlx is imported.
-	sqlx bool
-}
-
-// sinks are the methods of Go's database clients that take SQL. The adapter types no value of a
-// package outside the repository, so it cannot see that a receiver is a *sql.DB or a pgx.Conn: a
-// method counts only when the file it is called in imports one of sqlClients, and its receiver is
-// not a value of one of the repository's own types.
-var sinks = map[string]sinkRule{
-	"Query": {ctx: true}, "QueryRow": {ctx: true}, "Exec": {ctx: true}, "Prepare": {ctx: true},
-	"QueryContext": {ctx: true}, "QueryRowContext": {ctx: true}, "ExecContext": {ctx: true}, "PrepareContext": {ctx: true},
-	"Queryx": {ctx: true}, "QueryRowx": {ctx: true}, "QueryxContext": {ctx: true}, "QueryRowxContext": {ctx: true},
-	"MustExec": {ctx: true}, "MustExecContext": {ctx: true}, "NamedExec": {ctx: true}, "NamedQuery": {ctx: true},
-	"NamedExecContext": {ctx: true}, "NamedQueryContext": {ctx: true}, "Preparex": {ctx: true}, "PreparexContext": {ctx: true},
-	"Select": {ctx: true, dest: true, sqlx: true}, "Get": {ctx: true, dest: true, sqlx: true},
-	"SelectContext": {ctx: true, dest: true, sqlx: true}, "GetContext": {ctx: true, dest: true, sqlx: true},
-}
-
-// sqlClients are the import paths (and their subpackages) of the database clients sinks belongs to.
-var sqlClients = []string{"database/sql", "github.com/jackc/pgx", "github.com/jackc/pgconn", "github.com/jmoiron/sqlx"}
-
-func importsClient(imports map[string]string, sqlxOnly bool) bool {
-	for _, p := range imports {
-		for _, c := range sqlClients {
-			if sqlxOnly && c != "github.com/jmoiron/sqlx" {
-				continue
-			}
-			if p == c || strings.HasPrefix(p, c+"/") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // recordText records one use of a string where it is written.
@@ -160,53 +119,72 @@ func addends(e ast.Expr) []ast.Expr {
 // string when no part is a literal or a constant. depth bounds constants defined by constants.
 func (w *walker) stringExpr(e ast.Expr, in scope, at string, depth int) (facts.Text, bool) {
 	parts := addends(e)
-	var b strings.Builder
-	var holes []int
-	line, found := 0, false
-	for _, p := range parts {
-		switch p := p.(type) {
-		case *ast.BasicLit:
-			if p.Kind != token.STRING {
-				return facts.Text{}, false
-			}
-			s, err := strconv.Unquote(p.Value)
-			if err != nil {
-				return facts.Text{}, false
-			}
-			if !found {
-				line, found = w.line(p), true
-			}
-			b.WriteString(s)
-			continue
-		case *ast.Ident:
-			if d, ok := in.strDecl(p.Name); ok && depth < maxDepth {
-				if t, ok := w.stringExpr(d.value, d.in, d.path, depth+1); ok {
-					if !found && len(parts) == 1 {
-						return t, true // the constant itself, where it is declared
-					}
-					for _, h := range t.Holes {
-						holes = append(holes, b.Len()+h)
-					}
-					b.WriteString(t.Value)
-					found = true
-					continue
-				}
-			}
-		}
-		if len(parts) == 1 {
-			return facts.Text{}, false
-		}
-		if len(holes) == 0 || holes[len(holes)-1] != b.Len() {
-			holes = append(holes, b.Len())
-		}
+	if len(parts) == 1 {
+		return w.stringPart(parts[0], in, at, depth)
 	}
-	if !found {
+	var j joined
+	for _, p := range parts {
+		t, ok := w.stringPart(p, in, at, depth)
+		if !ok {
+			j.hole()
+			continue
+		}
+		j.add(t)
+	}
+	if !j.found {
 		return facts.Text{}, false
 	}
-	if line == 0 {
-		line = w.line(e)
+	if j.line == 0 {
+		j.line = w.line(e)
 	}
-	return facts.Text{Path: at, Line: line, Value: b.String(), Holes: holes}, true
+	return facts.Text{Path: at, Line: j.line, Value: j.b.String(), Holes: j.holes}, true
+}
+
+// stringPart reads one addend: a string literal, or a package-level string constant read where it
+// is declared.
+func (w *walker) stringPart(p ast.Expr, in scope, at string, depth int) (facts.Text, bool) {
+	switch p := p.(type) {
+	case *ast.BasicLit:
+		if p.Kind != token.STRING {
+			return facts.Text{}, false
+		}
+		s, err := strconv.Unquote(p.Value)
+		if err != nil {
+			return facts.Text{}, false
+		}
+		return facts.Text{Path: at, Line: w.line(p), Value: s}, true
+	case *ast.Ident:
+		if d, ok := in.strDecl(p.Name); ok && depth < maxDepth {
+			return w.stringExpr(d.value, d.in, d.path, depth+1)
+		}
+	}
+	return facts.Text{}, false
+}
+
+// joined builds the string of addends joined with +. A part that is not a string leaves one hole
+// where it is joined. The line is that of the first literal.
+type joined struct {
+	b     strings.Builder
+	holes []int
+	line  int
+	found bool
+}
+
+func (j *joined) add(t facts.Text) {
+	for _, h := range t.Holes {
+		j.holes = append(j.holes, j.b.Len()+h)
+	}
+	if !j.found {
+		j.line = t.Line
+	}
+	j.b.WriteString(t.Value)
+	j.found = true
+}
+
+func (j *joined) hole() {
+	if len(j.holes) == 0 || j.holes[len(j.holes)-1] != j.b.Len() {
+		j.holes = append(j.holes, j.b.Len())
+	}
 }
 
 // strKeys returns the strings an expression stands for: a string expression, or a local name bound
@@ -270,97 +248,6 @@ func (w *walker) pendStrs(ft *ast.FuncType, c *ast.CallExpr) {
 			i++
 		}
 	}
-}
-
-// sinkCall marks the SQL argument of a call that takes SQL. A string the walker can name is marked
-// as passed to SQL; anything else is recorded as a dynamic string.
-func (w *walker) sinkCall(c *ast.CallExpr) {
-	pos, ok := w.sinkArg(c)
-	if !ok {
-		return
-	}
-	if pos < 0 || pos >= len(c.Args) {
-		return
-	}
-	arg := ast.Unparen(c.Args[pos])
-	if f, ok := arg.(*ast.CallExpr); ok && isSprintf(f, w.imports) && len(f.Args) > 0 {
-		arg = ast.Unparen(f.Args[0]) // the format string is handed over as it is
-	}
-	if keys, ok := w.strKeys(arg); ok {
-		for _, k := range keys {
-			w.sinkKeys[k] = true
-		}
-		return
-	}
-	w.recordText(facts.Text{Path: w.curPath, Line: w.line(arg), Sink: facts.TextSinkSQL, Dynamic: true})
-}
-
-func isSprintf(c *ast.CallExpr, imports map[string]string) bool {
-	sel, ok := c.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	pkg, ok := sel.X.(*ast.Ident)
-	return ok && imports[pkg.Name] == "fmt" && sel.Sel.Name == "Sprintf"
-}
-
-// sinkArg returns the position of a call's SQL argument when the call takes SQL: a configured
-// entry, or a method of sinks called in a file that imports a database client.
-func (w *walker) sinkArg(c *ast.CallExpr) (int, bool) {
-	name := ""
-	switch f := ast.Unparen(c.Fun).(type) {
-	case *ast.SelectorExpr:
-		name = f.Sel.Name
-		written := types.ExprString(f)
-		if w.tables.sinks[name] || w.tables.sinks[written] {
-			return w.firstSQLArg(c, sinkRule{ctx: true}), true
-		}
-		if x, ok := f.X.(*ast.Ident); ok && (w.tParams[x.Name] || w.imports[x.Name] != "" && !w.shadowed(x.Name)) {
-			return 0, false // a call on the testing tool, or a package's function
-		}
-		rule, ok := sinks[name]
-		if !ok || !importsClient(w.imports, rule.sqlx) {
-			return 0, false
-		}
-		if t := w.valueType(f.X); t != nil && t.id != "" {
-			return 0, false // a method of the repository's own type
-		}
-		return w.firstSQLArg(c, rule), true
-	case *ast.Ident:
-		if w.tables.sinks[f.Name] {
-			return w.firstSQLArg(c, sinkRule{ctx: true}), true
-		}
-	}
-	return 0, false
-}
-
-// firstSQLArg skips a leading context and, for sqlx's Select and Get, the destination.
-func (w *walker) firstSQLArg(c *ast.CallExpr, r sinkRule) int {
-	pos := 0
-	if r.ctx && len(c.Args) > 1 && w.isContext(c.Args[0]) {
-		pos++
-	}
-	if r.dest {
-		pos++
-	}
-	return pos
-}
-
-// isContext reports whether an argument is a context: a name such as ctx, or a call that makes one
-// (context.Background(), t.Context()). A string never is.
-func (w *walker) isContext(e ast.Expr) bool {
-	switch e := ast.Unparen(e).(type) {
-	case *ast.Ident:
-		n := strings.ToLower(e.Name)
-		return n == "ctx" || strings.HasSuffix(n, "ctx") || strings.HasPrefix(n, "context")
-	case *ast.CallExpr:
-		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
-			if x, ok := sel.X.(*ast.Ident); ok {
-				return w.imports[x.Name] == "context" || sel.Sel.Name == "Context" && w.tParams[x.Name]
-			}
-		}
-	}
-	return false
 }
 
 // textFacts returns the test's strings, a string passed to SQL anywhere marked so, sorted.
@@ -445,4 +332,25 @@ func (w *walker) bindDecl(d *ast.GenDecl) {
 			w.bindStrs(names, vs.Values, true)
 		}
 	}
+}
+
+// visitText records the strings a node of the test holds and the names they are bound to. It
+// returns false when it read the whole node, a string joined with +, so that its parts are not read
+// again.
+func (w *walker) visitText(n ast.Node) bool {
+	switch n := n.(type) {
+	case *ast.AssignStmt:
+		if n.Tok == token.DEFINE || n.Tok == token.ASSIGN {
+			w.bindStrs(n.Lhs, n.Rhs, n.Tok == token.DEFINE)
+		}
+	case *ast.GenDecl:
+		w.bindDecl(n)
+	case *ast.Ident:
+		w.readConst(n)
+	case *ast.BasicLit:
+		w.literal(n)
+	case *ast.BinaryExpr:
+		return !w.concat(n)
+	}
+	return true
 }

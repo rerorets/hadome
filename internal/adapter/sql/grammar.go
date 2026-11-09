@@ -28,6 +28,7 @@ type syntaxError struct {
 	err error
 }
 
+// gate:allow size/params reason: ANTLR's ErrorListener interface fixes these six parameters
 func (e *syntaxError) SyntaxError(_ antlr.Recognizer, offending interface{}, line, col int, msg string, _ antlr.RecognitionException) {
 	if tok, ok := offending.(antlr.Token); ok && msg == "" {
 		msg = fmt.Sprintf("unexpected %q", tok.GetText())

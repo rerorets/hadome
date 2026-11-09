@@ -31,93 +31,136 @@ type scanned struct {
 // scan blanks the strings and comments of src. Quote characters and dollar tags stay, so that a
 // marker such as $$ is still seen; what is between them does not.
 func scan(src string, lx lexical) scanned {
-	b := []byte(src)
-	var comments []span
-	line := 1
-	blank := func(from, to int) {
-		for i := from; i < to && i < len(b); i++ {
-			if b[i] != '\n' {
-				b[i] = ' '
-			}
+	s := &scanner{src: src, b: []byte(src), lx: lx}
+	for i := 0; i < len(src); {
+		i = s.next(i)
+	}
+	return scanned{Masked: string(s.b), Comments: s.comments}
+}
+
+type scanner struct {
+	src      string
+	b        []byte // src with what has been found blanked
+	lx       lexical
+	comments []span
+	// line is the line at offset at; the scan only moves forward, so lines are counted once.
+	line, at int
+}
+
+// lineOf returns the line of offset i, at or after the last offset asked for.
+func (s *scanner) lineOf(i int) int {
+	if s.line == 0 {
+		s.line = 1
+	}
+	s.line += strings.Count(s.src[s.at:i], "\n")
+	s.at = i
+	return s.line
+}
+
+// next handles what starts at offset i and returns the offset after it.
+func (s *scanner) next(i int) int {
+	if end, ok := s.comment(i); ok {
+		return end
+	}
+	if end, ok := s.literal(i); ok {
+		return end
+	}
+	return i + 1
+}
+
+// comment handles a comment starting at i.
+func (s *scanner) comment(i int) (int, bool) {
+	rest := s.src[i:]
+	switch {
+	case strings.HasPrefix(rest, "--"):
+		return s.lineComment(i, 2), true
+	case s.lx.hashComments && rest[0] == '#':
+		return s.lineComment(i, 1), true
+	case strings.HasPrefix(rest, "/*"):
+		end := blockEnd(s.src, i, s.lx.nestedBlocks)
+		s.comments = append(s.comments, span{Start: i, End: end, Line: s.lineOf(i), Text: strings.TrimSuffix(s.src[i+2:end], "*/")})
+		s.blank(i, end)
+		return end, true
+	}
+	return 0, false
+}
+
+// literal handles a string or a quoted name starting at i.
+func (s *scanner) literal(i int) (int, bool) {
+	rest := s.src[i:]
+	c := rest[0]
+	switch {
+	case s.lx.tripleQuotes && isTripleQuote(rest):
+		return s.enclosed(i, 3, rest[:3]), true
+	case s.lx.qQuotes && isQQuote(rest):
+		return s.enclosed(i, 3, string(qClosing(rest[2]))+"'"), true
+	case c == '\'' || s.lx.doubleStrings && c == '"':
+		end := quotedEnd(s.src, i, c, s.escapes(i))
+		s.blank(i+1, end-1)
+		return end, true
+	case c == '"' || c == '`':
+		return quotedEnd(s.src, i, c, false), true
+	case s.lx.dollarQuotes && c == '$':
+		if tag, ok := dollarTag(rest); ok {
+			return s.enclosed(i, len(tag), tag), true
 		}
 	}
-	i := 0
-	for i < len(src) {
-		c := src[i]
-		switch {
-		case c == '\n':
-			line++
-			i++
-		case c == '-' && strings.HasPrefix(src[i:], "--"), lx.hashComments && c == '#':
-			end := strings.IndexByte(src[i:], '\n')
-			if end < 0 {
-				end = len(src) - i
-			}
-			start := 2
-			if c == '#' {
-				start = 1
-			}
-			comments = append(comments, span{Start: i, End: i + end, Line: line, Text: src[i+start : i+end]})
-			blank(i, i+end)
-			i += end
-		case c == '/' && strings.HasPrefix(src[i:], "/*"):
-			end := blockEnd(src, i, lx.nestedBlocks)
-			comments = append(comments, span{Start: i, End: end, Line: line, Text: strings.TrimSuffix(src[i+2:end], "*/")})
-			line += strings.Count(src[i:end], "\n")
-			blank(i, end)
-			i = end
-		case lx.tripleQuotes && (strings.HasPrefix(src[i:], `'''`) || strings.HasPrefix(src[i:], `"""`)):
-			q := src[i : i+3]
-			end := strings.Index(src[i+3:], q)
-			if end < 0 {
-				end = len(src) - i - 3
-			}
-			body := i + 3 + end
-			line += strings.Count(src[i:body], "\n")
-			blank(i+3, body)
-			i = min(body+3, len(src))
-		case lx.qQuotes && (c == 'q' || c == 'Q') && i+2 < len(src) && src[i+1] == '\'':
-			open := src[i+2]
-			closing := map[byte]byte{'[': ']', '{': '}', '(': ')', '<': '>'}[open]
-			if closing == 0 {
-				closing = open
-			}
-			end := strings.Index(src[i+3:], string(closing)+"'")
-			if end < 0 {
-				end = len(src) - i - 3
-			}
-			body := i + 3 + end
-			line += strings.Count(src[i:body], "\n")
-			blank(i+3, body)
-			i = min(body+2, len(src))
-		case c == '\'' || (lx.doubleStrings && c == '"'):
-			end := quotedEnd(src, i, c, lx.backslash || (c == '\'' && i > 0 && (src[i-1] == 'E' || src[i-1] == 'e')))
-			line += strings.Count(src[i:end], "\n")
-			blank(i+1, end-1)
-			i = end
-		case c == '"' || c == '`':
-			end := quotedEnd(src, i, c, false)
-			line += strings.Count(src[i:end], "\n")
-			i = end
-		case lx.dollarQuotes && c == '$':
-			tag, ok := dollarTag(src[i:])
-			if !ok {
-				i++
-				continue
-			}
-			end := strings.Index(src[i+len(tag):], tag)
-			if end < 0 {
-				end = len(src) - i - len(tag)
-			}
-			body := i + len(tag) + end
-			line += strings.Count(src[i:body], "\n")
-			blank(i+len(tag), body)
-			i = min(body+len(tag), len(src))
-		default:
-			i++
+	return 0, false
+}
+
+// escapes reports whether \ escapes a quote in the string starting at i: always in dialects with
+// backslash escapes, and in PostgreSQL's E'…' strings.
+func (s *scanner) escapes(i int) bool {
+	if s.lx.backslash {
+		return true
+	}
+	return s.src[i] == '\'' && i > 0 && (s.src[i-1] == 'E' || s.src[i-1] == 'e')
+}
+
+func isTripleQuote(rest string) bool {
+	return strings.HasPrefix(rest, "'''") || strings.HasPrefix(rest, `"""`)
+}
+
+func isQQuote(rest string) bool {
+	return len(rest) > 2 && (rest[0] == 'q' || rest[0] == 'Q') && rest[1] == '\''
+}
+
+// lineComment records and blanks the comment starting at i, whose delimiter is width bytes.
+func (s *scanner) lineComment(i, width int) int {
+	end := strings.IndexByte(s.src[i:], '\n')
+	if end < 0 {
+		end = len(s.src) - i
+	}
+	s.comments = append(s.comments, span{Start: i, End: i + end, Line: s.lineOf(i), Text: s.src[i+width : i+end]})
+	s.blank(i, i+end)
+	return i + end
+}
+
+// enclosed blanks the body of a string that opens with width bytes at i and closes with closer.
+func (s *scanner) enclosed(i, width int, closer string) int {
+	end := strings.Index(s.src[i+width:], closer)
+	if end < 0 {
+		end = len(s.src) - i - width
+	}
+	body := i + width + end
+	s.blank(i+width, body)
+	return min(body+len(closer), len(s.src))
+}
+
+func (s *scanner) blank(from, to int) {
+	for i := from; i < to && i < len(s.b); i++ {
+		if s.b[i] != '\n' {
+			s.b[i] = ' '
 		}
 	}
-	return scanned{Masked: string(b), Comments: comments}
+}
+
+// qClosing is the character that closes Oracle's q'… string opened with open.
+func qClosing(open byte) byte {
+	if c, ok := map[byte]byte{'[': ']', '{': '}', '(': ')', '<': '>'}[open]; ok {
+		return c
+	}
+	return open
 }
 
 // blockEnd returns the offset after the block comment starting at i.

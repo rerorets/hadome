@@ -24,37 +24,56 @@ func (db *database) resolve(d Dialect, ref Reference) (*object, outcome) {
 	for i, p := range ref.Name {
 		parts[i] = d.Fold(p)
 	}
-	b := d.Builtins()
-	if len(parts) >= 2 && (b.Schemas[parts[len(parts)-2]] || len(parts) >= 3 && b.Schemas[parts[len(parts)-3]] ||
-		hasPrefix(parts[0], b.Prefixes)) {
+	if inSystemSchema(d.Builtins(), parts) {
 		return nil, builtin
 	}
 	switch len(parts) {
 	case 1:
 		return db.unqualified(d, parts[0], ref.Use == UseCall)
 	case 2:
-		if o := db.objects[parts[0]+"."+parts[1]]; o != nil {
-			return o, found
-		}
-		// pkg.routine of an Oracle package in the default schema, or in the only schema that has it
-		if s := db.schemaFor(d); s != "" {
-			if o := db.objects[s+"."+parts[0]+"."+parts[1]]; o != nil && o.pkg {
-				return o, found
-			}
-		}
-		return db.only(func(o *object) bool { return o.pkg && strings.HasSuffix(o.key, "."+parts[0]+"."+parts[1]) })
+		return db.twoParts(d, parts[0], parts[1])
 	case 3:
-		if o := db.objects[strings.Join(parts, ".")]; o != nil && o.pkg {
-			return o, found
-		}
-		if db.cfg.Catalog != "" && parts[0] != d.Fold(Ident{Text: db.cfg.Catalog}) {
-			return nil, unresolved
-		}
-		if o := db.objects[parts[1]+"."+parts[2]]; o != nil {
+		return db.threeParts(d, parts)
+	}
+	return nil, unresolved
+}
+
+// twoParts resolves schema.name, or an Oracle package's routine written pkg.routine: the package in
+// the default schema, or in the only schema that has it.
+func (db *database) twoParts(d Dialect, first, second string) (*object, outcome) {
+	if o := db.objects[first+"."+second]; o != nil {
+		return o, found
+	}
+	if s := db.schemaFor(d); s != "" {
+		if o := db.objects[s+"."+first+"."+second]; o != nil && o.pkg {
 			return o, found
 		}
 	}
+	return db.only(func(o *object) bool { return o.pkg && strings.HasSuffix(o.key, "."+first+"."+second) })
+}
+
+// threeParts resolves schema.package.routine, or catalog.schema.name, whose catalog is compared only
+// when the configuration names one.
+func (db *database) threeParts(d Dialect, parts []string) (*object, outcome) {
+	if o := db.objects[strings.Join(parts, ".")]; o != nil && o.pkg {
+		return o, found
+	}
+	if db.cfg.Catalog != "" && parts[0] != d.Fold(Ident{Text: db.cfg.Catalog}) {
+		return nil, unresolved
+	}
+	if o := db.objects[parts[1]+"."+parts[2]]; o != nil {
+		return o, found
+	}
 	return nil, unresolved
+}
+
+// inSystemSchema reports whether a qualified name is in one of the dialect's system schemas, or its
+// first part starts like a built-in package (DBMS_ in Oracle).
+func inSystemSchema(b Builtins, parts []string) bool {
+	if len(parts) < 2 {
+		return false
+	}
+	return b.Schemas[parts[len(parts)-2]] || len(parts) >= 3 && b.Schemas[parts[len(parts)-3]] || hasPrefix(parts[0], b.Prefixes)
 }
 
 func (db *database) unqualified(d Dialect, name string, call bool) (*object, outcome) {
