@@ -114,24 +114,7 @@ func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
 			t.test.Asserts++ // the test fails unless it panics
 		}
 	}
-	cases, ignored := 0, 0
-	for _, a := range nodes[:len(nodes)-1] {
-		c, ok := rustTestCase(sc.f, a)
-		if !ok {
-			continue
-		}
-		cases++
-		switch {
-		case c.ignored:
-			ignored++
-			t.skipIf(c.reason, a)
-		case c.expects:
-			t.test.Asserts++ // the case fails unless the function returns what follows =>
-		}
-	}
-	if cases > 0 && ignored == cases {
-		t.skip(t.test.Skip.Reason, fn)
-	}
+	sc.testCases(t, nodes[:len(nodes)-1], fn)
 	for _, m := range sc.mocks {
 		t.fileHazard(facts.HazardMock, m)
 	}
@@ -297,6 +280,29 @@ func (w *rustWalk) scoped(p, name string) string {
 		return loc + "." + name
 	}
 	return ""
+}
+
+// testCases reads the test-case cases among the attributes before fn: their checked results, and
+// the cases that do not run.
+func (sc *rustScope) testCases(t *testFacts, attrs []*sitter.Node, fn *sitter.Node) {
+	cases, ignored := 0, 0
+	for _, a := range attrs {
+		c, ok := rustTestCase(sc.f, a)
+		if !ok {
+			continue
+		}
+		cases++
+		switch {
+		case c.ignored:
+			ignored++
+			t.skipIf(c.reason, a)
+		case c.expects:
+			t.test.Asserts++ // the case fails unless the function returns what follows =>
+		}
+	}
+	if cases > 0 && ignored == cases {
+		t.skip(t.test.Skip.Reason, fn)
+	}
 }
 
 // rustCase is one #[test_case(inputs => result ; "description")] of the test-case crate.
