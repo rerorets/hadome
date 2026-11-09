@@ -52,6 +52,11 @@ func TestGoCallsThatTakeSQL(t *testing.T) {
 		{"a call that is not Sprintf", `"database/sql"`, `var db *sql.DB; db.Exec(build("SELECT 14"))`, []string{`"" dynamic=true`}},
 		{"a first argument that is a name, not a context", `"database/sql"`, `var db *sql.DB; var limit int; q := "SELECT 16"; db.Query(q, limit)`,
 			[]string{`"SELECT 16" dynamic=false`}},
+		{"a name set again to another string", `"database/sql"`, `var db *sql.DB; q := "SELECT 17"; q = "SELECT 18"; db.Exec(q)`,
+			[]string{`"SELECT 18" dynamic=false`}},
+		{"a name declared again in a function literal", `"database/sql"`,
+			`var db *sql.DB; q := "SELECT 19"; func() { q := "SELECT 20"; _ = q }(); db.Exec(q)`, []string{`"SELECT 19" dynamic=false`}},
+		{"a name declared with var", `"database/sql"`, `var db *sql.DB; var q = "SELECT 21"; db.Exec(q)`, []string{`"SELECT 21" dynamic=false`}},
 		{"another package's Sprintf", `"database/sql"
 	"example.com/app/fmtx"`, `var db *sql.DB; db.Exec(fmtx.Sprintf("SELECT %d", 13))`, []string{`"" dynamic=true`}},
 	}
