@@ -21,8 +21,8 @@ type tracer interface {
 	trace(files []*file, t *tables, a *facts.Analysis)
 }
 
-// tsBinding is what a name imported at the top of a file stands for.
-type tsBinding struct {
+// tsImported is what a name imported at the top of a file stands for.
+type tsImported struct {
 	io   bool   // imported from a package that does input or output
 	file string // the repository's file it comes from; empty for a package
 	name string // the name in that file: "default", "*" for the whole module, or the exported name
@@ -32,7 +32,7 @@ type tsBinding struct {
 type tsTrace struct {
 	r        *typescript
 	f        *file
-	bindings map[string]tsBinding
+	bindings map[string]tsImported
 	top      map[string]*sitter.Node // names declared at the top of the file, and their declarations
 	funcs    map[string]bool         // the IDs of the version's functions and methods
 }
@@ -57,7 +57,7 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		if f.test || f.generatedGlob || declarationFile(f.path) {
 			continue
 		}
-		tr := &tsTrace{r: r, f: f, bindings: map[string]tsBinding{}, top: map[string]*sitter.Node{}, funcs: funcs}
+		tr := &tsTrace{r: r, f: f, bindings: map[string]tsImported{}, top: map[string]*sitter.Node{}, funcs: funcs}
 		tr.bind(t)
 		for id, body := range tr.bodies() {
 			i, ok := at[id]
@@ -112,7 +112,7 @@ func (tr *tsTrace) bindImport(n *sitter.Node, t *tables) {
 	f := tr.f
 	spec := unquote(f.field(n, "source"))
 	p, kind := tr.r.project.resolve(f.path, spec)
-	var b tsBinding
+	var b tsImported
 	switch kind {
 	case tsExternal:
 		b.io = t.isIO(spec)
@@ -208,7 +208,7 @@ func (tr *tsTrace) reachInto(n *sitter.Node, got *reached, values bool) {
 
 // imported records the use of an imported name: a package that does input or output, a function
 // of the repository, or a value of one of its units.
-func (tr *tsTrace) imported(x *sitter.Node, b tsBinding, got *reached) {
+func (tr *tsTrace) imported(x *sitter.Node, b tsImported, got *reached) {
 	if b.file == "" {
 		got.io = got.io || b.io
 		return
