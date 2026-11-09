@@ -133,7 +133,7 @@ Some imports look like the repository's own but resolve to no file.
 
 - When a test file calls a name taken from such an import, the call counts as unresolved (`Test.Unresolved`)
 - Treating it as an external package and counting nothing would fail a test that may well call the product with `tests/guards-nothing`. What cannot be identified goes to a person's review through `tests/target-unknown`
-- Imports of non-test files are treated as before: in TypeScript, an internal import whose unit is the directory of the named path; in Python, an external import
+- Imports of non-test files are not treated this way: in TypeScript, an internal import whose unit is the directory of the named path; in Python, an external import
 - An import that names something inside a directory hadome does not read (`dist/`, `build/`, `.generated/` and so on) is an exception: it is an import whose destination is unknown (`Import.Unknown` and `Import.Unread`), whether the file exists or not. In a test file, a call of a name taken from it counts as unresolved ("Imports whose destination is unknown" in [adapters.md](adapters.md))
 
 ## Symbols
@@ -206,12 +206,12 @@ In TypeScript, a method of a value the test built itself does not count as unres
 - A value the test built itself is a local variable made from literals (`[1, 2]`, `{ n: 1 }`), built-ins (`JSON.parse(s)`, `Math.max(…)`, `new Map()`), an external library (`userEvent.setup()`), or a method of such a value (`xs.filter(…)`)
 - For example, `const xs = [1, 2]; xs.reduce(…)` is a test that calls nothing, the same as `Math.max(...xs)`
 - Such a value passed to a helper of the file is treated the same inside the helper
-- A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, still counts as unresolved
+- A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, counts as unresolved
 
 In Java and Kotlin too, a method called on a local the test built as a string or a standard collection counts neither as a call of the product nor as unresolved, since it is the language's own method. Example: `sql.contains("SELECT")` with `val sql = "SELECT 1"`
 
 - A string is a string literal, a member of a string (`"…".trimIndent().split(" ")`), a Java concatenation with a string, or a local declared `String`
-- A collection is one built by a standard function such as `listOf`, or a local declared `List`, `Map` and the like. Its elements may be anything, so calls through an element (`xs.first().push(1)`) are read as before
+- A collection is one built by a standard function such as `listOf`, or a local declared `List`, `Map` and the like. Its elements may be anything, so calls through an element (`xs.first().push(1)`) are read like any other call
 
 ### Test support files
 
@@ -227,7 +227,7 @@ Some files are not test files but exist only for the tests: `test/helpers.ts`, `
 - **Following**: when a test calls a function of a support file, the function is followed. The calls inside are resolved through the support file's own imports, so a test that calls the product through a helper guards that product code
   - Example: when `createApp()` in `test/helpers.ts` calls `buildApp()` of `src/app.ts`, a test that calls `createApp()` guards `buildApp`
   - Calling a name the support file does not hold as a function (a value, say) counts as unresolved
-- **Other role settings**: files matching the `files.tests` globs are test files, as before. Files matching the `files.product` globs are not support files; they are read as product code ([adapters.md](adapters.md))
+- **Other role settings**: files matching the `files.tests` globs are test files. Files matching the `files.product` globs are not support files; they are read as product code ([adapters.md](adapters.md))
 - **The list of directories**: the list is `walk.SupportDir`. The Go adapter uses it without `tests/` (`walk.GoSupportDir`), because product packages called `tests` exist in Go ([adapters.md](adapters.md))
 
 ## Hazards and io
@@ -258,7 +258,7 @@ The `clock` and `sleep` hazards of the code that runs before each test are hazar
 - The hazard is placed on the line of that code, in another file when it is there, such as a class extended or a `conftest.py`
 - In Java, Kotlin and Python, the calls and checks in that code are not counted as the test's: what a test guards is decided by its own body
 - In TypeScript, the calls in a hook count as the test's (see "A TypeScript test also counts as its own the calls and reads of what runs before it" above)
-- A fixture a Python test receives as a parameter is followed into its body as before. The calls and hazards in it are the test's
+- A fixture a Python test receives as a parameter is followed into its body. The calls and hazards in it are the test's
 
 **Python's inherited setup**: a Python test class also runs the setup of its base classes. For example, a test of `class TestOrders(BaseCase)` runs `BaseCase.setUp`. It is read as follows.
 
@@ -268,7 +268,7 @@ The `clock` and `sleep` hazards of the code that runs before each test are hazar
 - When the method found calls the method of the same name through `super()` (`super().setUp()`), the one of the next class in the MRO that defines it runs too. Calling a base by name (`BaseCase.setUp(self)`) is treated the same
 - The `autouse=True` fixtures inside the base classes run too. When the test class, or a class earlier in the MRO, has a fixture of the same name, only the earlier one runs, because pytest overrides fixtures by name
 - The `setup_module` and `setup_function` of a base class's file do not run: pytest runs only those of the module holding the test
-- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. A class whose bases give no MRO, which Python cannot create, gets none of its bases. The test is still read as before
+- A base class that cannot be found adds nothing: an outside class such as `unittest.TestCase`, an undefined name, or a class extending itself. A class whose bases give no MRO, which Python cannot create, gets none of its bases. In both cases, the test itself is read
 
 Configuration adds entries as for Go: `rules.tests.hazards` takes `<unit>.<name>` in each language's own notation, and `rules.tests.io` takes units.
 
@@ -317,7 +317,7 @@ Constants are read from syntax, only from declarations in the same file. Of the 
 - Whether the value is the zero value is decided by comparing it with the zero value of the result type. A number counts as the same whichever way it is written, `0`, `0.0`, `0x0`, `0L` or `0_u64`, when its value is zero
 - In Java and Kotlin, a constant returned with the name of the class that declares it is read too. For example, with `object Defaults { const val ZERO = 0 }` in the same file, `return Defaults.ZERO` is not broken. A constant of a `companion object` is read with the name of the class around it (`Store.NONE`)
 - Only Python tells `int` from `float`, since a test can tell `0` from `0.0`. For example, `return RATE` in a function returning `float` is broken into `0.0` even when `RATE = 0`
-- These names are broken as before:
+- These names are broken even when their value is zero:
   - names that can be reassigned. For example, TypeScript's `let`, Rust's `static mut`, Java fields without `final`, Kotlin's `var`
   - names declared more than once in the file, with different values or in a form that is not read
   - names declared as a parameter or a local variable in the function being broken; for a constant with its class's name, that class's name declared so
@@ -375,7 +375,7 @@ At the top level of a file, the Kotlin grammar may read annotations with argumen
 - A TypeScript `extends` naming a package in `node_modules` (`@tsconfig/node20/tsconfig.json`), and the subpath table of `exports` in `package.json`. Both rarely decide an alias or a package's source
 - Treating a file imported only from test files as a test support file. A file's role is decided before its imports are read, and changing roles after reading the imports would split each language's reading in two
 - Zero values that need type inference (functions without a written result type, and user-defined types)
-- Reading constants of other files to tell constants whose value is the zero value. Following imports needs each language's way of reading modules, which `Mutants` does not have. A constant it cannot read is broken as before, so no test gap goes unseen
+- Reading constants of other files to tell constants whose value is the zero value. Following imports needs each language's way of reading modules, which `Mutants` does not have. A constant it cannot read is broken, so no test gap goes unseen
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`
 - Reporting a file with a syntax error as unread. Almost every such error comes from a grammar failing on correct code, so it would ask for a review that changing the code cannot clear

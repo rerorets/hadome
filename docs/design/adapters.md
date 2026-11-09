@@ -221,7 +221,7 @@ An import that names something inside a directory hadome does not read ("Directo
 - `Unknown` and `Unread` are true and `ToUnit` is empty. `Text` holds the specifier as written
 - It does not count as an import that performs input or output. What it reaches was not read, so whether it performs input or output is unknown too
 - This covers the TypeScript specifiers resolved as paths (those starting with `.` or `/`, and `paths` aliases) and Python's relative imports
-- A `..` in the path starts with `.` but is not a directory that is not read. An import that points outside the repository stays an import that cannot be resolved
+- A `..` in the path starts with `.` but is not a directory that is not read. An import that points outside the repository is an import that cannot be resolved
 
 `unknown/import` sends imports whose destination is unknown, added by a change, to a person's review (exit code `3`). It does not fail the check, because a check never fails on what cannot be confirmed. The anchor is the file and the normalised call text, so moving the import does not make it new.
 
