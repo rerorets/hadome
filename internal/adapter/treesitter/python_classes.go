@@ -93,6 +93,37 @@ func inTails(seqs [][]pyCode, c pyCode) bool {
 	return false
 }
 
+// testClass reports whether a class holds tests: pytest collects a class named Test…, and unittest,
+// and pytest with it, collects any subclass of unittest.TestCase whatever its name.
+func (pf *pyFile) testClass(class *sitter.Node) bool {
+	return strings.HasPrefix(pf.f.field(definition(class), "name"), "Test") || pf.unittestCase(class)
+}
+
+// unittestCase reports whether a class extends, itself or through a base class hadome finds, a
+// class outside the repository whose name ends in TestCase: unittest's TestCase and
+// IsolatedAsyncioTestCase, and the frameworks' subclasses of them, such as Django's TestCase.
+func (pf *pyFile) unittestCase(class *sitter.Node) bool {
+	for _, c := range pf.mro(class) {
+		list := c.n.ChildByFieldName("superclasses")
+		if list == nil {
+			continue
+		}
+		for _, a := range named(list) {
+			if a.Kind() != "identifier" && a.Kind() != "attribute" {
+				continue
+			}
+			if _, found := c.pf.classOf(a); found {
+				continue
+			}
+			text := c.pf.f.text(a)
+			if strings.HasSuffix(text[strings.LastIndex(text, ".")+1:], "TestCase") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // bases are the base classes of a class definition that hadome finds.
 func (pf *pyFile) bases(def *sitter.Node) []pyCode {
 	list := def.ChildByFieldName("superclasses")

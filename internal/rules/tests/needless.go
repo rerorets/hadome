@@ -30,10 +30,16 @@ func (r guardsNothing) Find(in engine.Input) ([]engine.Finding, error) {
 	var out []engine.Finding
 	for _, t := range in.Facts.Tests {
 		// One unresolved call may reach the repository; tests/target-unknown covers a test made only of those.
-		if len(t.Calls) == 0 && t.Unresolved == 0 && t.Reads == 0 && !t.Drives && !t.Skip.Skipped {
+		// The own test of support code checks that code; a product test that calls only support code
+		// guards nothing of the product.
+		if len(t.Calls) == 0 && t.Unresolved == 0 && t.Reads == 0 && !t.Drives && !t.TestsSupport && !t.Skip.Skipped {
+			msg := engine.T("%s calls no code of this repository and reads none of its values", t.Name)
+			if t.CallsSupport {
+				msg = engine.T("%s calls only test support code, and no product code nor its values", t.Name)
+			}
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: t.Path, Line: t.Line, Anchor: t.Name,
-				Message: engine.T("%s calls no code of this repository and reads none of its values", t.Name),
+				Message: msg,
 				Why:     r.About().Why,
 				Fix:     r.About().Fix,
 			})

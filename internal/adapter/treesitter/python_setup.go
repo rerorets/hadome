@@ -157,7 +157,8 @@ func (pf *pyFile) lambdaHelper(n *sitter.Node) {
 }
 
 // given types what a test receives from its setup: the fixtures it takes as parameters, and what
-// its class's setUp or setup_method, its own or inherited, stores on self (self.store = Store()).
+// its class's autouse fixtures and setUp or setup_method, its own or inherited, store on self
+// (self.store = Store()).
 func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	f := pf.f
 	out := map[string]string{}
@@ -169,11 +170,16 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	if class == nil {
 		return out
 	}
-	// A base's setUp reached through super() runs inside the class's own, which usually sets self
-	// after it, so the class's own assignment is read last and wins.
-	setups := pf.classSetups(class)
-	for i := len(setups) - 1; i >= 0; i-- {
-		c := setups[i]
+	// Each list is in MRO order, the class's own first, and is read backwards so that the nearer
+	// class's assignment wins: a base's setUp reached through super() runs inside the class's own,
+	// which usually sets self after it. setUp is read after the autouse fixtures, so it wins too.
+	var order []pyCode
+	for _, list := range [][]pyCode{pf.classAutouse(class), pf.classSetups(class)} {
+		for i := len(list) - 1; i >= 0; i-- {
+			order = append(order, list[i])
+		}
+	}
+	for _, c := range order {
 		cf := c.pf.f
 		walk(c.n, func(n *sitter.Node) bool {
 			if n.Kind() != "assignment" {

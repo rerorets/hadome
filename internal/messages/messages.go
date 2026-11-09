@@ -83,6 +83,7 @@ var Japanese = map[string]string{
 
 	// tests/guards-nothing, tests/no-assertion, tests/duplicate.
 	"%s calls no code of this repository and reads none of its values":                        "%s はこのリポジトリのコードを呼ばず、その値も読まない",
+	"%s calls only test support code, and no product code nor its values":                     "%s はテストの補助のコードだけを呼び、製品のコードもその値も使わない",
 	"a new test that calls no code of the repository and reads none of its values":            "リポジトリのコードを呼ばず、その値も読まない新しいテスト",
 	"the code can change in any way without this test noticing":                               "コードがどう変わっても、このテストは気づかない",
 	"call the code the test means to check, or delete the test if it is not needed":           "テストで確かめたいコードを呼ぶ。要らないテストなら消す",

@@ -317,6 +317,7 @@ func (w *tsWalk) useOuter(name string) {
 	w.setup++
 	for _, s := range setups {
 		if w.inScope(s.scope) {
+			w.t.setups = append(w.t.setups, codeIn{w.tf.f, s.node})
 			w.walk(s.node)
 		}
 	}

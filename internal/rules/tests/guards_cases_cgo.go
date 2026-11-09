@@ -26,8 +26,19 @@ func supportCases() []engine.Case {
 	}
 	const base = "import { rows } from './rows'\n\nit('lists', () => { expect(rows()).toHaveLength(2) })\n"
 	const helper = "import { firstRow } from '../test/helpers'\n\nit('starts at one', () => { expect(firstRow()).toBe(1) })\n"
+	withClock := func(path, test string) fstest.MapFS {
+		t := tr(base)
+		t["test/clock.ts"] = &fstest.MapFile{Data: []byte("export function forceZone(zone: string) {\n  process.env.TZ = zone\n}\n")}
+		t[path] = &fstest.MapFile{Data: []byte(test)}
+		return t
+	}
+	const ofHelper = "import { forceZone } from './clock'\n\nit('sets the zone', () => {\n  forceZone('UTC')\n  expect(process.env.TZ).toBe('UTC')\n})\n"
+	const onlyHelper = "import { forceZone } from '../test/clock'\n\nit('runs in UTC', () => {\n  forceZone('UTC')\n  expect(process.env.TZ).toBe('UTC')\n})\n"
 	return []engine.Case{
 		{Name: "a test that reaches the code through a helper of a test support file passes", Base: tr(base), Head: tr(base + "\n" + helper)},
+		{Name: "the own test of a test support file passes", Base: tr(base), Head: withClock("test/clock.test.ts", ofHelper)},
+		{Name: "a product test that calls only a helper of a test support file fails", Base: tr(base),
+			Head: withClock("src/zone.test.ts", onlyHelper), WantFail: []string{"tests/guards-nothing"}},
 	}
 }
 

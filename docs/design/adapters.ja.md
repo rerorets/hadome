@@ -84,6 +84,8 @@ classDiagram
     +Unresolved int
     +Reads int
     +Drives bool
+    +CallsSupport bool
+    +TestsSupport bool
     +Asserts int
     +AssertsUnknown bool
     +Body string
@@ -184,6 +186,8 @@ Go のテストの補助のパッケージ:
   - `latest` のように、たまたま `test` で終わる名前のパッケージは、前の部分（`la`）のパッケージを import しないので、製品のコードのままです
 - 補助のパッケージの関数は、対象にならず、`comments/missing-doc` も求めず、依存の図にも入りません
 - テストが補助のパッケージの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のパッケージ自身の import で解決します。例: `storetest.New(t)` が `store.Open()` を呼ぶなら、`storetest.New(t)` を呼ぶテストは `store.Open` を守ります
+  - 補助のパッケージの関数を呼んだテストは、`Test.CallsSupport` を真にします。TypeScript と Python の補助のファイルも同じです（[adapters-treesitter.ja.md](adapters-treesitter.ja.md)）
+  - そのテストが補助のパッケージと同じディレクトリにあれば、そのパッケージ自身のテストとして `Test.TestsSupport` も真にします。例: `internal/testutil/zone_test.go` が `testutil.Zone()` を呼ぶとき
   - 補助のパッケージの関数の結果は、宣言した型で読みます。`s := storetest.New(t)` の結果が `*store.Store` なら、`s.Append()` は `store.Store.Append` を呼びます
   - 補助のパッケージで宣言した型のメソッドは、たどりません。呼ぶと未解決と数えます
   - 中の危険（時計、待ち、モック）は、そのテストのものとして、補助のパッケージのファイルの行で報告します
@@ -308,10 +312,12 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | 言語 | 指紋に入れる範囲 |
 |---|---|
 | Go | 引数から閉じ括弧まで。Go の字句解析が行末に足すセミコロンは、改行の位置で変わるので入れない |
-| Python | デコレータ（`@pytest.mark.parametrize`）から本体の終わりまで |
-| TypeScript | `it("名前", …)` の呼び出しのうち、名前の文字列を除いたもの |
+| Python | デコレータ（`@pytest.mark.parametrize`）から本体の終わりまで。クラスのテストは、そのクラスで走る `setUp` などと `autouse=True` の fixture の本体も入れる |
+| TypeScript | `it("名前", …)` の呼び出しのうち、名前の文字列を除いたもの。囲む `describe` の `beforeEach`・`beforeAll` の本体と `.each` の表、テストが使う外の変数を用意する文も入れる |
 | Java / Kotlin | アノテーション（`@ValueSource`）から本体の終わりまで |
 | Rust | 関数の前の属性（`#[case(1)]`）から本体の終わりまで |
+
+Python と TypeScript では、テストの前に走る準備も指紋に入れます。本体が同じでも、準備が違えば別のものを確かめているからです。例: 同じファイルの `TestA` と `TestB` が、同じ本体のテストを持ち、`setUp` で別のものを作るとき。別の `describe` の中で、同じ本体のテストが、それぞれの `describe` の `const KEYS = …` を使うとき。
 
 ### テストが守るもの
 

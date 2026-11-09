@@ -169,7 +169,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 | 言語 | テストのファイル | テストとは | スキップ | 理由 |
 |---|---|---|---|---|
 | TypeScript | `*.test.*`、`*.spec.*`、`__tests__/` の下、テストの補助のファイル | 名前と関数を渡す `it` か `test` の呼び出し（下の注） | `.skip`、`xit`、`xtest`、`.todo`、`.fixme`、または `describe.skip`・`xdescribe` の中。一部の場合だけのスキップは `.skipIf(条件)`・`.runIf(条件)` と、Playwright の `test.skip(条件, 説明)`・`test.fixme(条件, 説明)` | スキップの行かその前の行のコメント。Playwright の `test.skip` は条件の後の説明 |
-| Python | `test_*.py`、`*_test.py` | モジュールの直下か `Test*` クラスの中の、名前が `test` で始まる関数 | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
+| Python | `test_*.py`、`*_test.py` | モジュールの直下か、テストのクラスの中の、名前が `test` で始まる関数。テストのクラスは、名前が `Test` で始まるクラスと、`unittest.TestCase` を継承するクラス（下の注） | `@pytest.mark.skip`、`@unittest.skip`、`pytest.skip(...)` | `reason` 引数か最初の文字列の引数 |
 | Rust | `tests/`・`benches/` の下のファイル。任意のファイル内の `#[cfg(test)]` モジュール | `#[test]`、`#[tokio::test]`、`#[async_std::test]`、`#[sqlx::test]`、`#[test_log::test]`、`#[rstest]` の付いた関数 | `#[ignore]` | `#[ignore = "…"]` |
 | Java | `src/` の下の、名前に test を含むディレクトリ（`src/test/`、`src/integrationTest/` など） | `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate` の付いたメソッド | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
 | Kotlin | Java と同じ | Java と同じアノテーションの付いた関数 | `@Disabled`、`@Ignore` | アノテーションの文字列の引数 |
@@ -183,6 +183,13 @@ TypeScript のテストの宣言は、次のように読みます。
   - 行が配列なら、引数と位置で対応させます。配列でない行は、1つめの引数に入ります。行がオブジェクトで、引数が分割代入（`({ op }) =>`）なら、キーで対応させます。タグ付きテンプレートの表は対応させません
 - **関数の位置**: テストの関数は最後の関数の引数です。vitest は名前と関数の間にオプションを取り（`it(名前, { retry: 2 }, 関数)`）、jest は関数の後にタイムアウトを取るからです。名前の文字列の後に関数の名前を渡したとき（`it('adds', checkAdd)`）は、ファイルの中のその関数をたどります
 - **Playwright の条件つきのスキップ**: 関数を渡さない `test.skip(条件, 説明)` と `test.fixme(条件, 説明)` は、テストではありません。テストの中で呼ぶとそのテストを、`describe` の直下で呼ぶとその中のテストを、一部の場合だけスキップします。引数の無い `test.skip()` をテストの中で呼ぶと、そのテストは常にスキップします
+
+Python のテストのクラスは、次のように見分けます。
+
+- unittest は、名前を問わず、`unittest.TestCase` を継承するクラスのテストを集めます。pytest も同じです。そのため、`class StoreTests(unittest.TestCase)` もテストのクラスです
+- `TestCase` は、リポジトリで見つからない継承元のうち、名前が `TestCase` で終わるもので見分けます。例: `unittest.TestCase`、`from unittest import TestCase` の `TestCase`、`IsolatedAsyncioTestCase`、Django の `TestCase`
+- 継承元をたどった先でも見分けます。例: 同じファイルか import したファイルの `class StoreCase(unittest.TestCase)` を継承する `class OrderTests(StoreCase)`。継承元のたどり方は「危険と io」の「Python の継承元の準備」と同じです
+- 名前が `Test` で始まらず、`TestCase` も継承しないクラスの中の関数は、テストではありません
 
 テストが何を呼ぶかは、import した名前と、テストの中で作ったオブジェクトから読みます。言語ごとに、次のものも読みます。
 
@@ -229,6 +236,9 @@ TypeScript のテストの宣言は、次のように読みます。
 - **Python のテストが受け取るもの**: 次のものを読みます
   - テストの引数と同じ名前の pytest の fixture（`@pytest.fixture` の付いた関数）が、`return` か `yield` で返すクラス
   - クラスの `setUp`・`setup_method` などで `self` に入れたクラス（`self.store = Store()`）。継承元のクラスのメソッドも、走るものなら読みます（「危険と io」の「Python の継承元の準備」）
+  - クラスの `autouse=True` の fixture で `self` に入れたクラスも、同じに読みます。継承元のクラスの fixture も入ります。同じ名前の fixture は、MRO で先のクラスのものだけを読みます
+  - 同じ名前に入れたものが2つあれば、テストのクラスに近いものを使います。`setUp` などと fixture の両方が入れたときは、`setUp` などのほうを使います
+  - 作ったオブジェクトにそのまま続けた呼び出し（`Store().append(1)`）も、そのクラスのメソッドの呼び出しとして読みます。ローカル変数に入れたときと同じです
   - ファイルの直下で名前に入れた lambda（`twice = lambda n: double(n)`）は、ヘルパーとしてたどります
   - テストの中で同じ名前に代入し直すと、fixture から受け取った型は消えます
   - fixture が同じファイルに無ければ、テストのディレクトリとその上のディレクトリの `conftest.py` から探します。近いものが先です
@@ -274,6 +284,9 @@ Java と Kotlin でも、テストが文字列か標準のコレクションと�
 - **たどり方**: テストが補助のファイルの関数を呼ぶと、その関数の中までたどります。中の呼び出しは、補助のファイル自身の import で解決します。そのため、ヘルパーを通して製品のコードを呼ぶテストは、その製品のコードを守ります
   - 例: `test/helpers.ts` の `createApp()` が `src/app.ts` の `buildApp()` を呼ぶなら、`createApp()` を呼ぶテストは `buildApp` を守ります
   - 補助のファイルの中で関数として見つからない名前（関数でない値など）を呼ぶと、未解決と数えます
+  - 補助のファイルの関数を呼んだテストは、`Test.CallsSupport` を真にします
+  - そのテストのファイルが、呼んだ関数のある補助のファイル自身のテストなら、`Test.TestsSupport` も真にします。補助のファイル自身のテストとは、補助のファイルと同じディレクトリにあり、名前からテストの印を除くと補助のファイルと同じ名前になるファイルです。例: `test/clock.ts` に対する `test/clock.test.ts`、`tests/helpers.py` に対する `tests/test_helpers.py` と `tests/helpers_test.py`
+  - 2つの事実の使い方は [rules-tests.ja.md](rules-tests.ja.md) の `tests/guards-nothing` にあります
 - **ほかの役割の指定**: `files.tests` の glob に合うファイルは、テストのファイルです。`files.product` の glob に合うファイルは、テストの補助のファイルにせず、製品のコードとして読みます（[adapters.ja.md](adapters.ja.md)）
 - **ディレクトリの一覧**: 一覧は `walk.SupportDir` にあります。Go のアダプタは、このうち `tests/` を除いたもの（`walk.GoSupportDir`）を使います。Go では `tests` という名前の製品のパッケージがあるからです（[adapters.ja.md](adapters.ja.md)）
 
@@ -315,7 +328,7 @@ TypeScript のテストが偽の時計に切り替えた後は、`Date.now`・`n
 - 見つかったメソッドが同じ名前のメソッドを `super()` で呼ぶとき（`super().setUp()`）は、MRO で次に見つかるクラスのものも走ります。継承元を名指して呼ぶとき（`BaseCase.setUp(self)`）も同じに扱います
 - 継承元のクラスの中の `autouse=True` の fixture も走ります。同じ名前の fixture がテストのクラスか MRO で先のクラスにあれば、先のものだけが走ります。pytest は fixture を名前で上書きするからです
 - 継承元のファイルの `setup_module` と `setup_function` は走りません。pytest は、テストのあるモジュールのものだけを走らせるからです
-- 見つからない継承元は、何も足しません。`unittest.TestCase` のような外のクラス、定義の無い名前、自分自身を継承するクラスがそうです。継承元の並びから MRO が決まらないクラスは、Python が作れないので、継承元をどれも足しません。どちらの場合も、テストそのものは読みます
+- 見つからない継承元は、準備を何も足しません。`unittest.TestCase` のような外のクラス、定義の無い名前、自分自身を継承するクラスがそうです。外の `TestCase` は、クラスをテストのクラスとして見分けるためにだけ使います（「テスト」の Python のテストのクラス）。継承元の並びから MRO が決まらないクラスは、Python が作れないので、継承元をどれも足しません。どちらの場合も、テストそのものは読みます
 
 設定での項目の足し方は Go と同じです。
 
@@ -365,7 +378,7 @@ Go と同じ6つとは、`<` → `>=`、`>=` → `<`、`<=` → `>`、`>` → `<
 | 言語 | 読む宣言 |
 |---|---|
 | TypeScript | ファイルの一番外の `const`（`export const` を含む） |
-| Python | モジュールの一番外の `NAME = 値`。ファイルの中に、その名前へのほかの代入も `global` も無いときだけ |
+| Python | モジュールの一番外の `NAME = 値`。ファイルの中に、その名前へのほかの代入も、その名前を取る import も、`global` も無いときだけ。import が取る名前は、`as` の後の名前か、`as` が無ければ import した名前です。`from m import NONE as OTHER` は `OTHER` を取り、`NONE` は取りません。`import a.b` は `a` を取ります |
 | Rust | 関数と `impl` の外の `const` と `static`。`static mut` は読みません |
 | Java | `final` の付いたフィールドと、インタフェースの定数 |
 | Kotlin | 関数の外の `val` と `const val`。`open` か `abstract` の付いたものと、getter を持つものは読みません |

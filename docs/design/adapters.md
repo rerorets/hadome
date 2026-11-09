@@ -84,6 +84,8 @@ classDiagram
     +Unresolved int
     +Reads int
     +Drives bool
+    +CallsSupport bool
+    +TestsSupport bool
     +Asserts int
     +AssertsUnknown bool
     +Body string
@@ -182,6 +184,8 @@ Go test support packages:
   - A package whose name happens to end in `test`, such as `latest`, imports no package named like the part before it (`la`), so it stays product code
 - The functions of a support package are not targets, need no doc comment for `comments/missing-doc`, and are not in the dependency diagram
 - When a test calls a function of a support package, the walk follows into it. Its calls resolve through the support package's own imports. For example, if `storetest.New(t)` calls `store.Open()`, a test calling `storetest.New(t)` guards `store.Open`
+  - A test that calls a function of a support package has `Test.CallsSupport` set. So do TypeScript's and Python's support files ([adapters-treesitter.md](adapters-treesitter.md))
+  - When the test is in the support package's own directory, it is that package's own test, and `Test.TestsSupport` is set too. For example, `internal/testutil/zone_test.go` calling `testutil.Zone()`
   - A support function's result is read by its declared type. If `s := storetest.New(t)` gives a `*store.Store`, `s.Append()` calls `store.Store.Append`
   - Methods of types declared in a support package are not followed. A call of one counts as unresolved
   - Hazards inside (clock, sleep, mock) are the test's, reported at the lines of the support package's file
@@ -292,10 +296,12 @@ A parameterised test writes its inputs outside its body. So the parameters, and 
 | Language | What the fingerprint covers |
 |---|---|
 | Go | From the parameters to the closing brace. The semicolons Go's scanner adds at line ends are left out, because they depend on where the lines break |
-| Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body |
-| TypeScript | The `it("name", …)` call, without the name's string |
+| Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body. For a test in a class, also the bodies of the `setUp` and the like and the `autouse=True` fixtures that run for that class |
+| TypeScript | The `it("name", …)` call, without the name's string. Also the bodies of `beforeEach` and `beforeAll` in the enclosing `describe` blocks, the tables of `.each`, and the statements that set up the outer variables the test uses |
 | Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body |
 | Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
+
+In Python and TypeScript, the setup that runs before a test is part of the fingerprint too. Tests with the same body under different setup check different things. For example, `TestA` and `TestB` in one file hold tests with the same body and build different things in `setUp`. Or tests with the same body in different `describe` blocks each use their own block's `const KEYS = …`.
 
 ### What a test guards
 

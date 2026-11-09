@@ -118,7 +118,12 @@ func (m *mutator) binds(n *sitter.Node, name string) bool {
 		if field != "" {
 			target = c.ChildByFieldName(field)
 		}
-		found = target != nil && slices.Contains(identifiers(m.f, target), name)
+		switch c.Kind() {
+		case "import_statement", "import_from_statement": // only Python's binders hold these
+			found = slices.Contains(pyImportBinds(m.f, c), name)
+		default:
+			found = target != nil && slices.Contains(identifiers(m.f, target), name)
+		}
 		return !found
 	})
 	return found
@@ -228,43 +233,6 @@ func tsConstants(f *file) consts {
 			}
 		}
 	}
-	return out
-}
-
-func pyConstants(f *file) consts {
-	out := consts{}
-	walk(f.root, func(n *sitter.Node) bool {
-		switch n.Kind() {
-		case "function_definition", "class_definition":
-			out.add(f.field(n, "name"), "")
-			return false
-		case "lambda":
-			return false
-		case "assignment":
-			left := n.ChildByFieldName("left")
-			if left != nil && left.Kind() == "identifier" {
-				out.add(f.text(left), textOr(f, n.ChildByFieldName("right")))
-			} else {
-				out.unread(f, left)
-			}
-			return true
-		}
-		if field, ok := pyBinders[n.Kind()]; ok {
-			if field != "" {
-				out.unread(f, n.ChildByFieldName(field))
-			} else {
-				out.unread(f, n)
-			}
-		}
-		return true
-	})
-	// A function that declares a name global can reassign it.
-	walk(f.root, func(n *sitter.Node) bool {
-		if n.Kind() == "global_statement" {
-			out.unread(f, n)
-		}
-		return true
-	})
 	return out
 }
 

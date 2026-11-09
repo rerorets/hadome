@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"path"
 	"sort"
 	"strings"
 
@@ -18,6 +19,9 @@ type testFacts struct {
 	test  facts.Test
 	calls map[string]*callCount
 	loops int // how many loops enclose the node being walked
+	// setups are the setups of the variables declared outside the test that the walk used, which
+	// are part of the test's Body.
+	setups []codeIn
 }
 
 type callCount struct {
@@ -238,35 +242,76 @@ func isField(p *sitter.Node, field string, c *sitter.Node) bool {
 
 // fingerprint sets the test's Body from the tokens of nodes, leaving out the node naming the test,
 // comments and whitespace. Text between children that is not whitespace, such as the content of a
-// string some grammars keep outside any node, is a token too.
-func (t *testFacts) fingerprint(nodes []*sitter.Node, name *sitter.Node) {
+// string some grammars keep outside any node, is a token too. context is the setup that runs for the
+// test, possibly in another file; tests with the same body under different setup check different
+// things, so its tokens are part of the Body, after a separator no source holds.
+func (t *testFacts) fingerprint(nodes []*sitter.Node, name *sitter.Node, context ...codeIn) {
 	var toks []string
-	var add func(n *sitter.Node)
-	add = func(n *sitter.Node) {
+	var add func(f *file, n *sitter.Node)
+	add = func(f *file, n *sitter.Node) {
 		if (name != nil && n.Id() == name.Id()) || strings.Contains(n.Kind(), "comment") {
 			return
 		}
 		if n.ChildCount() == 0 {
-			toks = append(toks, t.f.text(n))
+			toks = append(toks, f.text(n))
 			return
 		}
 		at := n.StartByte()
 		for i := uint(0); i < n.ChildCount(); i++ {
 			c := n.Child(i)
-			if gap := string(t.f.src[at:c.StartByte()]); strings.TrimSpace(gap) != "" {
+			if gap := string(f.src[at:c.StartByte()]); strings.TrimSpace(gap) != "" {
 				toks = append(toks, gap)
 			}
-			add(c)
+			add(f, c)
 			at = c.EndByte()
 		}
-		if gap := string(t.f.src[at:n.EndByte()]); strings.TrimSpace(gap) != "" {
+		if gap := string(f.src[at:n.EndByte()]); strings.TrimSpace(gap) != "" {
 			toks = append(toks, gap)
 		}
 	}
 	for _, n := range nodes {
 		if n != nil {
-			add(n)
+			add(t.f, n)
+		}
+	}
+	for _, c := range context {
+		if c.n != nil {
+			toks = append(toks, "\x00")
+			add(c.f, c.n)
 		}
 	}
 	t.test.Body = facts.Fingerprint(toks)
+}
+
+// callsSupport records that the test calls a function of the support file at support, and whether
+// the test's file is that support file's own test: in the same directory, with the same name once
+// the test marker is left out (clock.test.ts and test_clock.py for clock.ts and clock.py).
+func (t *testFacts) callsSupport(support string) {
+	t.test.CallsSupport = true
+	if path.Dir(t.test.Path) == path.Dir(support) && testedName(path.Base(t.test.Path)) == stemOf(path.Base(support)) {
+		t.test.TestsSupport = true
+	}
+}
+
+// stemOf is a file name without its extension.
+func stemOf(name string) string {
+	return strings.TrimSuffix(name, path.Ext(name))
+}
+
+// testedName is the name of the file a test file is named after: its stem without the test
+// marker (.test, .spec, _test, or a test_ prefix).
+func testedName(name string) string {
+	stem := stemOf(name)
+	for _, suffix := range []string{".test", ".spec", "_test"} {
+		if s, ok := strings.CutSuffix(stem, suffix); ok {
+			return s
+		}
+	}
+	return strings.TrimPrefix(stem, "test_")
+}
+
+// codeIn is a node with the file that holds it.
+type codeIn struct {
+	f *file
+	n *sitter.Node
 }
