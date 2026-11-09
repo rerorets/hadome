@@ -49,11 +49,14 @@ func TestGoCallsThatTakeSQL(t *testing.T) {
 		{"a first argument that is not a context", `"database/sql"`, `var db *sql.DB; var limit int; db.Query("SELECT 11", limit)`, []string{`"SELECT 11" dynamic=false`}},
 		{"fmt.Sprintf's format", `"database/sql"
 	"fmt"`, `var db *sql.DB; db.Exec(fmt.Sprintf("SELECT %d", 12))`, []string{`"SELECT %d" dynamic=false`}},
+		{"a call that is not Sprintf", `"database/sql"`, `var db *sql.DB; db.Exec(build("SELECT 14"))`, []string{`"" dynamic=true`}},
+		{"a first argument that is a name, not a context", `"database/sql"`, `var db *sql.DB; var limit int; q := "SELECT 16"; db.Query(q, limit)`,
+			[]string{`"SELECT 16" dynamic=false`}},
 		{"another package's Sprintf", `"database/sql"
 	"example.com/app/fmtx"`, `var db *sql.DB; db.Exec(fmtx.Sprintf("SELECT %d", 13))`, []string{`"" dynamic=true`}},
 	}
 	for _, c := range cases {
-		test := "package store\n\nimport (\n\t\"testing\"\n\t" + c.imports + "\n)\n\nfunc TestX(t *testing.T) {\n\t" +
+		test := "package store\n\nimport (\n\t\"testing\"\n\t" + c.imports + "\n)\n\nfunc build(s string) string { return s }\n\nfunc TestX(t *testing.T) {\n\t" +
 			strings.ReplaceAll(c.body, "; ", "\n\t") + "\n}\n"
 		got := sinkTexts(t, config.Config{}, test)
 		if strings.Join(got, "|") != strings.Join(c.want, "|") {
@@ -64,7 +67,7 @@ func TestGoCallsThatTakeSQL(t *testing.T) {
 
 // viewpoint: behaviour
 // target: golang.walker.sinkArg
-// A configured call that takes SQL matches by its name or as written.
+// A configured call that takes SQL matches by its name or as written, a method or a function.
 func TestGoConfiguredSinksMatchByNameOrAsWritten(t *testing.T) {
 	test := "package store\n\nimport \"testing\"\n\ntype runner struct{}\n\nfunc (runner) Run(q string) {}\nfunc (runner) Do(q string) {}\n\n" +
 		"func TestX(t *testing.T) {\n\tvar r runner\n\tr.Run(\"SELECT 1\")\n\tr.Do(\"SELECT 2\")\n}\n"
@@ -75,5 +78,10 @@ func TestGoConfiguredSinksMatchByNameOrAsWritten(t *testing.T) {
 	got = sinkTexts(t, config.Config{SQLSinks: map[string][]string{"go": {"Do"}}}, test)
 	if want := []string{`"SELECT 2" dynamic=false`}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("by name: got %q, want %q", got, want)
+	}
+	fn := "package store\n\nimport \"testing\"\n\nfunc exec(q string) {}\n\nfunc TestX(t *testing.T) {\n\texec(\"SELECT 3\")\n}\n"
+	got = sinkTexts(t, config.Config{SQLSinks: map[string][]string{"go": {"exec"}}}, fn)
+	if want := []string{`"SELECT 3" dynamic=false`}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("a function: got %q, want %q", got, want)
 	}
 }
