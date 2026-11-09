@@ -130,18 +130,26 @@ func openOn(t *testing.T, path string) []int {
 	if err := syscall.Stat(path, &want); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := os.ReadDir("/dev/fd")
+	// Names only: other tests open and close descriptors meanwhile, and reading the directory with
+	// each entry's details fails on one closed between the listing and the details.
+	dir, err := os.Open("/dev/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, err := dir.Readdirnames(-1)
+	dir.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var fds []int
-	for _, e := range entries {
-		fd, err := strconv.Atoi(e.Name())
+	for _, name := range names {
+		fd, err := strconv.Atoi(name)
 		if err != nil {
 			continue
 		}
 		var st syscall.Stat_t
-		// Other tests open and close descriptors meanwhile; one gone or reused is not on this file.
+		// A descriptor gone or reused since the listing is not on this test's own file, which only
+		// this test opens.
 		if syscall.Fstat(fd, &st) == nil && st.Dev == want.Dev && st.Ino == want.Ino {
 			fds = append(fds, fd)
 		}
