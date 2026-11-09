@@ -192,6 +192,15 @@ func TestShadowedPackageVar(t *testing.T) {
 	}
 }
 
+// pairSource declares a function and a method that return two values of different types.
+const pairSource = `
+// Split returns the Config and a Store built from it.
+func (c Config) Split() (Config, *Store) { return c, &Store{} }
+
+// Both returns a Config and a Store.
+func Both() (Config, *Store) { return Default, &Store{} }
+`
+
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // Each name an assignment or a var declaration sets takes the type of its own value; with one call
@@ -201,9 +210,7 @@ func TestShadowedPackageVar(t *testing.T) {
 func TestGoAssignmentsTypeEachName(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
-		"store/store.go": {Data: []byte(storeSource + "\n// Shared is set by the program.\nvar Shared *Store\n" +
-			"\n// Split returns the Config and a Store built from it.\nfunc (c Config) Split() (Config, *Store) { return c, &Store{} }\n" +
-			"\n// Both returns a Config and a Store.\nfunc Both() (Config, *Store) { return Default, &Store{} }\n")},
+		"store/store.go": {Data: []byte(storeSource + "\n// Shared is set by the program.\nvar Shared *Store\n" + pairSource)},
 		"store/helpers_test.go": {Data: []byte(`package store
 
 import "testing"
