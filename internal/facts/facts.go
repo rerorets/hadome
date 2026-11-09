@@ -102,7 +102,9 @@ type Import struct {
 type Comment struct {
 	Path string
 	Line int
-	Text string
+	// EndLine is the comment's last line; 0 means Line.
+	EndLine int
+	Text    string
 	// Directive is true for instructions to a tool written as comments, such as //go:embed.
 	// They are not prose, so rules about what comments say skip them.
 	Directive bool

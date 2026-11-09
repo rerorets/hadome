@@ -51,7 +51,7 @@ A `size/file-lines` finding points at the first line over the limit. Example: wi
 - **How the line is decided**: by the limit alone, not by the file's content. So it is the same line in a file of any language.
 - **Why it has a line**: without one, editors and CI annotations point at the top of the file. The first line over the limit shows where the part over the limit starts.
 - **Matching against base**: the anchor of the finding is the file. The line is not used for matching. So a line that changes because the limit changed is no regression by itself.
-- **Exception markers**: as for every other rule, a marker applies to its own line and the next one. So the marker goes on the reported line or the line before it. Example: with a limit of 300, line 300 or 301. When lines added above the marker, or a changed limit, move the marker off that line, it suppresses nothing. Then both the finding and `engine/marker-unused` are reported.
+- **Exception markers**: write one at the top of the file ("A marker at the top of a file" in [engine.md](engine.md)). A marker near the line the finding points at does not cover it. That line moves with the limit, so a marker there would soon fall off it. Example: `// gate:allow size/file-lines reason: one table of cases kept in one file`
 
 ## Configuration
 
@@ -80,7 +80,7 @@ A higher limit is looser than a lower one, so raising a limit needs a person's r
 | Rule | Cases |
 |---|---|
 | `size/function-lines` | a new long function fails · an existing long function that moved passes · an existing long function that grew fails · one that shrank passes · a long test function passes |
-| `size/file-lines` | a file that grows past the limit fails · an unchanged file over the limit passes · a generated file passes · an exception marker on the first line over the limit suppresses the file's finding |
+| `size/file-lines` | a file that grows past the limit fails · an unchanged file over the limit passes · a generated file passes · an exception marker at the top suppresses the file's finding · a marker at the top without a reason has no effect · a marker at the top stays in place as the file grows · a marker near the line over the limit does not suppress it · a marker at the top that suppresses nothing is reported |
 | `size/params` | a new function with too many parameters fails · five parameters pass |
 | `size/complexity` | a new function with too many branches fails · a function at the limit passes · `default` is not a branch · a nested function's branches are not added to the outer function · a new nested function with too many branches fails · an unchanged nested function passes |
 | `size/interface-methods` | a new wide interface fails · an interface of five passes |

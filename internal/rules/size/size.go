@@ -51,7 +51,7 @@ func (r limitRule) Find(in engine.Input) ([]engine.Finding, error) {
 			Fix:     r.About().Fix,
 		}
 		if m.whole {
-			f.Line = limit + 1
+			f.Line, f.Whole = limit+1, true
 		}
 		if m.nested {
 			f.Anchor += "\x00nested"

@@ -10,3 +10,12 @@ var treeSitterFiles = map[string]string{
 	"src/main/java/A.java": "package app;\n",
 	"src/main/kotlin/A.kt": "package app\n",
 }
+
+// treeSitterTop holds markers at and below the top of files in languages read through tree-sitter.
+var treeSitterTop = []topCase{
+	{"app/run.py", "#!/usr/bin/env python3\n# " + marker + "\nrows = 1\n", true},
+	{"app/doc.py", "\"\"\"Rows.\"\"\"\n# " + marker + "\nrows = 1\n", false},
+	{"src/cli.ts", "#!/usr/bin/env node\n// " + marker + "\nexport const cols = 1\n", true},
+	{"src/license.ts", "/**\n * Copyright A.\n */\n// " + marker + "\nexport const rows = 1\n", true},
+	{"src/main/kotlin/B.kt", "package app\n// " + marker + "\n", false},
+}

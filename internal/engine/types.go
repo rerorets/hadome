@@ -113,6 +113,9 @@ type Finding struct {
 	// Value is what the rule measured, for findings about an amount (lines, parameters). A finding
 	// that matches base but has a larger Value is a regression: the violation got worse.
 	Value int
+	// Whole marks a finding about a whole file: only an exception marker at the top of the file
+	// covers it, wherever its Line points.
+	Whole bool
 }
 
 // Item is one guarded thing reported by a measure rule.
@@ -134,6 +137,8 @@ type Marker struct {
 	Reason string `json:"reason"`
 	File   string `json:"file"`
 	Line   int    `json:"line"`
+	// Top is true when the marker is at the top of its file, where it covers whole-file findings.
+	Top bool `json:"-"`
 }
 
 // Case is one self-test case: two small trees and the rule IDs expected to regress or need review.

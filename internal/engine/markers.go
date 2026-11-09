@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"io/fs"
 	"regexp"
 	"strings"
 
@@ -48,15 +49,16 @@ func parseMarkers(comments []facts.Comment, known map[string]bool) ([]Marker, []
 	return valid, bad
 }
 
-// suppress removes findings covered by a marker (same rule and file, on the marker's line or the
-// next one) and reports markers that cover nothing.
+// suppress removes findings covered by a marker of the same rule and file, and reports markers that
+// cover nothing. A marker covers a finding on its own line or the next one; a whole-file finding is
+// covered only by a marker at the top of the file.
 func suppress(findings []Finding, markers []Marker) ([]Finding, []Finding) {
 	used := make([]bool, len(markers))
 	var kept []Finding
 	for _, f := range findings {
 		covered := false
 		for i, m := range markers {
-			if m.Rule == f.Rule && m.File == f.File && (f.Line == m.Line || f.Line == m.Line+1) {
+			if m.Rule == f.Rule && m.File == f.File && covers(m, f) {
 				used[i], covered = true, true
 			}
 		}
@@ -76,4 +78,62 @@ func suppress(findings []Finding, markers []Marker) ([]Finding, []Finding) {
 		}
 	}
 	return kept, unused
+}
+
+func covers(m Marker, f Finding) bool {
+	if f.Whole {
+		return m.Top
+	}
+	return f.Line == m.Line || f.Line == m.Line+1
+}
+
+// markTop sets Top on each marker on a comment line that only blank lines, comment lines, a shebang
+// on line 1 and YAML document separators precede. A line with code before its comment is no comment
+// line.
+func markTop(markers []Marker, comments []facts.Comment, fsys fs.FS) {
+	for i, m := range markers {
+		src, err := fs.ReadFile(fsys, m.File)
+		if err != nil {
+			continue
+		}
+		markers[i].Top = atTop(strings.Split(string(src), "\n"), commentLines(comments, m.File), m.Line)
+	}
+}
+
+// commentLines maps each line a comment of the file covers to whether the comment starts on it.
+func commentLines(comments []facts.Comment, file string) map[int]bool {
+	out := map[int]bool{}
+	for _, c := range comments {
+		if c.Path != file {
+			continue
+		}
+		for l := c.Line; l <= max(c.Line, c.EndLine); l++ {
+			out[l] = out[l] || l == c.Line
+		}
+	}
+	return out
+}
+
+func atTop(lines []string, comments map[int]bool, line int) bool {
+	for n := 1; n <= line && n <= len(lines); n++ {
+		text := strings.TrimSpace(lines[n-1])
+		starts, in := comments[n]
+		switch {
+		case text == "" || text == "---" || n == 1 && strings.HasPrefix(text, "#!"):
+		case in && !starts:
+		case starts && startsComment(text):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func startsComment(text string) bool {
+	for _, p := range []string{"//", "/*", "#"} {
+		if strings.HasPrefix(text, p) {
+			return true
+		}
+	}
+	return false
 }
