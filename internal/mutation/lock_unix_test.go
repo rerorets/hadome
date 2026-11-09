@@ -71,7 +71,8 @@ func TestAReleasedLockIsFreeWhileACopyOfItsFileIsOpen(t *testing.T) {
 // viewpoint: invariant
 // target: mutation.lock
 // A run that takes the lock but cannot write who holds it fails with that error and does not keep
-// the lock: trying again fails the same way, not as held by another run.
+// the lock: trying again fails the same way, not as held by another run. The lock file it leaves
+// is taken by the next run.
 func TestALockThatCannotBeWrittenIsNotKept(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "lock")
@@ -95,6 +96,11 @@ func TestALockThatCannotBeWrittenIsNotKept(t *testing.T) {
 	if lines[0] != lines[1] {
 		t.Errorf("the second attempt failed otherwise than the first: %q, then %q", lines[0], lines[1])
 	}
+	release, err := lock(path)
+	if err != nil {
+		t.Fatalf("the lock file a failed run left cannot be taken by the next: %v", err)
+	}
+	release()
 }
 
 // StandInUnwritable is the run of StandInUnwritableLock: files may not grow in it, so the lock is
