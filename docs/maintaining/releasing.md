@@ -12,6 +12,7 @@ A release starts by pushing a version tag. The `release` workflow ([.github/work
    - the new version's section in [CHANGELOG.ja.md](../../CHANGELOG.ja.md) and [CHANGELOG.md](../../CHANGELOG.md) (see "[Changelog](#changelog)")
 4. Put a signed tag on that PR's merge commit, and push it.
 5. Check the workflow's results. Fix the cause of a failed job, then rerun only that job.
+6. Approve each package staged on npm, with 2FA (see "[Publishing to npm](#publishing-to-npm)").
 
 ```sh
 git fetch origin
@@ -27,7 +28,73 @@ Sign the tag. GitHub then marks it Verified, which shows who tagged the release.
 
 The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS`, then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
 
-If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions already on the registry.
+If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions that are published, and versions that are staged and await approval.
+
+## Publishing to npm
+
+The npm job does not publish packages; it only stages them (`npm stage publish`). A staged version stays invisible until a maintainer approves it with 2FA.
+
+- The job authenticates through npm trusted publishing (GitHub Actions OIDC). No npm token is kept as a secret.
+- Each package's trusted publisher allows staging only. Its settings:
+
+| Setting | Value |
+|---|---|
+| User | `rerorets` |
+| Repository | `hadome` |
+| Workflow | `release.yml` |
+| Environment | `release` |
+| Allow npm publish | off |
+| Allow npm dist-tag | off |
+
+- The job runs [packaging/npm/stage.sh](../../packaging/npm/stage.sh). Staging needs npm 11.15.0 or later and Node 22.14.0 or later, so the job installs a pinned npm.
+- A trial version (`1.2.0-rc.1`) is staged with the dist-tag `next`, so it never becomes what `npm install hadome` gets.
+- npm attaches provenance by itself to what trusted publishing publishes.
+
+### Approving
+
+When the tag's workflow has finished, a maintainer approves each staged version with 2FA. Approval is what publishes the version.
+
+- Approve in the Staged Packages tab of each package on npmjs.com, or with a logged-in npm on your machine, as below.
+- Approve every `hadome-<os>-<arch>` first and `hadome` last. `hadome` lists the platform packages in `optionalDependencies`, so publishing it first would make a version that cannot be installed.
+
+```sh
+npm stage list hadome-linux-x64
+npm stage approve <stage-id>
+```
+
+### What the job skips, and when it fails
+
+The job acts on each package as follows. It stages the platform packages first and `hadome` last.
+
+| State of the package | What the job does |
+|---|---|
+| The version is published | Skips it |
+| The version is staged and awaits approval | Skips it; does not stage it again |
+| The package does not exist on npm | Fails without staging anything, naming the missing packages |
+| Any other failure | Fails |
+
+- `npm stage list` cannot run with an OIDC token. So a version awaiting approval is recognised by the registry's message when it refuses to stage it again.
+- If any package is missing, the job stages nothing. This way `hadome` is never staged while a platform package is missing.
+
+### Creating an npm package
+
+A trusted publisher can only be set on a package that already exists on npm. So a maintainer creates a new package once, on their own machine. For example, to create `hadome-win32-x64`:
+
+1. Download the archives of the release whose job failed, and build the packages.
+2. With npm logged in to your own account, stage the missing package. Staging a new package makes npm publish a placeholder version `0.0.0-stage`, which creates the package.
+3. On npmjs.com, set the package's trusted publisher, with the values in the table under "[Publishing to npm](#publishing-to-npm)".
+4. Approve the version you staged in step 2.
+5. Once no package is missing, re-run the failed npm job.
+
+```sh
+gh release download v1.2.0 --dir dist
+packaging/extract.sh dist bins
+node packaging/npm/build.mjs 1.2.0 bins npm
+cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
+```
+
+- Create `hadome` last, after every platform package exists.
+- When creating a package with a trial version, use `--tag next`.
 
 ## Changelog
 
@@ -87,7 +154,7 @@ The secrets go in the `release` environment, not at the repository level (Settin
 
 | Ecosystem | Variable | Secrets | Set up once |
 |---|---|---|---|
-| npm | `PUBLISH_NPM` | `NPM_TOKEN` | A granular access token of an account that may publish `hadome` and `hadome-<os>-<arch>` (read and write, all packages, bypassing 2FA; a token with write access expires after 90 days at most) |
+| npm | `PUBLISH_NPM` | none | A trusted publisher on each of `hadome` and `hadome-<os>-<arch>` (see "[Publishing to npm](#publishing-to-npm)"); a package missing from npm is created by hand first |
 | PyPI | `PUBLISH_PYPI` | none | A trusted publisher on PyPI for project `hadome`: this repository, workflow `release.yml`, environment `pypi` |
 | crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN`, `MINISIGN_SECRET_KEY` | A crates.io token that may publish `hadome` (publish-new and publish-update). A minisign key pair that signs the archives (`minisign -G -W`; no password, because the workflow cannot type one). The secret key file's contents go into the secret, and the public key into `pubkey` in `packaging/cargo/Cargo.toml` |
 | Gradle Plugin Portal | `PUBLISH_GRADLE` | `GRADLE_PUBLISH_KEY`, `GRADLE_PUBLISH_SECRET` | A Plugin Portal account; the namespace `io.github.rerorets` is verified through GitHub |

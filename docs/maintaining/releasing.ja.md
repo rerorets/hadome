@@ -12,6 +12,7 @@
    - [CHANGELOG.ja.md](../../CHANGELOG.ja.md) と [CHANGELOG.md](../../CHANGELOG.md) の新しい版の節（書き方は「[変更履歴](#変更履歴)」）
 4. その PR のマージコミットに、署名つきのタグを打って push します。
 5. ワークフローの結果を確かめます。落ちたジョブは、原因を直してから、そのジョブだけを再実行します。
+6. npm に段階公開（stage）された各パッケージを、2FA で承認します（「[npm への公開](#npm-への公開)」）。
 
 ```sh
 git fetch origin
@@ -33,7 +34,73 @@ git push origin v1.2.0
 
 ワークフローを手で動かすと、公開せずに、すべてをビルドして確かめます。手で動かすには、Actions → release → Run workflow を使います。
 
-公開が途中で落ちたら、原因を直してから、落ちたジョブだけを再実行します。npm のジョブはレジストリにすでにあるバージョンを飛ばします。
+公開が途中で落ちたら、原因を直してから、落ちたジョブだけを再実行します。npm のジョブは、公開済みのバージョンと、承認待ちで段階公開済みのバージョンを飛ばします。
+
+## npm への公開
+
+npm のジョブは、パッケージを公開せず、段階公開（`npm stage publish`）だけをします。段階公開したバージョンは、メンテナが 2FA で承認するまで誰にも見えません。
+
+- ジョブは npm の trusted publishing（GitHub Actions の OIDC）で認証します。npm のトークンをシークレットには置きません。
+- 各パッケージの trusted publisher は、段階公開だけを許します。設定は次のとおりです。
+
+| 項目 | 値 |
+|---|---|
+| ユーザー | `rerorets` |
+| リポジトリ | `hadome` |
+| ワークフロー | `release.yml` |
+| 環境 | `release` |
+| Allow npm publish | オフ |
+| Allow npm dist-tag | オフ |
+
+- ジョブの中身は [packaging/npm/stage.sh](../../packaging/npm/stage.sh) です。段階公開には npm 11.15.0 以上と Node 22.14.0 以上が要るので、ジョブは版を固定した npm を入れます。
+- 試しの版（`1.2.0-rc.1`）は、dist-tag `next` で段階公開します。`npm install hadome` で入る版にはなりません。
+- provenance は、trusted publishing で公開すると npm が自動で付けます。
+
+### 承認する
+
+タグのワークフローが終わったら、メンテナが段階公開された各バージョンを 2FA で承認します。承認した時点で、そのバージョンが公開されます。
+
+- 承認の場所は、npmjs.com の各パッケージの Staged Packages タブです。CLI なら、ログインした手元の npm で次のようにします。
+- 承認は、`hadome-<os>-<arch>` をすべて済ませてから、最後に `hadome` にします。`hadome` は各プラットフォームのパッケージを `optionalDependencies` に持つので、先に公開すると入れられない版ができます。
+
+```sh
+npm stage list hadome-linux-x64
+npm stage approve <stage-id>
+```
+
+### ジョブが飛ばすものと落ちるとき
+
+ジョブはパッケージごとに次のように動きます。プラットフォームのパッケージを先に、`hadome` を最後に段階公開します。
+
+| パッケージの状態 | ジョブの動き |
+|---|---|
+| そのバージョンが公開済み | 飛ばす |
+| そのバージョンが段階公開済みで承認待ち | 飛ばす。段階公開し直さない |
+| パッケージが npm に無い | 何も段階公開せずに落ちる。無いパッケージの名前を出す |
+| それ以外の失敗 | 落ちる |
+
+- OIDC のトークンでは `npm stage list` を使えません。そのため、承認待ちかどうかは、段階公開を断られたときのレジストリのメッセージで見分けます。
+- パッケージが1つでも無いと、ジョブは何も段階公開しません。こうすると、`hadome` だけが段階公開され、プラットフォームのパッケージが欠けることがありません。
+
+### npm のパッケージを作る
+
+trusted publisher は、npm にすでにあるパッケージにしか設定できません。そのため、新しいパッケージは、メンテナが一度だけ手元で作ります。たとえば `hadome-win32-x64` を作るときは、次のようにします。
+
+1. ジョブが落ちたタグのリリースからアーカイブを取り、パッケージを作ります。
+2. 自分のアカウントでログインした npm で、無いパッケージを段階公開します。新しいパッケージを段階公開すると、npm は仮のバージョン `0.0.0-stage` を公開して、パッケージを作ります。
+3. npmjs.com で、そのパッケージに trusted publisher を設定します。値は「[npm への公開](#npm-への公開)」の表のとおりです。
+4. 手順2で段階公開したバージョンを承認します。
+5. 無いパッケージがすべて揃ったら、落ちた npm のジョブを再実行します。
+
+```sh
+gh release download v1.2.0 --dir dist
+packaging/extract.sh dist bins
+node packaging/npm/build.mjs 1.2.0 bins npm
+cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
+```
+
+- `hadome` は、プラットフォームのパッケージをすべて作ってから、最後に作ります。
+- 試しの版でパッケージを作るときは、`--tag next` にします。
 
 ## 変更履歴
 
@@ -93,7 +160,7 @@ packaging/release-notes.sh 1.2.0 CHANGELOG.md
 
 | エコシステム | 変数 | シークレット | 一度だけ用意するもの |
 |---|---|---|---|
-| npm | `PUBLISH_NPM` | `NPM_TOKEN` | `hadome` と `hadome-<os>-<arch>` を公開できるアカウントの granular access token。権限は Read and write・All packages・2FA の迂回。書き込みのトークンは最長90日で切れる |
+| npm | `PUBLISH_NPM` | 無し | `hadome` と `hadome-<os>-<arch>` の各パッケージの trusted publisher（「[npm への公開](#npm-への公開)」）。npm に無いパッケージは、先に手元で作る |
 | PyPI | `PUBLISH_PYPI` | 無し | PyPI のプロジェクト `hadome` の trusted publisher: このリポジトリ、ワークフロー `release.yml`、環境 `pypi` |
 | crates.io | `PUBLISH_CRATES` | `CARGO_REGISTRY_TOKEN`、`MINISIGN_SECRET_KEY` | `hadome` を公開できる crates.io のトークン。権限は publish-new と publish-update。アーカイブに署名する minisign の鍵の組。鍵の組は `minisign -G -W` で作り、ワークフローがパスワードを入力できないので、パスワード無しにする。秘密鍵のファイルの中身をシークレットに入れ、公開鍵を `packaging/cargo/Cargo.toml` の `pubkey` に書く |
 | Gradle Plugin Portal | `PUBLISH_GRADLE` | `GRADLE_PUBLISH_KEY`、`GRADLE_PUBLISH_SECRET` | Plugin Portal のアカウント。名前空間 `io.github.rerorets` は GitHub を通して検証する |
