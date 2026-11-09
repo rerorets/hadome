@@ -111,6 +111,15 @@ runs src/a.test.ts:4 "SELECT 2" sql x1`
 
 // viewpoint: behaviour
 // target: the TypeScript reader's test strings
+// A call that takes SQL given another call that takes SQL, db.query(sql`…`), hands over the inner
+// string only: the outer call's argument is not a value hadome cannot read.
+func TestTextsNestedSinks(t *testing.T) {
+	got := texts(t, "typescript", tree("src/a.test.ts", "it('runs', async () => {\n  await pool.query(sql`SELECT 1`);\n});\n"), config.Config{})
+	expect(t, got, `runs src/a.test.ts:2 "SELECT 1" sql x1`)
+}
+
+// viewpoint: behaviour
+// target: the TypeScript reader's test strings
 // A string in a helper of a test support file that the test follows is the test's, at the place it
 // is written, with the support file's constants.
 func TestTextsInSupportFiles(t *testing.T) {

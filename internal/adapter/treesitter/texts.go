@@ -171,6 +171,12 @@ func (c *textCollector) sink(g *textGrammar, callee, last string, arg *sitter.No
 			return
 		}
 	}
+	// A call that takes SQL itself, such as db.execute(sql`…`), hands its own string over.
+	if inner, last, _, ok := g.call(f, arg); ok {
+		if _, isSink := c.sinkEntry(g, inner, last); isSink {
+			return
+		}
+	}
 	if entry.dynamic {
 		c.texts = append(c.texts, facts.Text{Path: f.path, Line: line(arg), Sink: facts.TextSinkSQL, Dynamic: true, Times: times})
 	}
