@@ -48,9 +48,9 @@ func TestMain(m *testing.M) {
 		case mutation.StandInUnwritableLock:
 			os.Exit(mutation.StandInUnwritable(os.Args[2]))
 		case mutation.StandInTree:
-			os.Exit(mutation.StandInTreeRoot(os.Args[2], os.Args[3]))
+			os.Exit(mutation.StandInTreeRoot(os.Args[2], os.Args[3], os.Args[4]))
 		case mutation.StandInLeaf:
-			os.Exit(mutation.StandInLeafRun(os.Args[2]))
+			os.Exit(mutation.StandInLeafRun(os.Args[2], os.Args[3]))
 		case mutation.StandInRunTree:
 			os.Exit(mutation.StandInRunTreeRun(os.Args[2]))
 		}

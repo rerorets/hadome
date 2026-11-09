@@ -30,13 +30,13 @@ const (
 	// attempt's error, or "taken". No test starts it on Windows.
 	StandInUnwritableLock = "stand-in-unwritable-lock"
 	// StandInTree makes the binary a test command that starts a process of its own:
-	// `<binary> stand-in-tree MODE WATCH` starts StandInLeaf with WATCH, waits until it is ready and
-	// says "leaf PID". Then, with MODE hang, it blocks forever; with MODE exit, it exits 0, leaving
-	// the leaf running.
+	// `<binary> stand-in-tree MODE WATCH HOLD` starts StandInLeaf with WATCH and HOLD, its standard
+	// error being the command's own when HOLD is "hold", waits until it is ready and says
+	// "leaf PID". Then, with MODE hang, it blocks forever; with MODE exit, it exits 0, leaving the
+	// leaf running.
 	StandInTree = "stand-in-tree"
-	// StandInLeaf makes the binary the process StandInTree starts: `<binary> stand-in-leaf WATCH`
-	// opens the FIFO at WATCH for writing unless WATCH is "-", says "ready" and blocks forever. The
-	// FIFO, of which it is the only writer, reaches its end when the leaf has ended.
+	// StandInLeaf makes the binary the process StandInTree starts: `<binary> stand-in-leaf WATCH
+	// HOLD` says "ready" and blocks forever (StandInLeafRun says how on each platform).
 	StandInLeaf = "stand-in-leaf"
 	// StandInRunTree makes the binary a hadome mutate running a test command:
 	// `<binary> stand-in-run-tree WATCH` runs StandInTree in mode hang with WATCH, its output going
@@ -86,13 +86,16 @@ func StandInHold(path string) int {
 }
 
 // StandInTreeRoot is the test command of StandInTree.
-func StandInTreeRoot(mode, watch string) int {
+func StandInTreeRoot(mode, watch, hold string) int {
 	exe, err := os.Executable()
 	if err != nil {
 		fmt.Println(err)
 		return 2
 	}
-	leaf := exec.Command(exe, StandInLeaf, watch)
+	leaf := exec.Command(exe, StandInLeaf, watch, hold)
+	if hold == "hold" {
+		leaf.Stderr = os.Stderr
+	}
 	out, err := leaf.StdoutPipe()
 	if err != nil {
 		fmt.Println(err)
@@ -113,21 +116,6 @@ func StandInTreeRoot(mode, watch string) int {
 	return 0
 }
 
-// StandInLeafRun is the process of StandInLeaf.
-func StandInLeafRun(watch string) int {
-	if watch != "-" {
-		f, err := os.OpenFile(watch, os.O_WRONLY, 0)
-		if err != nil {
-			fmt.Println(err)
-			return 2
-		}
-		defer f.Close()
-	}
-	fmt.Println("ready")
-	blockForever()
-	return 0
-}
-
 // StandInRunTreeRun is the hadome mutate of StandInRunTree.
 func StandInRunTreeRun(watch string) int {
 	exe, err := os.Executable()
@@ -141,7 +129,7 @@ func StandInRunTreeRun(watch string) int {
 		return 2
 	}
 	defer os.RemoveAll(dir)
-	_, err = runTree(context.Background(), dir, []string{exe, StandInTree, "hang", watch}, os.Stdout)
+	_, err = runTree(context.Background(), dir, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
 	fmt.Println("the run ended without a signal:", err)
 	return 2
 }

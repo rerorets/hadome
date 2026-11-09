@@ -30,13 +30,12 @@ func TestARunEndsWhatItsCommandLeftRunning(t *testing.T) {
 	}
 }
 
-// runLeavingALeaf runs StandInTree in mode through runTree, and returns once the leaf has ended. A
-// leaf left running makes it wait until go test's -timeout ends the test.
+// runLeavingALeaf runs StandInTree in mode through runTree, and returns once the leaf has ended.
 //
-// With mode hang, it ends the run once the leaf is ready, and the output of the run waits for the
-// leaf to end: the run cannot finish before. So the leaf has to end when the run is ended, not only
-// once the run has finished, as it would if only the command were killed then and the rest of the
-// tree after its output was given up on.
+// With mode hang, it ends the run once the leaf is ready. The leaf holds the run's output and keeps
+// it full, and the output waits for the leaf to end, so the run cannot finish before. The leaf has
+// to end when the run is ended: a leaf ended only once the run has finished is still running when
+// the run gives up on its output, and says so.
 func runLeavingALeaf(t *testing.T, mode string) bool {
 	t.Helper()
 	exe, err := os.Executable()
@@ -47,7 +46,7 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pid := 0
-	var goneErr error
+	var endErr error
 	out := &lines{line: func(l string) {
 		n, ok := strings.CutPrefix(l, "leaf ")
 		if !ok {
@@ -57,10 +56,14 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 		w.seen(pid)
 		if mode == "hang" {
 			cancel()
-			goneErr = w.gone()
+			endErr = w.gone()
 		}
 	}}
-	passed, err := runTree(ctx, t.TempDir(), []string{exe, StandInTree, mode, w.arg}, out)
+	hold := "-"
+	if mode == "hang" {
+		hold = "hold"
+	}
+	passed, err := runTree(ctx, t.TempDir(), []string{exe, StandInTree, mode, w.arg, hold}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +71,10 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 		t.Fatal("the test command never said its leaf was ready")
 	}
 	if mode != "hang" {
-		goneErr = w.gone()
+		endErr = w.ended()
 	}
-	if goneErr != nil {
-		t.Fatal(goneErr)
+	if endErr != nil {
+		t.Fatal(endErr)
 	}
 	return passed
 }
