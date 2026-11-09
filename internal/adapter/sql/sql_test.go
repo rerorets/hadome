@@ -466,6 +466,73 @@ func TestBigQueryTestStrings(t *testing.T) {
 	}
 }
 
+// viewpoint: external contract
+// target: sql.Adapter.Name
+// The adapter is the language sql of the configuration's languages.
+func TestTheAdapterIsTheLanguageSQL(t *testing.T) {
+	if got := sql.New().Name(); got != "sql" || !slices.ContainsFunc(config.Languages, func(v config.Value) bool { return v.Name == got }) {
+		t.Errorf("name %q is not a language of the configuration", got)
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.Adapter.Analyze
+// A product file belongs to its database's unit; a file that is not read belongs to none; a file
+// the configuration says is generated gives no symbol; a file starting with a byte order mark reads.
+func TestFilesTheirUnitsAndRoles(t *testing.T) {
+	c := postgres()
+	c.GeneratedFiles = []string{"db/gen/**"}
+	an := analyze(t, sql.New(), version(
+		"db/schema.sql", "\xef\xbb\xbfCREATE TABLE accounts (id int);",
+		"db/gen/out.sql", "CREATE TABLE generated_rows (id int);",
+		"db/1_a.down.sql", "DROP TABLE accounts;",
+	), c)
+	files := map[string]facts.File{}
+	for _, f := range an.Files {
+		files[f.Path] = f
+	}
+	if f := files["db/schema.sql"]; f.Unit != ".sql" || f.Role != facts.RoleSource || f.Unread {
+		t.Errorf("schema.sql: %+v, want a readable product file of unit .sql", f)
+	}
+	if f := files["db/1_a.down.sql"]; f.Unit != "" || f.Role != facts.RoleOther {
+		t.Errorf("the undo file: %+v, want role other and no unit", f)
+	}
+	if f := files["db/gen/out.sql"]; f.Role != facts.RoleGenerated {
+		t.Errorf("the generated file: %+v, want role generated", f)
+	}
+	if got, want := symbolIDs(an), []string{".sql/public.accounts"}; !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v", got, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.Adapter.Link
+// Link resolves against the files of the version it is given, even after the same adapter read
+// other contents at the same paths.
+func TestLinkUsesTheVersionItIsGiven(t *testing.T) {
+	a := sql.New()
+	before := version("db/schema.sql", "CREATE FUNCTION old_f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;")
+	analyze(t, a, before, postgres())
+	after := version("db/schema.sql", "CREATE FUNCTION new_f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;")
+	an := analyze(t, sql.New(), after, postgres())
+	an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT new_f()")}}}
+	if err := a.Link(after, postgres(), an); err != nil {
+		t.Fatal(err)
+	}
+	if got := targets(an.Tests[0]); !slices.Equal(got, []string{".sql/public.new_f"}) || an.Tests[0].Unresolved != 0 {
+		t.Errorf("calls %v unresolved %d, want new_f only", got, an.Tests[0].Unresolved)
+	}
+	other := postgres()
+	other.Databases[0].SearchPath = []string{"public"}
+	an.Tests[0] = facts.Test{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT new_f()")}}
+	if err := a.Link(after, other, an); err != nil {
+		t.Fatal(err)
+	}
+	if got := targets(an.Tests[0]); !slices.Equal(got, []string{".sql/public.new_f"}) {
+		t.Errorf("with another configuration: calls %v, want new_f", got)
+	}
+}
+
 // viewpoint: behaviour
 // target: sql.Adapter.Analyze
 // guards: same-rules-every-language
