@@ -44,7 +44,6 @@ git log --first-parent --format='%s' v1.1.0..origin/main
 ```
 
 - A section's heading looks like `## 1.2.0 - 2026-12-01`: the version, a space, `-`, a space, the date. The workflow looks for the section whose heading's second word equals the version.
-- Changes waiting for the next release may be added to an `## Unreleased` section (`## 未リリース` in Japanese). The version PR rewrites that heading into the version's heading.
 - A trial version (`1.2.0-rc.1`) needs a section with its own heading too.
 
 ### Grouping

@@ -15,45 +15,6 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
-## Unreleased
-
-### Finds more
-
-- Go mutate makes the zero-value mutant also for functions that return named types. (#92)
-- Go files the test build does not compile get no mutants tried and go to review (exit 3). (#97)
-
-### Fewer false findings and misses
-
-- Go packages under `test/` and `e2e/` are test support, like `testutil/`. `tests/` stays product code. (#89)
-- Mutate in every language makes no mutant that replaces a constant already zero with the zero value. (#92)
-- Python test classes run the `setUp`, `setup_method` and autouse fixtures they inherit from base classes in the same file or an imported module, in Python's method resolution order. (#93)
-- `size/complexity` counts each nested function on its own. A nested function over the limit is reported at its own line. (#95)
-- `comments/broken-reference` does not report references to paths `.gitignore` ignores. (#96)
-- Mutants in Go files the test build does not compile are not counted as survivors. (#97)
-- Go tests now read: (#98)
-  - the caller's type passed to a helper's interface parameter
-  - the type of each variable of a multi-value call
-  - method values as calls
-- Constant expressions that evaluate to zero get no zero-value mutant. (#98)
-- Imports in TypeScript declaration files (`.d.ts`) are no dependency. (#99)
-- Playwright tests are tests that drive the app. (#99)
-- File-level mocks are not charged to tests that only check purity. (#99)
-- Literals already zero get no zero-value mutant. (#99)
-- `size/file-lines` points at the first line over the limit. An exception marker on that line covers it. (#100)
-- TypeScript tests now read: (#102)
-  - helper arguments bound by position
-  - `describe.each` rows
-  - functions returned by loaders
-- Methods of values a TypeScript test builds itself are not counted as unresolved. Helpers in support files yield no tests. (#102)
-- Kotlin tests walk top-level helpers. Spies are taken to call the real product code. (#103)
-- Tests that drive the app are not asked for `no-mock`. (#103)
-- Qualified zero constants get no mutant. (#103)
-- In JVM tests, built-in calls on local strings and lists are not counted as unresolved. (#103)
-
-### Other
-
-- The release workflow's actions are pinned to commit SHAs. (#90)
-
 ## 0.4.3 - 2026-11-07
 
 ### Finds more
