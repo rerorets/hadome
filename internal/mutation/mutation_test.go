@@ -18,6 +18,52 @@ import (
 
 const mod = "module example.com/calc\n\ngo 1.21\n"
 
+// catchChanges, as the first argument, makes the test binary stand in for a project's tests (see
+// TestMain).
+const catchChanges = "stand-in-tests-catch-changes"
+
+// TestMain lets the test binary stand in for a project's test command. Run as
+// `<binary> stand-in-tests-catch-changes FILE...` in a copy of a version, it fails when any FILE
+// differs from FILE.unbroken, the copy of it written with the version: tests that catch every break
+// of those files and of nothing else. Cases about what mutate does with the outcomes use it, so they
+// do not wait for go test to build the module again for every mutant.
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == catchChanges {
+		for _, f := range os.Args[2:] {
+			now, err := os.ReadFile(f)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(2)
+			}
+			was, err := os.ReadFile(f + ".unbroken")
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(2)
+			}
+			if string(now) != string(was) {
+				fmt.Println("FAIL:", f, "is broken")
+				os.Exit(1)
+			}
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// standIn is a version whose test command is the test binary standing in for tests that catch
+// every break of calc/calc.go and nothing else, whatever test is the Go test file.
+func standIn(t *testing.T, code, test string) map[string]string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := version(code, test)
+	v[".hadome.yml"] = fmt.Sprintf("schema: 1\nmutation:\n  test: [%q, %s, calc/calc.go]\n  timeout: 60s\n", exe, catchChanges)
+	v["calc/calc.go.unbroken"] = code
+	return v
+}
+
 const cfg = "schema: 1\nmutation:\n  test: [go, test, ./...]\n  timeout: 60s\n"
 
 const calc = `package calc
@@ -83,9 +129,7 @@ func version(code, test string) map[string]string {
 // Each progress line says where the break is, so a person watching can open the line, and it is
 // written in the language the report uses: --lang, else messages in head's configuration.
 func TestProgressNamesTheLineInTheChosenLanguage(t *testing.T) {
-	if _, err := exec.LookPath("go"); err != nil {
-		t.Fatal("these cases run go test, and go is not on PATH")
-	}
+	t.Parallel()
 	touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
 	for _, tc := range []struct {
 		name, flag, messages, want string
@@ -95,12 +139,13 @@ func TestProgressNamesTheLineInTheChosenLanguage(t *testing.T) {
 		{"--lang over the configuration", "en", "messages: ja\n", "calc/calc.go:5 calc.Sign, flip a comparison: caught"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			head := version(touched, strong)
-			head[".hadome.yml"] = cfg + tc.messages
+			t.Parallel()
+			head := standIn(t, touched, strong)
+			head[".hadome.yml"] += tc.messages
 			var progress strings.Builder
 			an := adapter.New()
 			m := &mutation.Mutate{Analyzer: an, Mutator: an, Workdir: t.TempDir(), Progress: &progress, Lang: tc.flag}
-			if _, err := m.Run(source.Dirs{BaseDir: dir(t, version(calc, strong)), HeadDir: dir(t, head)}); err != nil {
+			if _, err := m.Run(source.Dirs{BaseDir: dir(t, standIn(t, calc, strong)), HeadDir: dir(t, head)}); err != nil {
 				t.Fatal(err)
 			}
 			if !strings.Contains(progress.String(), tc.want+"\n") {
@@ -119,7 +164,9 @@ func TestSurvivorsAreComparedLikeFindings(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Fatal("these cases run go test, and go is not on PATH")
 	}
+	t.Parallel()
 	t.Run("a weakened test", func(t *testing.T) {
+		t.Parallel()
 		r, err := run(t, version(calc, strong), version(calc, weak))
 		if err != nil {
 			t.Fatal(err)
@@ -134,6 +181,7 @@ func TestSurvivorsAreComparedLikeFindings(t *testing.T) {
 		}
 	})
 	t.Run("an old gap", func(t *testing.T) {
+		t.Parallel()
 		touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
 		r, err := run(t, version(calc, weak), version(touched, weak))
 		if err != nil {
@@ -144,6 +192,7 @@ func TestSurvivorsAreComparedLikeFindings(t *testing.T) {
 		}
 	})
 	t.Run("tests that fail with nothing broken", func(t *testing.T) {
+		t.Parallel()
 		failing := strings.Replace(strong, `Sign(2) != 1`, `Sign(2) != 2`, 1)
 		if _, err := run(t, version(calc, strong), version(calc, failing)); err == nil || !strings.Contains(err.Error(), "fail with nothing broken") {
 			t.Fatalf("want the clean run to stop it, got %v", err)
@@ -177,13 +226,12 @@ func TestDouble(t *testing.T) {
 // with a progress line that says why. A file the build compiles because of -tags in the test
 // command is tried as before.
 func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
-	if _, err := exec.LookPath("go"); err != nil {
-		t.Fatal("these cases run go test, and go is not on PATH")
-	}
+	t.Parallel()
 	touched := strings.Replace(double, "return n * 2", "return n * 2 // twice", 1)
 	t.Run("a file the build leaves out", func(t *testing.T) {
-		base := version(calc, strong)
-		head := version(strings.Replace(calc, "return 1", "return 1 // above zero", 1), strong)
+		t.Parallel()
+		base := standIn(t, calc, strong)
+		head := standIn(t, strings.Replace(calc, "return 1", "return 1 // above zero", 1), strong)
 		head["calc/double.go"] = "//go:build ignore\n\n" + double // new, so a survivor would be a regression
 		// One mutant only: removing the call.
 		head["calc/log.go"] = "//go:build ignore\n\npackage calc\n\nimport \"fmt\"\n\n// Log says hello.\nfunc Log() {\n\tfmt.Println(\"hello\")\n}\n"
@@ -218,6 +266,10 @@ func TestMutantsOutsideTheBuildAreNotSurvivors(t *testing.T) {
 		}
 	})
 	t.Run("a file built by -tags in the test command", func(t *testing.T) {
+		t.Parallel()
+		if _, err := exec.LookPath("go"); err != nil {
+			t.Fatal("this case runs go test, and go is not on PATH")
+		}
 		tagged := "schema: 1\nmutation:\n  test: [go, test, -tags, special, ./...]\n  timeout: 60s\n"
 		base, head := version(calc, strong), version(calc, strong)
 		for i, v := range []map[string]string{base, head} {
@@ -245,13 +297,11 @@ func (untranslatable) Unmutated([]facts.Symbol) []string { return []string{"Cobo
 // Functions touched in a language hadome cannot break are not passed silently: they go to a
 // person's review, never to a regression.
 func TestALanguageWithoutMutantsGoesToReview(t *testing.T) {
-	if _, err := exec.LookPath("go"); err != nil {
-		t.Fatal("these cases run go test, and go is not on PATH")
-	}
+	t.Parallel()
 	an := adapter.New()
 	m := &mutation.Mutate{Analyzer: an, Mutator: untranslatable{an}, Workdir: t.TempDir(), Progress: io.Discard}
 	touched := strings.Replace(calc, "return 1", "return 1 // above zero", 1)
-	r, err := m.Run(source.Dirs{BaseDir: dir(t, version(calc, strong)), HeadDir: dir(t, version(touched, strong))})
+	r, err := m.Run(source.Dirs{BaseDir: dir(t, standIn(t, calc, strong)), HeadDir: dir(t, standIn(t, touched, strong))})
 	if err != nil {
 		t.Fatal(err)
 	}
