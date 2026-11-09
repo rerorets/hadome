@@ -4,23 +4,38 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
+	"unsafe"
 )
 
 // leafWatch learns that a leaf ended by waiting on a handle to it, opened while the leaf is known to
-// run, so that its process ID cannot be reused in between. A leaf that finds the run's output given
-// up on exits by itself with leafAlive, which a leaf the job terminated never does.
+// run, so that its process ID cannot be reused in between. A leaf that is asked on its named pipe,
+// or that finds the run's output given up on, exits by itself with leafAlive, which a leaf the job
+// terminated never does: so a leaf left running is told apart at once instead of being waited for.
 type leafWatch struct {
-	arg string
+	arg string // the name of the leaf's pipe
 	h   syscall.Handle
 	err error
 }
 
-// leafAlive is the exit code of a leaf that was still running when the run gave up on its output.
+// leafAlive is the exit code of a leaf that was still running when it was asked.
 const leafAlive = 3
 
-func watchLeaf(*testing.T) *leafWatch { return &leafWatch{arg: "-"} }
+var (
+	procCreateNamedPipeW = kernel32.NewProc("CreateNamedPipeW")
+	procConnectNamedPipe = kernel32.NewProc("ConnectNamedPipe")
+)
+
+const (
+	pipeAccessInbound = 0x00000001
+	errPipeConnected  = syscall.Errno(535) // ERROR_PIPE_CONNECTED: the client came before the wait
+)
+
+func watchLeaf(t *testing.T) *leafWatch {
+	return &leafWatch{arg: `\\.\pipe\hadome-leaf-` + filepath.Base(t.TempDir())}
+}
 
 func (w *leafWatch) seen(pid int) {
 	w.h, w.err = syscall.OpenProcess(syscall.SYNCHRONIZE|syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
@@ -45,13 +60,40 @@ func (w *leafWatch) gone() error {
 	return nil
 }
 
-// ended waits like gone.
-func (w *leafWatch) ended() error { return w.gone() }
+// ended asks the leaf on its pipe whether it is still running, then waits like gone. A leaf being
+// terminated runs no more of its own code and never answers; a pipe that cannot be opened has no
+// leaf behind it.
+func (w *leafWatch) ended() error {
+	if p, err := os.OpenFile(w.arg, os.O_WRONLY, 0); err == nil {
+		p.Write([]byte{'?'})
+		p.Close()
+	}
+	return w.gone()
+}
 
-// StandInLeafRun is the process of StandInLeaf. It says "ready" and blocks forever. With HOLD
-// "hold", it keeps writing to its standard error, the run's output, and exits with leafAlive when
-// that fails.
-func StandInLeafRun(_, hold string) int {
+// StandInLeafRun is the process of StandInLeaf. It waits on the named pipe WATCH, says "ready" and
+// blocks forever. Asked on the pipe, it exits with leafAlive. With HOLD "hold", it keeps writing to
+// its standard error, the run's output, and exits with leafAlive when that fails.
+func StandInLeafRun(watch, hold string) int {
+	name, err := syscall.UTF16PtrFromString(watch)
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	r, _, err := procCreateNamedPipeW.Call(uintptr(unsafe.Pointer(name)), pipeAccessInbound, 0, 1, 0, 64, 0, 0)
+	if syscall.Handle(r) == syscall.InvalidHandle {
+		fmt.Println("creating the pipe:", err)
+		return 2
+	}
+	pipe := syscall.Handle(r)
+	go func() {
+		if ok, _, err := procConnectNamedPipe.Call(uintptr(pipe), 0); ok == 0 && !errors.Is(err, errPipeConnected) {
+			return
+		}
+		var n uint32
+		syscall.ReadFile(pipe, make([]byte, 1), &n, nil)
+		os.Exit(leafAlive)
+	}()
 	fmt.Println("ready")
 	if hold == "hold" {
 		newlines := make([]byte, 1<<16)
