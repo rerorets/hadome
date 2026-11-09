@@ -266,19 +266,16 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 	if id := s.qualify(fun, func(id string) bool { return s.idx.funcs[id] }); id != "" {
 		return s.idx.result(id, n)
 	}
-	if n > 0 { // a conversion gives one value
-		return nil
-	}
 	if t := s.qualify(fun, func(id string) bool { return s.idx.types[id] }); t != "" {
-		return s.resolve(fun) // a conversion
+		return s.first(n, s.resolve(fun)) // a conversion
 	}
 	switch f := fun.(type) {
 	case *ast.ParenExpr: // a conversion to a written type, (*T)(x)
-		return s.resolve(f.X)
+		return s.first(n, s.resolve(f.X))
 	case *ast.SelectorExpr:
 		if s.isPackage(f.X) {
 			if p := s.imports[f.X.(*ast.Ident).Name]; !s.idx.internal(p) {
-				return externalResult(p, f.Sel.Name, false)
+				return s.first(n, externalResult(p, f.Sel.Name, false))
 			}
 			return nil
 		}
@@ -288,10 +285,19 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 		case t.id != "":
 			return s.idx.result(t.id+"."+f.Sel.Name, n)
 		case t.ext != "":
-			return externalResult(t.ext, f.Sel.Name, true)
+			return s.first(n, externalResult(t.ext, f.Sel.Name, true))
 		}
 	}
 	return nil
+}
+
+// first returns t as the n-th value of a call that only its first value is known for: a conversion
+// gives one value, and the table of outside functions holds only their first results.
+func (scope) first(n int, t *vtype) *vtype {
+	if n > 0 {
+		return nil
+	}
+	return t
 }
 
 // localResult returns the result type of a call of a name the test knows: a function held in a

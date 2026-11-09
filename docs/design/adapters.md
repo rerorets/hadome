@@ -263,7 +263,7 @@ For `tests/no-assertion` ([rules-tests.md](rules-tests.md)), the adapter counts 
 | Python | the `assert` statement, `self.assert…`, `pytest.raises`, `pytest.fail` |
 | TypeScript | `expect(…)` with a matcher called (`expect(x).toBe(1)`, `expect(x).not.toBe(1)`), chai's `expect(x).to.…`, `assert` and `assert.…`. `expect(x)` alone, and a matcher not called (`expect(x).toBeTruthy`), do not count |
 | Java / Kotlin | JUnit's `assert…` and `fail`, AssertJ's and Hamcrest's `assertThat`, Mockito's `verify`, MockK's `verify…`, `coVerify…` and `confirmVerified`, kotest's `should…`, the checks after REST Assured's `then()` (`statusCode`, `body` and the like, including those after a helper whose body ends in `then()` or that is declared to return `ValidatableResponse`), Spring MockMvc's `andExpect` |
-| Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]` |
+| Rust | `assert!`, `assert_eq!`, `assert_ne!`, `panic!`; a test marked `#[should_panic]`. A case that checks the value after `=>` (`#[test_case(1 => 2)]`), one per case |
 
 As with hazard categories, these are examples; each adapter holds the full table. In languages other than Go, a function whose name starts with `assert`, `expect` or `verify` counts too (`assertEquals`, `assert_called_once`, `expectValid`). A checking helper in another file cannot be read by the adapter, but its name says that it checks.
 
@@ -300,7 +300,7 @@ A parameterised test writes its inputs outside its body. So the parameters, and 
 | Python | From the decorators (`@pytest.mark.parametrize`) to the end of the body. For a test in a class, also the class's decorators and the bodies of the `setUp` and the like and the `autouse=True` fixtures that run for that class |
 | TypeScript | The `it("name", …)` call, without the name's string. Also the bodies of `beforeEach` and `beforeAll` in the enclosing `describe` blocks, the tables of `.each`, and the statements that set up the outer variables the test uses |
 | Java / Kotlin | From the annotations (`@ValueSource`) to the end of the body. The annotations of the `@ParameterizedClass` classes around the test too |
-| Rust | From the attributes before the function (`#[case(1)]`) to the end of the body |
+| Rust | From the attributes before the function (`#[case(1)]`, `#[test_case(1)]`) to the end of the body |
 
 A test's name can also be written in annotations or arguments outside its body. What only gives the test a name is left out of the fingerprint, like the test's own name. Something only gives a name when changing or removing it changes neither what the test runs nor what it checks. Anything that changes how many times the test runs, its inputs, its time limit or which runs include it does not only give a name.
 
@@ -308,11 +308,11 @@ A test's name can also be written in annotations or arguments outside its body. 
 |---|---|
 | Java / Kotlin | `@DisplayName`. The `name` element of `@ParameterizedTest`, `@RepeatedTest` and `@ParameterizedClass` (`@ParameterizedTest(name = "{0}")` is the same as `@ParameterizedTest`) |
 | Python | The `ids=` argument of `@pytest.mark.parametrize`. The `id=` argument of `pytest.param` |
-| Rust | The description of an rstest case (`::small` in `#[case::small(1)]`) |
+| Rust | The description of an rstest case (`::small` in `#[case::small(1)]`). The description of a test-case case (`; "small"` in `#[test_case(1 ; "small")]`) |
 
 These change how the test runs rather than its name, so they are part of the fingerprint:
 
-- inputs (`@ValueSource`, the values of `@pytest.mark.parametrize`, `#[case(1)]`)
+- inputs (`@ValueSource`, the values of `@pytest.mark.parametrize`, `#[case(1)]`, `#[test_case(1)]`)
 - the number of runs (the `value` of `@RepeatedTest`)
 - time limits (`@Timeout`, `@pytest.mark.timeout`)
 - tags that decide which runs include the test (`@Tag`, `@pytest.mark.slow`)

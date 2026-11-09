@@ -276,7 +276,7 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | Python | `assert` 文、`self.assert…`、`pytest.raises`、`pytest.fail` |
 | TypeScript | matcher を呼ぶ `expect(…)`（`expect(x).toBe(1)`、`expect(x).not.toBe(1)`）、chai の `expect(x).to.…`、`assert` と `assert.…`。`expect(x)` だけのものと、matcher を呼ばないもの（`expect(x).toBeTruthy`）は数えません |
 | Java / Kotlin | JUnit の `assert…`・`fail`、AssertJ と Hamcrest の `assertThat`、Mockito の `verify`、MockK の `verify…`・`coVerify…`・`confirmVerified`、kotest の `should…`、REST Assured の `then()` に続く確かめ（`statusCode`・`body` など。本体が `then()` で終わるヘルパーか、戻り値の型を `ValidatableResponse` と宣言したヘルパーに続くものも入る）、Spring MockMvc の `andExpect` |
-| Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト |
+| Rust | `assert!`・`assert_eq!`・`assert_ne!`・`panic!`、`#[should_panic]` の付いたテスト。`=>` の後の値を確かめる case（`#[test_case(1 => 2)]`）。case ごとに1つと数える |
 
 危険の分類と同じく、この表は例で、全体の表は各アダプタにあります。Go 以外の言語では、名前が `assert`・`expect`・`verify` で始まる関数も assert とみなします。例: `assertEquals`、`assert_called_once`、`expectValid`。ほかのファイルにある確かめるためのヘルパーは、アダプタが中を読めませんが、名前から確かめていると分かるからです。
 
@@ -316,7 +316,7 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 | Python | デコレータ（`@pytest.mark.parametrize`）から本体の終わりまで。クラスのテストは、クラスのデコレータと、そのクラスで走る `setUp` などと `autouse=True` の fixture の本体も入れる |
 | TypeScript | `it("名前", …)` の呼び出しのうち、名前の文字列を除いたもの。囲む `describe` の `beforeEach`・`beforeAll` の本体と `.each` の表、テストが使う外の変数を用意する文も入れる |
 | Java / Kotlin | アノテーション（`@ValueSource`）から本体の終わりまで。テストを囲む `@ParameterizedClass` のクラスのアノテーションも入れる |
-| Rust | 関数の前の属性（`#[case(1)]`）から本体の終わりまで |
+| Rust | 関数の前の属性（`#[case(1)]`、`#[test_case(1)]`）から本体の終わりまで |
 
 テストの名前は、テストの本体の外の注釈や引数にも書けます。名前だけを付けるものは、テストの名前と同じく指紋に入れません。名前だけを付けるものとは、変えても、取り除いても、テストが動かすものと確かめるものが変わらないものです。テストを動かす回、入力、時間の上限、どの実行に含めるかを変えるものは、名前を付けるものではありません。
 
@@ -324,11 +324,11 @@ hadome が読まないディレクトリ（前述の「読まないディレク�
 |---|---|
 | Java / Kotlin | `@DisplayName`。`@ParameterizedTest`・`@RepeatedTest`・`@ParameterizedClass` の `name` の要素（`@ParameterizedTest(name = "{0}")` は `@ParameterizedTest` と同じ） |
 | Python | `@pytest.mark.parametrize` の `ids=` の引数。`pytest.param` の `id=` の引数 |
-| Rust | rstest の case の説明（`#[case::small(1)]` の `::small`） |
+| Rust | rstest の case の説明（`#[case::small(1)]` の `::small`）。test-case の case の説明（`#[test_case(1 ; "small")]` の `; "small"`） |
 
 次のものは、名前ではなくテストの動き方を変えるので、指紋に入れます。
 
-- 入力（`@ValueSource`、`@pytest.mark.parametrize` の値、`#[case(1)]`）
+- 入力（`@ValueSource`、`@pytest.mark.parametrize` の値、`#[case(1)]`、`#[test_case(1)]`）
 - 回数（`@RepeatedTest` の `value`）
 - 時間の上限（`@Timeout`、`@pytest.mark.timeout`）
 - どの実行に含めるかを決めるタグ（`@Tag`、`@pytest.mark.slow`）

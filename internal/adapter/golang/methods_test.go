@@ -192,15 +192,25 @@ func TestShadowedPackageVar(t *testing.T) {
 	}
 }
 
+// pairSource declares a function and a method that return two values of different types.
+const pairSource = `
+// Split returns the Config and a Store built from it.
+func (c Config) Split() (Config, *Store) { return c, &Store{} }
+
+// Both returns a Config and a Store.
+func Both() (Config, *Store) { return Default, &Store{} }
+`
+
 // viewpoint: behaviour
 // target: golang.Adapter.Analyze
 // Each name an assignment or a var declaration sets takes the type of its own value; with one call
-// on the right, the first name takes the call's first result. A package-level variable of the code
-// declared with a type, and one of another test file set with =, are typed too.
+// on the right, each name takes the call's result in its position, whether the call is of a
+// function or of a method. A package-level variable of the code declared with a type, and one of
+// another test file set with =, are typed too.
 func TestGoAssignmentsTypeEachName(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod":         {Data: []byte("module example.com/app\n")},
-		"store/store.go": {Data: []byte(storeSource + "\n// Shared is set by the program.\nvar Shared *Store\n")},
+		"store/store.go": {Data: []byte(storeSource + "\n// Shared is set by the program.\nvar Shared *Store\n" + pairSource)},
 		"store/helpers_test.go": {Data: []byte(`package store
 
 import "testing"
@@ -239,6 +249,24 @@ func TestVarFirstResult(t *testing.T) {
 	_ = err.Error()
 }
 
+func TestFunctionResults(t *testing.T) {
+	c, s := Both()
+	_ = c.Validate()
+	_ = s.Append()
+}
+
+func TestMethodResults(t *testing.T) {
+	c, s := Default.Split()
+	_ = c.Validate()
+	_ = s.Append()
+}
+
+func TestVarMethodResults(t *testing.T) {
+	var c, s = Default.Split()
+	_ = c.Validate()
+	_ = s.Append()
+}
+
 func TestDeclaredPackageVar(t *testing.T) { _ = Shared.Append() }
 
 func TestAssignedPackageVar(t *testing.T) {
@@ -252,8 +280,11 @@ func TestAssignedPackageVar(t *testing.T) {
 		"TestDeclaredPackageVar calls=[example.com/app/store.Store.Append×1] unresolved=0",
 		// error is not a type of the repository, so err.Error() names no target.
 		"TestFirstResult calls=[example.com/app/store.Store.Append×1] unresolved=1",
+		"TestFunctionResults calls=[example.com/app/store.Both×1 example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
+		"TestMethodResults calls=[example.com/app/store.Config.Split×1 example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 		"TestPairs calls=[example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 		"TestVarFirstResult calls=[example.com/app/store.Store.Append×1] unresolved=1",
+		"TestVarMethodResults calls=[example.com/app/store.Config.Split×1 example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 		"TestVarPairs calls=[example.com/app/store.Config.Validate×1 example.com/app/store.Store.Append×1] unresolved=0",
 	}, "\n")
 	if got := callsByTest(t, tree); got != want {

@@ -649,8 +649,26 @@ mod tests {
     #[rstest]
     #[case::small(2)]
     fn two_named(#[case] a: i32) { assert_eq!(add(a, 0), a); }
+
+    #[test_case(1)]
+    fn case_one(a: i32) { assert_eq!(add(a, 0), a); }
+
+    #[test_case(1 ; "small")]
+    fn case_one_named(a: i32) { assert_eq!(add(a, 0), a); }
+
+    #[test_case(1 => 1 ; "small")]
+    fn case_one_result(a: i32) -> i32 { add(a, 0) }
+
+    #[test_case(1 => 1)]
+    fn case_one_result_bare(a: i32) -> i32 { add(a, 0) }
+
+    #[test_case(2 ; "small")]
+    fn case_two_named(a: i32) { assert_eq!(add(a, 0), a); }
 }
 `)), `
+tests::case_one tests::case_one_named
+tests::case_one_result tests::case_one_result_bare
+tests::case_two_named
 tests::one tests::one_named
 tests::two_named`)
 	})

@@ -136,11 +136,21 @@ func pyNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 }
 
 // rustNameOnly lists the parts of the attributes in roots that only name a test: the description
-// of an rstest case, ::small in #[case::small(1)].
+// of an rstest case, ::small in #[case::small(1)], and of a test-case case, ; "small" in
+// #[test_case(1 ; "small")].
 func rustNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 	var out []*sitter.Node
 	walkAnnotations(roots, map[string]bool{"block": true}, func(n *sitter.Node) {
 		if n.Kind() != "attribute" || n.NamedChildCount() == 0 {
+			return
+		}
+		if args := rustCaseArgs(f, n); args != nil {
+			for i, named := uint(0), false; i+1 < args.ChildCount(); i++ {
+				named = named || args.Child(i).Kind() == ";"
+				if named {
+					out = append(out, args.Child(i))
+				}
+			}
 			return
 		}
 		path := n.NamedChild(0)
