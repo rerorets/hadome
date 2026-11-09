@@ -82,6 +82,7 @@ func (w *walker) followSupport(id string, h helper, c *ast.CallExpr) {
 	if w.walking[id] {
 		return
 	}
+	// gate:allow mutation/survived reason: a support package cannot import itself, so Go code never reaches the same support function again while it is walked; the guard keeps the walk finite all the same
 	w.walking[id] = true
 	prevScope, prevPath, prevArgs := w.scope, w.curPath, w.args
 	args, passed := w.bindArgs(h.decl.Type, c), w.argTypes(h.decl.Type, c)

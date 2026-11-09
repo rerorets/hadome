@@ -16,8 +16,8 @@ import (
 // target: golang.walker.followSupport
 // A helper of a support package is followed like the test's own code: what it calls through its
 // package's unexported helpers is the test's, its assertions on the testing tool count, a string the
-// test passes it reaches the SQL it runs, a second call walks it again, and a helper that calls
-// itself is walked once per call from the test.
+// test passes it reaches the SQL it runs, so do the string constants of its package, a second call
+// walks it again, and a helper that calls itself is walked once per call from the test.
 func TestGoSupportHelpersAreFollowed(t *testing.T) {
 	tree := fstest.MapFS{
 		"go.mod": {Data: []byte("module example.com/app\n")},
@@ -38,13 +38,17 @@ func Prepare() { seed() }
 
 func seed() { store.Seed() }
 
-func Check(t *testing.T, n int) {
+func Check(tb testing.TB, n int) {
 	if n < 0 {
-		t.Fatal("negative")
+		tb.Fatal("negative")
 	}
 }
 
 func Run(query string) { db.Exec(query) }
+
+const countSQL = "SELECT store.size()"
+
+func Count() { db.Exec(countSQL) }
 
 func Down(n int) {
 	if n > 0 {
@@ -63,6 +67,8 @@ import (
 
 func TestFollowed(t *testing.T) {
 	storetest.Prepare()
+	storetest.Prepare()
+	storetest.Count()
 	storetest.Check(t, 1)
 	storetest.Run("SELECT store.count()")
 	storetest.Down(2)
@@ -82,6 +88,9 @@ func TestFollowed(t *testing.T) {
 	var calls []string
 	for _, c := range ts.Calls {
 		calls = append(calls, c.Target)
+		if c.Target == "example.com/app/store.Seed" && c.Times != 2 {
+			t.Errorf("store.Seed is called %d times, want once per call of Prepare", c.Times)
+		}
 	}
 	sort.Strings(calls)
 	if got, want := strings.Join(calls, " "), "example.com/app/store.Drop example.com/app/store.Seed"; got != want {
@@ -96,7 +105,8 @@ func TestFollowed(t *testing.T) {
 			sinks = append(sinks, fmt.Sprintf("%s dynamic=%t", x.Value, x.Dynamic))
 		}
 	}
-	if got, want := strings.Join(sinks, "|"), "SELECT store.count() dynamic=false"; got != want {
+	sort.Strings(sinks)
+	if got, want := strings.Join(sinks, "|"), "SELECT store.count() dynamic=false|SELECT store.size() dynamic=false"; got != want {
 		t.Errorf("SQL %q, want %q", got, want)
 	}
 }
