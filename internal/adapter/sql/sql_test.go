@@ -1,6 +1,7 @@
 package sql_test
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -545,5 +546,86 @@ func TestReadingIsDeterministic(t *testing.T) {
 		if strings.Join(symbolIDs(again), ",") != strings.Join(symbolIDs(first), ",") {
 			t.Fatalf("read %d gave %v, first %v", i, symbolIDs(again), symbolIDs(first))
 		}
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.comments
+// The comments of a SQL file are read by its dialect's rules, and those that instruct a tool are
+// directives. A file without a dialect, such as one with the markers of two, is read with nested
+// block comments and dollar quotes.
+func TestCommentsOfSQLFiles(t *testing.T) {
+	cases := []struct {
+		name string
+		c    config.Config
+		src  string
+		want []string
+	}{
+		{"mysql", dialect("mysql"), "# keeps accounts\nCREATE TABLE accounts (id int); -- noqa: L010\n",
+			[]string{`db/schema.sql:1 "keeps accounts" directive=false`, `db/schema.sql:2 "noqa: L010" directive=true`}},
+		{"markers of two dialects", config.Config{}, "CREATE TASK t AS SELECT $$ -- quoted $$; /* outer /* inner */ still */\n",
+			[]string{`db/schema.sql:1 "outer /* inner */ still" directive=false`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			an := analyze(t, sql.New(), version("db/schema.sql", tc.src), tc.c)
+			var got []string
+			for _, c := range an.Comments {
+				got = append(got, fmt.Sprintf("%s:%d %q directive=%v", c.Path, c.Line, strings.TrimSpace(c.Text), c.Directive))
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("comments %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// viewpoint: failure
+// target: sql.Adapter.Link
+// Link fails when a SQL file of the analysis cannot be read from the version.
+func TestLinkFailsOnAFileItCannotRead(t *testing.T) {
+	an := &facts.Analysis{Files: []facts.File{{Path: "db/gone.sql", Language: "sql"}},
+		Tests: []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT 1")}}}}
+	if err := sql.New().Link(version(), postgres(), an); err == nil {
+		t.Error("no error for a file the version does not have")
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.Adapter.Link
+// Link resolves against the version's own files even when another version the adapter read holds
+// the same bytes split differently among paths: a path that runs into the contents, contents that
+// run into the next path, or the same contents at paths applied in another order.
+func TestLinkTellsVersionsApart(t *testing.T) {
+	const create = "CREATE FUNCTION new_f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;"
+	const drop = "DROP FUNCTION new_f();"
+	cases := []struct {
+		name         string
+		read, linkTo []string
+	}{
+		{"a path that runs into the contents",
+			[]string{"db/a.sql", ".sql" + create},
+			[]string{"db/a.sql.sql", create}},
+		{"contents that run into the next path",
+			[]string{"db/a.sql", "-- one\ndb/b.sql\x00" + create},
+			[]string{"db/a.sql", "-- one\n", "db/b.sql", create}},
+		{"the same contents applied in another order",
+			[]string{"db/1.sql", create, "db/2.sql", drop},
+			[]string{"db/10.sql", create, "db/9.sql", drop}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := sql.New()
+			analyze(t, a, version(tc.read...), postgres())
+			v := version(tc.linkTo...)
+			an := analyze(t, sql.New(), v, postgres())
+			an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT new_f()")}}}
+			if err := a.Link(v, postgres(), an); err != nil {
+				t.Fatal(err)
+			}
+			if got := targets(an.Tests[0]); !slices.Equal(got, []string{".sql/public.new_f"}) {
+				t.Errorf("calls %v, want new_f", got)
+			}
+		})
 	}
 }
