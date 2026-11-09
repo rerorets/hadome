@@ -4,6 +4,7 @@ package treesitter
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -31,6 +32,9 @@ type jvmScope struct {
 	values map[string]bool
 	mocks  []jvmCode
 	setups []jvmCode
+	// inputs are the annotations of the parameterised classes around the test (@ParameterizedClass
+	// with its @ValueSource): the test's inputs, which its fingerprint includes.
+	inputs []*sitter.Node
 }
 
 // nested is the scope a class declared inside this one starts from: a JUnit @Nested class sees the
@@ -45,7 +49,23 @@ func (s jvmScope) nested() jvmScope {
 	}
 	out.mocks = append(out.mocks, s.mocks...)
 	out.setups = append(out.setups, s.setups...)
+	out.inputs = append(out.inputs, s.inputs...)
 	return out
+}
+
+// withInputs adds the annotations of a class to the scope's inputs when the class is parameterised.
+// anns are the class's annotations by name; they join in the order they are written.
+func (s jvmScope) withInputs(anns map[string]*sitter.Node) jvmScope {
+	if anns["ParameterizedClass"] == nil {
+		return s
+	}
+	var add []*sitter.Node
+	for _, a := range anns {
+		add = append(add, a)
+	}
+	sort.Slice(add, func(i, j int) bool { return add[i].StartByte() < add[j].StartByte() })
+	s.inputs = append(append([]*sitter.Node{}, s.inputs...), add...)
+	return s
 }
 
 // startTest records what a test has from its file and class before its body runs, the mocks and

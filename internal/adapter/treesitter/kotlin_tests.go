@@ -81,7 +81,7 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 			classSkip = a
 		}
 	}
-	scope := outer.nested()
+	scope := outer.nested().withInputs(anns)
 	jf.ktInherit(n, &scope, 0)
 	tests, mocks := jf.ktCollect(n, &scope)
 	jf.mocks = append(jf.mocks, mocks...)
@@ -108,7 +108,7 @@ func ktBody(fn *sitter.Node) *sitter.Node {
 
 func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
-	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
+	t.fingerprint(append(append([]*sitter.Node{}, scope.inputs...), m), m.ChildByFieldName("name"))
 	skip := classSkip
 	for k, a := range ktAnnotations(jf.f, m) {
 		if jvmSkipAnnotations[k] {

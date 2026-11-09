@@ -128,7 +128,16 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 			context = append(context, codeIn{c.pf.f, c.n})
 		}
 	}
-	t.fingerprint([]*sitter.Node{n}, def.ChildByFieldName("name"), context...)
+	// A class's decorators (@pytest.mark.parametrize) give every test in it its inputs.
+	var inputs []*sitter.Node
+	if class != nil && class.Kind() == "decorated_definition" {
+		for _, c := range named(class) {
+			if c.Kind() == "decorator" {
+				inputs = append(inputs, c)
+			}
+		}
+	}
+	t.fingerprint(append(inputs, n), def.ChildByFieldName("name"), context...)
 	for _, d := range []*sitter.Node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
 			pf.decorators(t, d)

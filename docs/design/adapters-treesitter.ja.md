@@ -198,6 +198,7 @@ Python のテストのクラスは、次のように見分けます。
   - 初期値の無いフィールド（`lateinit`、注入、コンストラクタのプロパティ）は、宣言した型として読みます
   - モックなど、ほかの方法で作ったフィールドは読みません
   - スパイのフィールド（`@Spy`、`@SpyK`、Quarkus の `@InjectSpy`）は、モックに数えたうえで、宣言した型か作ったクラスとして読みます。スパイは包んだオブジェクトの本物のメソッドを動かすので、スパイの上の呼び出しは製品のメソッドの呼び出しです
+  - Mockito の `@InjectMocks` のフィールドは、モックに数えず、宣言した型か作ったクラスとして読みます。このフィールドは本物のインスタンスにモックを注入したものなので、その上の呼び出しは製品のメソッドの呼び出しです。`org.mockito.InjectMocks` の import もモックに数えません
   - Kotlin の `companion object` の中のフィールドとヘルパーも、クラスのものと同じに読みます
   - `@Nested` などの内側のクラスのテストは外側のクラスのフィールドとヘルパーも使います
   - Kotlin のテストのクラスがテストのファイルにある別のクラスを継承するとき（`class StoreTest : StoreTestSupport()`）は、継承元のフィールド、ヘルパー、モックのフィールド、各テストの前に走るコードも、そのクラスのものと同じに読みます。継承元が別のクラスを継承していれば、それもたどります
@@ -296,7 +297,7 @@ Java と Kotlin でも、テストが文字列か標準のコレクションと�
 |---|---|---|---|---|---|
 | `clock` | `Date.now`、`new Date()`、`performance.now` | `datetime.now`、`datetime.utcnow`、`date.today`、`time.time` | `SystemTime::now`、`Instant::now`、`Utc::now`、`Local::now` | `Instant.now`、`LocalDate(Time).now`、`System.currentTimeMillis`、`System.nanoTime` | Java と同じ、`Clock.System.now`、`measureTimeMillis`、`measureNanoTime`、`measureTime`、`measureTimedValue`、`TimeSource.Monotonic.markNow` |
 | `sleep` | `setTimeout` | `time.sleep`、`asyncio.sleep` | `thread::sleep`、`tokio::time::sleep` | `Thread.sleep` | `Thread.sleep`、`delay` |
-| `mock` | `jest.mock`、`vi.mock`、`mock.module`（bun）、`vi.spyOn`、`jest.spyOn`、`vi.stubGlobal`、`sinon` の import | `unittest.mock`、`mock` の import。`mocker`。`monkeypatch.setattr`、`monkeypatch.delattr` | `mock!`、`#[automock]` が作る `Mock<名前>` の型を使うこと、`mockall` の import | `org.mockito` の import。`@Mock`、`@Spy`、`@MockBean`、Quarkus の `@InjectMock`・`@InjectSpy` を付けたフィールド | `io.mockk`、`org.mockito` の import。Java と同じ注釈、`@MockK`、`@SpyK` |
+| `mock` | `jest.mock`、`vi.mock`、`mock.module`（bun）、`vi.spyOn`、`jest.spyOn`、`vi.stubGlobal`、`sinon` の import | `unittest.mock`、`mock` の import。`mocker`。`monkeypatch.setattr`、`monkeypatch.delattr` | `mock!`、`#[automock]` が作る `Mock<名前>` の型を使うこと、`mockall` の import | `org.mockito` の import（`org.mockito.InjectMocks` を除く）。`@Mock`、`@Spy`、`@MockBean`、Quarkus の `@InjectMock`・`@InjectSpy` を付けたフィールド | `io.mockk`、`org.mockito` の import。Java と同じ注釈、`@MockK`、`@SpyK` |
 | `always-true` | `expect(true).toBe(true)`、`expect(x).toBe(x)` | `assert True`、`assert x == x` | `assert!(true)`、`assert_eq!(x, x)` | `assertTrue(true)`、`assertEquals(x, x)` | Java と同じ |
 | `io`（ユニット） | `fs`、`net`、`http`、`https`、`child_process`（`node:` の有無を問わない）、`axios`、`undici`、`pg`、`mysql2`、`mongodb`、`redis`、`@prisma/client`、`@aws-sdk`、`@google-cloud` | `socket`、`os`、`subprocess`、`sqlite3`、`requests`、`httpx`、`urllib.request`、`psycopg`、`pymongo`、`redis`、`boto3`、`sqlalchemy`、`google.cloud` | `std::fs`、`std::net`、`std::process`、`tokio::fs`、`tokio::net`、`reqwest`、`sqlx`、`diesel` | `java.io`、`java.nio.file`、`java.net`、`java.sql`、`javax.sql`、`jakarta.persistence`、`javax.persistence`、`org.hibernate`、`io.quarkus.hibernate`、`com.google.cloud`、`jakarta.ws.rs.client`、`javax.ws.rs.client`、`software.amazon.awssdk` | Java と同じ、`io.ktor.client` |
 | `io`（グローバルの API） | `fetch`、`navigator.sendBeacon`、`new WebSocket`、`new XMLHttpRequest`、`new EventSource`、`localStorage`・`sessionStorage`・`indexedDB` のメンバー。`window.`・`globalThis.`・`self.` が前に付いても同じ | 無い | 無い | 無い | 無い |

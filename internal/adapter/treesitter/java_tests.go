@@ -13,8 +13,12 @@ import (
 var (
 	jvmTestAnnotations = set("Test", "ParameterizedTest", "RepeatedTest", "TestFactory", "TestTemplate")
 	jvmSkipAnnotations = set("Disabled", "Ignore")
-	jvmMockAnnotations = set("Mock", "MockBean", "InjectMocks", "Spy", "MockK", "RelaxedMockK", "SpyK",
+	// Mockito's @InjectMocks is not among them: its field holds a real instance of the product with
+	// the mocks injected, and only those mocks replace anything.
+	jvmMockAnnotations = set("Mock", "MockBean", "Spy", "MockK", "RelaxedMockK", "SpyK",
 		"InjectMock", "InjectSpy")
+	// jvmRealImports are imports from a mocking library that replace nothing.
+	jvmRealImports = set("org.mockito.InjectMocks")
 	// jvmSpyAnnotations mark the mock fields that run the real methods of the object they wrap: a
 	// call through one calls the product.
 	jvmSpyAnnotations = set("Spy", "SpyK", "InjectSpy")
@@ -52,7 +56,7 @@ func (jf *jvmFile) bindClasses(imports func(visit func(name string, wildcard boo
 		jf.names[c] = jf.f.unit + "." + c
 	}
 	imports(func(name string, wildcard bool, n *sitter.Node) {
-		if jf.t.isMock(name) {
+		if jf.t.isMock(name) && !jvmRealImports[name] {
 			jf.mocks = append(jf.mocks, n)
 		}
 		for prefix, calls := range jvmDrivers {
@@ -145,7 +149,7 @@ func (jf *jvmFile) javaClass(n *sitter.Node, prefix string, classSkip *sitter.No
 	}
 	body := n.ChildByFieldName("body")
 	var methods []*sitter.Node
-	scope := outer.nested()
+	scope := outer.nested().withInputs(anns)
 	for _, m := range named(body) {
 		switch {
 		case m.Kind() == "field_declaration":
@@ -183,7 +187,7 @@ func hasAny(m map[string]*sitter.Node, keys map[string]bool) bool {
 
 func (jf *jvmFile) javaTest(name string, m *sitter.Node, anns map[string]*sitter.Node, classSkip *sitter.Node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
-	t.fingerprint([]*sitter.Node{m}, m.ChildByFieldName("name"))
+	t.fingerprint(append(append([]*sitter.Node{}, scope.inputs...), m), m.ChildByFieldName("name"))
 	skip := classSkip
 	for k := range jvmSkipAnnotations {
 		if a, ok := anns[k]; ok {

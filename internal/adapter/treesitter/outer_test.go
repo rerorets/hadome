@@ -97,6 +97,49 @@ describe('follow', () => {
 }
 
 // viewpoint: behaviour
+// target: the Java reader
+// A helper of the test class is followed each time the test calls it, so a helper called twice
+// counts its calls twice, and helpers that call each other are followed once per chain, not forever.
+func TestJavaHelpersAreFollowedPerCall(t *testing.T) {
+	a := analyze(t, "java", tree(
+		"src/main/java/acme/Calc.java", "package acme;\n\npublic class Calc {\n    public static int twice(int n) { return n * 2; }\n}\n",
+		"src/test/java/acme/CalcTest.java", `package acme;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class CalcTest {
+    int ping(int n) { return n > 0 ? pong(n - 1) : Calc.twice(n); }
+
+    int pong(int n) { return ping(n); }
+
+    @Test
+    void helperTwice() { assertEquals(0, ping(0) + ping(0)); }
+
+    @Test
+    void helperOnce() { assertEquals(0, ping(0)); }
+}
+`))
+	got := map[string]string{}
+	for _, ts := range a.Tests {
+		var calls []string
+		for _, c := range ts.Calls {
+			calls = append(calls, fmt.Sprintf("%s×%d", c.Target, c.Times))
+		}
+		got[ts.Name] = strings.Join(calls, " ")
+	}
+	want := map[string]string{
+		"CalcTest.helperTwice": "acme.Calc.twice×2",
+		"CalcTest.helperOnce":  "acme.Calc.twice×1",
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("%s: got %q, want %q", name, got[name], w)
+		}
+	}
+}
+
+// viewpoint: behaviour
 // target: the TypeScript reader
 // A test runs the setup of the variables it uses that are declared outside it, at the top of the
 // file or in a describe block: the initializer, a value assigned in a hook, and the statements there
