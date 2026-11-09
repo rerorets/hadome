@@ -99,10 +99,15 @@ func (t *processTree) end() {
 	}
 }
 
-// raise ends hadome by the signal s, now that nothing of the tree is running.
+// raise ends hadome by the signal s, now that nothing of the tree is running, and never returns.
+// A signal sent to the process may reach it only after kill returns, on another thread; returning
+// would let the run go on meanwhile, judge the mutant by the tree it just killed, and even exit
+// with a status of its own first. With no channel notified, the runtime ends the process on s,
+// so waiting here ends too. end waits for relay, so the run stops while relay waits.
 func (t *processTree) raise(s os.Signal) {
 	signal.Stop(t.sigs)
 	syscall.Kill(syscall.Getpid(), s.(syscall.Signal))
+	select {}
 }
 
 // killGroup kills every process in the group pgid. A group with nothing left in it is not an error.
