@@ -50,6 +50,7 @@ SQL のアダプタは、まず SLL で読み、読めなかった文だけを L
 | BigQuery | 括弧の中の OR（`a AND (b IS NULL OR c = 1)`）。SLL は OR の左側に OR をすべて読ませて失敗する | `expression_maybe_parenthesized_not_a_query` の最初に、述語 `orInParentheses` を付けた `expression` の選択肢を足す |
 
 - **直しても木を変えない。** 読めた文から hadome が作る木（`Node`）は、直す前と同じにします。選択肢を足して木が1段深くなるときは、`antlrGrammar` の `inlined` に書き、変換でその段をはずします。BigQuery の上の直しがこれにあたります
+- **木が変わる入力。** MySQL の直しで LL の結果が変わるのは、`;` の無い2つの文が `SELECT f ((SELECT 1))` の形でつながる入力だけです。直す前は列の `f` と括弧の中の次の文として読み、直したあとは `f` の呼び出しとして読みます。括弧の無い名前（`SCHEMA`、`CURRENT_USER`）は、直す前と同じく列として読みます
 - **述語。** 述語の関数は、`.g4` の `@parser::members` に書きます。述語は先読みのトークンだけを見て、文法の状態は見ません
 - **試し。** 直したら、次の3つを確かめます
   - `TestStatementsWithParenthesesReadInSLL` が、直した形を SLL で読むこと

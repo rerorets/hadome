@@ -50,6 +50,7 @@ The SQL adapter reads with SLL first, and reads again with LL only the statement
 | BigQuery | An OR inside parentheses (`a AND (b IS NULL OR c = 1)`). SLL lets the left side of the OR take every OR, and fails | `expression_maybe_parenthesized_not_a_query` gets a first alternative, `expression` with the predicate `orInParentheses` |
 
 - **The tree does not change.** The tree hadome builds from a statement that reads (`Node`) stays what it was before the change. When an added alternative makes the tree one level deeper, `inlined` of `antlrGrammar` says so, and the conversion removes that level. The BigQuery change above does this
+- **Input whose tree changes.** The MySQL change alters LL's result only for two statements without `;` between them, joined as `SELECT f ((SELECT 1))`. Before the change it read as the column `f` and the next statement in parentheses; after it, as a call of `f`. A name without parentheses (`SCHEMA`, `CURRENT_USER`) reads as a column, as before
 - **Predicates.** The functions of predicates are in `@parser::members` of the `.g4`. A predicate looks only at the tokens ahead, never at the state of the grammar
 - **Trial.** After a change, check these three things
   - `TestStatementsWithParenthesesReadInSLL` reads the changed forms with SLL
