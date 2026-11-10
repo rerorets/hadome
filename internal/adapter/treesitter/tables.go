@@ -18,6 +18,7 @@ type tables struct {
 	// configuration adds for it (rules.tests.sql-sinks).
 	lang     string
 	sqlSinks []string
+	texts    bool // tests' strings are collected (facts.Test.Texts)
 }
 
 // with returns a copy with the configuration's entries added. Configuration never removes any.

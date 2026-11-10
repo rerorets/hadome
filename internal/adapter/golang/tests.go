@@ -86,6 +86,7 @@ type walker struct {
 	texts       map[textKey]*textCount
 	sinkKeys    map[textKey]bool
 	pendingStrs map[string][]textKey
+	noTexts     bool // no string is recorded
 }
 
 type callCount struct {

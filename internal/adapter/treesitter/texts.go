@@ -86,7 +86,7 @@ type textCollector struct {
 }
 
 func (c *textCollector) grammar() *textGrammar {
-	if c.in == nil || c.tables == nil {
+	if c.in == nil || c.tables == nil || !c.tables.texts {
 		return nil
 	}
 	return textGrammars[c.tables.lang]

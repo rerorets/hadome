@@ -192,7 +192,7 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 			paths = append(paths, f.Path)
 		}
 	}
-	if len(paths) == 0 && len(c.Databases) == 0 {
+	if !a.ReadsTexts(c, paths) {
 		return nil
 	}
 	cat, err := a.catalogFor(v, c, paths)
@@ -207,6 +207,12 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 		linkTest(cat, t)
 	}
 	return nil
+}
+
+// ReadsTexts reports whether Link reads the tests' strings: only when the version has a database,
+// a .sql file or a configured one.
+func (*Adapter) ReadsTexts(c config.Config, paths []string) bool {
+	return len(paths) > 0 || len(c.Databases) > 0
 }
 
 func (a *Adapter) catalogFor(v engine.Version, c config.Config, paths []string) (*catalog, error) {
