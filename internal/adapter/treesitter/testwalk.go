@@ -146,26 +146,41 @@ func (t *testFacts) done() facts.Test {
 // strings it reaches belong to the test (see textCollector).
 func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
 	in, inTables := t.texts.in, t.texts.tables
-	t.texts.in, t.texts.tables = f, tb
-	t.body(n, isLoop, visit)
-	t.texts.in, t.texts.tables = in, inTables
+	t.texts.use(f, tb)
+	at := place{i: -1}
+	if t.texts.g != nil {
+		at = placeOf(n)
+	}
+	t.body(n, at, isLoop, visit)
+	t.texts.use(in, inTables)
 }
 
-// body walks a test body. visit handles one node and returns false to skip its children; loops
-// are tracked here for every language, and so are the strings the walk reaches.
-func (t *testFacts) body(n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
-	walk(n, func(c *sitter.Node) bool {
-		t.texts.note(c, t.loops)
+// body walks a test body n, which is at at. visit handles one node and returns false to skip its
+// children; loops are tracked here for every language, and so are the strings the walk reaches.
+// A loop's children are each walked as a body of their own, so that n itself is never taken for a
+// loop.
+func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+	var step func(c *sitter.Node, at place)
+	step = func(c *sitter.Node, at place) {
+		t.texts.note(c, at, t.loops)
 		if c != n && isLoop(c) {
 			t.loops++
 			for i := uint(0); i < c.ChildCount(); i++ {
-				t.body(c.Child(i), isLoop, visit)
+				t.body(c.Child(i), place{parent: c, i: int(i)}, isLoop, visit)
 			}
 			t.loops--
-			return false
+			return
 		}
-		return visit(c)
-	})
+		if !visit(c) {
+			return
+		}
+		for i := uint(0); i < c.ChildCount(); i++ {
+			step(c.Child(i), place{parent: c, i: int(i)})
+		}
+	}
+	if n != nil {
+		step(n, at)
+	}
 }
 
 // assertPrefixes start the names of the functions that check something in the common test
