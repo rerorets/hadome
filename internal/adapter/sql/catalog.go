@@ -33,7 +33,9 @@ type sqlFile struct {
 	dialect Dialect
 	unread  bool
 	defs    []Definition
-	trees   []*Node
+	// trees are the statements of a test file, for the frameworks to read its tests from. Other
+	// files keep none: their definitions are all that is used of them.
+	trees []*Node
 }
 
 // object is one database object that remains at head.
@@ -148,6 +150,7 @@ func (db *database) decideDialects() {
 }
 
 // read parses the file. A file with a statement the grammar cannot read is unread as a whole.
+// Only a test file keeps its trees.
 func (f *sqlFile) read() {
 	if f.dialect == nil {
 		f.unread = true
@@ -159,7 +162,9 @@ func (f *sqlFile) read() {
 			f.unread, f.defs, f.trees = true, nil, nil
 			return
 		}
-		f.trees = append(f.trees, t)
+		if f.role == facts.RoleTest {
+			f.trees = append(f.trees, t)
+		}
 		f.defs = append(f.defs, f.dialect.Definitions(t)...)
 	}
 }

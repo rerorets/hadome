@@ -102,11 +102,13 @@ func (a *Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*f
 		if f.role == facts.RoleTest && !f.unread && f.db != nil {
 			out.Tests = append(out.Tests, sqlTests(f, cat)...)
 		}
+		f.trees = nil
 	}
 	return out, nil
 }
 
-// build reads the files into databases and applies their definitions.
+// build reads the files into databases and applies their definitions. The databases it returns
+// keep only their objects, not the files: the catalog outlives the files' text and trees.
 func build(v engine.Version, c config.Config, paths []string) (*catalog, []*sqlFile, error) {
 	cat := &catalog{databases: newDatabases(c)}
 	var files []*sqlFile
@@ -132,6 +134,10 @@ func build(v engine.Version, c config.Config, paths []string) (*catalog, []*sqlF
 			}
 		}
 		db.apply()
+		for _, f := range db.files {
+			f.defs = nil
+		}
+		db.files = nil
 	}
 	return cat, files, nil
 }

@@ -74,8 +74,8 @@ type textCollector struct {
 	in     *file   // the file being walked
 	tables *tables // the tables of its language
 	// g is the text grammar of in's language, nil while no strings are collected.
-	g *textGrammar
-	texts  []facts.Text
+	g     *textGrammar
+	texts []facts.Text
 	// sinks are the nodes passed where a call takes SQL, by ID.
 	sinks map[uintptr]bool
 	// pending are the values of local declarations being walked, by ID: node -> the local's name.
