@@ -25,6 +25,10 @@ type antlrGrammar struct {
 	parser func(antlr.TokenStream) antlr.Parser
 	// entry runs the start rule that reads a whole script.
 	entry func(antlr.Parser) antlr.ParseTree
+	// inlined maps a rule to the rule of a lone child that is replaced by its own children. A grammar
+	// changed so that SLL reads a construct may read it one rule deeper; this gives the tree the
+	// original grammar gives.
+	inlined map[string]string
 }
 
 // syntaxError keeps the first error the lexer or the parser reports.
@@ -55,7 +59,7 @@ func (g antlrGrammar) Parse(text string, base, line int) (*Node, error) {
 		return nil, shiftError(err, line)
 	}
 	c := converter{rules: p.GetRuleNames(), symbols: p.GetSymbolicNames(),
-		bytes: runeOffsets(text), base: base, line: line - 1}
+		bytes: runeOffsets(text), base: base, line: line - 1, inlined: g.inlined}
 	return c.node(tree, nil), nil
 }
 
@@ -117,6 +121,7 @@ type converter struct {
 	rules, symbols []string
 	bytes          []int
 	base, line     int
+	inlined        map[string]string
 }
 
 // offset is the offset in the file of a rune index. Only trees read without an error are converted,
@@ -151,6 +156,12 @@ func (c converter) node(t antlr.Tree, parent *Node) *Node {
 	}
 	for i := 0; i < rc.GetChildCount(); i++ {
 		n.Children = append(n.Children, c.node(rc.GetChild(i), n))
+	}
+	if child, ok := c.inlined[n.Rule]; ok && len(n.Children) == 1 && n.Children[0].Rule == child {
+		n.Children = n.Children[0].Children
+		for _, m := range n.Children {
+			m.Parent = n
+		}
 	}
 	return n
 }
