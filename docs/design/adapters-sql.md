@@ -209,6 +209,7 @@ Syntax is read with pure-Go parsers made from each dialect's public ANTLR gramma
 These are the rules of reading.
 
 - **Two passes.** It reads with ANTLR's fast prediction (SLL) first, and reads again with the full prediction (LL) only when that finds an error. No input reads with SLL and fails with LL, so the result is the same as reading with LL alone
+  - Reading again with LL reads the statement once more from its start. So the grammars are changed for common forms to read with SLL (see "Changes so that SLL reads" in [sql-grammars.md](../maintaining/sql-grammars.md)). The changes leave the tree of every statement that reads the same
 - **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong
 - **Bodies.** Function bodies (inside PostgreSQL's `$$`, the JavaScript or Python bodies of BigQuery and Snowflake) are not read, because calls from a body to other objects are not facts. T-SQL and PL/SQL bodies are part of the statement, so they are parsed to find where the statement ends
 - **Output.** The error reports the ANTLR runtime writes to standard output are stopped, so that they never mix with hadome's output

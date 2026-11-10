@@ -4,6 +4,32 @@ options {
 	tokenVocab = GoogleSQLLexer;
 }
 
+// hadome: orInParentheses reports whether the input, up to the ) that closes the parentheses it is in,
+// has an OR outside any inner parentheses, brackets, braces and CASE … END: an OR of the whole content.
+@parser::members {
+func (p *GoogleSQLParser) orInParentheses() bool {
+	s := p.GetTokenStream()
+	depth := 0
+	for i := 1; ; i++ {
+		switch s.LA(i) {
+		case antlr.TokenEOF:
+			return false
+		case GoogleSQLParserLR_BRACKET_SYMBOL, GoogleSQLParserLS_BRACKET_SYMBOL, GoogleSQLParserLC_BRACKET_SYMBOL, GoogleSQLParserCASE_SYMBOL:
+			depth++
+		case GoogleSQLParserRR_BRACKET_SYMBOL, GoogleSQLParserRS_BRACKET_SYMBOL, GoogleSQLParserRC_BRACKET_SYMBOL, GoogleSQLParserEND_SYMBOL:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case GoogleSQLParserOR_SYMBOL:
+			if depth == 0 {
+				return true
+			}
+		}
+	}
+}
+}
+
 // hadome: a file is a script, so its statements may be script statements (DECLARE, IF, BEGIN … END), and
 // a file holding only comments is empty.
 root: stmts? EOF;
@@ -1963,8 +1989,14 @@ expression_higher_prec_than_and:
 	| parenthesized_expression_not_a_query
 	| parenthesized_query;
 
+// hadome: an OR of the whole content is read first as one expression, whose own rule reads a chain of
+// OR. The alternative expression OR expression below needs the full LL prediction to tell where its
+// left side ends; the fast SLL one lets the left side take every OR and then fails. The converter
+// replaces the lone expression this reads by its children, so that the tree is the one the
+// alternative below gives.
 expression_maybe_parenthesized_not_a_query:
-	parenthesized_expression_not_a_query
+	{p.orInParentheses()}? expression
+	| parenthesized_expression_not_a_query
 	// unparenthesized_expression_higher_prec_than_and scope begin
 	| null_literal
 	| boolean_literal

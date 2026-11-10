@@ -32,6 +32,29 @@ options {
     tokenVocab = MySqlLexer;
 }
 
+// hadome: calledName reports whether the input starts with a name of up to three parts followed by an
+// opening parenthesis: a function call, f(1) or s.f(1), which a column name never is. The fast SLL
+// prediction cannot see that on its own: statements need no ; between them, so a column name
+// followed by ( could be a statement followed by a parenthesized one, and SLL takes the first such
+// alternative, the column, and fails on the call.
+@parser::members {
+func (p *MySqlParser) calledName() bool {
+    s := p.GetTokenStream()
+    i := 2
+    for k := 0; k < 2; k++ {
+        switch s.LA(i) {
+        case MySqlParserDOT_ID:
+            i++
+        case MySqlParserDOT:
+            i += 2
+        default:
+            return s.LA(i) == MySqlParserLR_BRACKET
+        }
+    }
+    return s.LA(i) == MySqlParserLR_BRACKET
+}
+}
+
 // Top Level Description
 
 root
@@ -1088,7 +1111,8 @@ selectElements
 
 selectElement
     : fullId '.' '*'                               # selectStarElement
-    | fullColumnName (AS? uid)?                    # selectColumnElement
+    // hadome: a name followed by ( is a call (calledName)
+    | {!p.calledName()}? fullColumnName (AS? uid)? # selectColumnElement
     | functionCall (AS? uid)?                      # selectFunctionElement
     | (LOCAL_ID VAR_ASSIGN)? expression (AS? uid)? # selectExpressionElement
     ;
