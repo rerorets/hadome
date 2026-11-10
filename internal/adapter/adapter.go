@@ -91,21 +91,12 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 		}
 		byLang[i] = append(byLang[i], p)
 	}
-	texts := false
-	for i, l := range an.Languages {
-		if lk, ok := l.(linker); ok && enabled(c, l.Name()) && lk.ReadsTexts(c, byLang[i]) {
-			texts = true
-		}
-	}
+	texts := an.readsTexts(c, byLang)
 	for i, l := range an.Languages {
 		if len(byLang[i]) == 0 {
 			continue
 		}
-		analyze := l.Analyze
-		if ts, ok := l.(textSource); ok && !texts {
-			analyze = ts.AnalyzeWithoutTexts
-		}
-		la, err := analyze(v, c, byLang[i])
+		la, err := analyzeFunc(l, texts)(v, c, byLang[i])
 		if err != nil {
 			return nil, err
 		}
@@ -120,6 +111,26 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 	}
 	sortAnalysis(a)
 	return a, nil
+}
+
+// readsTexts reports whether a linker reads the tests' strings of a version whose files went to
+// the languages as byLang says.
+func (an Analyzer) readsTexts(c config.Config, byLang map[int][]string) bool {
+	for i, l := range an.Languages {
+		if lk, ok := l.(linker); ok && enabled(c, l.Name()) && lk.ReadsTexts(c, byLang[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// analyzeFunc is how the language reads its files: without the tests' strings when no linker
+// reads them and the language can leave them out.
+func analyzeFunc(l Language, texts bool) func(engine.Version, config.Config, []string) (*facts.Analysis, error) {
+	if ts, ok := l.(textSource); ok && !texts {
+		return ts.AnalyzeWithoutTexts
+	}
+	return l.Analyze
 }
 
 // mutator is a language that makes mutants of its functions (hadome mutate).

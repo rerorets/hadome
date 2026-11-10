@@ -183,6 +183,29 @@ func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) boo
 	}
 }
 
+// place is where a node is in its tree: its parent, nil at the root, and its index among the
+// parent's children, or -1 when the walk does not know it.
+type place struct {
+	parent *sitter.Node
+	i      int
+}
+
+// placeOf is the place of n, asking tree-sitter for its parent.
+func placeOf(n *sitter.Node) place { return place{parent: n.Parent(), i: -1} }
+
+// index returns n's index among its parent's children, or -1 when n has no parent.
+func (at place) index(n *sitter.Node) int {
+	if at.i >= 0 || at.parent == nil {
+		return at.i
+	}
+	for i := uint(0); i < at.parent.ChildCount(); i++ {
+		if at.parent.Child(i).Id() == n.Id() {
+			return int(i)
+		}
+	}
+	return -1
+}
+
 // assertPrefixes start the names of the functions that check something in the common test
 // libraries: assertEquals, assert_called_once, expect, verify. A helper of another file named so
 // counts too, since the adapter cannot read it and its name says it checks.
