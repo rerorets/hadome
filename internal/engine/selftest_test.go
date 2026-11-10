@@ -93,6 +93,10 @@ func TestACaseFailsWhenItsCheckDisagrees(t *testing.T) {
 			if len(failed) != 1 || !strings.Contains(failed[0].Err, tc.want) {
 				t.Errorf("failures %+v, want one saying %q", failed, tc.want)
 			}
+			// The failure shows both reports as JSON; the one with reuse names the rule's finding.
+			if tc.want == "reuse changed the report" && len(failed) == 1 && !strings.Contains(failed[0].Err, `"rule": "zz/flag"`) {
+				t.Errorf("the failure %q does not show the reports", failed[0].Err)
+			}
 		})
 	}
 }
