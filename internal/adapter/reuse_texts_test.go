@@ -3,9 +3,11 @@
 package adapter_test
 
 import (
+	"slices"
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 )
@@ -33,4 +35,29 @@ func TestTheFirstSQLFileInHeadGivesHeadItsTestsStrings(t *testing.T) {
 	}
 	samePair(t, without, withSQL, config.Config{}, config.Config{})
 	samePair(t, withSQL, without, config.Config{}, config.Config{})
+}
+
+// viewpoint: behaviour
+// target: adapter.Analyzer.AnalyzePair
+// Between base's and head's analysis of a language, the session lets go of what head cannot use:
+// the trees and facts of a file whose content head does not have. Head then holds its own tree of
+// the changed file and base's tree of the unchanged one, which it was served.
+func TestWhatHeadCannotUseIsLetGoBeforeHeadIsRead(t *testing.T) {
+	base := fstest.MapFS{
+		"web/src/cart.ts": {Data: []byte("export function total(xs: number[]): number { return xs.length }\n")},
+		"web/src/tax.ts":  {Data: []byte("export function rate(x: number): number { return x * 2 }\n")},
+	}
+	head := clone(base)
+	head["web/src/cart.ts"] = &fstest.MapFile{Data: []byte("export function total(xs: number[]): number { return xs.length + 0 }\n")}
+	held, err := adapter.New().OneLanguageHeld(engine.Version{Label: "base", FS: base}, engine.Version{Label: "head", FS: head}, config.Config{}, "typescript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"adapter/language", "treesitter/parse", "treesitter/parse"}
+	if !slices.Equal(held.Remembered, want) {
+		t.Errorf("the session holds %v, want %v", held.Remembered, want)
+	}
+	if st := held.Stats["treesitter/parse"]; st.Hits != 1 || st.Misses != 3 {
+		t.Errorf("parse stats %+v, want the unchanged file served to head", st)
+	}
 }

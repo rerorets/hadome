@@ -2,6 +2,8 @@ package reuse
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"slices"
 	"sync"
@@ -334,5 +336,167 @@ func TestConcurrentCallsWithOneKeyRunTheStageOnce(t *testing.T) {
 	a, b := <-results, <-results
 	if a != "x" || b != "x" || callsOf("test/blocking") != 1 {
 		t.Errorf("results %q %q, ran %d times; want one run shared", a, b, callsOf("test/blocking"))
+	}
+}
+
+// opened reads through Open, as code that streams files does: a file, a directory's entries, and a
+// file that may be missing.
+var opened = NewReading("test/open", ScopeLanguage, func(rd Reads, a pathArg) (string, error) {
+	fsys := rd.FS()
+	f, err := fsys.Open(a.Path)
+	if err != nil {
+		return "", err
+	}
+	data, err := io.ReadAll(f)
+	f.Close()
+	if err != nil {
+		return "", err
+	}
+	d, err := fsys.Open("lib")
+	if err != nil {
+		return "", err
+	}
+	entries, err := d.(fs.ReadDirFile).ReadDir(-1)
+	d.Close()
+	if err != nil {
+		return "", err
+	}
+	missing := "missing"
+	if m, err := fsys.Open("app/new.txt"); err == nil {
+		m.Close()
+		missing = "present"
+	}
+	return fmt.Sprintf("%s %d %s", data, len(entries), missing), nil
+})
+
+// viewpoint: behaviour
+// target: reuse.recordingFS.Open
+// Files opened, directories opened and listed, and files found missing through Open are recorded
+// like any other read: head is served only when each gives the same answer.
+func TestReadsThroughOpenAreRecorded(t *testing.T) {
+	base := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
+	cases := []struct {
+		name string
+		head fstest.MapFS
+		hit  bool
+	}{
+		{"same", fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}, true},
+		{"opened file changed", fstest.MapFS{"app/a.txt": {Data: []byte("y")}, "lib/b.txt": {Data: []byte("b")}}, false},
+		{"opened directory changed", fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}, "lib/c.txt": {}}, false},
+		{"missing file appeared", fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}, "app/new.txt": {}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSession(nil, true)
+			defer s.End()
+			if _, err := opened.Do(s.Run("base", base, cfg), pathArg{"app/a.txt"}); err != nil {
+				t.Fatal(err)
+			}
+			got, err := opened.Do(s.Run("head", tc.head, cfg), pathArg{"app/a.txt"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fresh, err := opened.Do(NewSession(nil, true).Run("head", tc.head, cfg), pathArg{"app/a.txt"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != fresh {
+				t.Errorf("head got %q, reading head alone gives %q", got, fresh)
+			}
+			if st := s.Stats()["test/open"]; (st.Hits == 1) != tc.hit {
+				t.Errorf("stats %+v, want a hit: %v", st, tc.hit)
+			}
+		})
+	}
+}
+
+// viewpoint: failure
+// target: reuse.recordingFS.Open
+// A path a file system must refuse is refused through the recorded file system too.
+func TestAnInvalidPathIsRefused(t *testing.T) {
+	r := Lone(fstest.MapFS{"a.txt": {}})
+	rc := &recorder{run: r, seen: map[string]bool{}}
+	if _, err := rc.FS().Open("../a.txt"); !errors.Is(err, fs.ErrInvalid) {
+		t.Errorf("opening ../a.txt gave %v, want an invalid path", err)
+	}
+	if _, err := rc.FS().Open("a.txt"); err != nil {
+		t.Errorf("opening a.txt gave %v", err)
+	}
+}
+
+// viewpoint: behaviour
+// target: reuse.Session.Settle
+// A reading stage's result is kept for head when every file it read, and every file it found
+// missing, can be the same in head; head is then served without running the stage.
+func TestAReadingStageHeadCanUseIsKept(t *testing.T) {
+	for _, path := range []string{"app/a.txt", "app/new.txt"} {
+		s := NewSession(nil, true)
+		files := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
+		base, head := s.Run("base", files, cfg), s.Run("head", files, cfg)
+		if err := s.Expect(head); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readOne.Do(base, pathArg{path}); err != nil {
+			t.Fatal(err)
+		}
+		s.Settle()
+		if _, err := readOne.Do(head, pathArg{path}); err != nil {
+			t.Fatal(err)
+		}
+		if st := s.Stats()["test/read"]; st.Hits != 1 {
+			t.Errorf("%s: stats %+v, want head served from base", path, st)
+		}
+		s.End()
+	}
+}
+
+// counting is a file system that counts how often each file is read.
+type counting struct {
+	fstest.MapFS
+	reads map[string]int
+}
+
+func (c counting) ReadFile(name string) ([]byte, error) {
+	c.reads[name]++
+	return c.MapFS.ReadFile(name)
+}
+
+func (c counting) ReadDir(name string) ([]fs.DirEntry, error) {
+	c.reads[name+"/"]++
+	return c.MapFS.ReadDir(name)
+}
+
+// viewpoint: behaviour
+// target: reuse.Session.Expect
+// Checking remembered results against head reads no head file twice, and lists no head directory
+// twice: head's files are read once, when the session learns head, and an answer found while
+// checking one result serves the check of the next.
+func TestCheckingAgainstHeadReadsEachFileOnce(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	files := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
+	head := counting{MapFS: files, reads: map[string]int{}}
+	b, h := s.Run("base", files, cfg), s.Run("head", head, cfg)
+	if err := s.Expect(h); err != nil {
+		t.Fatal(err)
+	}
+	listed := head.reads["lib/"]
+	for _, p := range []string{"app/a.txt", "lib/b.txt"} {
+		if _, err := readOne.Do(b, pathArg{p}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		for _, p := range []string{"app/a.txt", "lib/b.txt"} {
+			if _, err := readOne.Do(h, pathArg{p}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if head.reads["app/a.txt"] != 1 || head.reads["lib/b.txt"] != 1 {
+		t.Errorf("head's files were read %v times, want once each", head.reads)
+	}
+	if got := head.reads["lib/"] - listed; got != 1 {
+		t.Errorf("head's lib was listed %d times while checking, want once", got)
 	}
 }

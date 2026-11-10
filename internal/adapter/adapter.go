@@ -137,23 +137,35 @@ func (an Analyzer) side(s *reuse.Session, v engine.Version, c config.Config) (*s
 
 // Analyze reads one version with every language.
 func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, error) {
-	s := reuse.NewSession(an, !an.NoReuse)
-	defer s.End()
-	sd, err := an.side(s, v, c)
+	s, a, err := an.one(v, c)
 	if err != nil {
 		return nil, err
 	}
+	s.End()
+	return a, nil
+}
+
+// one is Analyze returning the session too, still holding its ScopePair results; the caller ends it.
+func (an Analyzer) one(v engine.Version, c config.Config) (*reuse.Session, *facts.Analysis, error) {
+	s := reuse.NewSession(an, !an.NoReuse)
+	sd, err := an.side(s, v, c)
+	if err != nil {
+		s.End()
+		return nil, nil, err
+	}
 	for i := range an.Languages {
 		if err := an.language(sd, i); err != nil {
-			return nil, err
+			s.End()
+			return nil, nil, err
 		}
 		s.EndLanguage()
 	}
 	if err := an.link(sd); err != nil {
-		return nil, err
+		s.End()
+		return nil, nil, err
 	}
 	sortAnalysis(sd.a)
-	return sd.a, nil
+	return s, sd.a, nil
 }
 
 // AnalyzePair reads both versions, language by language, base first. A stage head calls with the
@@ -187,12 +199,8 @@ func (an Analyzer) pair(bv engine.Version, bc config.Config, hv engine.Version, 
 		return fail(hv, err)
 	}
 	for i := range an.Languages {
-		if err := an.language(b, i); err != nil {
-			return fail(bv, err)
-		}
-		s.Settle()
-		if err := an.language(h, i); err != nil {
-			return fail(hv, err)
+		if v, err := an.both(s, b, h, i); err != nil {
+			return fail(v, err)
 		}
 		s.EndLanguage()
 	}
@@ -205,6 +213,19 @@ func (an Analyzer) pair(bv engine.Version, bc config.Config, hv engine.Version, 
 	sortAnalysis(b.a)
 	sortAnalysis(h.a)
 	return s, b.a, h.a, nil
+}
+
+// both reads language i of base, lets go of what head cannot use, then reads it of head. An error
+// comes with the version it comes from.
+func (an Analyzer) both(s *reuse.Session, b, h *side, i int) (engine.Version, error) {
+	if err := an.language(b, i); err != nil {
+		return b.v, err
+	}
+	s.Settle()
+	if err := an.language(h, i); err != nil {
+		return h.v, err
+	}
+	return engine.Version{}, nil
 }
 
 // language reads the version's files of language i, through the stage that remembers a language's

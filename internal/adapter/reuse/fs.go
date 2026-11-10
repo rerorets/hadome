@@ -98,8 +98,6 @@ func (r *Run) answer(op, name string) string {
 		_, a, _ = r.readDir(name)
 	case "config":
 		a = r.cfgAnswer
-	default:
-		panic("reuse: unknown read " + op)
 	}
 	r.remember(op, name, a)
 	return a
