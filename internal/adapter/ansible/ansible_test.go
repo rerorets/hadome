@@ -66,7 +66,8 @@ func TestAnsibleClaimsItsLayout(t *testing.T) {
 // viewpoint: behaviour
 // target: ansible.Adapter.Analyze
 // A role's files have the role as their unit, a playbook its directory, a scenario's files are tests;
-// a file that is not YAML is unread and gives nothing else.
+// a file that is not YAML is unread and gives nothing else, not even the test a scenario's
+// verify.yml would be.
 func TestAnsibleFilesAndRoles(t *testing.T) {
 	a := analyze(t, config.Analysis{AnsibleFiles: []string{"deploy/*.yml"}, GeneratedFiles: []string{"roles/gen/**"}}, map[string]string{
 		"roles/web/tasks/main.yml":              "- name: Install\n  ansible.builtin.package:\n    name: nginx\n",
@@ -78,6 +79,7 @@ func TestAnsibleFilesAndRoles(t *testing.T) {
 		"site.yml":                              "- import_playbook: playbooks/web.yml\n",
 		"deploy/web.yml":                        "- hosts: web\n",
 		"roles/web/molecule/default/verify.yml": "- hosts: all\n",
+		"roles/web/molecule/broken/verify.yml":  "- hosts: [\n",
 	})
 	var got []string
 	for _, f := range a.Files {
@@ -89,6 +91,7 @@ func TestAnsibleFilesAndRoles(t *testing.T) {
 		"roles/db/defaults/main.yml ansible generated unit=db path=roles/db unread=false lines=2",
 		"roles/gen/defaults/main.yml ansible generated unit=gen path=roles/gen unread=false lines=1",
 		"roles/web/defaults/main.yml ansible source unit=web path=roles/web unread=false lines=1",
+		"roles/web/molecule/broken/verify.yml ansible other unit= path= unread=true lines=1",
 		"roles/web/molecule/default/verify.yml ansible test unit=roles/web/molecule/default path=roles/web/molecule/default unread=false lines=1",
 		"roles/web/tasks/main.yml ansible source unit=web path=roles/web unread=false lines=3",
 		"roles/web/vars/broken.yml ansible other unit= path= unread=true lines=1",
@@ -104,6 +107,13 @@ func TestAnsibleFilesAndRoles(t *testing.T) {
 	}
 	if want := []string{"web.web_port"}; !slices.Equal(ids, want) {
 		t.Errorf("symbols of source files: got %v, want %v", ids, want)
+	}
+	var tests []string
+	for _, ts := range a.Tests {
+		tests = append(tests, ts.Path)
+	}
+	if want := []string{"roles/web/molecule/default/verify.yml"}; !slices.Equal(tests, want) {
+		t.Errorf("tests: got %v, want %v", tests, want)
 	}
 }
 
