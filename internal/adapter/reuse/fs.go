@@ -27,30 +27,18 @@ func answerOf(err error) (string, bool) {
 
 func contentAnswer(h Hash) string { return "content " + hex.EncodeToString(h[:]) }
 
-// contentOf returns the hash an answer of contentAnswer holds, or false.
-func contentOf(answer string) (Hash, bool) {
-	const prefix = "content "
-	if len(answer) != len(prefix)+64 || answer[:len(prefix)] != prefix {
-		return Hash{}, false
-	}
-	var h Hash
-	if _, err := hex.Decode(h[:], []byte(answer[len(prefix):])); err != nil {
-		return Hash{}, false
-	}
-	return h, true
-}
-
-// readFile reads a file of the run's version and returns its content and the answer: its content's
-// hash, or that it is missing. ok is false when the read failed otherwise.
-func (r *Run) readFile(name string) (data []byte, answer string, ok bool, err error) {
+// readFile reads a file of the run's version and returns its content, the content's hash, and the
+// answer: the hash, or that the file is missing. ok is false when the read failed otherwise.
+func (r *Run) readFile(name string) (data []byte, sum Hash, answer string, ok bool, err error) {
 	data, err = fs.ReadFile(r.fsys, name)
 	if err != nil {
 		answer, ok = answerOf(err)
-		return nil, answer, ok, err
+		return nil, Hash{}, answer, ok, err
 	}
-	answer = contentAnswer(sha256.Sum256(data))
+	sum = sha256.Sum256(data)
+	answer = contentAnswer(sum)
 	r.remember("file", name, answer)
-	return data, answer, true, nil
+	return data, sum, answer, true, nil
 }
 
 // stat answers whether name exists, and as what: a directory, or a file of some size.
@@ -94,7 +82,7 @@ func (r *Run) answer(op, name string) (string, bool) {
 	ok := true
 	switch op {
 	case "file":
-		_, a, ok, _ = r.readFile(name)
+		_, _, a, ok, _ = r.readFile(name)
 	case "stat":
 		_, a, ok, _ = r.stat(name)
 	case "dir":
@@ -122,6 +110,15 @@ func (f recordingFS) record(op, name, answer string, ok bool) {
 	f.rec.add(read{op: op, arg: name, answer: answer})
 }
 
+// recordContent records a file read, and the content it read among what the result was computed
+// from.
+func (f recordingFS) recordContent(name string, sum Hash, answer string, ok bool, err error) {
+	f.record("file", name, answer, ok)
+	if err == nil {
+		f.rec.read(sum)
+	}
+}
+
 func (f recordingFS) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
@@ -140,8 +137,8 @@ func (f recordingFS) Open(name string) (fs.File, error) {
 		}
 		return &dirFile{info: info, entries: entries}, nil
 	}
-	data, answer, ok, err := run.readFile(name)
-	f.record("file", name, answer, ok)
+	data, sum, answer, ok, err := run.readFile(name)
+	f.recordContent(name, sum, answer, ok, err)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
@@ -149,8 +146,8 @@ func (f recordingFS) Open(name string) (fs.File, error) {
 }
 
 func (f recordingFS) ReadFile(name string) ([]byte, error) {
-	data, answer, ok, err := f.rec.run.readFile(name)
-	f.record("file", name, answer, ok)
+	data, sum, answer, ok, err := f.rec.run.readFile(name)
+	f.recordContent(name, sum, answer, ok, err)
 	return data, err
 }
 

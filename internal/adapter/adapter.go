@@ -123,7 +123,8 @@ type side struct {
 	a    *facts.Analysis
 }
 
-func (an Analyzer) side(s *reuse.Session, v engine.Version, c config.Config) (*side, error) {
+// side plans a version, before any session holds anything of it.
+func (an Analyzer) side(v engine.Version, c config.Config) (*side, error) {
 	ac := c.Analysis()
 	p, err := an.plan(v, ac)
 	if err != nil {
@@ -133,8 +134,11 @@ func (an Analyzer) side(s *reuse.Session, v engine.Version, c config.Config) (*s
 	for _, path := range p.other {
 		a.Files = append(a.Files, facts.File{Path: path, Role: facts.RoleOther})
 	}
-	return &side{v: v, c: ac, plan: p, run: s.Run(v.Label, v.FS, ac), a: a}, nil
+	return &side{v: v, c: ac, plan: p, a: a}, nil
 }
+
+// in makes the session's run of the version.
+func (sd *side) in(s *reuse.Session) { sd.run = s.Run(sd.v.Label, sd.v.FS, sd.c) }
 
 // Analyze reads one version with every language.
 func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, error) {
@@ -148,22 +152,24 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 
 // one is Analyze returning the session too, still holding its ScopePair results; the caller ends it.
 func (an Analyzer) one(v engine.Version, c config.Config) (*reuse.Session, *facts.Analysis, error) {
-	s := reuse.NewSession(an, !an.NoReuse)
-	sd, err := an.side(s, v, c)
+	sd, err := an.side(v, c)
 	if err != nil {
+		return nil, nil, err
+	}
+	s := reuse.NewSession(an, !an.NoReuse)
+	fail := func(err error) (*reuse.Session, *facts.Analysis, error) {
 		s.End()
 		return nil, nil, err
 	}
+	sd.in(s)
 	for i := range an.Languages {
 		if err := an.language(sd, i); err != nil {
-			s.End()
-			return nil, nil, err
+			return fail(err)
 		}
 		s.EndLanguage()
 	}
 	if err := an.link(sd); err != nil {
-		s.End()
-		return nil, nil, err
+		return fail(err)
 	}
 	sortAnalysis(sd.a)
 	return s, sd.a, nil
@@ -183,19 +189,21 @@ func (an Analyzer) AnalyzePair(bv engine.Version, bc config.Config, hv engine.Ve
 // pair is AnalyzePair returning the session too, still holding its ScopePair results; the caller
 // ends it.
 func (an Analyzer) pair(bv engine.Version, bc config.Config, hv engine.Version, hc config.Config) (*reuse.Session, *facts.Analysis, *facts.Analysis, error) {
+	b, err := an.side(bv, bc)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("analysing %s: %w", bv.Label, err)
+	}
+	h, err := an.side(hv, hc)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("analysing %s: %w", hv.Label, err)
+	}
 	s := reuse.NewSession(an, !an.NoReuse)
 	fail := func(v engine.Version, err error) (*reuse.Session, *facts.Analysis, *facts.Analysis, error) {
 		s.End()
 		return nil, nil, nil, fmt.Errorf("analysing %s: %w", v.Label, err)
 	}
-	b, err := an.side(s, bv, bc)
-	if err != nil {
-		return fail(bv, err)
-	}
-	h, err := an.side(s, hv, hc)
-	if err != nil {
-		return fail(hv, err)
-	}
+	b.in(s)
+	h.in(s)
 	if err := s.Expect(h.run, h.plan.paths); err != nil {
 		return fail(hv, err)
 	}

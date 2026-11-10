@@ -108,6 +108,13 @@ type recorder struct {
 	unreusable bool
 }
 
+// read keeps the hash of a file content the result is computed from.
+func (rc *recorder) read(sum Hash) {
+	rc.mu.Lock()
+	rc.contents = append(rc.contents, sum)
+	rc.mu.Unlock()
+}
+
 func (rc *recorder) unanswered() {
 	rc.mu.Lock()
 	rc.unreusable = true
@@ -123,9 +130,6 @@ func (rc *recorder) add(rd read) {
 	}
 	rc.seen[k] = true
 	rc.reads = append(rc.reads, rd)
-	if h, ok := contentOf(rd.answer); ok && rd.op == "file" {
-		rc.contents = append(rc.contents, h)
-	}
 }
 
 func (rc *recorder) FS() fs.FS               { return recordingFS{rc} }

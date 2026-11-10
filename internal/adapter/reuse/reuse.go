@@ -57,13 +57,11 @@ func NewSession(env any, reuse bool) *Session {
 func (s *Session) Expect(head *Run, paths []string) error {
 	contents := map[Hash]bool{}
 	for _, p := range paths {
-		_, answer, _, err := head.readFile(p)
+		_, sum, _, _, err := head.readFile(p)
 		if err != nil {
 			return err
 		}
-		if h, ok := contentOf(answer); ok {
-			contents[h] = true
-		}
+		contents[sum] = true
 	}
 	s.mu.Lock()
 	s.head = contents

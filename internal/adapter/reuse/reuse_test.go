@@ -561,3 +561,24 @@ func TestAResultWhoseReadFailedIsNotReused(t *testing.T) {
 		t.Errorf("stats %+v, want the stage run for each version", st)
 	}
 }
+
+// viewpoint: behaviour
+// target: reuse.Run.stat
+// A stage that looked at a file or a directory that is there is served to a version where both are
+// the same.
+func TestAStageThatLookedAtExistingFilesIsReused(t *testing.T) {
+	files := fstest.MapFS{"a.txt": {Data: []byte("x")}, "lib/b.txt": {}}
+	for _, path := range []string{"a.txt", "lib"} {
+		s := NewSession(nil, true)
+		if got, err := probe.Do(s.Run("base", files, cfg), pathArg{path}); err != nil || got != "some" {
+			t.Fatalf("%s: base %q %v", path, got, err)
+		}
+		if _, err := probe.Do(s.Run("head", files, cfg), pathArg{path}); err != nil {
+			t.Fatal(err)
+		}
+		if st := s.Stats()["test/probe"]; st.Hits != 1 {
+			t.Errorf("%s: stats %+v, want head served from base", path, st)
+		}
+		s.End()
+	}
+}

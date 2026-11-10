@@ -49,14 +49,16 @@ func (an Analyzer) PairHeld(bv engine.Version, hv engine.Version, c config.Confi
 func (an Analyzer) OneLanguageHeld(bv, hv engine.Version, c config.Config, lang string) (Held, error) {
 	s := reuse.NewSession(an, !an.NoReuse)
 	defer s.End()
-	b, err := an.side(s, bv, c)
+	b, err := an.side(bv, c)
 	if err != nil {
 		return Held{}, err
 	}
-	h, err := an.side(s, hv, c)
+	h, err := an.side(hv, c)
 	if err != nil {
 		return Held{}, err
 	}
+	b.in(s)
+	h.in(s)
 	if err := s.Expect(h.run, h.plan.paths); err != nil {
 		return Held{}, err
 	}
@@ -76,10 +78,11 @@ func (an Analyzer) InOneSession(vs []engine.Version, c config.Config) ([]*facts.
 	defer s.End()
 	var sides []*side
 	for _, v := range vs {
-		sd, err := an.side(s, v, c)
+		sd, err := an.side(v, c)
 		if err != nil {
 			return nil, err
 		}
+		sd.in(s)
 		sides = append(sides, sd)
 	}
 	for i := range an.Languages {

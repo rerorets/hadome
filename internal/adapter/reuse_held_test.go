@@ -2,6 +2,7 @@ package adapter_test
 
 import (
 	"errors"
+	"io/fs"
 	"slices"
 	"strings"
 	"testing"
@@ -84,17 +85,38 @@ func TestAPairKeepsOnlyTheCatalogToTheEnd(t *testing.T) {
 	}
 }
 
-// failing is a language that claims .fail files and cannot read them, and a linker that cannot
-// link when asked to.
+// letGo counts how often a held result is let go.
+var letGo int
+
+type heldResult struct{}
+
+func (heldResult) Release() { letGo++ }
+
+// holding is a result that lives until the analysis call ends, like a catalog.
+var holding = reuse.NewPure("test/holding", reuse.ScopePair, func(p struct{ Path string }) (heldResult, error) {
+	return heldResult{}, nil
+})
+
+// failing is a language that claims .fail files and holds a result for each before reading it.
+// It cannot read a file that says "bad", and as a linker it cannot link when link is set.
 type failing struct{ link bool }
 
 func (failing) Name() string         { return "failing" }
 func (failing) Claims(p string) bool { return strings.HasSuffix(p, ".fail") }
 func (f failing) Analyze(r *reuse.Run, _ config.Analysis, paths []string) (*facts.Analysis, error) {
-	if f.link {
-		return &facts.Analysis{}, nil
+	for _, p := range paths {
+		if _, err := holding.Do(r, struct{ Path string }{p}); err != nil {
+			return nil, err
+		}
+		data, err := fs.ReadFile(r.FS(), p)
+		if err != nil {
+			return nil, err
+		}
+		if string(data) == "bad" {
+			return nil, errors.New("cannot read " + p)
+		}
 	}
-	return nil, errors.New("cannot read " + paths[0])
+	return &facts.Analysis{}, nil
 }
 func (failing) ReadsTexts(config.Analysis, []string) bool { return false }
 func (f failing) Link(*reuse.Run, config.Analysis, *facts.Analysis) error {
@@ -107,17 +129,39 @@ func (f failing) Link(*reuse.Run, config.Analysis, *facts.Analysis) error {
 // viewpoint: failure
 // target: adapter.Analyzer.AnalyzePair
 // A language that cannot read a version, or a linker that cannot link it, fails the analysis with
-// the version it failed on; the analysis never goes on as though the language found nothing.
+// the version it failed on; the analysis never goes on as though the language found nothing. What
+// the session held is let go all the same.
 func TestALanguageOrLinkerThatFailsFailsTheAnalysis(t *testing.T) {
-	tree := fstest.MapFS{"x.fail": {Data: []byte("x")}}
-	for _, f := range []failing{{link: false}, {link: true}} {
-		an := adapter.Analyzer{Languages: []adapter.Language{f}}
-		if _, err := an.Analyze(engine.Version{Label: "v", FS: tree}, config.Config{}); err == nil {
-			t.Errorf("link %v: reading one version did not fail", f.link)
-		}
-		_, _, err := an.AnalyzePair(engine.Version{Label: "base", FS: tree}, config.Config{}, engine.Version{Label: "head", FS: tree}, config.Config{})
-		if err == nil || !strings.Contains(err.Error(), "analysing base") {
-			t.Errorf("link %v: reading both versions gave %v, want an error naming base", f.link, err)
-		}
+	good := fstest.MapFS{"x.fail": {Data: []byte("good")}}
+	bad := fstest.MapFS{"x.fail": {Data: []byte("bad")}}
+	cases := []struct {
+		name       string
+		lang       failing
+		base, head fstest.MapFS
+		failsOn    string
+	}{
+		{"base unreadable", failing{}, bad, good, "base"},
+		{"head unreadable", failing{}, good, bad, "head"},
+		{"link fails", failing{link: true}, good, good, "base"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			an := adapter.Analyzer{Languages: []adapter.Language{tc.lang}}
+			letGo = 0
+			if _, err := an.Analyze(engine.Version{Label: "v", FS: map[string]fstest.MapFS{"base": tc.base, "head": tc.head}[tc.failsOn]}, config.Config{}); err == nil {
+				t.Error("reading the failing version alone did not fail")
+			}
+			if letGo != 1 {
+				t.Errorf("reading one version let go of %d held results, want 1", letGo)
+			}
+			letGo = 0
+			_, _, err := an.AnalyzePair(engine.Version{Label: "base", FS: tc.base}, config.Config{}, engine.Version{Label: "head", FS: tc.head}, config.Config{})
+			if err == nil || !strings.Contains(err.Error(), "analysing "+tc.failsOn) {
+				t.Errorf("reading both versions gave %v, want an error naming %s", err, tc.failsOn)
+			}
+			if letGo == 0 {
+				t.Error("reading both versions let go of nothing it held")
+			}
+		})
 	}
 }
