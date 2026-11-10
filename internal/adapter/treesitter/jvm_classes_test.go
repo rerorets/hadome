@@ -619,7 +619,8 @@ QueueTest.constant calls=[acme.Kind.slot] unresolved=0`)
 // viewpoint: behaviour
 // target: the Java and Kotlin readers
 // Reading a property of a variable that holds a product object reads the product; calling a method
-// on it is a call, not a read.
+// on it is a call, not a read. A property of a value that is no product object, such as a local
+// string, reads nothing.
 func TestPropertiesOfProductObjectsAreReads(t *testing.T) {
 	t.Run("kotlin", func(t *testing.T) {
 		expect(t, reads(t, "kotlin", tree(
@@ -640,8 +641,14 @@ class CacheTest {
 
     @Test
     fun method() { cache.clear() }
+
+    @Test
+    fun plain() {
+        val word = "ttl"
+        assertEquals(3, word.length)
+    }
 }
-`)), "CacheTest.chained reads=1 calls=0\nCacheTest.method reads=0 calls=1\nCacheTest.property reads=1 calls=0")
+`)), "CacheTest.chained reads=1 calls=0\nCacheTest.method reads=0 calls=1\nCacheTest.plain reads=0 calls=0\nCacheTest.property reads=1 calls=0")
 	})
 	t.Run("java", func(t *testing.T) {
 		expect(t, reads(t, "java", tree(
