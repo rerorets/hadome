@@ -334,3 +334,45 @@ func countOf(list []string, s string) int {
 	}
 	return n
 }
+
+// viewpoint: behaviour
+// target: mutation.Runner.try
+// Design "The time limit": a run before breaking runs under an hour, and a run with a mutant under
+// three times its command's run before breaking plus one second. A configured timeout is the limit
+// of every run.
+func TestTheLimitOfEveryRun(t *testing.T) {
+	t.Parallel()
+	const hour, seven = time.Hour, 7 * time.Second // 3 × 2s + 1s
+	for _, tc := range []struct {
+		name    string
+		timeout time.Duration
+		want    []time.Duration
+	}{
+		// every test before breaking; then each stage before breaking and with the mutant
+		{"worked out", 0, []time.Duration{hour, hour, seven, hour, seven, seven}},
+		{"configured", time.Minute, []time.Duration{time.Minute, time.Minute, time.Minute, time.Minute, time.Minute, time.Minute}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r, mu, _ := fakeRunner(t, "", nil)
+			r.Timeout = tc.timeout
+			c := scriptedClock([]time.Duration{2 * time.Second, 2 * time.Second, 2 * time.Second})
+			var limits []time.Duration
+			deadline := c.deadline
+			c.deadline = func(argv []string, limit time.Duration) (context.Context, context.CancelFunc, io.Writer) {
+				limits = append(limits, limit)
+				return deadline(argv, limit)
+			}
+			r.clock = c
+			if err := r.clean(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.try(mu, []string{"T1"}, []string{"./a"}); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(limits, tc.want) {
+				t.Errorf("want the limits %v, got %v", tc.want, limits)
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -44,24 +45,29 @@ func limitAfter(took time.Duration) time.Duration {
 	return 3*took + time.Second
 }
 
+// measured is a run of a command with nothing broken.
+type measured struct {
+	out    string
+	passed bool
+	took   time.Duration
+}
+
 // measure runs a command with nothing broken, with a comment added to every file that holds a
 // mutant, and tells how long it took.
-func (r *Runner) measure(cmd []string) (string, bool, time.Duration, error) {
+func (r *Runner) measure(cmd []string) (measured, error) {
 	restore, err := r.addMarks()
 	if err != nil {
-		return "", false, 0, err
+		return measured{}, err
 	}
 	limit := r.Timeout
 	if limit == 0 {
 		limit = time.Hour // nothing is known yet; a hung run still ends
 	}
 	took := r.clock.start()
-	out, passed, _, err := r.run(cmd, limit)
-	d := took()
-	if rerr := restore(); err == nil {
-		err = rerr
-	}
-	return out, passed, d, err
+	var m measured
+	m.out, m.passed, _, err = r.run(cmd, limit)
+	m.took = took()
+	return m, errors.Join(err, restore())
 }
 
 // confirm runs the command again with nothing broken, after a run with the mutant in p timed out,
@@ -69,22 +75,18 @@ func (r *Runner) measure(cmd []string) (string, bool, time.Duration, error) {
 // is raised for this and later mutants. A run that fails confirms nothing. p holds broken again
 // when it returns.
 func (r *Runner) confirm(cmd []string, p string, orig, broken []byte) (bool, error) {
-	if err := os.WriteFile(p, orig, 0o644); err != nil {
-		return false, err
+	var m measured // a run that did not happen did not pass
+	err := os.WriteFile(p, orig, 0o644)
+	if err == nil {
+		m, err = r.measure(cmd)
 	}
-	_, passed, took, err := r.measure(cmd)
-	if werr := os.WriteFile(p, broken, 0o644); err == nil {
-		err = werr
-	}
-	if err != nil || !passed {
-		return false, err
-	}
+	err = errors.Join(err, os.WriteFile(p, broken, 0o644))
 	key := strings.Join(cmd, "\x00")
 	b := r.before[key]
-	if limit := limitAfter(took); limit > b.limit {
-		b.limit = limit
+	raised := m.passed && limitAfter(m.took) > b.limit
+	if raised {
+		b.limit = limitAfter(m.took)
 		r.before[key] = b
-		return true, nil
 	}
-	return false, nil
+	return raised, err
 }

@@ -151,16 +151,16 @@ func (r *Runner) baseline(cmd []string) (baseline, error) {
 	if b, ok := r.before[key]; ok {
 		return b, nil
 	}
-	out, passed, took, err := r.measure(cmd)
+	m, err := r.measure(cmd)
 	if err != nil {
 		return baseline{}, err
 	}
-	b := baseline{passed: passed, limit: r.Timeout, out: out}
+	b := baseline{passed: m.passed, limit: r.Timeout, out: m.out}
 	if b.limit == 0 {
-		b.limit = limitAfter(took)
+		b.limit = limitAfter(m.took)
 	}
 	r.before[key] = b
-	if !passed && r.skipped != nil && key != strings.Join(fill(r.Test, r.Sep, nil, nil), "\x00") {
+	if !b.passed && r.skipped != nil && key != strings.Join(fill(r.Test, r.Sep, nil, nil), "\x00") {
 		r.skipped(cmd)
 	}
 	return b, nil
