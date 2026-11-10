@@ -389,7 +389,10 @@ So hadome ends the tree as a whole.
 9. Before the tests run, the copy always holds exactly the version
 10. Two `hadome mutate` runs never run tests on the same repository at once
 11. No process the test command started is running after that run ends, whether it ends by the time limit, an interrupt or the command exiting
-12. A test that went past its limit only because the machine got loaded is not taken as a timeout that caught a mutant. A timeout catches a mutant only against a limit confirmed by running the run before breaking again
+12. A timeout catches a mutant only in these three cases (see "Confirming the limit" above)
+    - It goes past a limit confirmed by running the run before breaking again
+    - The repeated run before breaking fails, so the limit cannot be confirmed
+    - It still goes past the limit after two retries that each raised the limit
 13. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
 
 ## Deliberately left out
