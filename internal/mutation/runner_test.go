@@ -2,7 +2,9 @@ package mutation
 
 import (
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -374,5 +376,22 @@ func TestTheLimitOfEveryRun(t *testing.T) {
 				t.Errorf("want the limits %v, got %v", tc.want, limits)
 			}
 		})
+	}
+}
+
+// viewpoint: failure
+// target: mutation.Runner.clean
+// A test command that cannot start stops the run with why it could not: no mutant can be judged
+// without it, and it is a problem of the configuration, not a failing test.
+func TestATestCommandThatCannotStartStopsTheRun(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	r, err := newRunner(dir, config.Mutation{Test: []string{filepath.Join(dir, "no such command")}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.clean()
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("want the run stopped because the command does not exist, got %v", err)
 	}
 }
