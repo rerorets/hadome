@@ -85,7 +85,8 @@ func (w *leafWatch) ended() error {
 }
 
 // StandInLeafRun is the process of StandInLeaf. It waits on the named pipe WATCH, says "ready" and
-// blocks forever. Asked on the pipe, it exits with leafAlive. With HOLD "hold", it keeps writing to
+// blocks forever, holding the run's output open when HOLD is "open". Asked on the pipe, it exits
+// with leafAlive. With HOLD "hold", it keeps writing to
 // its standard error, the run's output, and exits with leafAlive when that fails.
 func StandInLeafRun(watch, hold string) int {
 	name, err := syscall.UTF16PtrFromString(watch)
@@ -122,3 +123,10 @@ func StandInLeafRun(watch, hold string) int {
 	blockForever()
 	return 0
 }
+
+// StandInEarlySignalRun is the stand-in of StandInEarlySignal, which no test starts on Windows: its
+// interrupts are Unix signals.
+func StandInEarlySignalRun(string, string) int { return 2 }
+
+// StandInAfterRunRun is the stand-in of StandInAfterRun, which no test starts on Windows.
+func StandInAfterRunRun() int { return 2 }

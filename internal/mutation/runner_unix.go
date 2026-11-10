@@ -91,11 +91,9 @@ func (t *processTree) end() {
 	signal.Stop(t.sigs)
 	close(t.sigs)
 	<-t.relayed
-	t.mu.Lock()
-	s, pid := t.dying, t.pid
-	t.mu.Unlock()
-	if s != nil && pid == 0 {
-		t.raise(s) // the command never started
+	// relay has returned, so nothing else writes dying or pid any more.
+	if t.dying != nil && t.pid == 0 {
+		t.raise(t.dying) // the command never started
 	}
 }
 

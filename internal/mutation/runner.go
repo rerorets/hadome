@@ -228,23 +228,22 @@ func (r *Runner) run(argv []string, limit time.Duration) (string, bool, error) {
 // reports whether it passed. The command is the root of a tree of processes, such as go test and
 // the test binaries it starts, and nothing of the tree outlives the run: ctx being done ends the
 // whole tree, and whatever the command leaves running when it exits is ended without a word.
-func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (bool, error) {
+// Along with an error, it reports that the command did not pass.
+func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (passed bool, err error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.WaitDelay = 5 * time.Second // a child that keeps the output open must not hang the run
 	tree, err := ownTree(cmd)
 	if err != nil {
-		return false, err
+		return passed, err
 	}
 	defer tree.end()
 	if err := cmd.Start(); err != nil {
-		return false, err // the command could not start: a configuration problem
+		return passed, err // the command could not start: a configuration problem
 	}
 	if err := tree.started(); err != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
-		return false, err
+		return passed, err
 	}
 	err = cmd.Wait()
 	var exit *exec.ExitError
@@ -256,7 +255,7 @@ func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (boo
 	case errors.Is(err, exec.ErrWaitDelay):
 		return true, nil // the command passed, and what kept its output open is ended with the tree
 	case err != nil:
-		return false, err
+		return passed, err
 	}
 	return true, nil
 }

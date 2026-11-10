@@ -58,6 +58,10 @@ func TestMain(m *testing.M) {
 			os.Exit(mutation.StandInRunTreeRun(os.Args[2]))
 		case mutation.StandInHolder:
 			os.Exit(mutation.StandInHolderRun(os.Args[2]))
+		case mutation.StandInEarlySignal:
+			os.Exit(mutation.StandInEarlySignalRun(os.Args[2], os.Args[3]))
+		case mutation.StandInAfterRun:
+			os.Exit(mutation.StandInAfterRunRun())
 		}
 	}
 	release := mutation.HoldLifeline()
