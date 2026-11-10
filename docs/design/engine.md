@@ -112,6 +112,12 @@ Renames are detected by the engine, not by the source, so every source behaves t
 - A source may report more renames it knows about (git does, including files whose content changed slightly); those are added on top
 - Files that were renamed and changed, with a source that cannot tell, look like a removal and an addition. There is no similarity-based detection
 
+## Analysing the two versions
+
+- When the analyzer is a `PairAnalyzer`, the engine has it analyse both versions in one call to `AnalyzePair`. The analyzer can then use in head the results computed for base that it confirmed to be the same for head ([analysis-reuse.md](analysis-reuse.md))
+- With an analyzer that is not a `PairAnalyzer`, the engine calls `Analyze` for each version
+- Either way, each version's facts are the same. The engine applies the rules once it has the facts of both versions
+
 ## Determinism
 
 - Same input, same output: findings and items are sorted; maps are never iterated for output
@@ -179,6 +185,10 @@ classDiagram
   class Analyzer {
     <<interface>>
     +Analyze(v Version, c config.Config) (*facts.Analysis, error)
+  }
+  class PairAnalyzer {
+    <<interface>>
+    +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
   }
   class Input {
     +Facts *facts.Analysis
@@ -262,6 +272,7 @@ classDiagram
   }
   Engine --> Source
   Engine --> Analyzer
+  Analyzer <|-- PairAnalyzer
   Engine --> Rule
   Source --> Version
   Rule <|-- FindingRule
@@ -301,5 +312,5 @@ The engine loads the configuration of both versions before analysing anything. A
 - Language adapters and the contents of `facts.Analysis` (separate design)
 - The individual rules (separate designs per group)
 - Mutation-based scope (outside the engine)
-- Caching and parallel execution
+- Caching across runs, and parallel execution
 - Fixing findings automatically

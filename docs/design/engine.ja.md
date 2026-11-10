@@ -118,6 +118,12 @@ gate:allow <rule-id> reason: <text>
 - ソースは自分が知っている改名を追加で報告してかまいません。例: git は、中身が少し変わったファイルも含めて報告します。報告された改名は、上の改名に足されます。
 - 改名して中身も変えたファイルは、見分けられないソースでは、削除と追加に見えます。類似度での検出はしません。
 
+## 2つの版の解析
+
+- 解析器が `PairAnalyzer` なら、エンジンは2つの版を `AnalyzePair` の1回の呼び出しで解析させます。解析器は、base で求めた結果のうち head でも同じになると確かめたものを、head で使い回せます（[analysis-reuse.ja.md](analysis-reuse.ja.md)）
+- `PairAnalyzer` でない解析器では、エンジンは版ごとに `Analyze` を呼びます
+- どちらでも、各版の事実は同じです。エンジンは、両方の版の事実を受け取ってからルールを当てます
+
 ## 決定性
 
 - 同じ入力なら、同じ出力を出します。違反と項目は並べ替え、出力のために map を走査しません。
@@ -198,6 +204,10 @@ classDiagram
   class Analyzer {
     <<interface>>
     +Analyze(v Version, c config.Config) (*facts.Analysis, error)
+  }
+  class PairAnalyzer {
+    <<interface>>
+    +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
   }
   class Input {
     +Facts *facts.Analysis
@@ -281,6 +291,7 @@ classDiagram
   }
   Engine --> Source
   Engine --> Analyzer
+  Analyzer <|-- PairAnalyzer
   Engine --> Rule
   Source --> Version
   Rule <|-- FindingRule
@@ -320,5 +331,5 @@ classDiagram
 - 言語アダプタと `facts.Analysis` の中身。別の設計にあります。
 - 個々のルール。グループごとに別の設計があります。
 - ミューテーションに基づく守る範囲。エンジンの外にあります。
-- キャッシュと並列実行
+- 実行をまたぐキャッシュと、並列実行
 - 違反の自動修正

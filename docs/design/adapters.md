@@ -422,6 +422,7 @@ Full parsers are used for every language because what users get (accurate functi
 4. A file no adapter claims is still listed with role `other`
 5. Configuration can add hazard entries but never remove built-in ones
 6. A test body's fingerprint does not change when the name, the annotations and arguments that only give a name, comments or whitespace change. It changes when any literal changes
+7. Adapter values hold no state across versions. Results reused across versions live in the session as stages' results ([analysis-reuse.md](analysis-reuse.md))
 
 ## Deliberately left out
 
