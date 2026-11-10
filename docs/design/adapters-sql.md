@@ -42,16 +42,16 @@ classDiagram
     <<interface>>
     +Name() string
     +Claims(path string) bool
-    +Analyze(v Version, c config.Config, paths []string) (*facts.Analysis, error)
+    +Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class linker {
     <<interface>>
-    +ReadsTexts(c config.Config, paths []string) bool
-    +Link(v Version, c config.Config, a *facts.Analysis) error
+    +ReadsTexts(c config.Analysis, paths []string) bool
+    +Link(r *reuse.Run, c config.Analysis, a *facts.Analysis) error
   }
   class textSource {
     <<interface>>
-    +AnalyzeWithoutTexts(v Version, c config.Config, paths []string) (*facts.Analysis, error)
+    +AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class Test {
     +Texts []Text

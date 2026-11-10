@@ -9,12 +9,13 @@ classDiagram
   class Analyzer {
     +Languages []Language
     +Analyze(v Version, c config.Config) (*facts.Analysis, error)
+    +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
   }
   class Language {
     <<interface>>
     +Name() string
     +Claims(path string) bool
-    +Analyze(v Version, c config.Config, paths []string) (*facts.Analysis, error)
+    +Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class golang {
     <<package>>
