@@ -40,6 +40,29 @@ ANTLR_JAR=/path/to/antlr-4.13.1-complete.jar internal/adapter/sql/grammar/genera
 - The ANTLR version is 4.13.1, the same as `github.com/antlr4-go/antlr/v4` in `go.mod`. The jar is at https://www.antlr.org/download/
 - After regenerating, run `go test ./internal/adapter/sql/...` and each dialect's trial ("When a dialect is enabled" below)
 
+## Changes so that SLL reads
+
+The SQL adapter reads with SLL first, and reads again with LL only the statements SLL could not read (see "How SQL is read" in [adapters-sql.md](../design/adapters-sql.md)). When SLL cannot tell alternatives apart, it takes the first. So a correct statement may not read with SLL. When a common form does that, the grammar is changed so that it reads with SLL.
+
+| Dialect | Form | Change |
+|---|---|---|
+| MySQL | A function call (`NOW(6)`, `s.f(1)`). Statements need no `;` between them, so SLL takes it for a column name followed by the `(` of the next statement | The column alternative of `selectElement` gets the predicate `calledName`, and a name right before `(` is not read as a column |
+| BigQuery | An OR inside parentheses (`a AND (b IS NULL OR c = 1)`). SLL lets the left side of the OR take every OR, and fails | `expression_maybe_parenthesized_not_a_query` gets a first alternative, `expression` with the predicate `orInParentheses` |
+
+- **The tree does not change.** The tree hadome builds from a statement that reads (`Node`) is the one the original grammar gives. When an added alternative makes the tree one level deeper, `inlined` of `antlrGrammar` says so, and the conversion removes that level. The BigQuery change above does this
+- **Input whose tree changes.** The MySQL change alters LL's result only for two statements without `;` between them, joined as `SELECT f ((SELECT 1))`. The original grammar reads it as the column `f` and the next statement in parentheses; the changed grammar, as a call of `f`. A name without parentheses (`SCHEMA`, `CURRENT_USER`) reads as a column in both
+- **Predicates.** The functions of predicates are in `@parser::members` of the `.g4`. A predicate looks only at the tokens ahead, never at the state of the grammar
+- **Trial.** After a change, check these three things
+  - `TestStatementsWithParenthesesReadInSLL` reads the changed forms with SLL
+  - The trees built from hadome's tests and from the `.sql` of real repositories at hand are the same with the original and the changed grammar
+  - On the same repositories, the output of `hadome check` is the same
+
+**Forms SLL does not read (not changed)**
+
+| Dialect | Form | Why it is not changed |
+|---|---|---|
+| MySQL | Queries joined with `UNION` (`SELECT 1 UNION SELECT 2`) | In the grammar, `querySpecificationNointo` may hold a `UNION` too, so deciding where to split needs LL. Changing it to read with SLL changes the shape of the tree of a query joining three or more |
+
 ## When a dialect is enabled
 
 A dialect is not enabled until it passes a trial on real code ("When a dialect is enabled" in [adapters-sql.md](../design/adapters-sql.md)).
