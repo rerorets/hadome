@@ -14,7 +14,7 @@ classDiagram
     <<interface>>
     +Name() string
     +Claims(path string) bool
-    +Analyze(v Version, c config.Config, paths []string) (*facts.Analysis, error)
+    +Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class terraform {
     <<package>>
