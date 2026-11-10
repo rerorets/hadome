@@ -107,7 +107,7 @@ func (Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.
 		}
 		pf := parse(p, src, c)
 		a.Files = append(a.Files, pf.file)
-		tree.add(pf)
+		tree.add(pf, !pf.file.Unread)
 	}
 	for _, pf := range tree.files {
 		a.Comments = append(a.Comments, pf.comments...)
@@ -137,11 +137,11 @@ type tree struct {
 }
 
 // add records a file; read is false when it could not be read, and it then only names its role.
-func (t *tree) add(pf parsed) {
+func (t *tree) add(pf parsed, read bool) {
 	if pf.place.kind == roleFile {
 		t.roles[pf.place.role] = true
 	}
-	if pf.file.Unread {
+	if !read {
 		return
 	}
 	t.files = append(t.files, pf)
@@ -172,7 +172,7 @@ type parsed struct {
 	comments []facts.Comment
 }
 
-// parse reads one file. A file that is not YAML comes back listed as unread, and nothing else.
+// parse reads one file. A file that is not YAML is listed as unread.
 func parse(p string, src []byte, c config.Analysis) parsed {
 	pl, ok := locate(p)
 	if !ok { // claimed through files.ansible
