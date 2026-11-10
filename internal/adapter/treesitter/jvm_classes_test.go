@@ -619,8 +619,8 @@ QueueTest.constant calls=[acme.Kind.slot] unresolved=0`)
 // viewpoint: behaviour
 // target: the Java and Kotlin readers
 // Reading a property of a variable that holds a product object reads the product; calling a method
-// on it is a call, not a read. A property of a value that is no product object, such as a local
-// string, reads nothing.
+// on it is a call, not a read. Passing the variable itself reads none of its properties, and a
+// property of a value that is no product object, such as a local string, reads nothing.
 func TestPropertiesOfProductObjectsAreReads(t *testing.T) {
 	t.Run("kotlin", func(t *testing.T) {
 		expect(t, reads(t, "kotlin", tree(
@@ -629,6 +629,7 @@ func TestPropertiesOfProductObjectsAreReads(t *testing.T) {
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class CacheTest {
     private lateinit var cache: Cache
@@ -643,12 +644,15 @@ class CacheTest {
     fun method() { cache.clear() }
 
     @Test
+    fun passed() { assertNotNull(cache) }
+
+    @Test
     fun plain() {
         val word = "ttl"
         assertEquals(3, word.length)
     }
 }
-`)), "CacheTest.chained reads=1 calls=0\nCacheTest.method reads=0 calls=1\nCacheTest.plain reads=0 calls=0\nCacheTest.property reads=1 calls=0")
+`)), "CacheTest.chained reads=1 calls=0\nCacheTest.method reads=0 calls=1\nCacheTest.passed reads=0 calls=0\nCacheTest.plain reads=0 calls=0\nCacheTest.property reads=1 calls=0")
 	})
 	t.Run("java", func(t *testing.T) {
 		expect(t, reads(t, "java", tree(
