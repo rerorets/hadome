@@ -104,6 +104,14 @@ type recorder struct {
 	reads    []read
 	seen     map[string]bool
 	contents []Hash
+	// unreusable is set by a read that gave no answer: the result may not be reused.
+	unreusable bool
+}
+
+func (rc *recorder) unanswered() {
+	rc.mu.Lock()
+	rc.unreusable = true
+	rc.mu.Unlock()
 }
 
 func (rc *recorder) add(rd read) {

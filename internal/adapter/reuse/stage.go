@@ -84,29 +84,36 @@ func NewReading[A, T any](id string, scope Scope, fn func(Reads, A) (T, error)) 
 func (st *Reading[A, T]) Do(r *Run, a A) (T, error) {
 	key, _ := stageKey(st.id, a)
 	real := r.real()
-	v, print, err := st.do(real, key, a)
+	e, err := st.do(real, key, a)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
 	if r.rec != nil {
-		r.rec.add(read{op: "stage", arg: string(key[:]), answer: print, refresh: func(other *Run) (string, error) {
-			_, p, err := st.do(other, key, a)
-			return p, err
+		if e.unreusable {
+			r.rec.unanswered()
+		}
+		r.rec.add(read{op: "stage", arg: string(key[:]), answer: e.print, refresh: func(other *Run) (string, error) {
+			e, err := st.do(other, key, a)
+			if err != nil {
+				return "", err
+			}
+			return e.print, nil
 		}})
 	}
-	return v, nil
+	return e.value.(T), nil
 }
 
-func (st *Reading[A, T]) do(r *Run, key Hash, a A) (T, string, error) {
-	e, err := r.s.do(r, key, func() (*entry, error) {
+func (st *Reading[A, T]) do(r *Run, key Hash, a A) (*entry, error) {
+	return r.s.do(r, key, func() (*entry, error) {
 		rc := &recorder{run: r, seen: map[string]bool{}}
 		rc.inner = &Run{s: r.s, label: r.label, fsys: r.fsys, cfg: r.cfg, cfgAnswer: r.cfgAnswer, outer: r, rec: rc}
 		v, err := st.fn(rc, a)
 		if err != nil {
 			return nil, err
 		}
-		e := &entry{id: st.id, key: key, scope: st.scope, value: v, reads: rc.reads, reading: true, contents: rc.contents}
+		e := &entry{id: st.id, key: key, scope: st.scope, value: v, reads: rc.reads, reading: true, contents: rc.contents,
+			unreusable: rc.unreusable}
 		if st.plain {
 			e.print = valuePrint(v)
 		} else {
@@ -114,11 +121,6 @@ func (st *Reading[A, T]) do(r *Run, key Hash, a A) (T, string, error) {
 		}
 		return e, nil
 	}, st.id)
-	if err != nil {
-		var zero T
-		return zero, "", err
-	}
-	return e.value.(T), e.print, nil
 }
 
 func stageKey(id string, a any) (Hash, []Hash) {

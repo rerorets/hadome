@@ -81,6 +81,7 @@ Work not split into stages runs on every version, every time. Work that runs eve
 
 - `FS()` shows the version as an `fs.FS`. Language code reads it like any file system. Opening, reading, looking at information and listing are all recorded
 - "Absent" is recorded as an answer too. A file absent in base that appears in head may change the result
+- A read that failed for another reason than a missing file (no permission, say) is not an answer. That stage's result is never returned to another version: what made the read fail may be gone when it is read again, and the error's message depends on where the version is read from
 - Listing a directory is a coarse read. A stage that listed a directory runs again when a single file is added to it or removed from it. The coarser the reads, the less is reused, but the facts never change
 - Another stage's result read while asking again is obtained by first calling that stage on head. That stage confirms in the same way whether its remembered result can be used
 - One piece of information is not recorded: a file's modification time. It differs when the version is read from another place, and no adapter reads it
@@ -306,7 +307,7 @@ classDiagram
   class Session {
     <<reuse>>
     +Run(label string, fsys fs.FS, c config.Analysis) *Run
-    +Expect(head *Run) error
+    +Expect(head *Run, paths []string) error
     +Settle()
     +EndLanguage()
     +End()
@@ -360,7 +361,7 @@ classDiagram
 ```
 
 - `internal/adapter/reuse` is the package of sessions and stages. The language packages (`golang`, `treesitter`, `sql`, `terraform`, `ansible`) and `internal/adapter` import it
-- The only hadome packages `reuse` imports are `config` (`config.Analysis`) and `walk` (head's list of files). It receives versions as `fs.FS`
+- The only hadome package `reuse` imports is `config` (`config.Analysis`). It receives versions as `fs.FS`. `internal/adapter` hands head's list of files to `Expect`
 - The engine does not know `reuse`. All the engine knows is `PairAnalyzer` and `Reuser`
 - The `Env` of a session is what both versions share (the languages). Reading stages receive it through `Reads.Env()`
 - `Session.Stats` counts, for each stage, how often its remembered result was returned and how often it ran. Tests and measurements use it

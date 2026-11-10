@@ -263,7 +263,7 @@ func TestOnlyResultsHeadCanUseAreKept(t *testing.T) {
 	s := NewSession(nil, true)
 	base := s.Run("base", fstest.MapFS{}, cfg)
 	head := s.Run("head", fstest.MapFS{"same.txt": {Data: []byte("kept")}}, cfg)
-	if err := s.Expect(head); err != nil {
+	if err := s.Expect(head, pathsOf(head)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := upper.Do(base, nameArg{Name: "same", Src: []byte("kept")}); err != nil {
@@ -433,7 +433,7 @@ func TestAReadingStageHeadCanUseIsKept(t *testing.T) {
 		s := NewSession(nil, true)
 		files := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
 		base, head := s.Run("base", files, cfg), s.Run("head", files, cfg)
-		if err := s.Expect(head); err != nil {
+		if err := s.Expect(head, pathsOf(head)); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := readOne.Do(base, pathArg{path}); err != nil {
@@ -477,7 +477,7 @@ func TestCheckingAgainstHeadReadsEachFileOnce(t *testing.T) {
 	files := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
 	head := counting{MapFS: files, reads: map[string]int{}}
 	b, h := s.Run("base", files, cfg), s.Run("head", head, cfg)
-	if err := s.Expect(h); err != nil {
+	if err := s.Expect(h, pathsOf(h)); err != nil {
 		t.Fatal(err)
 	}
 	listed := head.reads["lib/"]
@@ -498,5 +498,66 @@ func TestCheckingAgainstHeadReadsEachFileOnce(t *testing.T) {
 	}
 	if got := head.reads["lib/"] - listed; got != 1 {
 		t.Errorf("head's lib was listed %d times while checking, want once", got)
+	}
+}
+
+// pathsOf lists every file of the run's version, as the analyzer lists a version's files.
+func pathsOf(r *Run) []string {
+	var out []string
+	_ = fs.WalkDir(r.fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			out = append(out, p)
+		}
+		return err
+	})
+	return out
+}
+
+// probe looks a file up and says whether it found one, whatever stopped it from finding one.
+var probe = NewReading("test/probe", ScopeLanguage, func(rd Reads, a pathArg) (string, error) {
+	if _, err := fs.Stat(rd.FS(), a.Path); err != nil {
+		return "none", nil
+	}
+	return "some", nil
+})
+
+// refusing is a file system that cannot look at one file, for a reason other than its absence.
+type refusing struct {
+	fstest.MapFS
+	path string
+}
+
+func (f refusing) Stat(name string) (fs.FileInfo, error) {
+	if name == f.path {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrPermission}
+	}
+	return f.MapFS.Stat(name)
+}
+
+func (f refusing) Open(name string) (fs.File, error) {
+	if name == f.path {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return f.MapFS.Open(name)
+}
+
+// viewpoint: behaviour
+// target: reuse.Session.validate
+// A result whose read failed for another reason than a missing file is never served to another
+// version, even one where the file is missing and the result would read the same: the failure is
+// no answer the other version can be checked against.
+func TestAResultWhoseReadFailedIsNotReused(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	base := s.Run("base", refusing{MapFS: fstest.MapFS{"a.txt": {}}, path: "locked.txt"}, cfg)
+	head := s.Run("head", fstest.MapFS{"a.txt": {}}, cfg)
+	if got, err := probe.Do(base, pathArg{"locked.txt"}); err != nil || got != "none" {
+		t.Fatalf("base: %q %v", got, err)
+	}
+	if got, err := probe.Do(head, pathArg{"locked.txt"}); err != nil || got != "none" {
+		t.Fatalf("head: %q %v", got, err)
+	}
+	if st := s.Stats()["test/probe"]; st.Hits != 0 || st.Misses != 2 {
+		t.Errorf("stats %+v, want the stage run for each version", st)
 	}
 }

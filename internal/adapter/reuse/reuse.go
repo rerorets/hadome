@@ -11,8 +11,6 @@ package reuse
 import (
 	"sort"
 	"sync"
-
-	"github.com/rerorets/hadome/internal/adapter/walk"
 )
 
 // Scope is how long a stage's results are remembered.
@@ -54,16 +52,12 @@ func NewSession(env any, reuse bool) *Session {
 		stats: map[string]*Stat{}}
 }
 
-// Expect tells the session which version head is: it hashes the content of every file of head, so
-// that a result computed on base is remembered only when head can use it.
-func (s *Session) Expect(head *Run) error {
-	paths, err := walk.Files(head.fsys)
-	if err != nil {
-		return err
-	}
+// Expect tells the session which version head is, and which files it has: it hashes the content
+// of each, so that a result computed on base is remembered only when head can use it.
+func (s *Session) Expect(head *Run, paths []string) error {
 	contents := map[Hash]bool{}
 	for _, p := range paths {
-		_, answer, err := head.readFile(p)
+		_, answer, _, err := head.readFile(p)
 		if err != nil {
 			return err
 		}
@@ -87,8 +81,10 @@ type entry struct {
 	reading  bool
 	contents []Hash // the file contents it was computed from
 	print    string // its fingerprint
-	valid    map[*Run]bool
-	gone     bool
+	// unreusable is a result one of whose reads gave no answer; it is never served to another run.
+	unreusable bool
+	valid      map[*Run]bool
+	gone       bool
 }
 
 // do returns the remembered value under key when it may be used on r, and otherwise runs compute
@@ -154,6 +150,9 @@ func (s *Session) stat(id string) *Stat {
 
 // validate reports whether every read e recorded gives the same answer on r.
 func (s *Session) validate(e *entry, r *Run) bool {
+	if e.unreusable {
+		return false
+	}
 	for _, rd := range e.reads {
 		var got string
 		if rd.refresh != nil {
@@ -163,7 +162,11 @@ func (s *Session) validate(e *entry, r *Run) bool {
 			}
 			got = p
 		} else {
-			got = r.answer(rd.op, rd.arg)
+			a, ok := r.answer(rd.op, rd.arg)
+			if !ok {
+				return false
+			}
+			got = a
 		}
 		if got != rd.answer {
 			return false

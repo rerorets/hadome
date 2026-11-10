@@ -57,7 +57,7 @@ func (an Analyzer) OneLanguageHeld(bv, hv engine.Version, c config.Config, lang 
 	if err != nil {
 		return Held{}, err
 	}
-	if err := s.Expect(h.run); err != nil {
+	if err := s.Expect(h.run, h.plan.paths); err != nil {
 		return Held{}, err
 	}
 	for i, l := range an.Languages {

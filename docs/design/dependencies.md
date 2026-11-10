@@ -10,7 +10,7 @@ flowchart TB
   adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"] & terraform["internal/adapter/terraform"] & ansible["internal/adapter/ansible"] & sqladapter["internal/adapter/sql/..."]
   adapter & golang & treesitter & sqladapter --> walk["internal/adapter/walk"]
   adapter & golang & treesitter & terraform & ansible & sqladapter --> reuse["internal/adapter/reuse"]
-  reuse --> walk & config
+  reuse --> config
   adapter & golang & treesitter & terraform & ansible & sqladapter --> engine & config & facts["internal/facts"]
   engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
@@ -29,4 +29,4 @@ flowchart TB
 - Only the test that writes and checks `THIRD_PARTY_NOTICES` uses `notices`. `notices` imports nothing of hadome, and no other unit imports it
 - `packaging/` is the distribution: it imports nothing of the Go code, and its units (the installer and the plugins) are one box
 - `internal/adapter/sql/...` is the SQL adapter and, under it, each dialect's generated parser (`grammar/`) ([adapters-sql.md](adapters-sql.md))
-- `internal/adapter/reuse` reuses adapter stages' results between the two versions ([analysis-reuse.md](analysis-reuse.md)). It imports only `config` and `walk`. The engine does not know it.
+- `internal/adapter/reuse` reuses adapter stages' results between the two versions ([analysis-reuse.md](analysis-reuse.md)). It imports only `config`. The engine does not know it.

@@ -81,6 +81,7 @@
 
 - `FS()` は版を `fs.FS` として見せます。言語のコードはふだんのファイルシステムと同じに読めます。開く、読む、情報を見る、並べるは、どれも記録されます
 - 「無い」も答えとして記録します。base で無かったファイルが head で現れると、結果が変わりうるからです
+- 無い以外の理由で読めなかった読み取り（権限が無い、など）は、答えにしません。その段の結果は、ほかの版には返しません。読めなかった理由は読み直すと消えることがあり、エラーの文も版を読む場所で変わるからです
 - ディレクトリを並べるのは粗い読み取りです。並べた段はそのディレクトリにファイルが1つ増えても減っても走り直します。粗く読むほど再利用は減りますが、事実は変わりません
 - 問い直しで読むほかの段の結果は head で先にその段を呼んで得ます。その段も、覚えた結果が使えるかを同じように確かめます
 - 記録しない情報があります。ファイルの更新時刻です。版を読む場所が違えば変わり、どのアダプタも読まないからです
@@ -306,7 +307,7 @@ classDiagram
   class Session {
     <<reuse>>
     +Run(label string, fsys fs.FS, c config.Analysis) *Run
-    +Expect(head *Run) error
+    +Expect(head *Run, paths []string) error
     +Settle()
     +EndLanguage()
     +End()
@@ -360,7 +361,7 @@ classDiagram
 ```
 
 - `internal/adapter/reuse` は、セッションと段の仕組みのパッケージです。言語のパッケージ（`golang`、`treesitter`、`sql`、`terraform`、`ansible`）と `internal/adapter` が import します
-- `reuse` が import する hadome のパッケージは、`config`（`config.Analysis`）と `walk`（head のファイルの一覧）だけです。版は `fs.FS` として受け取ります
+- `reuse` が import する hadome のパッケージは、`config`（`config.Analysis`）だけです。版は `fs.FS` として受け取ります。head のファイルの一覧は、`internal/adapter` が `Expect` に渡します
 - エンジンは `reuse` を知りません。エンジンが知るのは `PairAnalyzer` と `Reuser` だけです
 - `Session.Run` の `Env` は、2つの版で同じもの（言語の一覧）です。読む段は `Reads.Env()` で受け取ります
 - `Session.Stats` は、段ごとに、覚えた結果を返した回数と段を走らせた回数を数えます。テストと計測に使います

@@ -11,19 +11,18 @@ import (
 )
 
 // Answers are what a read of a version gave, written as strings so that a recorded answer and the
-// answer of the same read on another version compare with ==.
-const (
-	absent = "absent"
-	isDir  = "dir"
-)
+// answer of the same read on another version compare with ==. A missing file answers with the empty
+// string, which no other answer is.
+const isDir = "dir"
 
-// answerOf writes the answer of a read that failed with err: absent for a missing file, the error
-// for any other failure.
-func answerOf(err error) string {
+// answerOf answers a read that failed with err. A missing file is an answer, the empty one; any
+// other failure is none (false): what made a read fail may not be there when it is read again, and
+// its message depends on where the version is read from, so a result that met one is not reused.
+func answerOf(err error) (string, bool) {
 	if errors.Is(err, fs.ErrNotExist) {
-		return absent
+		return "", true
 	}
-	return "error " + err.Error()
+	return "", false
 }
 
 func contentAnswer(h Hash) string { return "content " + hex.EncodeToString(h[:]) }
@@ -42,34 +41,37 @@ func contentOf(answer string) (Hash, bool) {
 }
 
 // readFile reads a file of the run's version and returns its content and the answer: its content's
-// hash, or why it could not be read.
-func (r *Run) readFile(name string) ([]byte, string, error) {
-	data, err := fs.ReadFile(r.fsys, name)
+// hash, or that it is missing. ok is false when the read failed otherwise.
+func (r *Run) readFile(name string) (data []byte, answer string, ok bool, err error) {
+	data, err = fs.ReadFile(r.fsys, name)
 	if err != nil {
-		return nil, answerOf(err), err
+		answer, ok = answerOf(err)
+		return nil, answer, ok, err
 	}
-	answer := contentAnswer(sha256.Sum256(data))
+	answer = contentAnswer(sha256.Sum256(data))
 	r.remember("file", name, answer)
-	return data, answer, nil
+	return data, answer, true, nil
 }
 
 // stat answers whether name exists, and as what: a directory, or a file of some size.
-func (r *Run) stat(name string) (fs.FileInfo, string, error) {
-	info, err := fs.Stat(r.fsys, name)
+func (r *Run) stat(name string) (info fs.FileInfo, answer string, ok bool, err error) {
+	info, err = fs.Stat(r.fsys, name)
 	if err != nil {
-		return nil, answerOf(err), err
+		answer, ok = answerOf(err)
+		return nil, answer, ok, err
 	}
 	if info.IsDir() {
-		return info, isDir, nil
+		return info, isDir, true, nil
 	}
-	return info, "file " + strconv.FormatInt(info.Size(), 10), nil
+	return info, "file " + strconv.FormatInt(info.Size(), 10), true, nil
 }
 
 // readDir lists a directory and answers with the hash of its entries' names and kinds.
-func (r *Run) readDir(name string) ([]fs.DirEntry, string, error) {
-	entries, err := fs.ReadDir(r.fsys, name)
+func (r *Run) readDir(name string) (entries []fs.DirEntry, answer string, ok bool, err error) {
+	entries, err = fs.ReadDir(r.fsys, name)
 	if err != nil {
-		return nil, answerOf(err), err
+		answer, ok = answerOf(err)
+		return nil, answer, ok, err
 	}
 	h := sha256.New()
 	for _, e := range entries {
@@ -79,35 +81,44 @@ func (r *Run) readDir(name string) ([]fs.DirEntry, string, error) {
 		}
 		h.Write([]byte(kind + e.Name() + "\x00"))
 	}
-	return entries, "entries " + hex.EncodeToString(h.Sum(nil)), nil
+	return entries, "entries " + hex.EncodeToString(h.Sum(nil)), true, nil
 }
 
 // answer is the answer the run's version gives to a recorded read, for checking a remembered
-// result against another version.
-func (r *Run) answer(op, name string) string {
+// result against another version. ok is false when the read gives no answer.
+func (r *Run) answer(op, name string) (string, bool) {
 	if a, ok := r.recalled(op, name); ok {
-		return a
+		return a, true
 	}
 	var a string
+	ok := true
 	switch op {
 	case "file":
-		_, a, _ = r.readFile(name)
+		_, a, ok, _ = r.readFile(name)
 	case "stat":
-		_, a, _ = r.stat(name)
+		_, a, ok, _ = r.stat(name)
 	case "dir":
-		_, a, _ = r.readDir(name)
+		_, a, ok, _ = r.readDir(name)
 	case "config":
 		a = r.cfgAnswer
 	}
-	r.remember(op, name, a)
-	return a
+	if ok {
+		r.remember(op, name, a)
+	}
+	return a, ok
 }
 
 // recordingFS is a version read through a reading stage: every read it serves is recorded with
 // its answer.
 type recordingFS struct{ rec *recorder }
 
-func (f recordingFS) record(op, name, answer string) {
+// record records a read and its answer; a read without an answer (ok false) makes the stage's
+// result one that is never reused.
+func (f recordingFS) record(op, name, answer string, ok bool) {
+	if !ok {
+		f.rec.unanswered()
+		return
+	}
 	f.rec.add(read{op: op, arg: name, answer: answer})
 }
 
@@ -116,21 +127,21 @@ func (f recordingFS) Open(name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 	run := f.rec.run
-	info, answer, err := run.stat(name)
+	info, answer, ok, err := run.stat(name)
 	if err != nil {
-		f.record("stat", name, answer)
+		f.record("stat", name, answer, ok)
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	if info.IsDir() {
-		entries, answer, err := run.readDir(name)
-		f.record("dir", name, answer)
+		entries, answer, ok, err := run.readDir(name)
+		f.record("dir", name, answer, ok)
 		if err != nil {
 			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 		}
 		return &dirFile{info: info, entries: entries}, nil
 	}
-	data, answer, err := run.readFile(name)
-	f.record("file", name, answer)
+	data, answer, ok, err := run.readFile(name)
+	f.record("file", name, answer, ok)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
@@ -138,20 +149,20 @@ func (f recordingFS) Open(name string) (fs.File, error) {
 }
 
 func (f recordingFS) ReadFile(name string) ([]byte, error) {
-	data, answer, err := f.rec.run.readFile(name)
-	f.record("file", name, answer)
+	data, answer, ok, err := f.rec.run.readFile(name)
+	f.record("file", name, answer, ok)
 	return data, err
 }
 
 func (f recordingFS) Stat(name string) (fs.FileInfo, error) {
-	info, answer, err := f.rec.run.stat(name)
-	f.record("stat", name, answer)
+	info, answer, ok, err := f.rec.run.stat(name)
+	f.record("stat", name, answer, ok)
 	return info, err
 }
 
 func (f recordingFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	entries, answer, err := f.rec.run.readDir(name)
-	f.record("dir", name, answer)
+	entries, answer, ok, err := f.rec.run.readDir(name)
+	f.record("dir", name, answer, ok)
 	return entries, err
 }
 

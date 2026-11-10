@@ -89,6 +89,7 @@ func (an Analyzer) WithoutReuse() engine.Analyzer {
 // plan is how a version's files go to the languages.
 type plan struct {
 	byLang map[int][]string
+	paths  []string // every file
 	other  []string // files no language claims
 	texts  bool     // whether a linker reads the tests' strings
 }
@@ -100,7 +101,7 @@ func (an Analyzer) plan(v engine.Version, c config.Analysis) (plan, error) {
 	if err != nil {
 		return plan{}, err
 	}
-	p := plan{byLang: map[int][]string{}}
+	p := plan{paths: paths, byLang: map[int][]string{}}
 	for _, path := range paths {
 		i := slices.IndexFunc(an.Languages, func(l Language) bool { return enabled(c, l.Name()) && claims(l, c, path) })
 		if i < 0 {
@@ -195,7 +196,7 @@ func (an Analyzer) pair(bv engine.Version, bc config.Config, hv engine.Version, 
 	if err != nil {
 		return fail(hv, err)
 	}
-	if err := s.Expect(h.run); err != nil {
+	if err := s.Expect(h.run, h.plan.paths); err != nil {
 		return fail(hv, err)
 	}
 	for i := range an.Languages {
