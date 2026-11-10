@@ -75,3 +75,21 @@ func TestAKeptCatalogIsNotUsedForFilesReadAnotherWay(t *testing.T) {
 		t.Errorf("linked with the catalog kept under other configuration\n%+v\nwant\n%+v", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: sql.fingerprint
+// Two different lists of files never share a key, even when their paths, roles and contents written
+// one after another are the same text: the key keeps where each ends.
+func TestFilesThatDifferOnlyWhereOneEndsHaveDifferentKeys(t *testing.T) {
+	file := func(p, role, src string) *sqlFile { return &sqlFile{path: p, role: facts.Role(role), src: []byte(src)} }
+	pairs := [][2][]*sqlFile{
+		{{file("a.sql", "source", "x")}, {file("a.sqls", "ource", "x")}},
+		{{file("a.sql", "source", "x")}, {file("a.sql", "sourcex", "")}},
+		{{file("a.sql", "test", "x"), file("b.sql", "test", "")}, {file("a.sql", "test", "xb.sql"), file("", "test", "")}},
+	}
+	for i, p := range pairs {
+		if fingerprint(config.Config{}, p[0]) == fingerprint(config.Config{}, p[1]) {
+			t.Errorf("pair %d shares a key", i)
+		}
+	}
+}
