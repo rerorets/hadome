@@ -1,11 +1,13 @@
 package sql
 
 import (
+	"reflect"
 	"testing"
 	"testing/fstest"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // viewpoint: behaviour
@@ -38,5 +40,38 @@ func TestTheCatalogKeptForLinkHoldsNoFile(t *testing.T) {
 				t.Errorf("the catalog keeps %d files", len(db.files))
 			}
 		}
+	}
+}
+
+// viewpoint: failure
+// target: sql.Adapter.Link
+// A catalog Analyze kept is used only for the same files read the same way: the same .sql files
+// read under configuration that makes one of them a test file are another catalog, whose test file
+// defines no product object. A string naming that object is then unresolved, as it is for an
+// adapter that never kept a catalog.
+func TestAKeptCatalogIsNotUsedForFilesReadAnotherWay(t *testing.T) {
+	tree := fstest.MapFS{
+		"db/billing.sql": {Data: []byte("CREATE FUNCTION billing.is_active(id int) RETURNS boolean AS $$ SELECT true $$ LANGUAGE sql;\n")},
+	}
+	v := engine.Version{FS: tree}
+	asTests := config.Config{TestFiles: []string{"db/**"}}
+	link := func(a *Adapter) facts.Test {
+		an := &facts.Analysis{
+			Files: []facts.File{{Path: "db/billing.sql", Language: "sql"}},
+			Tests: []facts.Test{{Name: "TestActive", Path: "app/billing_test.go",
+				Texts: []facts.Text{{Path: "app/billing_test.go", Line: 3, Value: "SELECT billing.is_active(1)", Times: 1}}}},
+		}
+		if err := a.Link(v, asTests, an); err != nil {
+			t.Fatal(err)
+		}
+		return an.Tests[0]
+	}
+	kept := New()
+	if _, err := kept.Analyze(v, config.Config{}, []string{"db/billing.sql"}); err != nil {
+		t.Fatal(err)
+	}
+	got, want := link(kept), link(New())
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("linked with the catalog kept under other configuration\n%+v\nwant\n%+v", got, want)
 	}
 }
