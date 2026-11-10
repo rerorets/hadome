@@ -42,6 +42,10 @@ const (
 	// `<binary> stand-in-run-tree WATCH` runs StandInTree in mode hang with WATCH, its output going
 	// to standard output, until the binary is ended by a signal. No test starts it on Windows.
 	StandInRunTree = "stand-in-run-tree"
+	// StandInHolder makes the binary a test binary that runs a test command: `<binary>
+	// stand-in-holder WATCH` holds a lifeline of its own (HoldLifeline), starts StandInTree in mode
+	// hang with WATCH, passes on what it says and blocks until it is killed.
+	StandInHolder = "stand-in-holder"
 )
 
 // StandInStage is the test command of StandInStages.
@@ -134,6 +138,24 @@ func StandInRunTreeRun(watch string) int {
 	return 2
 }
 
+// StandInHolderRun is the test binary of StandInHolder.
+func StandInHolderRun(watch string) int {
+	HoldLifeline()
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	tree := exec.Command(exe, StandInTree, "hang", watch, "-")
+	tree.Stdout = os.Stdout
+	if err := tree.Start(); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	blockForever()
+	return 0
+}
+
 // blockForever reads a pipe no one writes to. It holds the pipe's writing end itself, so the read
 // never reaches the end.
 func blockForever() {
@@ -192,4 +214,21 @@ func standInLines(t *testing.T, log string) []string {
 		out = append(out, s.Text())
 	}
 	return out
+}
+
+// lifelineEnv names, in the environment every stand-in inherits, how to tell that the test binary
+// running the tests has ended (HoldLifeline). A stand-in left running by code under test, or by a
+// test binary killed before its cleanups ran, then ends with it instead of running on.
+const lifelineEnv = "HADOME_TEST_LIFELINE"
+
+// lifelineGone is the exit code of a stand-in that ended because the test binary had ended.
+const lifelineGone = 4
+
+// WatchLifeline makes a stand-in end once the test binary that started it, directly or through
+// other stand-ins, has ended. It never ends a stand-in while the binary runs, so a stand-in that
+// code under test should have ended still shows that it was not.
+func WatchLifeline() {
+	if v := os.Getenv(lifelineEnv); v != "" {
+		watchLifeline(v)
+	}
 }

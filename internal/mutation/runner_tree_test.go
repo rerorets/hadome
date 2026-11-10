@@ -1,8 +1,10 @@
 package mutation
 
 import (
+	"bufio"
 	"context"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,4 +83,40 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 		t.Fatal(endErr)
 	}
 	return passed
+}
+
+// viewpoint: failure
+// target: the stand-ins' lifeline (WatchLifeline)
+// A stand-in ends once the test binary that started it has ended, even one killed before its
+// cleanups could run: a tree that code under test failed to end does not run on past the binary.
+// The leaf ends without saying it was still running, which only a leaf that was asked does.
+func TestStandInsEndWithTheTestBinaryThatStartedThem(t *testing.T) {
+	t.Parallel()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := watchLeaf(t)
+	holder := exec.Command(exe, StandInHolder, w.arg)
+	out, err := holder.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Start(); err != nil {
+		t.Fatal(err)
+	}
+	line, _ := bufio.NewReader(out).ReadString('\n')
+	n, ok := strings.CutPrefix(strings.TrimSpace(line), "leaf ")
+	if !ok {
+		holder.Process.Kill()
+		holder.Wait()
+		t.Fatalf("the test command did not say its leaf was ready: %q", line)
+	}
+	pid, _ := strconv.Atoi(n)
+	w.seen(pid)
+	holder.Process.Kill()
+	holder.Wait()
+	if err := w.gone(); err != nil {
+		t.Error(err)
+	}
 }
