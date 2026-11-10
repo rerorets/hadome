@@ -19,7 +19,9 @@ const (
 	// StandInStages makes the binary a test command that records the stages it runs in:
 	// `<binary> stand-in-stages LOG SPEC ARG...`. It appends ARG... and the last line of x.go and y.py
 	// to LOG. SPEC is a comma-separated list of ACTION=ARGS, ARGS being ARG... joined by spaces:
-	// fail fails always, and, when x.go is broken (holds BROKEN), hang never ends and catch fails.
+	// fail fails always, and, when x.go is broken (holds BROKEN), hang says "hanging" and never ends,
+	// hangonce does so the first time only, and catch fails; with x.go unbroken, failagain fails every
+	// time but the first.
 	StandInStages = "stand-in-stages"
 	// StandInHoldLock makes the binary a second hadome mutate: `<binary> stand-in-hold-lock PATH`
 	// takes the lock at PATH, says "held" and holds it until its standard input closes or it is
@@ -44,6 +46,10 @@ const (
 	StandInRunTree = "stand-in-run-tree"
 )
 
+// hanging is what StandInStage says when it starts to hang, so that a test's clock can end the run
+// then (scriptedClock).
+const hanging = "hanging"
+
 // StandInStage is the test command of StandInStages.
 func StandInStage(args []string) int {
 	log, spec, rest := args[0], args[1], args[2:]
@@ -66,7 +72,20 @@ func StandInStage(args []string) int {
 		case action == "fail":
 			return 1
 		case action == "hang" && broken:
+			fmt.Println(hanging)
 			time.Sleep(time.Hour) // the runner's limit ends it
+		case action == "failagain" && !broken:
+			f, err := os.OpenFile(log+".ran", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+			if err != nil {
+				return 1
+			}
+			f.Close()
+		case action == "hangonce" && broken:
+			if f, err := os.OpenFile(log+".hung", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); err == nil {
+				f.Close()
+				fmt.Println(hanging)
+				time.Sleep(time.Hour) // the runner's limit ends it
+			}
 		case action == "catch" && broken:
 			return 1
 		}

@@ -1,11 +1,14 @@
 package mutation
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/facts"
@@ -114,8 +117,32 @@ func fakeRunner(t *testing.T, spec string, skipped func([]string)) (*Runner, fac
 	if err != nil {
 		t.Fatal(err)
 	}
+	r.clock = scriptedClock(nil)
 	at := strings.Index(xGo, "ok")
 	return r, facts.Mutant{Path: "x.go", Start: at, End: at + len("ok"), Replacement: "BROKEN"}, log
+}
+
+// scriptedClock is a clock that takes no account of the machine's load. The runs before breaking
+// take the durations of took in turn, and no time once they are used up. A run times out exactly
+// when the stand-in says it hangs (StandInStage), and never otherwise.
+func scriptedClock(took []time.Duration) clock {
+	return clock{
+		start: func() func() time.Duration {
+			var d time.Duration
+			if len(took) > 0 {
+				d, took = took[0], took[1:]
+			}
+			return func() time.Duration { return d }
+		},
+		deadline: func([]string, time.Duration) (context.Context, context.CancelFunc, io.Writer) {
+			ctx, cancel := context.WithCancel(context.Background())
+			return ctx, cancel, &lines{line: func(l string) {
+				if l == hanging {
+					cancel()
+				}
+			}}
+		},
+	}
 }
 
 // brokenRuns are the logged runs that saw the mutant, by their arguments.
@@ -230,4 +257,80 @@ func TestFailingTestsWithNothingBrokenStopTheRun(t *testing.T) {
 	if err := r.clean(); err == nil || !strings.Contains(err.Error(), "fail with nothing broken") {
 		t.Fatalf("want the run stopped, got %v", err)
 	}
+}
+
+// viewpoint: behaviour
+// target: mutation.Runner.try
+// Design "Confirming the limit": a run with a mutant that times out counts as caught only once the
+// command's run before breaking, run again, does not call for a longer limit. A machine that got
+// slower raises the limit and runs the mutant again, at most twice; a run before breaking that fails
+// again confirms nothing; a configured timeout is the limit as written.
+func TestATimeoutCatchesOnlyAgainstAConfirmedLimit(t *testing.T) {
+	t.Parallel()
+	const narrowest = "./a -run T1"
+	for _, tc := range []struct {
+		name       string
+		spec       string
+		took       []time.Duration // of the runs before breaking: every test, the narrowest, then its runs again
+		timeout    time.Duration
+		want       Outcome
+		broken     int // runs of the narrowest stage with the mutant
+		unbroken   int // runs of the narrowest stage before breaking
+		everyStage bool
+	}{
+		{"a run only the slower machine stopped runs again and survives", "hangonce=" + narrowest,
+			[]time.Duration{0, 0, time.Second}, 0, Survived, 2, 2, true},
+		{"a hang against a confirmed limit is caught", "hang=" + narrowest,
+			[]time.Duration{0, 0, 0}, 0, Caught, 1, 2, false},
+		{"a hang on a machine that keeps slowing is caught after two more runs", "hang=" + narrowest,
+			[]time.Duration{0, 0, time.Second, 2 * time.Second, 3 * time.Second}, 0, Caught, 3, 3, false},
+		{"a run before breaking that fails again confirms nothing", "hang=" + narrowest + ",failagain=" + narrowest,
+			[]time.Duration{0, 0, time.Second}, 0, Caught, 1, 2, false},
+		{"a configured timeout is not confirmed", "hang=" + narrowest,
+			[]time.Duration{0, 0, time.Second}, time.Hour, Caught, 1, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r, mu, log := fakeRunner(t, tc.spec, nil)
+			r.clock = scriptedClock(tc.took)
+			r.Timeout = tc.timeout
+			if err := r.clean(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := r.try(mu, []string{"T1"}, []string{"./a"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("want outcome %d, got %d", tc.want, got)
+			}
+			lines := standInLines(t, log)
+			broken := brokenRuns(lines)
+			var unbroken int
+			for _, l := range lines {
+				if args, seen, _ := strings.Cut(l, " | "); args == narrowest && !strings.HasPrefix(seen, "var BROKEN") {
+					unbroken++
+				}
+			}
+			if n := countOf(broken, narrowest); n != tc.broken {
+				t.Errorf("want the narrowest stage run %d times with the mutant, got the runs %q", tc.broken, broken)
+			}
+			if tc.everyStage != slices.Contains(broken, "./...") {
+				t.Errorf("want every test run with the mutant: %v, got the runs %q", tc.everyStage, broken)
+			}
+			if unbroken != tc.unbroken {
+				t.Errorf("want the narrowest stage run %d times before breaking, got %d", tc.unbroken, unbroken)
+			}
+		})
+	}
+}
+
+func countOf(list []string, s string) int {
+	n := 0
+	for _, x := range list {
+		if x == s {
+			n++
+		}
+	}
+	return n
 }
