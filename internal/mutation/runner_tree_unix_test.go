@@ -24,6 +24,7 @@ import (
 // tell. A leaf that is asked on ping, or that finds the run's output given up on, writes "alive"
 // to out and exits: so a leaf left running is told apart at once instead of being waited for.
 type leafWatch struct {
+	t   *testing.T
 	arg string
 	out *os.File
 }
@@ -49,10 +50,20 @@ func watchLeaf(t *testing.T) *leafWatch {
 	}
 	out := os.NewFile(uintptr(fd), path)
 	t.Cleanup(func() { out.Close() })
-	return &leafWatch{arg: dir, out: out}
+	return &leafWatch{t: t, arg: dir, out: out}
 }
 
-func (w *leafWatch) seen(int) {}
+// seen is told the leaf's PID while the leaf runs. When the test ends, whatever is left of the
+// leaf's process group, the command's tree with its root, is killed: code under test that fails to
+// end the tree fails the test, and must not leave the tree running past it. The test's own group is
+// never killed.
+func (w *leafWatch) seen(pid int) {
+	pgid, err := syscall.Getpgid(pid)
+	if err != nil || pgid == syscall.Getpgrp() {
+		return
+	}
+	w.t.Cleanup(func() { syscall.Kill(-pgid, syscall.SIGKILL) })
+}
 
 // gone waits until the leaf has ended, after it said it was ready, and fails if it said it was
 // still running.
@@ -143,6 +154,7 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 				return
 			}
 			pid, _ := strconv.Atoi(n)
+			w.seen(pid)
 			pgid, err := syscall.Getpgid(pid)
 			switch {
 			case err != nil:
@@ -180,11 +192,14 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 				t.Fatal(err)
 			}
 			line, _ := bufio.NewReader(out).ReadString('\n')
-			if !strings.HasPrefix(line, "leaf ") {
+			n, ok := strings.CutPrefix(strings.TrimSpace(line), "leaf ")
+			if !ok {
 				cmd.Process.Kill()
 				cmd.Wait()
 				t.Fatalf("the test command did not say its leaf was ready: %q", line)
 			}
+			pid, _ := strconv.Atoi(n)
+			w.seen(pid)
 			cmd.Process.Signal(sig)
 			err = cmd.Wait()
 			if err := w.ended(); err != nil {

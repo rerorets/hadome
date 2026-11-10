@@ -15,6 +15,7 @@ import (
 // or that finds the run's output given up on, exits by itself with leafAlive, which a leaf the job
 // terminated never does: so a leaf left running is told apart at once instead of being waited for.
 type leafWatch struct {
+	t   *testing.T
 	arg string // the name of the leaf's pipe
 	h   syscall.Handle
 	err error
@@ -36,12 +37,21 @@ const (
 // leaves numbers the pipes of this test binary, which tests running at once share.
 var leaves atomic.Int64
 
-func watchLeaf(*testing.T) *leafWatch {
-	return &leafWatch{arg: fmt.Sprintf(`\\.\pipe\hadome-leaf-%d-%d`, os.Getpid(), leaves.Add(1))}
+func watchLeaf(t *testing.T) *leafWatch {
+	return &leafWatch{t: t, arg: fmt.Sprintf(`\\.\pipe\hadome-leaf-%d-%d`, os.Getpid(), leaves.Add(1))}
 }
 
+// seen is told the leaf's PID while the leaf runs. When the test ends, the leaf is terminated if it
+// still runs: code under test that fails to end it fails the test, and must not leave it running
+// past it. The handle names that process alone, even once its ID is reused.
 func (w *leafWatch) seen(pid int) {
 	w.h, w.err = syscall.OpenProcess(syscall.SYNCHRONIZE|syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
+	if h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, uint32(pid)); err == nil {
+		w.t.Cleanup(func() {
+			syscall.TerminateProcess(h, 1)
+			syscall.CloseHandle(h)
+		})
+	}
 }
 
 // gone waits until the leaf has ended, and fails if it ended by itself.
