@@ -226,8 +226,14 @@ func (tf *tsFile) preludes(n *sitter.Node) []*sitter.Node {
 			if fn := tsLastFunction(call); fn != nil {
 				out = append(out, fn.ChildByFieldName("body"))
 			}
-		case tsInBodySkips[callee] || tf.fakesTimers(call):
+		case tsInBodySkips[callee]:
 			if _, ok := tf.declaration(call); !ok {
+				out = append(out, call)
+			}
+		default:
+			// A test or a suite is never a prelude, so its body, which may be the whole suite, is
+			// not searched for fake timers.
+			if _, ok := tf.declaration(call); !ok && tf.fakesTimers(call) {
 				out = append(out, call)
 			}
 		}

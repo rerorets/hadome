@@ -35,12 +35,17 @@ type jvmScope struct {
 	// inputs are the annotations of the parameterised classes around the test (@ParameterizedClass
 	// with its @ValueSource): the test's inputs, which its fingerprint includes.
 	inputs []*sitter.Node
+	// setupHazards are the clock and sleep hazards of each setup, by the setup's node, once it has
+	// been walked for one test of the class: what the walk finds depends only on the class, so every
+	// test of the class shares it. A nested class starts with none of its own, since its fields differ.
+	setupHazards map[uintptr][]facts.Hazard
 }
 
 // nested is the scope a class declared inside this one starts from: a JUnit @Nested class sees the
 // fields and helpers of its enclosing class, and its tests run that class's setup first.
 func (s jvmScope) nested() jvmScope {
-	out := jvmScope{fields: copyMap(s.fields), inherited: map[string]jvmCode{}, values: map[string]bool{}}
+	out := jvmScope{fields: copyMap(s.fields), inherited: map[string]jvmCode{}, values: map[string]bool{},
+		setupHazards: map[uintptr][]facts.Hazard{}}
 	for k, v := range s.inherited {
 		out.inherited[k] = v
 	}
@@ -83,13 +88,20 @@ func (jf *jvmFile) startTest(t *testFacts, scope jvmScope, walk func(*jvmWalk, *
 	// every one of them depend on time. Only those hazards are its test's: what the setup calls or
 	// checks is not what the test guards.
 	for _, s := range scope.setups {
-		sw := &jvmWalk{jf: s.jf, t: newTest(s.jf.f, "", s.n), vars: copyMap(scope.fields), locals: map[string]bool{},
-			walking: map[string]bool{}, inherited: scope.inherited}
-		walk(sw, s.n)
-		for _, h := range sw.t.test.Hazards {
-			if h.Category == facts.HazardClock || h.Category == facts.HazardSleep {
-				t.addHazard(h)
+		hazards, ok := scope.setupHazards[s.n.Id()]
+		if !ok {
+			sw := &jvmWalk{jf: s.jf, t: newTest(s.jf.f, "", s.n), vars: copyMap(scope.fields), locals: map[string]bool{},
+				walking: map[string]bool{}, inherited: scope.inherited}
+			walk(sw, s.n)
+			for _, h := range sw.t.test.Hazards {
+				if h.Category == facts.HazardClock || h.Category == facts.HazardSleep {
+					hazards = append(hazards, h)
+				}
 			}
+			scope.setupHazards[s.n.Id()] = hazards
+		}
+		for _, h := range hazards {
+			t.addHazard(h)
 		}
 	}
 	return w

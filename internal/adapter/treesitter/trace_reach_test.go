@@ -70,6 +70,51 @@ func TestKotlinTraceReadsBareMethodCalls(t *testing.T) {
 }
 
 // viewpoint: behaviour
+// target: kotlin.trace
+// Every method of a class reads the class's fields by their declared types, and only that class's:
+// two classes of one file with a field of the same name and different types, and a class nested in
+// one of them that declares none, each read their own.
+func TestKotlinTraceReadsEachClasssOwnFields(t *testing.T) {
+	a := analyze(t, "kotlin", fstest.MapFS{
+		"src/main/kotlin/com/example/Store.kt": {Data: []byte("package com.example\n\nclass Store {\n    fun open() {}\n}\n")},
+		"src/main/kotlin/com/example/Ids.kt":   {Data: []byte("package com.example\n\nclass Ids {\n    fun open() {}\n}\n")},
+		"src/main/kotlin/com/example/Svc.kt": {Data: []byte(`package com.example
+
+class First {
+    private val store: Store = Store()
+
+    fun one() { store.open() }
+
+    fun two() { store.open() }
+
+    class Inner {
+        fun three() { store.open() }
+    }
+}
+
+class Second {
+    private val store: Ids = Ids()
+
+    fun one() { store.open() }
+
+    fun two() { store.open() }
+}
+`)},
+	})
+	for id, want := range map[string]string{
+		"com.example.First.one":         "io=false calls=[com.example.Store.open] units=[]",
+		"com.example.First.two":         "io=false calls=[com.example.Store.open] units=[]",
+		"com.example.First.Inner.three": "io=false calls=[] units=[]",
+		"com.example.Second.one":        "io=false calls=[com.example.Ids.open] units=[]",
+		"com.example.Second.two":        "io=false calls=[com.example.Ids.open] units=[]",
+	} {
+		if got := reachOf(t, a, id); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
 // target: java.trace
 // A class imported from outside the repository that does no input or output gives nothing.
 func TestJavaTraceIgnoresOtherExternalClasses(t *testing.T) {
