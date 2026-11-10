@@ -27,8 +27,9 @@ const (
 // calls Release once, when it lets go of the result.
 type Releaser interface{ Release() }
 
-// Stat counts how often a stage's remembered result was returned, and how often it ran.
-type Stat struct{ Hits, Misses int }
+// Stat counts how often a stage's remembered result was returned, how often it ran, and how often a
+// call waited for another call running the stage with the same key.
+type Stat struct{ Hits, Misses, Waits int }
 
 // Session remembers stage results for one analysis call. It is safe for concurrent use.
 type Session struct {
@@ -81,8 +82,6 @@ type entry struct {
 	print    string // its fingerprint
 	// unreusable is a result one of whose reads gave no answer; it is never served to another run.
 	unreusable bool
-	valid      map[*Run]bool
-	gone       bool
 }
 
 // do returns the remembered value under key when it may be used on r, and otherwise runs compute
@@ -91,13 +90,14 @@ func (s *Session) do(r *Run, key Hash, compute func() (*entry, error), id string
 	for {
 		s.mu.Lock()
 		if wait, ok := s.inflight[key]; ok {
+			s.stat(id).Waits++
 			s.mu.Unlock()
 			<-wait
 			continue
 		}
 		e := s.entries[key]
 		if e != nil && s.reuse {
-			if !e.reading || e.run == r || e.valid[r] {
+			if !e.reading || e.run == r {
 				s.stat(id).Hits++
 				s.mu.Unlock()
 				return e, nil
@@ -109,10 +109,6 @@ func (s *Session) do(r *Run, key Hash, compute func() (*entry, error), id string
 
 		if e != nil && s.reuse && s.validate(e, r) {
 			s.mu.Lock()
-			if e.valid == nil {
-				e.valid = map[*Run]bool{}
-			}
-			e.valid[r] = true
 			s.stat(id).Hits++
 			delete(s.inflight, key)
 			close(done)
@@ -229,7 +225,6 @@ func (s *Session) forget(drop []*entry) {
 	gone := map[*entry]bool{}
 	for _, e := range drop {
 		gone[e] = true
-		e.gone = true
 		if s.entries[e.key] == e {
 			delete(s.entries, e.key)
 		}
