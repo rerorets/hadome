@@ -313,7 +313,15 @@ mutation:
   - The language decides how the comment is written: `#` in Python, `//` in the other languages
   - Why: build caches and test result caches are looked up by file contents. With the same contents as before, only the run before breaking hits the cache and is measured short. The limit then becomes too short, and a timeout wrongly catches a mutant. With the comment, the cache misses in the same files where a mutant makes it miss
 - **The time limit.** Per command, three times that command's run before breaking, plus one second. For example, stage 1's limit comes from stage 1's command and stage 3's from all the tests. When `timeout` is written, every stage uses it
-- **A timeout** counts as caught: a mutant that made the tests stop finishing did not let them pass
+- **A timeout** against a confirmed limit counts as caught: a mutant that made the tests stop finishing did not let them pass
+- **Confirming the limit.** The limit comes from the run before breaking, so when the machine gets loaded, tests with nothing broken go past it too. Counting that as caught would miss mutants that survived. So when a run with a mutant goes past its limit:
+  1. The command's run before breaking runs again, and the limit is worked out again from its time
+  2. When the new limit is longer than the old one, the machine is loaded. The limit is raised to the new one, and the run with the mutant runs again
+  3. When the new limit is not longer, the limit is confirmed. The timeout counts as caught
+  - A run with a mutant runs again at most twice. If it still times out after that, it counts as caught. So a mutant that truly made the tests stop finishing still ends, after at most three runs with the mutant and two runs before breaking
+  - When the repeated run before breaking fails, the limit cannot be confirmed. The timeout counts as caught
+  - A raised limit is used for that command for the mutants that come after too
+  - When `timeout` is written, the limit is not confirmed. The written value is the limit
 - Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` or `{packages}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
 - Adding `mutation` when base has none does not loosen anything, because base did not run `mutate` at all (`OmittedIsOff`)
 
@@ -358,7 +366,7 @@ So hadome ends the tree as a whole.
 
 | When | What hadome does |
 |---|---|
-| The time limit is reached | Ends the whole tree. The mutant counts as caught |
+| The time limit is reached | Ends the whole tree. Once the limit is confirmed, the mutant counts as caught (see "Confirming the limit" above) |
 | An interrupt (Ctrl-C, `SIGTERM`, `SIGHUP`) | Ends the whole tree, then ends itself by the same signal |
 | The command exits | Ends whatever is left of the tree, without a word. The command's exit code decides the result |
 
@@ -381,6 +389,8 @@ So hadome ends the tree as a whole.
 9. Before the tests run, the copy always holds exactly the version
 10. Two `hadome mutate` runs never run tests on the same repository at once
 11. No process the test command started is running after that run ends, whether it ends by the time limit, an interrupt or the command exiting
+12. A test that went past its limit only because the machine got loaded is not taken as a timeout that caught a mutant. A timeout catches a mutant only against a limit confirmed by running the run before breaking again
+13. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
 
 ## Deliberately left out
 
