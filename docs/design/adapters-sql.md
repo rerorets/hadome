@@ -46,7 +46,12 @@ classDiagram
   }
   class linker {
     <<interface>>
+    +ReadsTexts(c config.Analysis, paths []string) bool
     +Link(r *reuse.Run, c config.Analysis, a *facts.Analysis) error
+  }
+  class textSource {
+    <<interface>>
+    +AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class Test {
     +Texts []Text
@@ -108,6 +113,8 @@ classDiagram
   }
   sqladapter ..|> Language
   sqladapter ..|> linker
+  golang ..|> textSource
+  treesitter ..|> textSource
   sqladapter --> Dialect : one implementation per dialect
   Dialect --> Grammar : reads syntax with
   sqladapter --> Framework : one per way of writing tests
@@ -126,6 +133,9 @@ classDiagram
   - `Sink` is the kind of argument the string was passed to. A per-language table (below, "Calls that take SQL") decides it. `sql` for an argument that takes SQL, empty otherwise
   - `Dynamic` is true when a value that is not a string literal is passed to an argument that takes SQL. `Value` is then empty
 - **`linker`.** An optional interface `internal/adapter` calls after every language has finished reading. Like `ClaimsConfigured`, it is called only for languages that have it. Here the SQL adapter reads each test's `Texts` and adds `Calls`, `Reads`, `Unresolved` and hazards
+- **`ReadsTexts`.** A `linker` answers whether it reads the tests' strings of the version. Before any language starts reading, `internal/adapter` asks each `linker`, passing the paths it claimed: every path of the version is known before the languages read. The SQL adapter answers that it reads them only when it claimed a `.sql` file or the configuration has `sql.databases`. `Link` follows the same condition and does nothing when there is nothing to read
+- **`textSource`.** An optional interface of the languages that hand over test strings (Go, and the five languages read with tree-sitter). `AnalyzeWithoutTexts` is `Analyze` collecting no `Test.Texts`. For a version where no `linker` reads strings, `internal/adapter` calls it instead of `Analyze`, because collecting strings means examining every node of every test body. Facts other than `Texts` do not change
+  - Example: in a repository with neither a `.sql` file nor `sql.databases`, every test's `Texts` is empty
 - **Extension points.** The following three need only an implementation or data added behind an existing interface. The types other packages see do not change
   - **Adding a dialect**: add one implementation of `Dialect` and register it in the dialect table
   - **Adding an object kind**: add one row to the `ObjectKind` table. A row is the kind's name, the symbol kind (`routine` or `relation`), and how tests use it (`call` or `read`)
@@ -410,6 +420,7 @@ Strings are read as SQL under these conditions.
 - With one database, strings are read in its dialect and resolved against it
 - With two or more, they are resolved against the database whose `sql.databases[].tests` globs match. Without those, every database whose dialect can read the string is tried. A name matching objects in two or more databases is unresolved
 - When the repository has no SQL database at all (no `.sql` files and no configuration), test strings are not read. Strings passed to calls that take SQL are not counted as unresolved either. With no dialect and nothing to resolve against, nothing can be said for certain
+  - The other language adapters then do not collect test strings either (see "`textSource`" above)
 
 ### Resolving names
 

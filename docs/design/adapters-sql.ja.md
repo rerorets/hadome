@@ -46,7 +46,12 @@ classDiagram
   }
   class linker {
     <<interface>>
+    +ReadsTexts(c config.Analysis, paths []string) bool
     +Link(r *reuse.Run, c config.Analysis, a *facts.Analysis) error
+  }
+  class textSource {
+    <<interface>>
+    +AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error)
   }
   class Test {
     +Texts []Text
@@ -108,6 +113,8 @@ classDiagram
   }
   sqladapter ..|> Language
   sqladapter ..|> linker
+  golang ..|> textSource
+  treesitter ..|> textSource
   sqladapter --> Dialect : 方言ごとに1つの実装
   Dialect --> Grammar : 構文を読む
   sqladapter --> Framework : テストの書き方ごとに1つ
@@ -126,6 +133,9 @@ classDiagram
   - `Sink` は、文字列を渡した引数の種類です。言語ごとの表（後述の「SQL を受け取る呼び出し」）で決まります。SQL を受け取る引数なら `sql`、それ以外は空です
   - `Dynamic` は、SQL を受け取る引数に、文字列のリテラルでない値を渡したときに真です。`Value` は空です
 - **`linker`。** すべての言語が読み終わった後に、`internal/adapter` が呼ぶ省略できるインターフェースです。`ClaimsConfigured` と同じく、持つ言語にだけ呼びます。SQL のアダプタはここで各テストの `Texts` を読み、`Calls`、`Reads`、`Unresolved`、危険を足します
+- **`ReadsTexts`。** `linker` が、その版でテストの文字列を読むかどうかを答えます。`internal/adapter` はどの言語も読み始める前に、各 `linker` に、それが受け持ったパスを渡して尋ねます。版のすべてのパスは、言語が読む前に分かっているからです。SQL のアダプタは `.sql` のファイルを受け持ったか、設定に `sql.databases` があるときだけ、読むと答えます。`Link` も同じ条件で、読むものが無いときは何もしません
+- **`textSource`。** テストの文字列を渡す言語（Go と、tree-sitter で読む5言語）が持つ、省略できるインターフェースです。`AnalyzeWithoutTexts` は、`Test.Texts` を集めずに読む `Analyze` です。どの `linker` も文字列を読まない版では、`internal/adapter` は `Analyze` の代わりにこちらを呼びます。文字列を集めるには、テストの本体のすべてのノードを調べる手間がかかるからです。`Texts` のほかの事実は変わりません
+  - 例: `.sql` のファイルも `sql.databases` も無いリポジトリでは、どのテストの `Texts` も空です
 - **拡張の口。** 次の3つは既存のインターフェースの後ろに実装かデータを足すだけで済みます。ほかのパッケージが見る型は変わりません
   - **方言を足す**: `Dialect` の実装を1つ足し、方言の表に登録します
   - **オブジェクトの種類を足す**: `ObjectKind` の表に1行足します。行は種類の名前、シンボルの種類（`routine` か `relation`）、テストでの使われ方（`call` か `read`）です
@@ -410,6 +420,7 @@ SQL のファイルには、データベースではなくクライアントが�
 - データベースが1つなら、その方言で読み、そのデータベースで解決します
 - 2つ以上なら、設定の `sql.databases[].tests` の glob に合うデータベースで解決します。書いていなければ、文字列を読める方言のデータベースをすべて試します。名前が2つ以上のデータベースのオブジェクトに当たるときは、未解決にします
 - リポジトリに SQL のデータベースが1つも無い（`.sql` のファイルも設定も無い）ときは、テストの文字列を読みません。SQL を受け取る呼び出しに渡した文字列も、未解決と数えません。方言が分からず、名前を解決する先も無いので、確かに言えることが無いからです
+  - このとき、ほかの言語のアダプタも、テストの文字列を集めません（上の「`textSource`」）
 
 ### 名前の解決
 

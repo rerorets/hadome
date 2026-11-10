@@ -87,6 +87,9 @@ type tracing struct {
 	locals map[string]string       // the variables of the function being read, and their types
 	fields map[string]string       // the fields of its class, and their types
 	seen   map[string]bool         // the values at the top of the file already read for it
+	// classFields are the fields of each class read so far, by the class's node: a class's methods
+	// share them, so the class is walked once for all of them.
+	classFields map[uintptr]map[string]string
 }
 
 // traceFiles fills in the facts of the functions each file lists, and appends the entry points
@@ -124,15 +127,23 @@ func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
 	tr.locals, tr.fields = map[string]string{}, map[string]string{}
 	if tr.syn.vars != nil {
 		if fn.scope != nil { // the class's fields, not the parameters of its other functions
-			walk(fn.scope, func(n *sitter.Node) bool {
-				if tr.syn.funcs[n.Kind()] {
-					return false
+			if cached, ok := tr.classFields[fn.scope.Id()]; ok {
+				tr.fields = cached
+			} else {
+				walk(fn.scope, func(n *sitter.Node) bool {
+					if tr.syn.funcs[n.Kind()] {
+						return false
+					}
+					for k, v := range tr.syn.vars(tr.f, n) {
+						tr.fields[k] = v
+					}
+					return true
+				})
+				if tr.classFields == nil {
+					tr.classFields = map[uintptr]map[string]string{}
 				}
-				for k, v := range tr.syn.vars(tr.f, n) {
-					tr.fields[k] = v
-				}
-				return true
-			})
+				tr.classFields[fn.scope.Id()] = tr.fields
+			}
 		}
 		if fn.decl != nil {
 			walk(fn.decl, func(n *sitter.Node) bool {

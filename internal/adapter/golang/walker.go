@@ -9,9 +9,10 @@ import (
 // reading is what reading any function of the version needs: positions, the index of the
 // repository's declarations, and the hazard and io tables.
 type reading struct {
-	fset *token.FileSet
-	idx  *index
-	tb   *tables
+	fset    *token.FileSet
+	idx     *index
+	tb      *tables
+	noTexts bool // tests' strings are not collected
 }
 
 // newWalker returns a walker for a function declared in the file: a test, a TestMain, or a function
@@ -23,6 +24,6 @@ func newWalker(rd reading, pf parsedFile, helpers map[string]helper) *walker {
 		fset: rd.fset, tables: rd.tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
 		walking: map[string]bool{}, curPath: pf.path,
 		callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,
-		texts: map[textKey]*textCount{}, sinkKeys: map[textKey]bool{},
+		texts: map[textKey]*textCount{}, sinkKeys: map[textKey]bool{}, noTexts: rd.noTexts,
 	}
 }

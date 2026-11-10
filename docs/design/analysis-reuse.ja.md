@@ -288,6 +288,7 @@ classDiagram
   }
   class linker {
     <<interface, adapter>>
+    +ReadsTexts(c config.Analysis, paths []string) bool
     +Link(r *Run, c config.Analysis, a *facts.Analysis) error
   }
   class Session {
