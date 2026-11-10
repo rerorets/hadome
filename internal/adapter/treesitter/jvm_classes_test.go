@@ -223,6 +223,98 @@ public class StoreTest {
 
 // viewpoint: behaviour
 // target: the Java and Kotlin readers
+// Each test class's setup gives its hazards to every test of that class and of the classes nested
+// in it, and to no other: two classes of one file whose setups share a name keep their own hazards,
+// and a nested class's own setup is not its enclosing class's.
+func TestSetupHazardsStayWithTheirClass(t *testing.T) {
+	t.Run("kotlin", func(t *testing.T) {
+		expect(t, hazardsOf(t, "kotlin",
+			"src/main/kotlin/acme/Store.kt", ktStore,
+			"src/test/kotlin/acme/StoreTest.kt", `package acme
+
+import java.time.Instant
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+
+class SleepyTest {
+    @BeforeEach
+    fun setUp() { Thread.sleep(1) }
+
+    @Test
+    fun first() { Store().append(1) }
+
+    @Test
+    fun second() { Store().append(2) }
+
+    @Nested
+    inner class Timed {
+        @BeforeEach
+        fun setUp() { Instant.now() }
+
+        @Test
+        fun third() { Store().append(3) }
+
+        @Test
+        fun fourth() { Store().append(4) }
+    }
+}
+
+class ClockTest {
+    @BeforeEach
+    fun setUp() { System.currentTimeMillis() }
+
+    @Test
+    fun first() { Store().append(1) }
+
+    @Test
+    fun second() { Store().append(2) }
+}
+`), `ClockTest.first hazards=[clock@33]
+ClockTest.second hazards=[clock@33]
+SleepyTest.Timed.fourth hazards=[clock@21 sleep@10]
+SleepyTest.Timed.third hazards=[clock@21 sleep@10]
+SleepyTest.first hazards=[sleep@10]
+SleepyTest.second hazards=[sleep@10]`)
+	})
+	t.Run("java", func(t *testing.T) {
+		expect(t, hazardsOf(t, "java",
+			"src/main/java/acme/Store.java", "package acme;\n\npublic class Store {\n    public int append(int x) { return x + 1; }\n}\n",
+			"src/test/java/acme/StoreTest.java", `package acme;
+
+import org.junit.Before;
+import org.junit.Test;
+
+public class StoreTest {
+    @Before
+    public void setUp() { Thread.sleep(1); }
+
+    @Test
+    public void first() { new Store().append(1); }
+
+    @Test
+    public void second() { new Store().append(2); }
+}
+
+class ClockTest {
+    @Before
+    public void setUp() { System.nanoTime(); }
+
+    @Test
+    public void first() { new Store().append(1); }
+
+    @Test
+    public void second() { new Store().append(2); }
+}
+`), `ClockTest.first hazards=[clock@19]
+ClockTest.second hazards=[clock@19]
+StoreTest.first hazards=[sleep@8]
+StoreTest.second hazards=[sleep@8]`)
+	})
+}
+
+// viewpoint: behaviour
+// target: the Java and Kotlin readers
 // Quarkus's @InjectMock and @InjectSpy fields are mocks, as Mockito's @Mock fields are.
 func TestQuarkusMockAnnotationsAreMocks(t *testing.T) {
 	expect(t, hazardsOf(t, "java",

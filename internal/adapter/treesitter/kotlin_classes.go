@@ -103,8 +103,11 @@ func ktSuperclass(f *file, n *sitter.Node) string {
 // ktReadsProperty reports whether an identifier is a variable of a product class whose property
 // the test reads (cache.ttlSeconds), not one whose method it calls (cache.get()).
 func (w *jvmWalk) ktReadsProperty(n *sitter.Node) bool {
+	if w.vars[w.jf.f.text(n)] == "" {
+		return false
+	}
 	p := n.Parent()
-	if w.vars[w.jf.f.text(n)] == "" || p == nil || p.Kind() != "navigation_expression" || !isField(p, "", n) {
+	if p == nil || p.Kind() != "navigation_expression" || !isField(p, "", n) {
 		return false
 	}
 	call := p.Parent()
