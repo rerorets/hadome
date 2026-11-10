@@ -147,11 +147,7 @@ func (t *testFacts) done() facts.Test {
 func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
 	in, inTables := t.texts.in, t.texts.tables
 	t.texts.use(f, tb)
-	at := place{i: -1}
-	if t.texts.g != nil {
-		at = placeOf(n)
-	}
-	t.body(n, at, isLoop, visit)
+	t.body(n, placeOf(n), isLoop, visit)
 	t.texts.use(in, inTables)
 }
 

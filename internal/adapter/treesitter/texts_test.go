@@ -197,6 +197,22 @@ def test_loops(cur):
 }
 
 // viewpoint: behaviour
+// target: the TypeScript reader's test strings
+// A test whose body is an expression, not a block, holds the strings of that expression: a
+// constant it reads, and a literal joined into one string.
+func TestTypeScriptTextsOfAnExpressionBody(t *testing.T) {
+	got := texts(t, "typescript", tree(
+		"src/store.test.ts", `const QUERY = "SELECT 1"
+
+it('reads', () => QUERY)
+it('joins', () => "SELECT " + "2")
+`), config.Config{})
+	want := `joins src/store.test.ts:4 "SELECT 2" x1
+reads src/store.test.ts:1 "SELECT 1" x1`
+	expect(t, got, want)
+}
+
+// viewpoint: behaviour
 // target: the Rust reader's test strings
 // Rust tests hand over plain and raw strings, strings in macro arguments, and constants of the file.
 func TestRustTexts(t *testing.T) {
