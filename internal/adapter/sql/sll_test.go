@@ -79,3 +79,22 @@ func TestStatementsReadInSLLKeepTheirTrees(t *testing.T) {
 		t.Errorf("the left side's parent is not the parentheses' content")
 	}
 }
+
+// viewpoint: behaviour
+// target: sql.antlrGrammar.Parse
+// A statement SLL cannot read but LL can still reads, with LL's tree: MySQL's UNION, whose split
+// needs the full prediction.
+func TestAStatementOnlyLLReadsStillReads(t *testing.T) {
+	text := "SELECT 1 UNION SELECT 2;"
+	g := grammars["mysql"].(antlrGrammar)
+	if _, _, err := g.run(text, antlr.PredictionModeSLL); err == nil {
+		t.Fatalf("%q reads in SLL; the case needs a statement only LL reads", text)
+	}
+	n, err := g.Parse(text, 0, 1)
+	if err != nil {
+		t.Fatalf("%q does not read: %v", text, err)
+	}
+	if u := n.Find(func(m *Node) bool { return m.Rule == "unionStatement" }); u == nil {
+		t.Errorf("%q has no unionStatement", text)
+	}
+}
