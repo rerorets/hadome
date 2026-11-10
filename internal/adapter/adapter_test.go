@@ -4,6 +4,7 @@ package adapter_test
 
 import (
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -251,5 +252,51 @@ func TestGoFilesUnderAnUnderscoreDirectoryAreNotGoCode(t *testing.T) {
 	}
 	if len(a.Tests) != 0 {
 		t.Errorf("tests: got %v, want none", a.Tests)
+	}
+}
+
+// viewpoint: behaviour
+// target: adapter.Analyzer.Analyze
+// SQL design, textSource: the strings tests hold are collected only for a version whose strings a
+// linker reads, one with a .sql file or a configured database. Without either, no test of any
+// language has any; with either, the same test has its strings, and its other facts are the same.
+func TestTestStringsAreCollectedOnlyWhenSQLReadsThem(t *testing.T) {
+	sqlFile := &fstest.MapFile{Data: []byte("CREATE TABLE accounts (id int);\n")}
+	configured := config.Config{Databases: []config.Database{{Name: "main", Dialect: "postgresql"}}}
+	for _, p := range projects {
+		t.Run(p.lang, func(t *testing.T) {
+			analyze := func(tree fstest.MapFS, c config.Config) facts.Test {
+				t.Helper()
+				a, err := adapter.New().Analyze(engine.Version{FS: tree}, c)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, tc := range a.Tests {
+					if tc.Path == p.testPath {
+						return tc
+					}
+				}
+				t.Fatalf("no test in %s among %v", p.testPath, a.Tests)
+				return facts.Test{}
+			}
+			without := analyze(p.tree(p.test("", p.call)), config.Config{})
+			if len(without.Texts) != 0 {
+				t.Errorf("without SQL the test holds strings %v", without.Texts)
+			}
+			withFile := p.tree(p.test("", p.call))
+			withFile["db/schema.sql"] = sqlFile
+			for name, got := range map[string]facts.Test{
+				"a .sql file":           analyze(withFile, config.Config{}),
+				"a configured database": analyze(p.tree(p.test("", p.call)), configured),
+			} {
+				if len(got.Texts) == 0 || got.Texts[0].Value != "a" {
+					t.Errorf("with %s the test holds strings %v, want the literal \"a\"", name, got.Texts)
+				}
+				got.Texts = nil
+				if !reflect.DeepEqual(got, without) {
+					t.Errorf("with %s the test's other facts\n%+v\ndiffer from those without SQL\n%+v", name, got, without)
+				}
+			}
+		})
 	}
 }

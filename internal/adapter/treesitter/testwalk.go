@@ -146,26 +146,60 @@ func (t *testFacts) done() facts.Test {
 // strings it reaches belong to the test (see textCollector).
 func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
 	in, inTables := t.texts.in, t.texts.tables
-	t.texts.in, t.texts.tables = f, tb
-	t.body(n, isLoop, visit)
-	t.texts.in, t.texts.tables = in, inTables
+	t.texts.use(f, tb)
+	t.body(n, placeOf(n), isLoop, visit)
+	t.texts.use(in, inTables)
 }
 
-// body walks a test body. visit handles one node and returns false to skip its children; loops
-// are tracked here for every language, and so are the strings the walk reaches.
-func (t *testFacts) body(n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
-	walk(n, func(c *sitter.Node) bool {
-		t.texts.note(c, t.loops)
+// body walks a test body n, which is at at. visit handles one node and returns false to skip its
+// children; loops are tracked here for every language, and so are the strings the walk reaches.
+// A loop's children are each walked as a body of their own, so that n itself is never taken for a
+// loop.
+func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+	var step func(c *sitter.Node, at place)
+	step = func(c *sitter.Node, at place) {
+		t.texts.note(c, at, t.loops)
 		if c != n && isLoop(c) {
 			t.loops++
 			for i := uint(0); i < c.ChildCount(); i++ {
-				t.body(c.Child(i), isLoop, visit)
+				t.body(c.Child(i), place{parent: c, i: int(i)}, isLoop, visit)
 			}
 			t.loops--
-			return false
+			return
 		}
-		return visit(c)
-	})
+		if !visit(c) {
+			return
+		}
+		for i := uint(0); i < c.ChildCount(); i++ {
+			step(c.Child(i), place{parent: c, i: int(i)})
+		}
+	}
+	if n != nil {
+		step(n, at)
+	}
+}
+
+// place is where a node is in its tree: its parent, nil at the root, and its index among the
+// parent's children, or -1 when the walk does not know it.
+type place struct {
+	parent *sitter.Node
+	i      int
+}
+
+// placeOf is the place of n, asking tree-sitter for its parent.
+func placeOf(n *sitter.Node) place { return place{parent: n.Parent(), i: -1} }
+
+// index returns n's index among its parent's children, or -1 when n has no parent.
+func (at place) index(n *sitter.Node) int {
+	if at.i >= 0 || at.parent == nil {
+		return at.i
+	}
+	for i := uint(0); i < at.parent.ChildCount(); i++ {
+		if at.parent.Child(i).Id() == n.Id() {
+			return int(i)
+		}
+	}
+	return -1
 }
 
 // assertPrefixes start the names of the functions that check something in the common test

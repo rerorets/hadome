@@ -73,6 +73,16 @@ func (l *lang) Claims(p string) bool { return claims(l.name, p) }
 
 // Analyze reads the language's files of the version.
 func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+	return l.analyze(v, c, paths, true)
+}
+
+// AnalyzeWithoutTexts is Analyze leaving every test's strings (facts.Test.Texts) out, for a version
+// no other adapter reads them in.
+func (l *lang) AnalyzeWithoutTexts(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+	return l.analyze(v, c, paths, false)
+}
+
+func (l *lang) analyze(v engine.Version, c config.Config, paths []string, texts bool) (*facts.Analysis, error) {
 	parser := sitter.NewParser()
 	defer parser.Close()
 	var files []*file
@@ -93,7 +103,7 @@ func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*fact
 	}
 	l.r.index(v, files)
 	t := l.tables.with(c)
-	t.lang, t.sqlSinks = l.name, c.SQLSinks[l.name]
+	t.lang, t.sqlSinks, t.texts = l.name, c.SQLSinks[l.name], texts
 	a := &facts.Analysis{}
 	// Symbols come first: tests need to know each target's parameters.
 	for _, f := range files {

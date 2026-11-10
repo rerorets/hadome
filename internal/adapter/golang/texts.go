@@ -36,6 +36,9 @@ type strDecl struct {
 
 // recordText records one use of a string where it is written.
 func (w *walker) recordText(t facts.Text) {
+	if w.noTexts {
+		return
+	}
 	k := textKey{t.Path, t.Line, t.Value}
 	tc := w.texts[k]
 	if tc == nil {
