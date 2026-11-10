@@ -18,18 +18,16 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// Adapter reads .sql files, and after every language has been read, the SQL strings of tests.
+// Adapter reads .sql files, and after every language has been read, the SQL strings of tests. It
+// keeps nothing between calls: what one version's Analyze builds for its Link is a stage's result.
 type Adapter struct{}
-
-// New returns the SQL adapter.
-func New() *Adapter { return &Adapter{} }
 
 // Name is the adapter's name. SQL is not in config.Languages: it is read whenever .sql files are
 // there, whichever languages are configured.
-func (*Adapter) Name() string { return "sql" }
+func (Adapter) Name() string { return "sql" }
 
 // Claims reports whether the file is SQL: its path ends in .sql. Its content is never looked at.
-func (*Adapter) Claims(p string) bool { return strings.EqualFold(path.Ext(p), ".sql") }
+func (Adapter) Claims(p string) bool { return strings.EqualFold(path.Ext(p), ".sql") }
 
 var (
 	undoFile  = regexp.MustCompile(`(?i)(\.down\.sql$|(^|/)down/|(^|/)U\d[^/]*__[^/]*\.sql$)`)
@@ -64,7 +62,7 @@ func ancestorHas(fsys fs.FS, p, name string) bool {
 
 // Analyze reads the .sql files of a version: the objects that remain at head become symbols, and
 // tests written in SQL become tests.
-func (a *Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+func (a Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
 	b, err := buildStage.Do(r, buildInput{Paths: paths, Config: c})
 	if err != nil {
 		return nil, err
@@ -192,7 +190,7 @@ func comments(f *sqlFile) []facts.Comment {
 // Link reads the strings of every test, handed over by the other languages, as SQL resolved against
 // the version's databases. Without a database (no .sql file and no configured database) it reads
 // nothing: there is no dialect and nothing to resolve against.
-func (a *Adapter) Link(r *reuse.Run, c config.Analysis, an *facts.Analysis) error {
+func (a Adapter) Link(r *reuse.Run, c config.Analysis, an *facts.Analysis) error {
 	var paths []string
 	for _, f := range an.Files {
 		if f.Language == "sql" {
@@ -219,6 +217,6 @@ func (a *Adapter) Link(r *reuse.Run, c config.Analysis, an *facts.Analysis) erro
 
 // ReadsTexts reports whether Link reads the tests' strings: only when the version has a database,
 // a .sql file or a configured one.
-func (*Adapter) ReadsTexts(c config.Analysis, paths []string) bool {
+func (Adapter) ReadsTexts(c config.Analysis, paths []string) bool {
 	return len(paths) > 0 || len(c.Databases) > 0
 }

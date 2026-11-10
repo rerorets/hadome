@@ -105,9 +105,9 @@ func (Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.
 		if err != nil {
 			return nil, err
 		}
-		pf, ok := parse(p, src, c)
+		pf := parse(p, src, c)
 		a.Files = append(a.Files, pf.file)
-		tree.add(pf, ok)
+		tree.add(pf)
 	}
 	for _, pf := range tree.files {
 		a.Comments = append(a.Comments, pf.comments...)
@@ -137,11 +137,11 @@ type tree struct {
 }
 
 // add records a file; read is false when it could not be read, and it then only names its role.
-func (t *tree) add(pf parsed, read bool) {
+func (t *tree) add(pf parsed) {
 	if pf.place.kind == roleFile {
 		t.roles[pf.place.role] = true
 	}
-	if !read {
+	if pf.file.Unread {
 		return
 	}
 	t.files = append(t.files, pf)
@@ -172,8 +172,8 @@ type parsed struct {
 	comments []facts.Comment
 }
 
-// parse reads one file. It reports false, with the file listed as unread, when it is not YAML.
-func parse(p string, src []byte, c config.Analysis) (parsed, bool) {
+// parse reads one file. A file that is not YAML comes back listed as unread, and nothing else.
+func parse(p string, src []byte, c config.Analysis) parsed {
 	pl, ok := locate(p)
 	if !ok { // claimed through files.ansible
 		pl = place{kind: playbook, dir: path.Dir(p)}
@@ -181,7 +181,7 @@ func parse(p string, src []byte, c config.Analysis) (parsed, bool) {
 	lines := facts.CountLines(src)
 	f, err := parser.ParseBytes(src, 0)
 	if err != nil {
-		return parsed{place: pl, file: facts.File{Path: p, Language: name, Role: facts.RoleOther, Lines: lines, Unread: true}}, false
+		return parsed{place: pl, file: facts.File{Path: p, Language: name, Role: facts.RoleOther, Lines: lines, Unread: true}}
 	}
 	pf := parsed{path: p, place: pl, src: src, comments: lexComments(p, src)}
 	for _, d := range f.Docs {
@@ -202,7 +202,7 @@ func parse(p string, src []byte, c config.Analysis) (parsed, bool) {
 	default:
 		pf.file.Role = facts.RoleSource
 	}
-	return pf, true
+	return pf
 }
 
 // symbols lists the variables of a role's defaults, the values a playbook may set: exported unless

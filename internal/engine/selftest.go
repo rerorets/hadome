@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -81,17 +82,17 @@ func sameWithoutReuse(e *Engine, c Case, r Report) string {
 	if err != nil {
 		return "check without reuse failed: " + err.Error()
 	}
-	var a, b bytes.Buffer
-	if err := WriteJSON(&a, r, "en"); err != nil {
-		return err.Error()
+	if reflect.DeepEqual(r, without) {
+		return ""
 	}
-	if err := WriteJSON(&b, without, "en"); err != nil {
-		return err.Error()
-	}
-	if !bytes.Equal(a.Bytes(), b.Bytes()) {
-		return fmt.Sprintf("reuse changed the report:\n with reuse: %s\n without:    %s", a.String(), b.String())
-	}
-	return ""
+	return fmt.Sprintf("reuse changed the report:\n with reuse: %s\n without:    %s", jsonOf(r), jsonOf(without))
+}
+
+// jsonOf is the report as WriteJSON writes it, for showing two reports side by side.
+func jsonOf(r Report) string {
+	var b bytes.Buffer
+	_ = WriteJSON(&b, r, "en") // a buffer takes every write; what was written is shown either way
+	return b.String()
 }
 
 func ids(fs []Finding) []string {

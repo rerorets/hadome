@@ -1,6 +1,7 @@
 package facts_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -86,5 +87,29 @@ func TestNamesShowCollidingIDsWithTheShortestPathThatTellsThemApart(t *testing.T
 	}
 	if got := facts.Names(nil).Short("src/routes/shops/[id].load"); got != "[id].load" {
 		t.Errorf("nil Names: Short = %q, want [id].load", got)
+	}
+}
+
+// viewpoint: behaviour
+// target: facts.Analysis.Clone
+// A clone holds the same facts and shares nothing with the original: changing a test's calls, its
+// declared lines or its strings in the clone leaves the original as it was.
+func TestACloneSharesNothing(t *testing.T) {
+	a := &facts.Analysis{
+		Files: []facts.File{{Path: "a.go", Lines: 3}},
+		Tests: []facts.Test{{Name: "TestA", Path: "a_test.go", Calls: []facts.Call{{Target: "a.F"}},
+			Declared: map[string][]string{"guards": {"durable store"}}, Texts: []facts.Text{{Value: "SELECT 1"}}}},
+	}
+	c := a.Clone()
+	if !reflect.DeepEqual(a, c) {
+		t.Fatalf("clone %+v differs from %+v", c, a)
+	}
+	c.Tests[0].Calls[0].Target = "b.G"
+	c.Tests[0].Declared["guards"][0] = "other"
+	c.Tests[0].Texts[0].Value = "SELECT 2"
+	c.Files[0].Lines = 9
+	if a.Tests[0].Calls[0].Target != "a.F" || a.Tests[0].Declared["guards"][0] != "durable store" ||
+		a.Tests[0].Texts[0].Value != "SELECT 1" || a.Files[0].Lines != 3 {
+		t.Errorf("changing the clone changed the original: %+v", a)
 	}
 }
