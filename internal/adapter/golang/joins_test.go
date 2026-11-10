@@ -18,7 +18,7 @@ func TestGoJoinedStrings(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		chain.WriteString("const c" + itoa(i) + " = c" + itoa(i-1) + "\n")
 	}
-	got := textsOf(t, config.Config{}, textsProduct, `package store
+	got := textsOf(t, config.Analysis{}, textsProduct, `package store
 
 import "testing"
 

@@ -50,29 +50,20 @@ func (e *Engine) Check(src Source) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
 	}
-	rules := e.Rules
-	if e.ConfigRules != nil {
-		more, err := e.ConfigRules(headCfg)
-		if err != nil {
-			return Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
-		}
-		// Built-in rules have their cases checked before hadome is released. Configured rules live
-		// only in the user's repository, so a check is the one place to test them before trusting
-		// what they report.
-		for _, r := range more {
-			if st, ok := r.(SelfTester); ok {
-				if err := st.SelfTest(); err != nil {
-					return Report{}, fmt.Errorf("%s failed its own self-test, so the check does not use it:\n%w", r.ID(), err)
-				}
-			}
-		}
-		rules = append(append([]Rule{}, rules...), more...)
-	}
-	base, err := e.side(bv, config.ForBase(baseCfg, headCfg), rules)
+	rules, err := e.rules(hv, headCfg)
 	if err != nil {
 		return Report{}, err
 	}
-	head, err := e.side(hv, headCfg, rules)
+	forBase := config.ForBase(baseCfg, headCfg)
+	ba, ha, err := e.analyze(bv, forBase, hv, headCfg)
+	if err != nil {
+		return Report{}, err
+	}
+	base, err := e.side(bv, ba, forBase, rules)
+	if err != nil {
+		return Report{}, err
+	}
+	head, err := e.side(hv, ha, headCfg, rules)
 	if err != nil {
 		return Report{}, err
 	}
@@ -94,6 +85,28 @@ func (e *Engine) Check(src Source) (Report, error) {
 	sortFindings(r.Reviews)
 	sort.Slice(r.NewExceptions, func(i, j int) bool { return markerLess(r.NewExceptions[i], r.NewExceptions[j]) })
 	return r, nil
+}
+
+// rules returns the built-in rules and those head's configuration adds.
+func (e *Engine) rules(hv Version, headCfg config.Config) ([]Rule, error) {
+	if e.ConfigRules == nil {
+		return e.Rules, nil
+	}
+	more, err := e.ConfigRules(headCfg)
+	if err != nil {
+		return nil, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
+	}
+	// Built-in rules have their cases checked before hadome is released. Configured rules live
+	// only in the user's repository, so a check is the one place to test them before trusting
+	// what they report.
+	for _, r := range more {
+		if st, ok := r.(SelfTester); ok {
+			if err := st.SelfTest(); err != nil {
+				return nil, fmt.Errorf("%s failed its own self-test, so the check does not use it:\n%w", r.ID(), err)
+			}
+		}
+	}
+	return append(append([]Rule{}, e.Rules...), more...), nil
 }
 
 // read reads both versions and the renames between them.
@@ -139,11 +152,24 @@ func compareItems(r *Report, rules []Rule, base, head side) error {
 	return nil
 }
 
-func (e *Engine) side(v Version, c config.Config, rules []Rule) (side, error) {
-	a, err := e.Analyzer.Analyze(v, c)
-	if err != nil {
-		return side{}, fmt.Errorf("analysing %s: %w", v.Label, err)
+// analyze reads both versions: in one call when the analyzer is a PairAnalyzer, one version at a
+// time otherwise.
+func (e *Engine) analyze(bv Version, bc config.Config, hv Version, hc config.Config) (*facts.Analysis, *facts.Analysis, error) {
+	if pa, ok := e.Analyzer.(PairAnalyzer); ok {
+		return pa.AnalyzePair(bv, bc, hv, hc)
 	}
+	ba, err := e.Analyzer.Analyze(bv, bc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysing %s: %w", bv.Label, err)
+	}
+	ha, err := e.Analyzer.Analyze(hv, hc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysing %s: %w", hv.Label, err)
+	}
+	return ba, ha, nil
+}
+
+func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rule) (side, error) {
 	in := Input{Facts: a, Config: c, Version: v}
 	s := side{input: in, items: map[string][]Item{}}
 	known := map[string]bool{}

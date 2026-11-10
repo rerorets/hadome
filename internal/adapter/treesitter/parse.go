@@ -1,0 +1,85 @@
+//go:build cgo
+
+package treesitter
+
+import (
+	"sync"
+
+	sitter "github.com/tree-sitter/go-tree-sitter"
+
+	"github.com/rerorets/hadome/internal/adapter/reuse"
+)
+
+// parsed is one file's syntax trees: the tree read from src, and the earlier trees a repairer read
+// before it. Base and head share it when the file is the same in both, so nothing changes it after
+// it is made; what a version learns about the file goes in that version's file.
+type parsed struct {
+	src    []byte
+	root   *sitter.Node
+	lifted []*sitter.Node
+	trees  []*sitter.Tree
+}
+
+// Release frees the trees, after which no node of them may be used.
+func (pr *parsed) Release() {
+	for _, t := range pr.trees {
+		t.Close()
+	}
+}
+
+// file is the parsed file as one version reads it.
+func (pr *parsed) file(p string) *file {
+	return &file{path: p, src: pr.src, root: pr.root, lifted: pr.lifted}
+}
+
+// parseInput is everything a file's trees depend on: the language, whose grammar reads it; the
+// path, which picks the grammar (TypeScript's .tsx); and the content.
+type parseInput struct {
+	Lang string
+	Path string
+	Src  []byte
+}
+
+var parseStage = reuse.NewPure("treesitter/parse", reuse.ScopeLanguage, parseFile)
+
+// grammars are the languages' readers, for their grammars and repairs, which keep no state.
+var grammars = func() map[string]reader {
+	out := map[string]reader{}
+	for _, l := range Languages() {
+		out[l.name] = l.r
+	}
+	return out
+}()
+
+var parsers = sync.Pool{New: func() any { return sitter.NewParser() }}
+
+func parseFile(in parseInput) (*parsed, error) {
+	parser := parsers.Get().(*sitter.Parser)
+	defer parsers.Put(parser)
+	return parseWith(grammars[in.Lang], parser, in.Path, in.Src)
+}
+
+// parseWith parses src with the grammar r gives the path, reading it again while a repairer
+// finds parts the grammar misread.
+func parseWith(r reader, parser *sitter.Parser, p string, src []byte) (*parsed, error) {
+	if err := parser.SetLanguage(r.grammar(p)); err != nil {
+		return nil, err
+	}
+	tree := parser.Parse(src, nil)
+	pr := &parsed{src: src, trees: []*sitter.Tree{tree}}
+	if rp, ok := r.(repairer); ok {
+		read := src
+		for range 4 { // a repair may uncover another misreading further on
+			fixed, lifted := rp.repair(read, tree.RootNode())
+			if fixed == nil {
+				break
+			}
+			pr.lifted = append(pr.lifted, lifted...)
+			read = fixed
+			tree = parser.Parse(read, nil)
+			pr.trees = append(pr.trees, tree)
+		}
+	}
+	pr.root = tree.RootNode()
+	return pr, nil
+}

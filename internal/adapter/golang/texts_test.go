@@ -7,21 +7,21 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
 // textsOf analyzes a module with one product file and one test file, and lists each test's strings
 // as "<test> <path>:<line> <value> holes=<holes> sink=<sink> dynamic=<dynamic> ×<times>".
-func textsOf(t *testing.T, c config.Config, product, test string) []string {
+func textsOf(t *testing.T, c config.Analysis, product, test string) []string {
 	t.Helper()
 	tree := fstest.MapFS{
 		"go.mod":              {Data: []byte("module example.com/app\n")},
 		"store/store.go":      {Data: []byte(product)},
 		"store/store_test.go": {Data: []byte(test)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, []string{"store/store.go", "store/store_test.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), c, []string{"store/store.go", "store/store_test.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func Append() string { return "INSERT INTO store.rows VALUES (1)" }
 // constants it reads. Literals joined with + are one string, with a hole where a value that is not a
 // literal is joined. A string in a loop counts twice. Strings of product code are never handed over.
 func TestGoTestsHandOverTheirStrings(t *testing.T) {
-	got := textsOf(t, config.Config{}, textsProduct, `package store
+	got := textsOf(t, config.Analysis{}, textsProduct, `package store
 
 import "testing"
 
@@ -99,7 +99,7 @@ func TestStrings(t *testing.T) {
 // string the helper build returns is still one of the test's strings. A method of the same name on a
 // value of the repository's own type is not a database client.
 func TestGoTestsMarkTheStringsPassedToSQL(t *testing.T) {
-	got := textsOf(t, config.Config{}, `package store
+	got := textsOf(t, config.Analysis{}, `package store
 
 // Store keeps rows.
 type Store struct{}
@@ -165,9 +165,9 @@ func TestRun(t *testing.T) {
 	want := func(sink string) []string {
 		return []string{fmt.Sprintf(`TestRun store/store_test.go:11 "SELECT store.f()" holes=[] sink=%s dynamic=false ×1`, sink)}
 	}
-	checkTexts(t, textsOf(t, config.Config{}, textsProduct, test), want(""))
+	checkTexts(t, textsOf(t, config.Analysis{}, textsProduct, test), want(""))
 	for _, entry := range []string{"Run", "r.Run"} {
-		c := config.Config{SQLSinks: map[string][]string{"go": {entry}}}
+		c := config.Analysis{SQLSinks: map[string][]string{"go": {entry}}}
 		checkTexts(t, textsOf(t, c, textsProduct, test), want(facts.TextSinkSQL))
 	}
 }

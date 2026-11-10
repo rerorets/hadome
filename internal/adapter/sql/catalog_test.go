@@ -29,7 +29,7 @@ func symbolFacts(an *facts.Analysis) []string {
 func TestSymbolsAreDocumentedExportedAndScoped(t *testing.T) {
 	cases := []struct {
 		name string
-		c    config.Config
+		c    config.Analysis
 		src  string
 		want []string
 	}{
@@ -111,7 +111,7 @@ func TestTheOrderFilesAreAppliedIn(t *testing.T) {
 	ordered.Databases[0].Order = []string{"db/later/**"}
 	cases := []struct {
 		name  string
-		c     config.Config
+		c     config.Analysis
 		files []string
 		want  []string
 	}{
@@ -133,7 +133,7 @@ func TestTheOrderFilesAreAppliedIn(t *testing.T) {
 			for i := 0; i < len(tc.files); i += 2 {
 				paths = append(paths, tc.files[i])
 			}
-			an, err := sql.New().Analyze(v, tc.c, paths)
+			an, err := sql.New().Analyze(run(v), tc.c, paths)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,13 +158,13 @@ func TestWhereDefinitionsGo(t *testing.T) {
 	withCatalog.Databases[0].Catalog = "main"
 	cases := []struct {
 		name  string
-		c     config.Config
+		c     config.Analysis
 		files []string
 		want  []string
 	}{
 		{"the default schema", withDefault, []string{"db/a.sql", "CREATE TABLE t (id int);"}, []string{".sql/billing.t"}},
 		{"the search path", withPath, []string{"db/a.sql", "CREATE TABLE t (id int);"}, []string{".sql/app.t"}},
-		{"the dialect of the other files", config.Config{},
+		{"the dialect of the other files", config.Analysis{},
 			[]string{"db/a.sql", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;", "db/b.sql", "CREATE TABLE t (id int);"},
 			[]string{".sql/public.f", ".sql/public.t"}},
 		{"the configured catalog", withCatalog,
@@ -213,7 +213,7 @@ func symbolLines(an *facts.Analysis) []string {
 func TestStatementsThatChangeObjects(t *testing.T) {
 	cases := []struct {
 		name string
-		c    config.Config
+		c    config.Analysis
 		src  string
 		want []string
 	}{

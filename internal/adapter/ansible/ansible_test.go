@@ -8,12 +8,12 @@ import (
 	"testing/fstest"
 
 	"github.com/rerorets/hadome/internal/adapter/ansible"
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-func analyze(t *testing.T, c config.Config, files map[string]string) *facts.Analysis {
+func analyze(t *testing.T, c config.Analysis, files map[string]string) *facts.Analysis {
 	t.Helper()
 	tree := fstest.MapFS{}
 	var paths []string
@@ -25,7 +25,7 @@ func analyze(t *testing.T, c config.Config, files map[string]string) *facts.Anal
 		}
 	}
 	sort.Strings(paths)
-	a, err := ansible.Adapter{}.Analyze(engine.Version{FS: tree}, c, paths)
+	a, err := ansible.Adapter{}.Analyze(reuse.Lone(tree), c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func analyze(t *testing.T, c config.Config, files map[string]string) *facts.Anal
 // templates and files are not, and neither is a playbook outside the layout unless files.ansible
 // names it.
 func TestAnsibleClaimsItsLayout(t *testing.T) {
-	c := config.Config{AnsibleFiles: []string{"deploy/*.yml"}}
+	c := config.Analysis{AnsibleFiles: []string{"deploy/*.yml"}}
 	for p, want := range map[string]bool{
 		"roles/web/tasks/main.yml": true, "roles/web/handlers/main.yaml": true, "roles/web/defaults/main.yml": true,
 		"roles/web/vars/main.yml": true, "roles/web/meta/main.yml": true, "ansible/roles/db/tasks/install.yml": true,
@@ -68,7 +68,7 @@ func TestAnsibleClaimsItsLayout(t *testing.T) {
 // A role's files have the role as their unit, a playbook its directory, a scenario's files are tests;
 // a file that is not YAML is unread and gives nothing else.
 func TestAnsibleFilesAndRoles(t *testing.T) {
-	a := analyze(t, config.Config{AnsibleFiles: []string{"deploy/*.yml"}, GeneratedFiles: []string{"roles/gen/**"}}, map[string]string{
+	a := analyze(t, config.Analysis{AnsibleFiles: []string{"deploy/*.yml"}, GeneratedFiles: []string{"roles/gen/**"}}, map[string]string{
 		"roles/web/tasks/main.yml":              "- name: Install\n  ansible.builtin.package:\n    name: nginx\n",
 		"roles/web/defaults/main.yml":           "web_port: 80\n",
 		"roles/web/vars/broken.yml":             "a: [\n",
@@ -112,7 +112,7 @@ func TestAnsibleFilesAndRoles(t *testing.T) {
 // The variables of a role's defaults are its symbols, of kind value: exported unless the name starts
 // with _, and documented only by a description in meta/argument_specs.yml that says something.
 func TestAnsibleDefaultsAreValues(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{
+	a := analyze(t, config.Analysis{}, map[string]string{
 		"roles/web/defaults/main.yml": `---
 web_port: 80
 web_user: www
@@ -160,7 +160,7 @@ _web_cache: /tmp
 // imports. A role of the repository is internal and is its unit; any other is named by its collection
 // or as written; a templated name is unknown. Configuration's rules.tests.io marks input and output.
 func TestAnsibleImports(t *testing.T) {
-	a := analyze(t, config.Config{IO: []string{"community.general"}}, map[string]string{
+	a := analyze(t, config.Analysis{IO: []string{"community.general"}}, map[string]string{
 		"roles/db/tasks/main.yml": "- name: Install\n  ansible.builtin.package:\n    name: postgresql\n",
 		"roles/web/meta/main.yml": `dependencies:
   - db
@@ -237,7 +237,7 @@ const verify = `---
 // failed_when are its asserts, a pause is a sleep, and the repository's roles its converge playbook
 // applies are its calls; a templated role is a call hadome cannot identify.
 func TestAnsibleScenariosAreTests(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{
+	a := analyze(t, config.Analysis{}, map[string]string{
 		"roles/web/tasks/main.yml":              "- name: Install\n  ansible.builtin.package:\n    name: nginx\n",
 		"roles/db/tasks/main.yml":               "- name: Install\n  ansible.builtin.package:\n    name: postgresql\n",
 		"roles/web/molecule/default/verify.yml": verify,
@@ -291,7 +291,7 @@ func TestAnsibleScenariosAreTests(t *testing.T) {
 // changes with any literal.
 func TestAnsibleVerifyFingerprint(t *testing.T) {
 	body := func(src string) string {
-		a := analyze(t, config.Config{}, map[string]string{"molecule/default/verify.yml": src})
+		a := analyze(t, config.Analysis{}, map[string]string{"molecule/default/verify.yml": src})
 		if len(a.Tests) != 1 || a.Tests[0].Body == "" {
 			t.Fatalf("no fingerprint from %q", src)
 		}
@@ -313,7 +313,7 @@ func TestAnsibleVerifyFingerprint(t *testing.T) {
 // # comments are comments, without the #; ansible-lint's noqa and yamllint's instructions are
 // directives, and an exception marker stays an ordinary comment for the engine.
 func TestAnsibleComments(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{"roles/web/tasks/main.yml": `# yamllint disable rule:line-length
+	a := analyze(t, config.Analysis{}, map[string]string{"roles/web/tasks/main.yml": `# yamllint disable rule:line-length
 - name: Install # noqa: package-latest
   ansible.builtin.package:
     name: nginx
@@ -352,7 +352,7 @@ func TestAnsibleMoleculeProjectDirectoryNamesTheRole(t *testing.T) {
 	const plain = `"{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"`
 	const spaced = `'{{lookup("ansible.builtin.env","MOLECULE_PROJECT_DIRECTORY")|basename}}'`
 	const other = `"{{ lookup('env', 'ROLE') | basename }}"`
-	a := analyze(t, config.Config{}, map[string]string{
+	a := analyze(t, config.Analysis{}, map[string]string{
 		"roles/web/tasks/main.yml":                "- name: Install\n  ansible.builtin.package:\n    name: nginx\n",
 		"roles/web/molecule/default/converge.yml": converge(plain, spaced, other),
 		"roles/web/molecule/default/verify.yml":   "- hosts: all\n",

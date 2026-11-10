@@ -126,7 +126,7 @@ classDiagram
   Test --> Text
 ```
 
-- **Package.** `internal/adapter/sql`. Each dialect's parser is under it, in `internal/adapter/sql/grammar/<dialect>`, all generated code ([sql-grammars.md](../maintaining/sql-grammars.md)). The dependency diagram draws `internal/adapter/sql/...` as one box, with an arrow from `internal/adapter` and arrows to `engine`, `config`, `facts` and `walk`. No other language adapter imports `sql`
+- **Package.** `internal/adapter/sql`. Each dialect's parser is under it, in `internal/adapter/sql/grammar/<dialect>`, all generated code ([sql-grammars.md](../maintaining/sql-grammars.md)). The dependency diagram draws `internal/adapter/sql/...` as one box, with an arrow from `internal/adapter` and arrows to `engine`, `config`, `facts`, `walk` and `reuse`. No other language adapter imports `sql`
 - **Types other packages see.** Only three things in `facts` are added: `Test.Texts` (a list of `Text`), and the symbol kinds `SymbolRoutine` (`"routine"`) and `SymbolRelation` (`"relation"`). `Dialect`, `Grammar`, `Framework`, `Catalog` and `Definition` are types inside the `sql` package and invisible outside it
 - **`Text`.** A string the test code holds. The other language adapters fill it. They know nothing about SQL. They hand over only the string's value, the positions of interpolation holes, and which call it was passed to (`Sink`)
   - `Holes` are the positions of interpolations such as `${…}` or an f-string's `{…}`

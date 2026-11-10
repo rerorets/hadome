@@ -15,7 +15,7 @@ import (
 // asserts renders each test's count of checks, and whether it handed its tool to unread code.
 func asserts(t *testing.T, name string, tr fstest.MapFS) string {
 	t.Helper()
-	c := config.Config{Assertions: []string{"must_equal", "mustEqual", "MustEqual.that", "must_equal!"}}
+	c := config.Analysis{Assertions: []string{"must_equal", "mustEqual", "MustEqual.that", "must_equal!"}}
 	var out []string
 	for _, ts := range analyzeWith(t, name, tr, c).Tests {
 		out = append(out, fmt.Sprintf("%s asserts=%d unknown=%v", ts.Name, ts.Asserts, ts.AssertsUnknown))

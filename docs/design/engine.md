@@ -148,7 +148,7 @@ Exit code `3` is raised once, by the change that introduces the thing to review.
 
 ## Self-tests
 
-Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates, and fails a rule without cases. The built-in rules' cases also run in hadome's own tests. Gates live only in the user's repository, so `hadome check` also runs a gate's self-test once before using it. If it fails, the check stops with exit code `2` without using the gate's results.
+Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates, and fails a rule without cases. The built-in rules' cases also run in hadome's own tests. When the analyzer is a `Reuser`, which reuses results across versions, every case runs twice, with reuse and without, and fails when the two reports' JSON differ byte for byte ([analysis-reuse.md](analysis-reuse.md)). Gates live only in the user's repository, so `hadome check` also runs a gate's self-test once before using it. If it fails, the check stops with exit code `2` without using the gate's results.
 
 ## Product-specific gates
 
@@ -189,6 +189,10 @@ classDiagram
   class PairAnalyzer {
     <<interface>>
     +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
+  }
+  class Reuser {
+    <<interface>>
+    +WithoutReuse() Analyzer
   }
   class Input {
     +Facts *facts.Analysis

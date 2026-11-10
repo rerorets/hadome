@@ -126,7 +126,7 @@ classDiagram
   Test --> Text
 ```
 
-- **パッケージ。** `internal/adapter/sql` です。方言ごとのパーサは、その下の `internal/adapter/sql/grammar/<方言>` にあり、どれも生成したコードです（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）。依存の図では、`internal/adapter/sql/...` を1つの箱にし、`internal/adapter` からの矢印と、`engine`、`config`、`facts`、`walk` への矢印を引きます。ほかの言語のアダプタは `sql` を import しません
+- **パッケージ。** `internal/adapter/sql` です。方言ごとのパーサは、その下の `internal/adapter/sql/grammar/<方言>` にあり、どれも生成したコードです（[sql-grammars.ja.md](../maintaining/sql-grammars.ja.md)）。依存の図では、`internal/adapter/sql/...` を1つの箱にし、`internal/adapter` からの矢印と、`engine`、`config`、`facts`、`walk`、`reuse` への矢印を引きます。ほかの言語のアダプタは `sql` を import しません
 - **ほかのパッケージから見える型。** 増えるのは `facts` の3つだけです。`Test.Texts`（`Text` の並び）、シンボルの種類 `SymbolRoutine`（`"routine"`）と `SymbolRelation`（`"relation"`）です。`Dialect`、`Grammar`、`Framework`、`Catalog`、`Definition` は `sql` パッケージの中の型で、外からは見えません
 - **`Text`。** テストのコードが持つ文字列です。ほかの言語のアダプタが埋めます。アダプタは SQL を知りません。文字列の値と、埋め込みの穴の位置と、どの呼び出しに渡したか（`Sink`）だけを渡します
   - `Holes` は、`${…}` や f 文字列の `{…}` のような埋め込みの位置です

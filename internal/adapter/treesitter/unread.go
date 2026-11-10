@@ -5,6 +5,7 @@ package treesitter
 import (
 	"io/fs"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -29,7 +30,8 @@ func (u unread) Name() string { return u.lang }
 func (u unread) Claims(p string) bool { return claims(u.lang, p) }
 
 // Analyze lists the files, marked unread.
-func (u unread) Analyze(v engine.Version, _ config.Config, paths []string) (*facts.Analysis, error) {
+func (u unread) Analyze(r *reuse.Run, _ config.Analysis, paths []string) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	a := &facts.Analysis{}
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)

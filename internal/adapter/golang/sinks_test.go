@@ -9,7 +9,7 @@ import (
 
 // sinkTexts lists the strings of a test file that were passed to a call that takes SQL, as
 // "<value> dynamic=<dynamic>".
-func sinkTexts(t *testing.T, c config.Config, test string) []string {
+func sinkTexts(t *testing.T, c config.Analysis, test string) []string {
 	t.Helper()
 	var out []string
 	for _, line := range textsOf(t, c, "package store\n\n// Store keeps rows.\ntype Store struct{}\n\n// Exec runs nothing.\nfunc (Store) Exec(q string) {}\n", test) {
@@ -63,7 +63,7 @@ func TestGoCallsThatTakeSQL(t *testing.T) {
 	for _, c := range cases {
 		test := "package store\n\nimport (\n\t\"testing\"\n\t" + c.imports + "\n)\n\nfunc build(s string) string { return s }\n\nfunc TestX(t *testing.T) {\n\t" +
 			strings.ReplaceAll(c.body, "; ", "\n\t") + "\n}\n"
-		got := sinkTexts(t, config.Config{}, test)
+		got := sinkTexts(t, config.Analysis{}, test)
 		if strings.Join(got, "|") != strings.Join(c.want, "|") {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
@@ -76,16 +76,16 @@ func TestGoCallsThatTakeSQL(t *testing.T) {
 func TestGoConfiguredSinksMatchByNameOrAsWritten(t *testing.T) {
 	test := "package store\n\nimport \"testing\"\n\ntype runner struct{}\n\nfunc (runner) Run(q string) {}\nfunc (runner) Do(q string) {}\n\n" +
 		"func TestX(t *testing.T) {\n\tvar r runner\n\tr.Run(\"SELECT 1\")\n\tr.Do(\"SELECT 2\")\n}\n"
-	got := sinkTexts(t, config.Config{SQLSinks: map[string][]string{"go": {"r.Run"}}}, test)
+	got := sinkTexts(t, config.Analysis{SQLSinks: map[string][]string{"go": {"r.Run"}}}, test)
 	if want := []string{`"SELECT 1" dynamic=false`}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("as written: got %q, want %q", got, want)
 	}
-	got = sinkTexts(t, config.Config{SQLSinks: map[string][]string{"go": {"Do"}}}, test)
+	got = sinkTexts(t, config.Analysis{SQLSinks: map[string][]string{"go": {"Do"}}}, test)
 	if want := []string{`"SELECT 2" dynamic=false`}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("by name: got %q, want %q", got, want)
 	}
 	fn := "package store\n\nimport \"testing\"\n\nfunc exec(q string) {}\n\nfunc TestX(t *testing.T) {\n\texec(\"SELECT 3\")\n}\n"
-	got = sinkTexts(t, config.Config{SQLSinks: map[string][]string{"go": {"exec"}}}, fn)
+	got = sinkTexts(t, config.Analysis{SQLSinks: map[string][]string{"go": {"exec"}}}, fn)
 	if want := []string{`"SELECT 3" dynamic=false`}; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("a function: got %q, want %q", got, want)
 	}

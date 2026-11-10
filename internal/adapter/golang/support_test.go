@@ -9,8 +9,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -97,7 +97,7 @@ func TestFresh(t *testing.T) {
 	}
 }
 
-func analyzeSupport(t *testing.T, c config.Config) *facts.Analysis {
+func analyzeSupport(t *testing.T, c config.Analysis) *facts.Analysis {
 	t.Helper()
 	tree := supportTree()
 	var paths []string
@@ -107,7 +107,7 @@ func analyzeSupport(t *testing.T, c config.Config) *facts.Analysis {
 		}
 	}
 	sort.Strings(paths)
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func analyzeSupport(t *testing.T, c config.Config) *facts.Analysis {
 // product code the helper calls, and the helper's sleep is the test's. A package whose name merely
 // ends in test, without a package of the rest of its name (latest, clocktest), stays product code.
 func TestGoTestSupportPackagesAreFollowedNotTargeted(t *testing.T) {
-	a := analyzeSupport(t, config.Config{})
+	a := analyzeSupport(t, config.Analysis{})
 	var got []string
 	for _, f := range a.Files {
 		got = append(got, fmt.Sprintf("file %s %s", f.Path, f.Role))
@@ -167,7 +167,7 @@ func TestGoTestSupportPackagesAreFollowedNotTargeted(t *testing.T) {
 // files.product keeps a package that would be test support as product code: its functions are
 // symbols again and tests target them. It never makes a _test.go file product code.
 func TestGoProductFilesAreNotTestSupport(t *testing.T) {
-	a := analyzeSupport(t, config.Config{ProductFiles: []string{"internal/testutil/**", "store/store_test.go"}})
+	a := analyzeSupport(t, config.Analysis{ProductFiles: []string{"internal/testutil/**", "store/store_test.go"}})
 	var got []string
 	for _, f := range a.Files {
 		if strings.HasPrefix(f.Path, "internal/testutil/") || f.Path == "store/store_test.go" {
@@ -277,10 +277,10 @@ func TestGoTestAndE2EDirectoriesAreTestSupport(t *testing.T) {
 	sort.Strings(paths)
 	for _, c := range []struct {
 		name string
-		cfg  config.Config
+		cfg  config.Analysis
 		want []string
 	}{
-		{"default", config.Config{}, []string{
+		{"default", config.Analysis{}, []string{
 			"file e2e/server/server.go test",
 			"file internal/rules/tests/tests.go source",
 			"file store/store.go source",
@@ -295,7 +295,7 @@ func TestGoTestAndE2EDirectoriesAreTestSupport(t *testing.T) {
 			"test TestHello calls=[]",
 			"test TestServe calls=[example.com/app/internal/rules/tests.Check]",
 		}},
-		{"files.product", config.Config{ProductFiles: []string{"e2e/server/**"}}, []string{
+		{"files.product", config.Analysis{ProductFiles: []string{"e2e/server/**"}}, []string{
 			"file e2e/server/server.go source",
 			"file internal/rules/tests/tests.go source",
 			"file store/store.go source",
@@ -313,7 +313,7 @@ func TestGoTestAndE2EDirectoriesAreTestSupport(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c.cfg, paths)
+			a, err := Adapter{}.Analyze(reuse.Lone(tree), c.cfg, paths)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -350,7 +350,7 @@ func TestHadomeRulesTestsPackageIsProduct(t *testing.T) {
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no files under internal/rules/tests: %v", err)
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: fsys}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(fsys), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +454,7 @@ func Now() int { return store.Open() }
 		}
 	}
 	sort.Strings(paths)
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

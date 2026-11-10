@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 )
 
 // callsByTest analyzes the tree and lists each test's calls and unresolved calls, sorted by test.
@@ -21,7 +21,7 @@ func callsByTest(t *testing.T, tree fstest.MapFS) string {
 		}
 	}
 	sort.Strings(paths)
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestField(t *testing.T) {
 }
 `)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go", "store/store_test.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"store/store.go", "store/store_test.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
