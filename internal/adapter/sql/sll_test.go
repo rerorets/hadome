@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -36,5 +37,45 @@ func TestStatementsWithParenthesesReadInSLL(t *testing.T) {
 		if _, _, err := g.run(tc.text, antlr.PredictionModeLL); err != nil {
 			t.Errorf("%s: %q does not read: %v", tc.dialect, tc.text, err)
 		}
+	}
+}
+
+// viewpoint: behaviour
+// target: sql.antlrGrammar.Parse
+// The trees of those statements are the ones the full prediction builds: a call in a select list is
+// a call, not a column, and an OR inside parentheses is its left side, OR, and its last operand, the
+// left side holding the ORs before.
+func TestStatementsReadInSLLKeepTheirTrees(t *testing.T) {
+	shape := func(n *Node) []string {
+		var out []string
+		for _, c := range n.Children {
+			out = append(out, c.Rule+c.Token)
+		}
+		return out
+	}
+	call, err := grammars["mysql"].Parse("SELECT NOW(6), s.f(1), a FROM a;", 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var elems [][]string
+	for _, e := range call.All(func(n *Node) bool { return n.Rule == "selectElement" }) {
+		elems = append(elems, shape(e))
+	}
+	if want := [][]string{{"functionCall"}, {"functionCall"}, {"fullColumnName"}}; !reflect.DeepEqual(elems, want) {
+		t.Errorf("select elements %v, want %v", elems, want)
+	}
+	or, err := grammars["bigquery"].Parse("SELECT (a OR b OR c)", 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := or.Find(func(n *Node) bool { return n.Rule == "expression_maybe_parenthesized_not_a_query" })
+	if got, want := shape(in), []string{"expression", "OR_SYMBOL", "expression"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("inside the parentheses %v, want %v", got, want)
+	}
+	if got, want := shape(in.Children[0]), []string{"expression", "OR_SYMBOL", "expression"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the left side %v, want %v", got, want)
+	}
+	if in.Children[0].Parent != in {
+		t.Errorf("the left side's parent is not the parentheses' content")
 	}
 }
