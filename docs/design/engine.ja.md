@@ -158,6 +158,7 @@ JSON のスキーマは独自のバージョン番号を持ち、フィールド
 
 - `hadome self-test` は製品固有の門番を含む全ルールの全事例を走らせます。事例の無いルールも失敗にします。
 - 組み込みのルールの事例は、hadome のテストでも走ります。
+- 解析器が `Reuser`（版をまたいで結果を使い回す解析器）なら、事例ごとに、再利用するときとしないときの2回チェックを走らせます。2つのレポートの JSON がバイト単位で違えば、その事例は失敗です（[analysis-reuse.ja.md](analysis-reuse.ja.md)）。
 - 門番は利用者のリポジトリにしか無いので、`hadome check` も、門番を使う前にその自己テストを1回走らせます。自己テストが落ちたら、門番の結果は使わずに、終了コード `2` で止まります。
 
 ## 製品固有の門番
@@ -208,6 +209,10 @@ classDiagram
   class PairAnalyzer {
     <<interface>>
     +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
+  }
+  class Reuser {
+    <<interface>>
+    +WithoutReuse() Analyzer
   }
   class Input {
     +Facts *facts.Analysis

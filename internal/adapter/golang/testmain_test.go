@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 )
 
 // viewpoint: behaviour
@@ -122,7 +122,7 @@ func TestMain(m *testing.M, extra int) { db.Migrate() }
 		}
 	}
 	sort.Strings(paths)
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

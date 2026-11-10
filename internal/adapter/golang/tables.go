@@ -18,7 +18,7 @@ type tables struct {
 	sinks map[string]bool
 }
 
-func newTables(c config.Config) *tables {
+func newTables(c config.Analysis) *tables {
 	t := &tables{
 		calls: map[string]facts.HazardCategory{
 			"time.Now": facts.HazardClock, "time.Since": facts.HazardClock, "time.Until": facts.HazardClock,

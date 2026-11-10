@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 )
 
 // viewpoint: behaviour
@@ -51,7 +51,7 @@ func TestUnreadReadersListFilesAsUnread(t *testing.T) {
 		"src/empty.py": {Data: []byte("")},
 	}
 	python := Languages()[1]
-	a, err := python.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"src/calc.py", "src/empty.py"})
+	a, err := python.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"src/calc.py", "src/empty.py"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestUnreadReadersListFilesAsUnread(t *testing.T) {
 	if len(a.Symbols)+len(a.Tests)+len(a.Imports) != 0 {
 		t.Errorf("want nothing read from unread files, got %+v", a)
 	}
-	if _, err := python.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"src/gone.py"}); err == nil {
+	if _, err := python.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"src/gone.py"}); err == nil {
 		t.Error("want an error for a file that cannot be read")
 	}
 }

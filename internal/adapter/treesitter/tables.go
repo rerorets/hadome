@@ -22,7 +22,7 @@ type tables struct {
 }
 
 // with returns a copy with the configuration's entries added. Configuration never removes any.
-func (t *tables) with(c config.Config) *tables {
+func (t *tables) with(c config.Analysis) *tables {
 	out := &tables{calls: map[string]facts.HazardCategory{}, mocks: append([]string{}, t.mocks...),
 		io: append(append([]string{}, t.io...), c.IO...), asserts: map[string]bool{}}
 	for _, e := range c.Assertions {

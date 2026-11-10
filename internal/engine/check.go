@@ -68,11 +68,16 @@ func (e *Engine) Check(src Source) (Report, error) {
 		}
 		rules = append(append([]Rule{}, rules...), more...)
 	}
-	base, err := e.side(bv, config.ForBase(baseCfg, headCfg), rules)
+	forBase := config.ForBase(baseCfg, headCfg)
+	ba, ha, err := e.analyze(bv, forBase, hv, headCfg)
 	if err != nil {
 		return Report{}, err
 	}
-	head, err := e.side(hv, headCfg, rules)
+	base, err := e.side(bv, ba, forBase, rules)
+	if err != nil {
+		return Report{}, err
+	}
+	head, err := e.side(hv, ha, headCfg, rules)
 	if err != nil {
 		return Report{}, err
 	}
@@ -139,11 +144,24 @@ func compareItems(r *Report, rules []Rule, base, head side) error {
 	return nil
 }
 
-func (e *Engine) side(v Version, c config.Config, rules []Rule) (side, error) {
-	a, err := e.Analyzer.Analyze(v, c)
-	if err != nil {
-		return side{}, fmt.Errorf("analysing %s: %w", v.Label, err)
+// analyze reads both versions: in one call when the analyzer is a PairAnalyzer, one version at a
+// time otherwise.
+func (e *Engine) analyze(bv Version, bc config.Config, hv Version, hc config.Config) (*facts.Analysis, *facts.Analysis, error) {
+	if pa, ok := e.Analyzer.(PairAnalyzer); ok {
+		return pa.AnalyzePair(bv, bc, hv, hc)
 	}
+	ba, err := e.Analyzer.Analyze(bv, bc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysing %s: %w", bv.Label, err)
+	}
+	ha, err := e.Analyzer.Analyze(hv, hc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysing %s: %w", hv.Label, err)
+	}
+	return ba, ha, nil
+}
+
+func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rule) (side, error) {
 	in := Input{Facts: a, Config: c, Version: v}
 	s := side{input: in, items: map[string][]Item{}}
 	known := map[string]bool{}

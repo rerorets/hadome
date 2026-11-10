@@ -8,9 +8,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	fswalk "github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -34,7 +34,7 @@ func analyzeWalked(t *testing.T, name string, tree fstest.MapFS) *facts.Analysis
 			paths = append(paths, p)
 		}
 	}
-	a, err := l.Analyze(engine.Version{Label: "head", FS: tree}, config.Config{}, paths)
+	a, err := l.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

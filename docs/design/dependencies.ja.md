@@ -12,6 +12,8 @@ flowchart TB
   cmd --> mutation["internal/mutation"]
   adapter --> golang["internal/adapter/golang"] & treesitter["internal/adapter/treesitter"] & terraform["internal/adapter/terraform"] & ansible["internal/adapter/ansible"] & sqladapter["internal/adapter/sql/..."]
   adapter & golang & treesitter & sqladapter --> walk["internal/adapter/walk"]
+  adapter & golang & treesitter & terraform & ansible & sqladapter --> reuse["internal/adapter/reuse"]
+  reuse --> walk & config
   adapter & golang & treesitter & terraform & ansible & sqladapter --> engine & config & facts["internal/facts"]
   engine --> config & facts & messages["internal/messages"]
   gate --> engine & config
@@ -30,3 +32,4 @@ flowchart TB
 - `notices` を使うのは、`THIRD_PARTY_NOTICES` を作って確かめるテストだけです。`notices` は hadome のものを何も import せず、ほかのユニットからも import されません。
 - `packaging/` は配布物です。Go のコードを何も import しません。`packaging/` のユニット（インストーラとプラグイン）は、図では1つの箱にまとめます。
 - `internal/adapter/sql/...` は SQL のアダプタと、その下の方言ごとの生成したパーサ（`grammar/`）です（[adapters-sql.ja.md](adapters-sql.ja.md)）。
+- `internal/adapter/reuse` は、アダプタの段の結果を、2つの版のあいだで使い回す仕組みです（[analysis-reuse.ja.md](analysis-reuse.ja.md)）。import するのは `config` と `walk` だけです。エンジンは `reuse` を知りません。

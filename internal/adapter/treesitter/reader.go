@@ -10,6 +10,7 @@ import (
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -57,8 +58,11 @@ type reader interface {
 
 // lang is one tree-sitter language as the analyzer sees it.
 type lang struct {
-	name   string
+	name string
+	// r reads grammars and repairs, which keep no state. fresh makes the reader one analysis uses:
+	// a reader learns about the version it indexes, and nothing of one version may stay for the next.
 	r      reader
+	fresh  func() reader
 	tables *tables // the built-in hazard and io tables
 	breaks *breaks // where hadome mutate breaks the language's code
 	// directive reports whether a comment is an instruction to a tool rather than prose.
@@ -72,36 +76,37 @@ func (l *lang) Name() string { return l.name }
 func (l *lang) Claims(p string) bool { return claims(l.name, p) }
 
 // Analyze reads the language's files of the version.
-func (l *lang) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
-	return l.analyze(v, c, paths, true)
+func (l *lang) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	return l.analyze(r, c, paths, true)
 }
 
 // AnalyzeWithoutTexts is Analyze leaving every test's strings (facts.Test.Texts) out, for a version
 // no other adapter reads them in.
-func (l *lang) AnalyzeWithoutTexts(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
-	return l.analyze(v, c, paths, false)
+func (l *lang) AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	return l.analyze(r, c, paths, false)
 }
 
-func (l *lang) analyze(v engine.Version, c config.Config, paths []string, texts bool) (*facts.Analysis, error) {
-	parser := sitter.NewParser()
-	defer parser.Close()
+func (l *lang) analyze(r *reuse.Run, c config.Analysis, paths []string, texts bool) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
+	rd := l.fresh()
 	var files []*file
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
 		if err != nil {
 			return nil, err
 		}
-		f, done, err := l.parse(parser, p, src)
+		// The session lets go of the file's trees when the language's analysis ends.
+		pr, err := parseStage.Do(r, parseInput{Lang: l.name, Path: p, Src: src})
 		if err != nil {
 			return nil, err
 		}
-		defer done()
+		f := pr.file(p)
 		gen := config.MatchesAny(c.GeneratedFiles, p)
 		f.testGlob, f.generatedGlob = !gen && config.MatchesAny(c.TestFiles, p), gen
 		f.productGlob = config.MatchesAny(c.ProductFiles, p)
 		files = append(files, f)
 	}
-	l.r.index(v, files)
+	rd.index(v, files)
 	t := l.tables.with(c)
 	t.lang, t.sqlSinks, t.texts = l.name, c.SQLSinks[l.name], texts
 	a := &facts.Analysis{}
@@ -119,17 +124,17 @@ func (l *lang) analyze(v engine.Version, c config.Config, paths []string, texts 
 			Lines: facts.CountLines(f.src), Unit: f.unit, UnitPath: f.unitPath})
 		a.Comments = append(a.Comments, cs...)
 		if !f.test {
-			a.Imports = append(a.Imports, l.r.imports(f, t)...)
+			a.Imports = append(a.Imports, rd.imports(f, t)...)
 		}
 		if role == facts.RoleSource {
-			a.Symbols = append(a.Symbols, l.r.symbols(f)...)
+			a.Symbols = append(a.Symbols, rd.symbols(f)...)
 		}
 	}
-	if tr, ok := l.r.(tracer); ok {
+	if tr, ok := rd.(tracer); ok {
 		tr.trace(files, t, a)
 	}
 	for _, f := range files {
-		a.Tests = append(a.Tests, l.r.tests(f, t)...)
+		a.Tests = append(a.Tests, rd.tests(f, t)...)
 	}
 	return a, nil
 }
@@ -144,32 +149,11 @@ type repairer interface {
 // parse parses one file with the grammar its path calls for. done frees the file's trees, after
 // which its nodes must not be used.
 func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (f *file, done func(), err error) {
-	if err := parser.SetLanguage(l.r.grammar(p)); err != nil {
+	pr, err := parseWith(l.r, parser, p, src)
+	if err != nil {
 		return nil, nil, err
 	}
-	tree := parser.Parse(src, nil)
-	trees := []*sitter.Tree{tree}
-	done = func() {
-		for _, t := range trees {
-			t.Close()
-		}
-	}
-	f = &file{path: p, src: src}
-	if r, ok := l.r.(repairer); ok {
-		read := src
-		for range 4 { // a repair may uncover another misreading further on
-			fixed, lifted := r.repair(read, tree.RootNode())
-			if fixed == nil {
-				break
-			}
-			f.lifted = append(f.lifted, lifted...)
-			read = fixed
-			tree = parser.Parse(read, nil)
-			trees = append(trees, tree)
-		}
-	}
-	f.root = tree.RootNode()
-	return f, done, nil
+	return pr.file(p), pr.Release, nil
 }
 
 var generatedMark = regexp.MustCompile(`(?i)(@generated|code generated .* do not edit|auto-generated)`)

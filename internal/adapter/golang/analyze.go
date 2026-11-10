@@ -14,6 +14,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
@@ -57,17 +58,19 @@ func (Adapter) Claims(p string) bool {
 
 // Analyze reads the Go files of the version. Files that do not parse are listed but yield no other
 // facts: a broken file is the compiler's business, not a reason to stop checking everything else.
-func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+func (Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	return analyze(v, c, paths, true)
 }
 
 // AnalyzeWithoutTexts is Analyze leaving every test's strings (facts.Test.Texts) out, for a version
 // no other adapter reads them in.
-func (Adapter) AnalyzeWithoutTexts(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+func (Adapter) AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	return analyze(v, c, paths, false)
 }
 
-func analyze(v engine.Version, c config.Config, paths []string, texts bool) (*facts.Analysis, error) {
+func analyze(v engine.Version, c config.Analysis, paths []string, texts bool) (*facts.Analysis, error) {
 	modules, err := findModules(v.FS)
 	if err != nil {
 		return nil, err

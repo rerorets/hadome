@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -52,6 +53,9 @@ func runCase(e *Engine, c Case) string {
 	if err != nil {
 		return "check failed: " + err.Error()
 	}
+	if msg := sameWithoutReuse(e, c, r); msg != "" {
+		return msg
+	}
 	gotFail, gotReview := ids(r.Regressions), ids(r.Reviews)
 	for _, m := range r.NewExceptions {
 		gotReview = append(gotReview, "exception:"+m.Rule)
@@ -60,6 +64,32 @@ func runCase(e *Engine, c Case) string {
 	want, wantReview := sorted(c.WantFail), sorted(c.WantReview)
 	if strings.Join(gotFail, ",") != strings.Join(want, ",") || strings.Join(gotReview, ",") != strings.Join(wantReview, ",") {
 		return fmt.Sprintf("want fail %v review %v, got fail %v review %v", want, wantReview, gotFail, gotReview)
+	}
+	return ""
+}
+
+// sameWithoutReuse runs the case again with the analyzer that reuses nothing between versions,
+// when the engine's analyzer reuses, and reports how the two reports differ.
+func sameWithoutReuse(e *Engine, c Case, r Report) string {
+	ru, ok := e.Analyzer.(Reuser)
+	if !ok {
+		return ""
+	}
+	plain := *e
+	plain.Analyzer = ru.WithoutReuse()
+	without, err := plain.Check(mapSource{base: c.Base, head: c.Head})
+	if err != nil {
+		return "check without reuse failed: " + err.Error()
+	}
+	var a, b bytes.Buffer
+	if err := WriteJSON(&a, r, "en"); err != nil {
+		return err.Error()
+	}
+	if err := WriteJSON(&b, without, "en"); err != nil {
+		return err.Error()
+	}
+	if !bytes.Equal(a.Bytes(), b.Bytes()) {
+		return fmt.Sprintf("reuse changed the report:\n with reuse: %s\n without:    %s", a.String(), b.String())
 	}
 	return ""
 }

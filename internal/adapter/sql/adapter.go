@@ -6,14 +6,12 @@ package sql
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"fmt"
 	"io/fs"
 	"path"
 	"regexp"
 	"strings"
-	"sync"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
@@ -21,16 +19,10 @@ import (
 )
 
 // Adapter reads .sql files, and after every language has been read, the SQL strings of tests.
-type Adapter struct {
-	// cache keeps the catalog Analyze built, for Link to use on the same files. It is keyed by
-	// everything build reads (see fingerprint), so a catalog is never used for files it was not
-	// built from, or that were read another way.
-	mu    sync.Mutex
-	cache map[[32]byte]*catalog
-}
+type Adapter struct{}
 
 // New returns the SQL adapter.
-func New() *Adapter { return &Adapter{cache: map[[32]byte]*catalog{}} }
+func New() *Adapter { return &Adapter{} }
 
 // Name is the adapter's name. SQL is not in config.Languages: it is read whenever .sql files are
 // there, whichever languages are configured.
@@ -45,7 +37,7 @@ var (
 )
 
 // role decides what a .sql file is for, by its path and the files around it.
-func role(fsys fs.FS, c config.Config, p string) facts.Role {
+func role(fsys fs.FS, c config.Analysis, p string) facts.Role {
 	switch {
 	case undoFile.MatchString(p), sqitchDir.MatchString(p) && ancestorHas(fsys, p, "sqitch.plan"),
 		ancestorHas(fsys, p, "dbt_project.yml"):
@@ -72,14 +64,38 @@ func ancestorHas(fsys fs.FS, p, name string) bool {
 
 // Analyze reads the .sql files of a version: the objects that remain at head become symbols, and
 // tests written in SQL become tests.
-func (a *Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
-	cat, files, err := build(v, c, paths)
+func (a *Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	b, err := buildStage.Do(r, buildInput{Paths: paths, Config: c})
 	if err != nil {
 		return nil, err
 	}
-	a.mu.Lock()
-	a.cache[fingerprint(c, files)] = cat
-	a.mu.Unlock()
+	return b.facts.Clone(), nil
+}
+
+// buildInput is the .sql files of a version, in the order they were claimed, and the configuration
+// they are read with.
+type buildInput struct {
+	Paths  []string
+	Config config.Analysis
+}
+
+// built is what reading a version's .sql files gives: the catalog Link resolves strings against,
+// and the facts Analyze reports. The catalog keeps only the databases' objects, not the files: no
+// text, definition or tree stays while the other languages are read and linked.
+type built struct {
+	cat   *catalog
+	facts *facts.Analysis
+}
+
+// buildStage reads a version's .sql files once for Analyze and Link, and for head too when every
+// file, every file around them that decides a role, and the configuration are the same.
+var buildStage = reuse.NewReading("sql/build", reuse.ScopePair, buildVersion)
+
+func buildVersion(rd reuse.Reads, in buildInput) (*built, error) {
+	cat, files, err := build(engine.Version{FS: rd.FS()}, in.Config, in.Paths)
+	if err != nil {
+		return nil, err
+	}
 	out := &facts.Analysis{}
 	for _, f := range files {
 		ff := facts.File{Path: f.path, Language: "sql", Role: f.role, Lines: facts.CountLines(f.src), Unread: f.unread}
@@ -105,12 +121,12 @@ func (a *Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*f
 		}
 		f.trees = nil
 	}
-	return out, nil
+	return &built{cat: cat, facts: out}, nil
 }
 
 // build reads the files into databases and applies their definitions. The databases it returns
 // keep only their objects, not the files: the catalog outlives the files' text and trees.
-func build(v engine.Version, c config.Config, paths []string) (*catalog, []*sqlFile, error) {
+func build(v engine.Version, c config.Analysis, paths []string) (*catalog, []*sqlFile, error) {
 	cat := &catalog{databases: newDatabases(c)}
 	var files []*sqlFile
 	for _, p := range paths {
@@ -156,25 +172,6 @@ func withoutBOM(src []byte) []byte {
 
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
-// fingerprint identifies a set of files by what build reads of them: their paths, roles and
-// contents, with the configured databases. A role comes from configuration and from the files
-// around the file, so two versions with the same .sql files may read them differently.
-func fingerprint(c config.Config, files []*sqlFile) [32]byte {
-	h := sha256.New()
-	fmt.Fprintf(h, "%q\x00", c.Databases)
-	for _, f := range files {
-		h.Write([]byte(f.path))
-		h.Write([]byte{0})
-		h.Write([]byte(f.role))
-		h.Write([]byte{0})
-		h.Write(f.src)
-		h.Write([]byte{0})
-	}
-	var out [32]byte
-	copy(out[:], h.Sum(nil))
-	return out
-}
-
 // directive matches the comments that are instructions to a tool, not prose.
 var directive = regexp.MustCompile(`^\s*(noqa\b|sqlfluff:|migrate:|\+goose\b|changeset\b|rollback\b|name:|%)`)
 
@@ -195,7 +192,7 @@ func comments(f *sqlFile) []facts.Comment {
 // Link reads the strings of every test, handed over by the other languages, as SQL resolved against
 // the version's databases. Without a database (no .sql file and no configured database) it reads
 // nothing: there is no dialect and nothing to resolve against.
-func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) error {
+func (a *Adapter) Link(r *reuse.Run, c config.Analysis, an *facts.Analysis) error {
 	var paths []string
 	for _, f := range an.Files {
 		if f.Language == "sql" {
@@ -205,10 +202,11 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 	if !a.ReadsTexts(c, paths) {
 		return nil
 	}
-	cat, err := a.catalogFor(v, c, paths)
+	b, err := buildStage.Do(r, buildInput{Paths: paths, Config: c})
 	if err != nil {
 		return err
 	}
+	cat := b.cat
 	for i := range an.Tests {
 		t := &an.Tests[i]
 		if len(t.Texts) == 0 || strings.EqualFold(path.Ext(t.Path), ".sql") {
@@ -221,27 +219,6 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 
 // ReadsTexts reports whether Link reads the tests' strings: only when the version has a database,
 // a .sql file or a configured one.
-func (*Adapter) ReadsTexts(c config.Config, paths []string) bool {
+func (*Adapter) ReadsTexts(c config.Analysis, paths []string) bool {
 	return len(paths) > 0 || len(c.Databases) > 0
-}
-
-func (a *Adapter) catalogFor(v engine.Version, c config.Config, paths []string) (*catalog, error) {
-	var files []*sqlFile
-	for _, p := range paths {
-		src, err := fs.ReadFile(v.FS, p)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, &sqlFile{path: p, src: withoutBOM(src), role: role(v.FS, c, p)})
-	}
-	key := fingerprint(c, files)
-	a.mu.Lock()
-	cat, ok := a.cache[key]
-	delete(a.cache, key)
-	a.mu.Unlock()
-	if ok {
-		return cat, nil
-	}
-	cat, _, err := build(v, c, paths)
-	return cat, err
 }

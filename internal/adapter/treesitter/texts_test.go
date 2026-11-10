@@ -15,7 +15,7 @@ import (
 // texts renders the strings each test hands over, one line per string: the test, where the string
 // is, its value, its holes, sql when it was passed to a call that takes SQL, dynamic when what was
 // passed there is not a string, and how many times it is used.
-func texts(t *testing.T, name string, tr fstest.MapFS, c config.Config) string {
+func texts(t *testing.T, name string, tr fstest.MapFS, c config.Analysis) string {
 	t.Helper()
 	var out []string
 	for _, ts := range analyzeWith(t, name, tr, c).Tests {
@@ -72,7 +72,7 @@ describe('store', () => {
     expect(label).toBe('x');
   });
 });
-`), config.Config{})
+`), config.Analysis{})
 	want := `store reads src/store.test.ts:12 "TRUNCATE accounts" x1
 store reads src/store.test.ts:17 "SELECT 1" sql x1
 store reads src/store.test.ts:20 "" sql dynamic x1
@@ -90,7 +90,7 @@ store reads src/store.test.ts:7 "INSERT INTO accounts VALUES (1)" sql x1`
 // A call configuration names as taking SQL marks the strings passed to it, by its last name or
 // by the callee as written, and a value that is not a string passed to it is dynamic.
 func TestTextsConfiguredSinks(t *testing.T) {
-	c := config.Config{SQLSinks: map[string][]string{"typescript": {"runSql", "repo.raw"}}}
+	c := config.Analysis{SQLSinks: map[string][]string{"typescript": {"runSql", "repo.raw"}}}
 	got := texts(t, "typescript", tree("src/a.test.ts", `it('runs', () => {
   helpers.runSql("SELECT 1");
   repo.raw(text);
@@ -105,7 +105,7 @@ runs src/a.test.ts:4 "SELECT 2" sql x1`
   helpers.runSql("SELECT 1");
   repo.raw(text);
 });
-`), config.Config{})
+`), config.Analysis{})
 	expect(t, got, `runs src/a.test.ts:2 "SELECT 1" x1`)
 }
 
@@ -114,7 +114,7 @@ runs src/a.test.ts:4 "SELECT 2" sql x1`
 // A call that takes SQL given another call that takes SQL, db.query(sql`…`), hands over the inner
 // string only: the outer call's argument is not a value hadome cannot read.
 func TestTextsNestedSinks(t *testing.T) {
-	got := texts(t, "typescript", tree("src/a.test.ts", "it('runs', async () => {\n  await pool.query(sql`SELECT 1`);\n});\n"), config.Config{})
+	got := texts(t, "typescript", tree("src/a.test.ts", "it('runs', async () => {\n  await pool.query(sql`SELECT 1`);\n});\n"), config.Analysis{})
 	expect(t, got, `runs src/a.test.ts:2 "SELECT 1" sql x1`)
 }
 
@@ -135,7 +135,7 @@ export async function seed(pool) {
 it('seeds', async () => {
   await seed(pool);
 });
-`), config.Config{})
+`), config.Analysis{})
 	expect(t, got, `seeds test/helpers.ts:1 "INSERT INTO accounts VALUES (1)" sql x1`)
 }
 
@@ -164,7 +164,7 @@ def test_reads(cur):
     raw = r"a\nb" + name
     for i in range(3):
         print("loop")
-`), config.Config{})
+`), config.Analysis{})
 	want := `test_reads tests/test_store.py:1 "SELECT billing.is_active(1) AS ok" sql x1
 test_reads tests/test_store.py:13 "SELECT * FROM t WHERE id = " holes=[27] sql x1
 test_reads tests/test_store.py:14 "SELECT 2" sql x1
@@ -191,7 +191,7 @@ def test_loops(cur):
         pass
     for row in ROWS:
         pass
-`), config.Config{})
+`), config.Analysis{})
 	want := `test_loops tests/test_store.py:2 "abc" x2`
 	expect(t, got, want)
 }
@@ -206,7 +206,7 @@ func TestTypeScriptTextsOfAnExpressionBody(t *testing.T) {
 
 it('reads', () => QUERY)
 it('joins', () => "SELECT " + "2")
-`), config.Config{})
+`), config.Analysis{})
 	want := `joins src/store.test.ts:4 "SELECT 2" x1
 reads src/store.test.ts:1 "SELECT 1" x1`
 	expect(t, got, want)
@@ -229,7 +229,7 @@ fn reads() {
     sqlx::query(SQL);
     sqlx::query(&format!("SELECT {}", t));
 }
-`), config.Config{})
+`), config.Analysis{})
 	want := `reads tests/store.rs:1 "SELECT \"x\"" sql x1
 reads tests/store.rs:5 "SELECT 1" sql x1
 reads tests/store.rs:7 "SELECT billing.is_active($1)" sql x1
@@ -265,7 +265,7 @@ class StoreTest {
     jdbc.query("SELECT 2", mapper);
   }
 }
-`), config.Config{})
+`), config.Analysis{})
 	want := `StoreTest.reads src/test/java/com/acme/StoreTest.java:13 "\n        SELECT 1\n        " x1
 StoreTest.reads src/test/java/com/acme/StoreTest.java:16 "SELECT * FROM t WHERE id = " holes=[27] sql x1
 StoreTest.reads src/test/java/com/acme/StoreTest.java:17 "" sql dynamic x1
@@ -299,7 +299,7 @@ class StoreTest {
     repeat(2) { println("x") }
   }
 }
-`), config.Config{})
+`), config.Analysis{})
 	want := `StoreTest.reads src/test/kotlin/com/acme/StoreTest.kt:13 "SELECT * FROM t WHERE id = " holes=[27] sql x1
 StoreTest.reads src/test/kotlin/com/acme/StoreTest.kt:15 "SELECT  FROM t" holes=[7] sql x1
 StoreTest.reads src/test/kotlin/com/acme/StoreTest.kt:16 "" sql dynamic x1

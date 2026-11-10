@@ -35,6 +35,20 @@ type Analyzer interface {
 	Analyze(v Version, c config.Config) (*facts.Analysis, error)
 }
 
+// PairAnalyzer is an analyzer that reads both versions in one call, so that it can use in head
+// what it computed for base whenever head's input is the same. The facts are those Analyze would
+// give each version. Its errors name the version they come from.
+type PairAnalyzer interface {
+	Analyzer
+	AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
+}
+
+// Reuser is an analyzer that reuses results between versions, and can give the analyzer that
+// never does, which must give the same facts. The self-test runs every case with both.
+type Reuser interface {
+	WithoutReuse() Analyzer
+}
+
 // Input is what a rule sees of one version: the adapters' facts and that version's configuration.
 type Input struct {
 	Facts  *facts.Analysis

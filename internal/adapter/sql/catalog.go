@@ -67,7 +67,7 @@ type catalog struct {
 var defaultSchemas = map[string]string{"postgresql": "public", "sqlite": "main", "tsql": "dbo", "snowflake": "PUBLIC"}
 
 // newDatabases returns the configured databases, or one database holding every file.
-func newDatabases(c config.Config) []*database {
+func newDatabases(c config.Analysis) []*database {
 	if len(c.Databases) == 0 {
 		return []*database{{unit: ".sql", objects: map[string]*object{}}}
 	}

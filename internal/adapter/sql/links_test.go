@@ -11,13 +11,13 @@ import (
 )
 
 // linkAt links one test at path, holding texts, against the version's files.
-func linkAt(t *testing.T, c config.Config, path string, texts []facts.Text, files ...string) facts.Test {
+func linkAt(t *testing.T, c config.Analysis, path string, texts []facts.Text, files ...string) facts.Test {
 	t.Helper()
 	a := sql.New()
 	v := version(files...)
 	an := analyze(t, a, v, c)
 	an.Tests = append(an.Tests, facts.Test{Name: "TestX", Path: path, Line: 1, Texts: texts})
-	if err := a.Link(v, c, an); err != nil {
+	if err := a.Link(run(v), c, an); err != nil {
 		t.Fatal(err)
 	}
 	return an.Tests[len(an.Tests)-1]
@@ -37,7 +37,7 @@ func TestHowNamesInTestsResolve(t *testing.T) {
 	withCatalog.Databases[0].Catalog = "main"
 	cases := []struct {
 		name              string
-		c                 config.Config
+		c                 config.Analysis
 		files             []string
 		text              string
 		reads, unresolved int
@@ -93,15 +93,15 @@ func TestScopesPassedToRoutines(t *testing.T) {
 func TestTestsUseTheirDatabases(t *testing.T) {
 	create := "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"
 	files := []string{"db/main/a.sql", create, "db/other/a.sql", create}
-	scoped := config.Config{Databases: []config.Database{
+	scoped := config.Analysis{Databases: []config.Database{
 		{Name: "main", Dialect: "postgresql", Paths: []string{"db/main/**"}, Tests: []string{"app/**"}},
 		{Name: "other", Dialect: "postgresql", Paths: []string{"db/other/**"}}}}
-	unscoped := config.Config{Databases: []config.Database{
+	unscoped := config.Analysis{Databases: []config.Database{
 		{Name: "main", Dialect: "postgresql", Paths: []string{"db/main/**"}},
 		{Name: "other", Dialect: "postgresql", Paths: []string{"db/other/**"}}}}
 	cases := []struct {
 		name, path string
-		c          config.Config
+		c          config.Analysis
 		want       []string
 		unresolved int
 	}{
@@ -128,7 +128,7 @@ func TestSQLCallsMergeWithTheLanguagesCalls(t *testing.T) {
 	an := analyze(t, a, v, postgres())
 	an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1,
 		Calls: []facts.Call{{Target: ".sql/public.f", Times: 1}}, Texts: []facts.Text{text("SELECT f()")}}}
-	if err := a.Link(v, postgres(), an); err != nil {
+	if err := a.Link(run(v), postgres(), an); err != nil {
 		t.Fatal(err)
 	}
 	if c := an.Tests[0].Calls; len(c) != 1 || c[0].Times != 2 {

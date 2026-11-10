@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -77,7 +77,7 @@ func TestFollowed(t *testing.T) {
 `)},
 	}
 	paths := []string{"app/app_test.go", "store/store.go", "store/storetest/storetest.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +123,8 @@ func TestGoMockingLibrariesAreHazards(t *testing.T) {
 			"store/store_test.go": {Data: []byte("package store\n\nimport (\n\t\"testing\"\n\n\tm \"" + lib + "\"\n)\n\n" +
 				"func TestSeed(t *testing.T) {\n\tm.NewController(t)\n\tSeed()\n}\n")},
 		}
-		c := config.Config{Hazards: map[string][]string{"mock": {"example.com/app/fakes"}}}
-		a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, []string{"store/store.go", "store/store_test.go"})
+		c := config.Analysis{Hazards: map[string][]string{"mock": {"example.com/app/fakes"}}}
+		a, err := Adapter{}.Analyze(reuse.Lone(tree), c, []string{"store/store.go", "store/store_test.go"})
 		if err != nil {
 			t.Fatal(err)
 		}

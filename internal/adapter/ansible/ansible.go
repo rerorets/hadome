@@ -17,6 +17,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/goccy/go-yaml/token"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -39,7 +40,7 @@ func (Adapter) Claims(p string) bool {
 
 // ClaimsConfigured reports whether the file is in Ansible's layout or is a playbook files.ansible
 // names.
-func (a Adapter) ClaimsConfigured(c config.Config, p string) bool {
+func (a Adapter) ClaimsConfigured(c config.Analysis, p string) bool {
 	return a.Claims(p) || config.MatchesAny(c.AnsibleFiles, p)
 }
 
@@ -95,7 +96,8 @@ func locate(p string) (place, bool) {
 // Analyze reads the Ansible files of the version. A file that is not YAML is listed as unread and
 // yields nothing else, as in the Go adapter. Files matching files.tests are not made tests: Molecule's
 // layout decides what a test is.
-func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+func (Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	a := &facts.Analysis{}
 	tree := tree{roles: map[string]bool{}, specs: map[string]map[string]bool{}, converges: map[string]parsed{}}
 	for _, p := range paths {
@@ -171,7 +173,7 @@ type parsed struct {
 }
 
 // parse reads one file. It reports false, with the file listed as unread, when it is not YAML.
-func parse(p string, src []byte, c config.Config) (parsed, bool) {
+func parse(p string, src []byte, c config.Analysis) (parsed, bool) {
 	pl, ok := locate(p)
 	if !ok { // claimed through files.ansible
 		pl = place{kind: playbook, dir: path.Dir(p)}

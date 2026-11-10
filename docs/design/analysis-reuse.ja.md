@@ -46,7 +46,7 @@
 | 種類 | 見られるもの | 入力が同じだと確かめる方法 | 例 |
 |---|---|---|---|
 | **純粋な段** | 渡された引数だけ | 段の名前と引数の全体から作った鍵が同じ | 1つのファイルを構文木にする。1つのファイルのコメントを取り出す |
-| **読む段** | 引数と、`Reads` を通して読んだ版とほかの段の結果 | 記録したすべての読み取りが、head でも同じ答えを返す | TypeScript の import を解決する表を作る。SQL のカタログを作る。テストのヘルパーをファイルをまたいでたどる |
+| **読む段** | 引数と、`Reads` を通して読んだ版とほかの段の結果 | 記録したすべての読み取りが、head でも同じ答えを返す | 1つの言語の、版の事実のすべてを求める。SQL のカタログを作る |
 
 段に分けていない仕事は版ごとに毎回走ります。毎回走る仕事が、事実を変えることはありません。そのため、アダプタは段を1つずつ増やせます。
 
@@ -67,22 +67,23 @@
 - 読む段の関数は引数と `Reads` を受け取ります。版を読むのは `Reads` を通してだけです
 - 引数の決まりと鍵の作り方は純粋な段と同じです
 - `Reads` は読み取りの一つひとつを、問いと答えの組で記録します
-- head で同じ段を同じ引数で呼ぶと、セッションは記録した問いを head に順に問い直します
+- head で同じ段を同じ引数で呼ぶと、セッションは記録した問いを head に問い直します
   - 答えがすべて同じなら、覚えた結果を返します
   - 1つでも違えば、段を head で走らせ直します
 
 | 読み取り | 問い | 記録する答え | 例 |
 |---|---|---|---|
-| `File(path)` | ファイルの中身 | 中身のハッシュ。無ければ「無い」 | `tsconfig.json`、ヘルパーのファイル |
-| `Exists(path)` | ファイルがあるか | ある、または無い | 上のディレクトリの `dbt_project.yml` |
-| `Claimed(lang)` | 言語が受け持つファイルの一覧 | 並べた一覧のハッシュ | すべての `.sql` のファイル |
-| `Match(glob)` | パターンに合うファイルの一覧 | 並べた一覧のハッシュ | すべての `go.mod` |
+| `FS()` でファイルを読む | ファイルの中身 | 中身のハッシュ。無ければ「無い」 | `tsconfig.json`、ヘルパーのファイル |
+| `FS()` でファイルの情報を見る | ファイルがあるか | ディレクトリか、ファイルとその大きさか、無いか | 上のディレクトリの `dbt_project.yml` |
+| `FS()` でディレクトリを並べる | ディレクトリの中身 | 名前と種類を並べた一覧のハッシュ | `go.mod` を探してたどるディレクトリ |
 | `Config()` | アダプタが読める設定（`config.Analysis`） | 設定のハッシュ | `files.generated`、`sql.databases` |
-| `stage.In(reads, arg)` | ほかの段の結果 | その結果の指紋 | 各ファイルの宣言の要約 |
+| `Run()` を渡して呼んだ読む段 | ほかの段の結果 | その結果の指紋 | 各ファイルの宣言の要約 |
 
+- `FS()` は版を `fs.FS` として見せます。言語のコードはふだんのファイルシステムと同じに読めます。開く、読む、情報を見る、並べるは、どれも記録されます
 - 「無い」も答えとして記録します。base で無かったファイルが head で現れると、結果が変わりうるからです
-- 一覧は粗い読み取りです。一覧を読んだ段はファイルが1つ増えても減っても走り直します。粗く読むほど再利用は減りますが、事実は変わりません
+- ディレクトリを並べるのは粗い読み取りです。並べた段はそのディレクトリにファイルが1つ増えても減っても走り直します。粗く読むほど再利用は減りますが、事実は変わりません
 - 問い直しで読むほかの段の結果は head で先にその段を呼んで得ます。その段も、覚えた結果が使えるかを同じように確かめます
+- 記録しない情報があります。ファイルの更新時刻です。版を読む場所が違えば変わり、どのアダプタも読まないからです
 
 ### 結果の指紋
 
@@ -95,9 +96,8 @@
 
 値だけからなる結果は入力が変わっても結果が同じなら、同じ指紋になります。そのため、それを読んだ段は走り直さずに済みます。
 
-- 例: 関数の本体の1行を変えても、そのファイルの宣言の要約は変わりません
-- 要約だけを読む索引の段は head でも同じ指紋の要約を読みます。そのため、索引を作り直しません
-- 索引を読むテストの段も、索引の指紋が同じなので、ほかの読み取りが同じなら走り直しません
+- 例: ファイルの宣言の要約を、値だけからなる型で返す段を考えます。関数の本体を1行変えても、要約は変わりません
+- その要約だけを読む段は head でも同じ指紋の要約を読みます。そのため、走り直しません
 
 ## 鍵
 
@@ -179,7 +179,7 @@ sequenceDiagram
 base で求めた結果のうち、覚えておくのは head で当たりうるものだけです。
 
 - セッションは解析を始める前に、head の全ファイルの中身のハッシュを1回求めます
-- base の結果を覚えるのは、それを求めるのに使ったファイルの中身のハッシュが、すべて head にあるときだけです。使った中身とは引数のバイト列と、`File` の答えです
+- base の結果を覚えるのは、それを求めるのに使ったファイルの中身のハッシュが、すべて head にあるときだけです。使った中身とは、引数のバイト列と、`FS()` で読んだファイルの答えです
 - 覚えなかった結果はその言語の base の解析が終わったら手放します
 
 覚えた構文木は head で作り直さずに使います。そのため、1つの言語を解析している間に持つ構文木は、どの時点でもおおよそ1つの版の分です。ほとんどのファイルを変える変更でも、base の構文木と head の構文木を両方抱えることはありません。
@@ -211,58 +211,65 @@ base で求めた結果のうち、覚えておくのは head で当たりうる
 段はパッケージの変数として宣言します。段の関数はパッケージの最上位の関数にします。版を閉じ込めた関数リテラルにすると、`Reads` を通らない読み取りが生まれるからです。
 
 ```go
-var parseStage = reuse.NewPure("kotlin/parse", reuse.ScopeLanguage, parse)
+var parseStage = reuse.NewPure("treesitter/parse", reuse.ScopeLanguage, parseFile)
 
 type parseInput struct {
+	Lang string
 	Path string
 	Src  []byte
 }
 
-func parse(in parseInput) (*tree, error) { ... }
+func parseFile(in parseInput) (*parsed, error) { ... }
 
-var catalogStage = reuse.NewReading("sql/catalog", reuse.ScopePair, buildCatalog)
+var buildStage = reuse.NewReading("sql/build", reuse.ScopePair, buildVersion)
 
-func buildCatalog(r reuse.Reads, _ struct{}) (*catalog, error) { ... }
+func buildVersion(rd reuse.Reads, in buildInput) (*built, error) { ... }
 ```
 
-- 段の名前は `<アダプタ>/<段>` の形にします。名前は hadome の中で一意にします。同じ名前を2回登録すると、hadome は起動したところで止まります
+- 段の名前は `<パッケージ>/<段>` の形にします。名前は hadome の中で一意にします。同じ名前を2回登録すると、hadome は起動したところで止まります
 - 言語の `Analyze` と `Link` は段を `stage.Do(run, arg)` で呼びます
-- 読む段の中からほかの段を呼ぶときは、`stage.In(reads, arg)` を使います。呼んだことが読み取りとして記録されます
+- 読む段の中では、`Reads.Run()` が返す run で、ほかの段を呼びます。読む段をこの run で呼ぶと、呼んだことが読み取りとして記録されます。純粋な段は引数が結果のすべてを決めるので、記録しません
 
-### 各アダプタの段
+### hadome の段
 
 段の境目はその仕事が何を見て決まるかで決めます。
 
 - ファイルの中身とパスと設定だけで決まる仕事は、純粋な段にします
 - ほかのファイルを見る仕事は読む段にします
 
-| アダプタ | 純粋な段 | 読む段 |
-|---|---|---|
-| Go | ファイルの構文木、コメント、行数、生成物の印 | モジュールの一覧（`go.mod`）、テストの補助の判定、呼び出しの索引、テストの抽出 |
-| TypeScript、Python、Rust、Java、Kotlin | ファイルの構文木（文法の誤読を直した読み直しを含む）、コメント、行数 | 索引（TypeScript のプロジェクトの設定、Python と Rust のモジュール）、ファイルをまたぐたどり、テストの抽出 |
-| Terraform、Ansible | ファイルの構文と、そこから取り出す事実 | モジュールの `required_providers`（Terraform）、ロールの一覧（Ansible） |
-| SQL | 方言を決めた後の、ファイルの文の読み取り | 方言の決定、カタログ、テストの文字列の解決（`Link`） |
+| 段 | 種類 | 引数 | 範囲 | 何をするか |
+|---|---|---|---|---|
+| `adapter/language` | 読む段 | 言語、受け持ったファイルの一覧、テストの文字列を集めるか | `ScopeLanguage` | 1つの言語の、版の事実のすべてを求めます |
+| `treesitter/parse` | 純粋な段 | 言語、パス、中身 | `ScopeLanguage` | 1つのファイルを構文木にします。文法の誤読を直した読み直しを含みます |
+| `sql/build` | 読む段 | `.sql` のファイルの一覧、設定 | `ScopePair` | `.sql` のファイルを読み、カタログと事実を作ります |
 
-- Go の構文木はそのファイルだけの `token.FileSet` と一緒に持ちます。版で共有する `token.FileSet` に入れると、位置が解析の順に左右され、ほかの版で読めなくなるからです
-- テストの抽出はテストのファイルごとの読む段にします。読み取りはそのファイルの中身、索引の指紋、たどったヘルパーのファイルの結果です。変更が触れないテストのファイルは、たどった先も変わらなければ、head で走り直しません
+- `adapter/language` は、言語のコードを `Reads.Run()` の run で動かします。そのため、言語が読んだものはすべて記録されます。言語のファイルも、そのほかに読むファイル（`go.mod`、`tsconfig.json` など）も同じです
+- head で `adapter/language` が当たらないとき、言語はもう一度読みます。そのとき `treesitter/parse` は、中身の同じファイルの構文木を base から受け取ります
+- 段を足すときも、同じ決め方で境目を決めます。例: Go の構文木を純粋な段にするなら、そのファイルだけの `token.FileSet` と一緒に持ちます。版で共有する `token.FileSet` に入れると、位置が解析の順に左右され、ほかの版で読めなくなるからです
+
+### テストの文字列を集めるか
+
+`adapter/language` の引数には、テストの文字列（`facts.Test.Texts`）を集めるかを入れます。
+
+- `linker` が文字列を読むかどうかは、版ごとに決まります（`ReadsTexts`）。例: head で初めて `.sql` のファイルが足されると、head だけが文字列を読みます
+- 文字列を集めて読んだ事実と、集めずに読んだ事実は違います
+- そのため、集めるかどうかで鍵を分けます。片方で求めた結果が、もう片方に返ることはありません
 
 ## SQL のカタログ
 
-カタログは読む段 `sql/catalog` で作ります。引数はありません。カタログはすべてのデータベースを1つに持つからです。カタログを作るときに記録する読み取りは次のとおりです。
+カタログは読む段 `sql/build` で作ります。引数は受け持った `.sql` のファイルの一覧と、設定です。設定を引数に入れるのは、`Analyze` と `Link` が受け取った設定で読むためです。カタログを作るときに記録する読み取りは次のとおりです。
 
 | 読み取り | 何のためか |
 |---|---|
-| `Claimed("sql")` | `.sql` のファイルの集合 |
-| 各ファイルの `File` | 中身 |
-| 各ファイルの上のディレクトリの `Exists("dbt_project.yml")` と `Exists("sqitch.plan")` | ファイルの役割（役割 `other` になるか） |
-| `Config()` | `files.generated` と `files.tests`（役割）、`sql.databases`（データベース、方言、ファイルの割り当て） |
+| 各ファイルの中身 | 定義と、SQL で書いたテスト |
+| 各ファイルの上のディレクトリの `dbt_project.yml` と `sqitch.plan` の情報 | ファイルの役割（役割 `other` になるか） |
 
-- head では、これらの答えがすべて同じときだけ、カタログを使い回します
-- 役割はパスの形（`down/`、`revert/` など）と、上の読み取りで決まります。役割を変える入力が変われば、カタログは作り直されます
-- 各ファイルの文の読み取りは純粋な段 `sql/statements` です。引数はパス、中身、決まった方言です。カタログはこの段を `In` で読みます
-- `Analyze` と `Link` は同じ版で同じカタログの段を呼びます。2回目の呼び出しは当たります
+- 設定は引数として鍵に入ります。`files.generated` と `files.tests`（役割）、`sql.databases`（データベース、方言、ファイルの割り当て）です
+- head では、引数が同じで、記録した答えがすべて同じときだけ、カタログを使い回します
+- 役割はパスの形（`down/`、`revert/` など）と、上の読み取りと、設定で決まります。役割を変える入力が変われば、カタログは作り直されます
+- 結果はカタログと事実の組です。カタログはデータベースのオブジェクトだけを持ちます。ファイルの文字列、定義、構文木は残しません
+- `Analyze` と `Link` は同じ版で同じ段を呼びます。2回目の呼び出しは当たります
 - カタログは `ScopePair` です。`Link` が、すべての言語を読んだ後で使うからです
-- テストの文字列の解決は読む段 `sql/resolve` です。引数はデータベースの名前と文字列です。カタログは `In` で読みます
 
 ## 型とインターフェース
 
@@ -276,9 +283,14 @@ classDiagram
     <<interface, engine>>
     +AnalyzePair(base Version, baseCfg config.Config, head Version, headCfg config.Config) (*facts.Analysis, *facts.Analysis, error)
   }
+  class Reuser {
+    <<interface, engine>>
+    +WithoutReuse() Analyzer
+  }
   class adapterAnalyzer {
     <<adapter.Analyzer>>
     +Languages []Language
+    +NoReuse bool
   }
   class Language {
     <<interface, adapter>>
@@ -293,31 +305,34 @@ classDiagram
   }
   class Session {
     <<reuse>>
-    +Run(v Version) *Run
+    +Run(label string, fsys fs.FS, c config.Analysis) *Run
+    +Expect(head *Run) error
+    +Settle()
     +EndLanguage()
     +End()
+    +Stats() map~string,Stat~
   }
   class Run {
     <<reuse>>
-    +Version() Version
+    +Label() string
+    +FS() fs.FS
+    +Config() config.Analysis
+    +Env() any
   }
   class Pure~A, T~ {
     <<reuse>>
     +Do(r *Run, a A) (T, error)
-    +In(rd Reads, a A) (T, error)
   }
   class Reading~A, T~ {
     <<reuse>>
     +Do(r *Run, a A) (T, error)
-    +In(rd Reads, a A) (T, error)
   }
   class Reads {
     <<interface, reuse>>
-    +File(path string) ([]byte, error)
-    +Exists(path string) bool
-    +Claimed(lang string) []string
-    +Match(glob string) []string
+    +FS() fs.FS
     +Config() config.Analysis
+    +Env() any
+    +Run() *Run
   }
   class Releaser {
     <<interface, reuse>>
@@ -330,6 +345,7 @@ classDiagram
   }
   Analyzer <|-- PairAnalyzer
   adapterAnalyzer ..|> PairAnalyzer
+  adapterAnalyzer ..|> Reuser
   adapterAnalyzer --> Language
   adapterAnalyzer --> Session
   Language <|-- linker
@@ -344,35 +360,42 @@ classDiagram
 ```
 
 - `internal/adapter/reuse` は、セッションと段の仕組みのパッケージです。言語のパッケージ（`golang`、`treesitter`、`sql`、`terraform`、`ansible`）と `internal/adapter` が import します
-- `reuse` が import する hadome のパッケージは、`config`（`config.Analysis`）だけです。版は `fs.FS` として受け取ります
-- エンジンは `reuse` を知りません。エンジンが知るのは `PairAnalyzer` だけです
+- `reuse` が import する hadome のパッケージは、`config`（`config.Analysis`）と `walk`（head のファイルの一覧）だけです。版は `fs.FS` として受け取ります
+- エンジンは `reuse` を知りません。エンジンが知るのは `PairAnalyzer` と `Reuser` だけです
+- `Session.Run` の `Env` は、2つの版で同じもの（言語の一覧）です。読む段は `Reads.Env()` で受け取ります
+- `Session.Stats` は、段ごとに、覚えた結果を返した回数と段を走らせた回数を数えます。テストと計測に使います
 
 ## テスト
 
-再利用しないときは、何も覚えないセッションで解析します。アダプタのコードは同じ道を通ります。違うのは、覚えた結果が返るかどうかだけです。どのテストも、この2つを比べます。
+再利用しないときは、何も覚えないセッションで解析します（`Analyzer.NoReuse`）。アダプタのコードは同じ道を通ります。違うのは、覚えた結果が返るかどうかだけです。どのテストも、この2つを比べます。
 
 | テスト | 何を確かめるか | どこで |
 |---|---|---|
 | 自己テストでの突き合わせ | 全ルールの全事例で、再利用するときとしないときのレポートが同じ | `hadome self-test`、エンジンのテスト |
-| 事実の突き合わせ | アダプタのテストの木（`testdata`）の各組で、再利用するときとしないときの base と head の事実が同じ | `internal/adapter` のテスト |
-| 揺さぶり | 入力を1つだけ変えた head で、再利用するときとしないときの事実が同じ | `internal/adapter` のテスト |
+| 事実の突き合わせ | 全言語のファイルを持つ小さなリポジトリで、2つの版を一度に読んだ事実が、1つずつ読んだ事実と同じ | `internal/adapter` のテスト |
+| 揺さぶり | 入力を1つだけ変えた head で、2つの版を一度に読んだ事実が、1つずつ読んだ事実と同じ | `internal/adapter` のテスト |
+| テストの文字列 | head で初めて `.sql` のファイルが足されても、head の事実が1つずつ読んだ事実と同じ | `internal/adapter` のテスト |
 | 3回の解析 | 同じセッションで base、head、base の順に解析し、1回目と3回目の事実が同じ | `internal/adapter` のテスト |
 | 段の登録 | 段の名前が一意で、引数の型が値だけからなる | `internal/adapter/reuse` のテスト |
+| 読み取りの照合 | 読んだファイル、無かったファイル、並べたディレクトリ、設定のどれかが違えば、覚えた結果を返さない | `internal/adapter/reuse` のテスト |
 | 手放す時期 | head で当たりえない結果を覚えない。範囲の終わりに結果をすべて手放し、`Release` を1回ずつ呼ぶ | `internal/adapter/reuse` のテスト |
 
 **自己テストでの突き合わせ**
 
-- `hadome self-test` は、事例ごとに、再利用するときとしないときの2回チェックを走らせます
-- 2つのレポートが違えば、その事例は失敗です。失敗の文には再利用で結果が変わったことを書きます
+- `hadome self-test` は、解析器が `Reuser` なら、事例ごとに、再利用するときとしないときの2回チェックを走らせます
+- 2つのレポートの JSON がバイト単位で違えば、その事例は失敗です。失敗の文には再利用で結果が変わったことを書きます
 - 組み込みのルールの事例はすべて、再利用のテストにもなります
 
 **揺さぶり**
 
-揺さぶりは2通りです。
+- 小さなリポジトリの各ファイルを、変える、消す、別のパスに写します
+- 各ファイルの隣に、役割や読み方を変えうるファイル（`dbt_project.yml`、`sqitch.plan`、`conftest.py`、`Cargo.toml`、`__init__.py`）を足します
+- `config.Analysis` の各フィールドを変えます
+- これらは `Reads` を通らない読み取りと、鍵に入れ忘れた入力を見つけるためのものです
 
-- 記録した読み取りを1つずつ裏返します。例: 読んだファイルの中身を変える、消す。「無い」と答えたファイルを作る。一覧にファイルを足す
-- 記録に依らずに入力を変えます。例: 木の各ファイルを、変える、消す、別のパスに写す。`config.Analysis` の各フィールドを変える
-- 記録に依らない揺さぶりは `Reads` を通らない読み取りを見つけるためのものです
+**テストの文字列**
+
+- Kotlin のように自分のファイルしか読まない言語で確かめます。ほかの読み取りでは版の違いが分からないので、鍵だけが2つの版を分けます
 
 **3回の解析**
 

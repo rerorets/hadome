@@ -6,8 +6,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 )
 
 // viewpoint: behaviour
@@ -38,7 +38,7 @@ type T struct{}
 func (T) M(x int) { f := func() { if x > 0 { x-- } }; f() }
 `)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"store/store.go"})
 	if err != nil {
 		t.Fatal(err)
 	}

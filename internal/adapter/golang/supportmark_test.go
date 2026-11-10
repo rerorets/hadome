@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 )
 
 // viewpoint: behaviour
@@ -58,7 +58,7 @@ func TestStoreZone(t *testing.T) {
 `)},
 	}
 	paths := []string{"internal/testutil/zone.go", "internal/testutil/zone_test.go", "store/store.go", "store/store_test.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -39,7 +40,8 @@ func (Adapter) Claims(p string) bool {
 // Analyze reads the Terraform files of the version. A file HCL cannot parse is listed as unread and
 // yields nothing else, as in the Go adapter. Files matching files.tests are not made tests: Terraform
 // itself decides what a test is, by the .tftest.hcl suffix.
-func (Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error) {
+func (Adapter) Analyze(r *reuse.Run, c config.Analysis, paths []string) (*facts.Analysis, error) {
+	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	a := &facts.Analysis{}
 	var files []parsed
 	sources := map[string]map[string]string{} // directory -> provider's local name -> source
@@ -92,7 +94,7 @@ func (pf parsed) dir() string { return path.Dir(pf.path) }
 
 // parse reads one file. It reports false, with the file listed as unread or as other, when there is
 // nothing more to read from it.
-func parse(p string, src []byte, c config.Config) (parsed, bool) {
+func parse(p string, src []byte, c config.Analysis) (parsed, bool) {
 	dir := path.Dir(p)
 	f := facts.File{Path: p, Language: name, Lines: facts.CountLines(src), Unit: dir, UnitPath: dir}
 	if strings.HasSuffix(p, ".tfvars") { // values only: nothing to read

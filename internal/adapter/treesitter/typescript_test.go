@@ -10,19 +10,19 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
 // analyze runs one language over a tree and returns its facts.
 func analyze(t *testing.T, name string, tree fstest.MapFS) *facts.Analysis {
 	t.Helper()
-	return analyzeWith(t, name, tree, config.Config{})
+	return analyzeWith(t, name, tree, config.Analysis{})
 }
 
 // analyzeWith runs one language over a tree with a configuration.
-func analyzeWith(t *testing.T, name string, tree fstest.MapFS, c config.Config) *facts.Analysis {
+func analyzeWith(t *testing.T, name string, tree fstest.MapFS, c config.Analysis) *facts.Analysis {
 	t.Helper()
 	var l *lang
 	for _, c := range Languages() {
@@ -37,7 +37,7 @@ func analyzeWith(t *testing.T, name string, tree fstest.MapFS, c config.Config) 
 		}
 	}
 	sort.Strings(paths)
-	a, err := l.Analyze(engine.Version{Label: "head", FS: tree}, c, paths)
+	a, err := l.Analyze(reuse.Lone(tree), c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}

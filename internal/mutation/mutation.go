@@ -67,11 +67,7 @@ func (m *Mutate) Run(src engine.Source) (engine.Report, error) {
 	if err != nil {
 		return engine.Report{}, fmt.Errorf("configuration of %s:\n%w", bv.Label, err)
 	}
-	baseFacts, err := m.Analyzer.Analyze(bv, config.ForBase(baseCfg, headCfg))
-	if err != nil {
-		return engine.Report{}, err
-	}
-	headFacts, err := m.Analyzer.Analyze(hv, headCfg)
+	baseFacts, headFacts, err := analyzeBoth(m.Analyzer, bv, config.ForBase(baseCfg, headCfg), hv, headCfg)
 	if err != nil {
 		return engine.Report{}, err
 	}
@@ -91,6 +87,19 @@ func (m *Mutate) Run(src engine.Source) (engine.Report, error) {
 	e := &engine.Engine{Analyzer: m.Analyzer, Rules: []engine.Rule{survived{byVersion: found}}, Workdir: m.Workdir,
 		Elsewhere: func(rule string) bool { return rule != RuleID }}
 	return e.Check(src)
+}
+
+// analyzeBoth reads both versions, in one call when the analyzer can.
+func analyzeBoth(an engine.Analyzer, bv engine.Version, bc config.Config, hv engine.Version, hc config.Config) (*facts.Analysis, *facts.Analysis, error) {
+	if pa, ok := an.(engine.PairAnalyzer); ok {
+		return pa.AnalyzePair(bv, bc, hv, hc)
+	}
+	b, err := an.Analyze(bv, bc)
+	if err != nil {
+		return nil, nil, err
+	}
+	h, err := an.Analyze(hv, hc)
+	return b, h, err
 }
 
 // versions are the two versions compared, each with its facts.

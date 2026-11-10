@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -52,7 +53,7 @@ func TestRows(t *testing.T) {
 `)},
 	}
 	paths := []string{"store/broken.go", "store/store.go", "store/store_test.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +111,7 @@ import (
 )
 `)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"store/store.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestIn(t *testing.T) {
 `)},
 	}
 	paths := []string{"store/in_test.go", "store/out_test.go", "store/store.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +235,7 @@ func TestIn(t *testing.T) {
 `)},
 	}
 	paths := []string{"store/in_test.go", "store/out_test.go", "store/store.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +281,7 @@ func TestAddOther(t *testing.T) {
 }
 `)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go", "store/store_test.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"store/store.go", "store/store_test.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,9 +365,9 @@ func equal(tb testing.TB, a, b int) {
 `)},
 		"store/sub_test.go": {Data: []byte("package store\n\nimport \"testing\"\n\nvar runOne = func(t *testing.T) {}\n\nvar subs struct{ one func(*testing.T) }\n")},
 	}
-	c := config.Config{Assertions: []string{"example.com/app/check.Equal"}}
+	c := config.Analysis{Assertions: []string{"example.com/app/check.Equal"}}
 	paths := []string{"check/check.go", "store/store.go", "store/store_test.go", "store/sub_test.go"}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, paths)
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,8 +401,8 @@ func TestGoRolesFromConfiguration(t *testing.T) {
 		"checks/a.go":    {Data: []byte("package checks\n\nfunc A() {}\n")},
 		"store/store.go": {Data: []byte("package store\n\nfunc Save() {}\n")},
 	}
-	c := config.Config{GeneratedFiles: []string{"gen/**"}, TestFiles: []string{"checks/**"}}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, c, []string{"checks/a.go", "gen/client.go", "store/store.go"})
+	c := config.Analysis{GeneratedFiles: []string{"gen/**"}, TestFiles: []string{"checks/**"}}
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), c, []string{"checks/a.go", "gen/client.go", "store/store.go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -911,7 +912,7 @@ func (c Counter) Swap(i, j int) bool   { return false }
 func Error() string                    { return "" }
 `)},
 	}
-	a, err := Adapter{}.Analyze(engine.Version{FS: tree}, config.Config{}, []string{"store/store.go"})
+	a, err := Adapter{}.Analyze(reuse.Lone(tree), config.Analysis{}, []string{"store/store.go"})
 	if err != nil {
 		t.Fatal(err)
 	}

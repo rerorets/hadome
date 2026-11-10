@@ -17,7 +17,7 @@ import (
 // Globs add roles the conventions do not give: a file under files.tests is read as tests, and one
 // under files.generated is generated, also when it matches both. A glob never takes a role away.
 func TestRolesFromConfiguration(t *testing.T) {
-	c := config.Config{TestFiles: []string{"checks/**", "gen/**"}, GeneratedFiles: []string{"gen/**", "src/*.test.ts"}}
+	c := config.Analysis{TestFiles: []string{"checks/**", "gen/**"}, GeneratedFiles: []string{"gen/**", "src/*.test.ts"}}
 	a := analyzeWith(t, "typescript", tree(
 		"src/store.ts", "export function save(r: number) { return r; }\n",
 		"src/store.test.ts", "import { save } from \"./store\";\nit(\"saves\", () => { expect(save(1)).toBe(1); });\n",
@@ -55,7 +55,7 @@ func TestRolesFromConfiguration(t *testing.T) {
 // the end-to-end tests run against, kept under e2e/, is product code with symbols, and a test that
 // calls it targets it. It never makes a test file, or a files.tests file, product code.
 func TestProductFilesAreNotTestSupport(t *testing.T) {
-	c := config.Config{TestFiles: []string{"e2e/checks/**"},
+	c := config.Analysis{TestFiles: []string{"e2e/checks/**"},
 		ProductFiles: []string{"e2e/server/**", "e2e/app.test.ts", "e2e/checks/**", "tests/helpers.py"}}
 	ts := analyzeWith(t, "typescript", tree(
 		"e2e/server/main.ts", "export function serve() { return 1 }\n",

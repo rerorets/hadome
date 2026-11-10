@@ -7,13 +7,13 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/rerorets/hadome/internal/adapter/reuse"
 	"github.com/rerorets/hadome/internal/adapter/terraform"
 	"github.com/rerorets/hadome/internal/config"
-	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-func analyze(t *testing.T, c config.Config, files map[string]string) *facts.Analysis {
+func analyze(t *testing.T, c config.Analysis, files map[string]string) *facts.Analysis {
 	t.Helper()
 	tree := fstest.MapFS{}
 	var paths []string
@@ -24,7 +24,7 @@ func analyze(t *testing.T, c config.Config, files map[string]string) *facts.Anal
 		}
 	}
 	sort.Strings(paths)
-	a, err := terraform.Adapter{}.Analyze(engine.Version{FS: tree}, c, paths)
+	a, err := terraform.Adapter{}.Analyze(reuse.Lone(tree), c, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestTerraformClaimsItsFiles(t *testing.T) {
 // Each file has its role and its module's directory as its unit; a file HCL cannot parse is unread
 // and gives nothing else; a variables file is other.
 func TestTerraformFilesAndRoles(t *testing.T) {
-	a := analyze(t, config.Config{GeneratedFiles: []string{"gen/**"}}, map[string]string{
+	a := analyze(t, config.Analysis{GeneratedFiles: []string{"gen/**"}}, map[string]string{
 		"main.tf":                      "variable \"region\" {}\n",
 		"modules/network/main.tf":      "output \"id\" {\n  value = 1\n}\n",
 		"modules/network/broken.tf":    "variable \"x\" {\n",
@@ -91,7 +91,7 @@ func TestTerraformFilesAndRoles(t *testing.T) {
 // Variables and outputs are the module's symbols: always exported, of kind value, and documented
 // only by a description that says something.
 func TestTerraformVariablesAndOutputsAreValues(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{"modules/network/main.tf": `variable "region" {
+	a := analyze(t, config.Analysis{}, map[string]string{"modules/network/main.tf": `variable "region" {
   description = "Where the network is."
   type        = string
 }
@@ -130,7 +130,7 @@ locals {
 // its directory; any other is named by its address without the version query and subdirectory.
 // Providers perform input and output, and so do modules configuration lists in rules.tests.io.
 func TestTerraformImports(t *testing.T) {
-	a := analyze(t, config.Config{IO: []string{"hashicorp/consul"}}, map[string]string{"envs/prod/main.tf": `terraform {
+	a := analyze(t, config.Analysis{IO: []string{"hashicorp/consul"}}, map[string]string{"envs/prod/main.tf": `terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -173,7 +173,7 @@ module "queue" {
 // provider is found by local name in the module's required providers, in any of its files, or else
 // is Terraform's default hashicorp/<name>. A module of variables, outputs and locals imports nothing.
 func TestTerraformResourcesImportTheirProvider(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{
+	a := analyze(t, config.Analysis{}, map[string]string{
 		"modules/repo/versions.tf": "terraform {\n  required_providers {\n    github = {\n      source = \"integrations/github\"\n    }\n  }\n}\n",
 		"modules/repo/main.tf": `resource "github_repository" "a" {}
 resource "github_team" "b" {}
@@ -242,7 +242,7 @@ run "rejects_bad_cidr" {
 // passes and the outputs its conditions read are its calls into the module it tests, and mocks are
 // hazards, including the ones written for the whole file.
 func TestTerraformRunBlocksAreTests(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{"tests/network.tftest.hcl": testFile})
+	a := analyze(t, config.Analysis{}, map[string]string{"tests/network.tftest.hcl": testFile})
 	if len(a.Tests) != 2 {
 		t.Fatalf("got %d tests, want 2", len(a.Tests))
 	}
@@ -289,7 +289,7 @@ func TestTerraformRunBlocksAreTests(t *testing.T) {
 // changes with any literal.
 func TestTerraformRunFingerprint(t *testing.T) {
 	body := func(src string) string {
-		a := analyze(t, config.Config{}, map[string]string{"main.tftest.hcl": src})
+		a := analyze(t, config.Analysis{}, map[string]string{"main.tftest.hcl": src})
 		if len(a.Tests) != 1 || a.Tests[0].Body == "" {
 			t.Fatalf("no fingerprint from %q", src)
 		}
@@ -312,7 +312,7 @@ func TestTerraformRunFingerprint(t *testing.T) {
 // instructions are directives, and an exception marker stays an ordinary comment for the engine. A
 // block comment spans every line it is written on.
 func TestTerraformComments(t *testing.T) {
-	a := analyze(t, config.Config{}, map[string]string{"main.tf": `# tflint-ignore: terraform_unused_declarations
+	a := analyze(t, config.Analysis{}, map[string]string{"main.tf": `# tflint-ignore: terraform_unused_declarations
 variable "a" {}
 // gate:allow comments/missing-doc the module is internal
 variable "b" {}
