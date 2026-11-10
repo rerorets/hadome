@@ -15,7 +15,7 @@ import (
 // trees are read for its tests before they go.
 func TestTheCatalogKeptForLinkHoldsNoFile(t *testing.T) {
 	tree := fstest.MapFS{
-		"db/billing.sql": {Data: []byte("CREATE FUNCTION billing.is_active(id int) RETURNS boolean AS $$ SELECT true $$ LANGUAGE sql;\n")},
+		"db/billing.sql":         {Data: []byte("CREATE FUNCTION billing.is_active(id int) RETURNS boolean AS $$ SELECT true $$ LANGUAGE sql;\n")},
 		"tests/billing_test.sql": {Data: []byte("SELECT plan(1);\nSELECT ok(billing.is_active(1));\n")},
 	}
 	a := New()

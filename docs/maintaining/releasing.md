@@ -7,12 +7,13 @@ A release starts by pushing a version tag. The `release` workflow ([.github/work
 1. Check that CI on main passes.
 2. Run `hadome mutate` on the change since the previous tag, and check that it reports no `mutation/survived` regression. If it does, merge a PR that adds the tests first.
    - When the change exceeds `mutation.max-mutants`, the mutants not tried are reported as a review (exit 3). That review does not hold back a release.
-3. Open a PR that raises the version, and merge it. Title it like `The README pins 1.2.0`. The PR changes two things:
+3. On real repositories at hand, compare the CPU time and peak memory of `hadome check` with the previous release (see "[Comparing performance](#comparing-performance)"). If it regressed without reason, merge a PR that fixes it first.
+4. Open a PR that raises the version, and merge it. Title it like `The README pins 1.2.0`. The PR changes two things:
    - the version written in `README.md` and `README.ja.md`
    - the new version's section in [CHANGELOG.ja.md](../../CHANGELOG.ja.md) and [CHANGELOG.md](../../CHANGELOG.md) (see "[Changelog](#changelog)")
-4. Put a signed tag on that PR's merge commit, and push it.
-5. Check the workflow's results. Fix the cause of a failed job, then rerun only that job.
-6. Approve each package staged on npm, with 2FA (see "[Publishing to npm](#publishing-to-npm)").
+5. Put a signed tag on that PR's merge commit, and push it.
+6. Check the workflow's results. Fix the cause of a failed job, then rerun only that job.
+7. Approve each package staged on npm, with 2FA (see "[Publishing to npm](#publishing-to-npm)").
 
 ```sh
 git fetch origin
@@ -29,6 +30,47 @@ Sign the tag. GitHub then marks it Verified, which shows who tagged the release.
 The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS`, then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
 
 If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions that are published, and versions that are staged and await approval.
+
+## Comparing performance
+
+Before a release, compare `hadome check` of the previous release and of main on real repositories at hand. What you look at is the CPU time (user) and the peak memory (maximum RSS). hadome's self-test and unit tests read only small inputs, so slowdowns and memory growth on large repositories show up only here.
+
+**Repositories to compare on**
+
+- Use three or more repositories in different languages. Include one that has `.sql` files
+- None of them is brought into hadome. Their names and results are not written in hadome's documents or cases either
+
+**How to measure**
+
+| What | Command |
+|---|---|
+| A whole version | `hadome check --base-dir <an empty directory> --head-dir <the repository> --format json` |
+| A one-line change | In a copy of the repository with a commit that changes one line, `hadome check --base HEAD~1 --format json` |
+
+- Build both binaries locally: the previous release from its tag, the new one from main
+- Measure time and memory with `/usr/bin/time`: `-l` on macOS, `-v` on Linux
+- Run the previous and the new binary in turn, three times each. Compare the medians of user time and maximum RSS. Elapsed time (real) depends on other load on the machine, so it is not compared
+
+```sh
+git worktree add ../hadome-prev v1.1.0
+(cd ../hadome-prev && go build -o /tmp/hadome-prev ./cmd/hadome)
+go build -o /tmp/hadome-next ./cmd/hadome
+mkdir -p /tmp/empty
+for i in 1 2 3; do
+  for b in /tmp/hadome-prev /tmp/hadome-next; do
+    /usr/bin/time -l $b check --base-dir /tmp/empty --head-dir ~/src/product-a --format json > /dev/null
+  done
+done
+```
+
+**When to stop**
+
+- When user time or maximum RSS grew visibly from the previous release (about a tenth or more), look for the reason
+- When the reason is a check this release adds (a new rule, a new language, a check that reads more) and the changelog says so, the release goes on
+- When there is no reason, or the growth is out of proportion to the check, stop the release. Merge a PR that fixes the cause, then start the steps again
+
+> [!NOTE]
+> This comparison does not run in PR CI. CI has none of the large repositories the measurement needs, and the load of the machines it runs on is not even.
 
 ## Publishing to npm
 
