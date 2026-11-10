@@ -38,7 +38,17 @@ type configuredClaimer interface {
 // linker is a language that reads what the other languages found, after every language has been
 // read: the SQL adapter reads the strings tests hold as SQL.
 type linker interface {
+	// ReadsTexts reports whether Link reads the tests' strings (facts.Test.Texts) of a version in
+	// which the linker claimed paths. It is asked before any language reads the version.
+	ReadsTexts(c config.Config, paths []string) bool
 	Link(v engine.Version, c config.Config, a *facts.Analysis) error
+}
+
+// textSource is a language that hands over the strings its tests hold. AnalyzeWithoutTexts is
+// Analyze collecting none, with every other fact unchanged: collecting them examines every node of
+// every test body, which is wasted on a version no linker reads them in.
+type textSource interface {
+	AnalyzeWithoutTexts(v engine.Version, c config.Config, paths []string) (*facts.Analysis, error)
 }
 
 // claims reports whether the language claims the file under this configuration.
@@ -81,11 +91,12 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 		}
 		byLang[i] = append(byLang[i], p)
 	}
+	texts := an.readsTexts(c, byLang)
 	for i, l := range an.Languages {
 		if len(byLang[i]) == 0 {
 			continue
 		}
-		la, err := l.Analyze(v, c, byLang[i])
+		la, err := analyzeFunc(l, texts)(v, c, byLang[i])
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +111,26 @@ func (an Analyzer) Analyze(v engine.Version, c config.Config) (*facts.Analysis, 
 	}
 	sortAnalysis(a)
 	return a, nil
+}
+
+// readsTexts reports whether a linker reads the tests' strings of a version whose files went to
+// the languages as byLang says.
+func (an Analyzer) readsTexts(c config.Config, byLang map[int][]string) bool {
+	for i, l := range an.Languages {
+		if lk, ok := l.(linker); ok && enabled(c, l.Name()) && lk.ReadsTexts(c, byLang[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// analyzeFunc is how the language reads its files: without the tests' strings when no linker
+// reads them and the language can leave them out.
+func analyzeFunc(l Language, texts bool) func(engine.Version, config.Config, []string) (*facts.Analysis, error) {
+	if ts, ok := l.(textSource); ok && !texts {
+		return ts.AnalyzeWithoutTexts
+	}
+	return l.Analyze
 }
 
 // mutator is a language that makes mutants of its functions (hadome mutate).

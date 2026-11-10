@@ -61,14 +61,14 @@ var tsText = &textGrammar{
 	escapes:  set("escape_sequence"),
 	idents:   set("identifier"),
 	notRead:  set("name", "key", "label"),
-	declare: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
-		if n.Kind() != "variable_declarator" || kindOf(childField(n, "name")) != "identifier" {
+	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+		if kind != "variable_declarator" || kindOf(childField(n, "name")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("name"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node) (string, string, *sitter.Node, bool) {
-		if n.Kind() != "call_expression" {
+	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+		if kind != "call_expression" {
 			return "", "", nil, false
 		}
 		fn, args := n.ChildByFieldName("function"), n.ChildByFieldName("arguments")
@@ -119,14 +119,14 @@ var pyText = &textGrammar{
 	},
 	idents:  set("identifier"),
 	notRead: set("attribute", "name", "left"),
-	declare: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
-		if n.Kind() != "assignment" || kindOf(childField(n, "left")) != "identifier" {
+	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+		if kind != "assignment" || kindOf(childField(n, "left")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("left"), n.ChildByFieldName("right")
 	},
-	call: func(f *file, n *sitter.Node) (string, string, *sitter.Node, bool) {
-		if n.Kind() != "call" || n.ChildByFieldName("function") == nil {
+	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+		if kind != "call" || n.ChildByFieldName("function") == nil {
 			return "", "", nil, false
 		}
 		var first *sitter.Node
@@ -161,14 +161,14 @@ var rustText = &textGrammar{
 	raw:      func(f *file, n *sitter.Node) bool { return n.Kind() == "raw_string_literal" },
 	idents:   set("identifier"),
 	notRead:  set("name", "pattern", "field"),
-	declare: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
-		if n.Kind() != "let_declaration" || kindOf(childField(n, "pattern")) != "identifier" {
+	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+		if kind != "let_declaration" || kindOf(childField(n, "pattern")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("pattern"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node) (string, string, *sitter.Node, bool) {
-		switch n.Kind() {
+	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+		switch kind {
 		case "call_expression":
 			fn := n.ChildByFieldName("function")
 			if fn == nil {
@@ -218,14 +218,14 @@ var javaText = &textGrammar{
 	escapes:  set("escape_sequence"),
 	idents:   set("identifier"),
 	notRead:  set("name", "field"),
-	declare: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
-		if n.Kind() != "variable_declarator" {
+	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+		if kind != "variable_declarator" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("name"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node) (string, string, *sitter.Node, bool) {
-		if n.Kind() != "method_invocation" {
+	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+		if kind != "method_invocation" {
 			return "", "", nil, false
 		}
 		name := f.field(n, "name")
@@ -272,8 +272,7 @@ var ktText = &textGrammar{
 	escapes:     set("escape_sequence"),
 	dollarHoles: true,
 	idents:      set("identifier", "simple_identifier"),
-	notReadIn: func(n *sitter.Node) bool {
-		p := n.Parent()
+	notReadIn: func(n, p *sitter.Node) bool {
 		switch p.Kind() {
 		case "navigation_expression": // a.b: b is a member
 			return p.NamedChild(0).Id() != n.Id()
@@ -284,14 +283,14 @@ var ktText = &textGrammar{
 		}
 		return false
 	},
-	declare: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
-		if n.Kind() != "property_declaration" {
+	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+		if kind != "property_declaration" {
 			return nil, nil
 		}
 		return ktPropertyValue(n)
 	},
-	call: func(f *file, n *sitter.Node) (string, string, *sitter.Node, bool) {
-		if n.Kind() != "call_expression" || n.NamedChildCount() < 2 {
+	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+		if kind != "call_expression" || n.NamedChildCount() < 2 {
 			return "", "", nil, false
 		}
 		var args *sitter.Node

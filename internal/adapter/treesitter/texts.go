@@ -30,12 +30,14 @@ type textGrammar struct {
 	// notRead are the fields of a parent in which a name is not read: the member side of a.b, a
 	// declared name, a keyword argument's name.
 	notRead map[string]bool
-	// notReadIn reports, for grammars without fields there, whether a name is not read where it is.
-	notReadIn func(n *sitter.Node) bool
-	// declare returns the name and the value of a local declaration, or nils.
-	declare func(f *file, n *sitter.Node) (name, value *sitter.Node)
-	// call returns, for a call, what it calls as written, the last name of it and its first argument.
-	call func(f *file, n *sitter.Node) (callee, last string, first *sitter.Node, ok bool)
+	// notReadIn reports, for grammars without fields there, whether a name is not read where it is,
+	// in its parent p.
+	notReadIn func(n, p *sitter.Node) bool
+	// declare returns the name and the value of a local declaration of the given kind, or nils.
+	declare func(f *file, n *sitter.Node, kind string) (name, value *sitter.Node)
+	// call returns, for a call of the given kind, what it calls as written, the last name of it and
+	// its first argument.
+	call func(f *file, n *sitter.Node, kind string) (callee, last string, first *sitter.Node, ok bool)
 	// consts returns the file's constants by name with their value.
 	consts func(f *file) map[string]*sitter.Node
 	sinks  []sqlSink
@@ -71,7 +73,9 @@ var textGrammars = map[string]*textGrammar{
 type textCollector struct {
 	in     *file   // the file being walked
 	tables *tables // the tables of its language
-	texts  []facts.Text
+	// g is the text grammar of in's language, nil while no strings are collected.
+	g     *textGrammar
+	texts []facts.Text
 	// sinks are the nodes passed where a call takes SQL, by ID.
 	sinks map[uintptr]bool
 	// pending are the values of local declarations being walked, by ID: node -> the local's name.
@@ -85,16 +89,19 @@ type textCollector struct {
 	read map[uintptr]bool
 }
 
-func (c *textCollector) grammar() *textGrammar {
-	if c.in == nil || c.tables == nil {
-		return nil
+// use makes the collector walk f, whose language's tables are tb.
+func (c *textCollector) use(f *file, tb *tables) {
+	c.in, c.tables, c.g = f, tb, nil
+	if f != nil && tb != nil && tb.texts {
+		c.g = textGrammars[tb.lang]
 	}
-	return textGrammars[c.tables.lang]
 }
 
 // note records what node n, reached by the walk with loops loops around it, adds to the strings.
-func (c *textCollector) note(n *sitter.Node, loops int) {
-	g := c.grammar()
+// at is where n is: its parent, and its index there when the walk knows it. The walk hands it
+// down because asking tree-sitter for a node's parent descends from the root.
+func (c *textCollector) note(n *sitter.Node, at place, loops int) {
+	g := c.g
 	if g == nil {
 		return
 	}
@@ -107,18 +114,19 @@ func (c *textCollector) note(n *sitter.Node, loops int) {
 	if loops > 0 {
 		times = 2 // it runs more than once
 	}
-	if name, value := g.declare(f, n); name != nil {
+	kind := n.Kind()
+	if name, value := g.declare(f, n, kind); name != nil {
 		c.shadow[f.text(name)] = true
 		delete(c.locals, f.text(name))
 		if value != nil {
 			c.pending[value.Id()] = f.text(name)
 		}
 	}
-	if callee, last, first, ok := g.call(f, n); ok && first != nil {
+	if callee, last, first, ok := g.call(f, n, kind); ok && first != nil {
 		c.sink(g, callee, last, first, times)
 	}
 	switch {
-	case g.top(f, n):
+	case g.top(f, n, kind, at.parent):
 		if c.read[n.Id()] {
 			return
 		}
@@ -127,7 +135,7 @@ func (c *textCollector) note(n *sitter.Node, loops int) {
 			return
 		}
 		c.add(facts.Text{Path: f.path, Line: line(n), Value: value, Holes: holes, Times: times}, n)
-	case g.idents[n.Kind()] && !c.shadow[f.text(n)] && g.reads(n):
+	case g.idents[kind] && !c.shadow[f.text(n)] && g.reads(n, at):
 		v, ok := stringConsts(g, f)[f.text(n)]
 		if !ok {
 			return
@@ -172,7 +180,7 @@ func (c *textCollector) sink(g *textGrammar, callee, last string, arg *sitter.No
 		}
 	}
 	// A call that takes SQL itself, such as db.execute(sql`…`), hands its own string over.
-	if inner, last, _, ok := g.call(f, arg); ok {
+	if inner, last, _, ok := g.call(f, arg, arg.Kind()); ok {
 		if _, isSink := c.sinkEntry(g, inner, last); isSink {
 			return
 		}
@@ -246,13 +254,18 @@ func stringConsts(g *textGrammar, f *file) map[string]*sitter.Node {
 
 // joins reports whether n joins the strings below it into one.
 func (g *textGrammar) joins(f *file, n *sitter.Node) bool {
-	return n != nil && (g.adjacent[n.Kind()] || (g.concat[n.Kind()] && f.field(n, "operator") == "+"))
+	return n != nil && g.joinsAs(f, n, n.Kind())
 }
 
-// top reports whether n is a whole string: a literal, or literals joined, that is not part of a
-// larger one.
-func (g *textGrammar) top(f *file, n *sitter.Node) bool {
-	return (g.literals[n.Kind()] || g.joins(f, n)) && !g.joins(f, n.Parent())
+// joinsAs is joins for a node whose kind is known.
+func (g *textGrammar) joinsAs(f *file, n *sitter.Node, kind string) bool {
+	return g.adjacent[kind] || (g.concat[kind] && f.field(n, "operator") == "+")
+}
+
+// top reports whether n, of the given kind and below parent, is a whole string: a literal, or
+// literals joined, that is not part of a larger one.
+func (g *textGrammar) top(f *file, n *sitter.Node, kind string, parent *sitter.Node) bool {
+	return (g.literals[kind] || g.joinsAs(f, n, kind)) && !g.joins(f, parent)
 }
 
 // literalish reports whether n is a string: a literal, or a join holding at least one.
@@ -264,21 +277,17 @@ func (g *textGrammar) literalish(f *file, n *sitter.Node) bool {
 	return lits > 0
 }
 
-// reads reports whether the name n is read where it is, rather than declared or used as a member.
-func (g *textGrammar) reads(n *sitter.Node) bool {
-	p := n.Parent()
+// reads reports whether the name n, at at, is read where it is, rather than declared or used as a
+// member.
+func (g *textGrammar) reads(n *sitter.Node, at place) bool {
+	p := at.parent
 	if p == nil {
 		return false
 	}
-	for i := uint(0); i < p.ChildCount(); i++ {
-		if p.Child(i).Id() == n.Id() {
-			if g.notRead[p.FieldNameForChild(uint32(i))] {
-				return false
-			}
-			break
-		}
+	if i := at.index(n); i >= 0 && g.notRead[p.FieldNameForChild(uint32(i))] {
+		return false
 	}
-	return g.notReadIn == nil || !g.notReadIn(n)
+	return g.notReadIn == nil || !g.notReadIn(n, p)
 }
 
 // flatten returns the content of the string n: literals joined into one, with a hole wherever a

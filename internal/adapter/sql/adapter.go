@@ -22,8 +22,9 @@ import (
 
 // Adapter reads .sql files, and after every language has been read, the SQL strings of tests.
 type Adapter struct {
-	// cache keeps the catalog Analyze built, for Link to use on the same files. It is keyed by the
-	// files' paths and contents, so a catalog is never used for files it was not built from.
+	// cache keeps the catalog Analyze built, for Link to use on the same files. It is keyed by
+	// everything build reads (see fingerprint), so a catalog is never used for files it was not
+	// built from, or that were read another way.
 	mu    sync.Mutex
 	cache map[[32]byte]*catalog
 }
@@ -102,11 +103,13 @@ func (a *Adapter) Analyze(v engine.Version, c config.Config, paths []string) (*f
 		if f.role == facts.RoleTest && !f.unread && f.db != nil {
 			out.Tests = append(out.Tests, sqlTests(f, cat)...)
 		}
+		f.trees = nil
 	}
 	return out, nil
 }
 
-// build reads the files into databases and applies their definitions.
+// build reads the files into databases and applies their definitions. The databases it returns
+// keep only their objects, not the files: the catalog outlives the files' text and trees.
 func build(v engine.Version, c config.Config, paths []string) (*catalog, []*sqlFile, error) {
 	cat := &catalog{databases: newDatabases(c)}
 	var files []*sqlFile
@@ -132,6 +135,10 @@ func build(v engine.Version, c config.Config, paths []string) (*catalog, []*sqlF
 			}
 		}
 		db.apply()
+		for _, f := range db.files {
+			f.defs = nil
+		}
+		db.files = nil
 	}
 	return cat, files, nil
 }
@@ -149,13 +156,16 @@ func withoutBOM(src []byte) []byte {
 
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
-// fingerprint identifies a set of files by their paths and contents, read with the configured
-// databases.
+// fingerprint identifies a set of files by what build reads of them: their paths, roles and
+// contents, with the configured databases. A role comes from configuration and from the files
+// around the file, so two versions with the same .sql files may read them differently.
 func fingerprint(c config.Config, files []*sqlFile) [32]byte {
 	h := sha256.New()
 	fmt.Fprintf(h, "%q\x00", c.Databases)
 	for _, f := range files {
 		h.Write([]byte(f.path))
+		h.Write([]byte{0})
+		h.Write([]byte(f.role))
 		h.Write([]byte{0})
 		h.Write(f.src)
 		h.Write([]byte{0})
@@ -192,7 +202,7 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 			paths = append(paths, f.Path)
 		}
 	}
-	if len(paths) == 0 && len(c.Databases) == 0 {
+	if !a.ReadsTexts(c, paths) {
 		return nil
 	}
 	cat, err := a.catalogFor(v, c, paths)
@@ -209,6 +219,12 @@ func (a *Adapter) Link(v engine.Version, c config.Config, an *facts.Analysis) er
 	return nil
 }
 
+// ReadsTexts reports whether Link reads the tests' strings: only when the version has a database,
+// a .sql file or a configured one.
+func (*Adapter) ReadsTexts(c config.Config, paths []string) bool {
+	return len(paths) > 0 || len(c.Databases) > 0
+}
+
 func (a *Adapter) catalogFor(v engine.Version, c config.Config, paths []string) (*catalog, error) {
 	var files []*sqlFile
 	for _, p := range paths {
@@ -216,7 +232,7 @@ func (a *Adapter) catalogFor(v engine.Version, c config.Config, paths []string) 
 		if err != nil {
 			return nil, err
 		}
-		files = append(files, &sqlFile{path: p, src: src})
+		files = append(files, &sqlFile{path: p, src: withoutBOM(src), role: role(v.FS, c, p)})
 	}
 	key := fingerprint(c, files)
 	a.mu.Lock()
