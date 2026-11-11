@@ -24,6 +24,10 @@ type tableDialect struct {
 	// renameWithoutTo is true where ALTER TABLE t RENAME t2 renames the table (MySQL). Elsewhere
 	// RENAME a TO b may rename a column.
 	renameWithoutTo bool
+	// viewHead matches the head of a view or table function whose query a product file does not
+	// parse: its tokens from CREATE to the kind word, upper-cased and joined by one space. Nil where
+	// the query's end cannot be told from its tokens (SQL Server, Oracle).
+	viewHead *regexp.Regexp
 }
 
 // rules name the parts of a dialect's grammar that definitions and names are found in.

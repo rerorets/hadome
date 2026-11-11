@@ -156,7 +156,12 @@ func (f *sqlFile) read() {
 		f.unread = true
 		return
 	}
+	td, product := f.dialect.(tableDialect)
+	product = product && f.role != facts.RoleTest
 	for _, s := range f.dialect.Split(f.src) {
+		if product {
+			s = td.withoutViewQueries(s)
+		}
 		t, err := f.dialect.Parse(s)
 		if err != nil {
 			f.unread, f.defs, f.trees = true, nil, nil
