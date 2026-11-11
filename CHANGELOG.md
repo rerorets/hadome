@@ -23,6 +23,7 @@ https://github.com/rerorets/hadome/releases
 - A configuration change that alters how SQL names resolve goes to review (exit 3). (#120)
 - Go mutate makes zero-value mutants for functions that return named types too. (#92)
 - Go files the test build does not compile get no mutants and go to review (exit 3). (#97)
+- When a mutant's test run times out, `hadome mutate` runs the clean run again to confirm the limit. If the limit grows, the mutant runs again with the longer limit, and it counts as caught only when it times out against a confirmed limit. The limit is confirmed at most twice per run. On a busy machine, a mutant that survives is no longer counted as caught, so new survivors may be reported. With `mutation.timeout` written, that value is the limit as it is. (#129)
 
 ### Fewer false findings and misses
 
@@ -59,6 +60,7 @@ https://github.com/rerorets/hadome/releases
 - A Go package's `TestMain` setup is counted as guarded by that package's tests. (#118)
 - Rust `#[test_case]` and `#[test_matrix]` functions are tests with their cases as inputs. (#117)
 - Idempotent candidates, in every language, are only those with I/O reached from a retryable entry point. (#118)
+- In Ansible, a file that cannot be read as YAML is unread on its own. A Molecule scenario whose `verify.yml` cannot be read as YAML gives no test. (#127)
 
 ### Configuration
 
@@ -67,6 +69,8 @@ https://github.com/rerorets/hadome/releases
 
 ### Other
 
+- `hadome check` analyses base and head in one call, and head does not read again a language, a file or an SQL catalog whose content is the same. The smaller a PR's change, the faster it is. Results do not change. (#126)
+- `hadome check` analyses faster and uses less memory: it collects tests' strings only when SQL reads them, walks a JVM test class's setup once per class, and reads MySQL and BigQuery SQL with the fast prediction, among others. Results do not change. (#123, #124, #125)
 - `hadome mutate` runs Go mutants against their tests' packages first, and against every test only when they survive. Outcomes do not change. (#110)
 - `hadome mutate` sets each stage's time limit from that stage's own run without mutants. (#110)
 - `hadome mutate` uses a fixed working directory per repository and refuses a second `mutate` in the same repository. (#110)
