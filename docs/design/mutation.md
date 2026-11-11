@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Package `internal/mutation` breaks the code a change touched, a little and on purpose, and checks whether the tests notice. Broken code is called a **mutant**. When a test fails, the mutant is **caught**; when the tests pass, it **survived**. When the build that runs the tests does not compile the mutant's file, it is **not built**: no test is run for it, and it is not counted as survived.
+Package `internal/mutation` breaks the code a change touched, a little and on purpose, and checks whether the tests notice. Broken code is called a **mutant**. When a test fails, the mutant is **caught**; when the tests pass, it **survived**. When the build of no test command in configuration compiles the mutant's file, it is **not built**: no test is run for it, and it is not counted as survived.
 
 The `tests/` rules only see what a test calls. A test can call code without checking its result, and then it guards nothing. Mutation asks "if the product code breaks, does a test really fail?", so it measures what the tests guard more truly than the `tests/` rules.
 
@@ -188,7 +188,50 @@ After each mutant it tries, it writes one progress line to standard error: which
 
 Breaking a file that the build running the tests does not compile makes the tests run none of its code. The tests pass as a matter of course, and whether the code is guarded is unknown. For example, a file with `//go:build !cgo` is not compiled by `go test` with cgo on. Reporting its mutants as survivors would make regressions that no added test could remove.
 
-So the mutants of such a file are set apart as **not built**.
+So configuration can list, under `builds`, commands that run the tests in other builds. A mutant is tried with the commands that compile its file. The mutants of a file that no command compiles are set apart as **not built**.
+
+### Trying other builds
+
+```yaml
+mutation:
+  test: [go, test, ./...]
+  builds:
+    - [env, CGO_ENABLED=0, go, test, ./...]
+    - [go, test, -tags, integration, ./...]
+```
+
+- Each element of `builds` is a test command of the same shape as `test`. `{tests}` and `{packages}` can be written in it by the same rules as in `test`
+- Whether a command compiles a file is decided per command, by the rules in "What Go decides" below
+- A file in a language other than Go is taken as compiled by every command, because outside Go whether a file is in the build is not told apart (see "Deliberately left out" below)
+
+A mutant is tried with the commands that compile its file, in the order `test`, then `builds`.
+
+| Result | What happens |
+|---|---|
+| A test fails in a stage of a command | The mutant is caught there |
+| The tests pass through stage 3 of a command | The mutant is tried with the next command that compiles the file, from stage 1 |
+| The tests pass with every command that compiles the file | The mutant survived |
+
+For example, `store/store.go`, which does not depend on cgo, is compiled both by `test` and by the `CGO_ENABLED=0` command. When it survives `test`, it is tried with the `CGO_ENABLED=0` command too. A file with `//go:build !cgo` is not compiled by `test`, so it is tried with the `CGO_ENABLED=0` command from the start.
+
+- **Why the next command is tried too.** Different builds compile different tests. For example, a test file with `//go:build !cgo` does not run under `test`. Deciding with the first command alone would report as a survivor a mutant that another build's tests catch
+- **Time.** Most mutants are caught by the first command. Only the survivors are tried with the next one
+- **The stages are made per command.** Stages 1 to 3 are made from the command in use (see "Narrowing the tests run" above). Stage 2's command is one per pair of test command and unit
+- **One run before breaking.** A `builds` command, like `test`, runs once before anything is broken (see "Configuration" below), the first time a mutant is tried with it. When its stage 3 fails before breaking, there is no result and the exit code is `2`
+- **The same in base.** A mutant tried again in base uses the commands in the same order. Whether a command compiles the file is decided from base's file. A mutant that no command compiles in base is treated as absent from base (step 3 of "How to compare" below)
+- The progress line of a mutant tried with a `builds` command names that command
+
+### Other operating systems and architectures
+
+A `builds` command whose GOOS or GOARCH differs from the environment hadome runs in is not run. For example, on macOS `[env, GOOS=windows, go, test, ./...]` is not run.
+
+- **Why it is not run.** The test programs of another OS or architecture often cannot start in this environment. Whether they can (whether an emulator is installed, and the like) must not change the result
+- **Nor is it only cross-compiled.** A build that compiles has run no test, so whether the tests catch the mutant is unknown
+- Such a file (for example, `runner_windows.go` on macOS) is **not built** (below). Running `hadome mutate` in an environment that compiles it (for example, a Windows CI job) tries it there
+
+### Not built
+
+The mutants of a file that no command, neither `test` nor any of `builds`, compiles are handled as follows.
 
 - **No test is run for them.** Their progress line says `not built`
 - **They are counted neither as survived nor as caught.** They are never a regression (exit code `1`)
@@ -205,11 +248,11 @@ Whether a Go file is in the build is decided from syntax only. No command such a
 | `_GOOS` and `_GOARCH` in the file name | `poll_windows.go`, `asm_arm64_test.go` |
 | A file name starting with `_` or `.` | `_scratch.go` |
 
-These are the rules of `MatchFile` in `go/build`. The environment matched against is the one hadome runs in.
+These are the rules of `MatchFile` in `go/build`. The environment matched against is decided per test command (`test` and each element of `builds`) as follows.
 
-- GOOS, GOARCH and cgo follow `go/build`'s default (`go/build.Default`). cgo follows `CGO_ENABLED`, and without it, whether a C compiler is found
-- When `mutation.test` has an element `CGO_ENABLED=0`, `GOOS=…` or `GOARCH=…`, that is used. For example, `[env, CGO_ENABLED=0, go, test, ./...]`
-- When `mutation.test` has `-tags`, those tags are taken as satisfied. For example, `[go, test, -tags, integration, ./...]` or `-tags=integration`
+- It starts from the environment hadome runs in. GOOS, GOARCH and cgo follow `go/build`'s default (`go/build.Default`). cgo follows `CGO_ENABLED`, and without it, whether a C compiler is found
+- When the command has an element `CGO_ENABLED=0`, `GOOS=…` or `GOARCH=…`, that is used. For example, `[env, CGO_ENABLED=0, go, test, ./...]`
+- When the command has `-tags`, those tags are taken as satisfied. For example, `[go, test, -tags, integration, ./...]` or `-tags=integration`
 
 ## How to compare
 
@@ -340,6 +383,8 @@ mutation:
   test: [go, test, ./...]   # required; run in the root of the version's copy for each mutant
   timeout: 2m               # optional; the limit of one test run. Default: three times one run of the same command before breaking anything
   max-mutants: 100          # optional; how many mutants one run tries at most. Default: 100
+  builds:                   # optional; commands that run the tests in other builds, for files test does not compile
+    - [env, CGO_ENABLED=0, go, test, ./...]
 ```
 
 The default `max-mutants` of 100 is about 17 minutes at most with a 10-second test run.
@@ -355,7 +400,7 @@ mutation:
 - **One run before breaking.** Each stage's command runs once before anything is broken: per version (head and base), the first time the command is needed, and the result is kept for the rest of the run
   - Stage 3 (all the tests) runs before any mutant is tried. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
   - When the command of stage 1 or 2 fails, that stage is not used and the mutant goes to the next stage (see "Narrowing the tests run" above). A progress line names the command and says the stage was skipped
-  - Stage 2's command is one per unit of the broken function. Its run before breaking is once per unit too
+  - Stage 2's command is one per pair of test command and unit of the broken function. Its run before breaking is once per pair too
 - **The comment added in the run before breaking.** In the run before breaking, a one-line comment is added at the end of every file that holds a mutant, and removed afterwards
   - The comment holds a mark used for that run only. For example: `// hadome mutate baseline 9c1e04d2-3`
   - The language decides how the comment is written: `#` in Python, `//` in the other languages
@@ -370,7 +415,7 @@ mutation:
   - When the repeated run before breaking fails, the limit cannot be confirmed. The timeout counts as caught
   - A raised limit is used for that command for the mutants that come after too
   - When `timeout` is written, the limit is not confirmed. The written value is the limit
-- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` or `{packages}` is changing `test`. So is changing `timeout` or `tests-separator`. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
+- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` or `{packages}` is changing `test`. So is changing `timeout` or `tests-separator`. So is changing `builds`, including adding, taking out or rewriting an element. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
 - Adding `mutation` when base has none does not loosen anything, because base did not run `mutate` at all (`OmittedIsOff`)
 
 ## The working directory
@@ -431,10 +476,10 @@ So hadome ends the tree as a whole.
 3. The same pair of versions and configuration always make the same mutants in the same order
 4. A mutant that already survived in base never fails a change
 5. Mutants that could not be tried (beyond the limit, in a file outside the build, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
-6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
-7. Stacking the stages gives the same verdict as stage 3 (all the tests) alone. The tests stages 1 and 2 run are all part of all the tests
+6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests of every command that compiles its file is
+7. Stacking the stages gives the same verdict as stage 3 (all the tests) of each command that compiles the file alone. The tests stages 1 and 2 run are all part of all the tests
 8. The tests stage 2 runs are decided from the version's facts alone. No command is started to find the callers
-9. Stage 2's command is one per unit of the broken function
+9. Stage 2's command is one per pair of test command (`test` or an element of `builds`) and unit of the broken function
 10. A command that fails before anything is broken never catches a mutant
 11. Before the tests run, the copy always holds exactly the version
 12. Two `hadome mutate` runs never run tests on the same repository at once
@@ -444,6 +489,8 @@ So hadome ends the tree as a whole.
     - The repeated run before breaking fails, so the limit cannot be confirmed
     - It still goes past the limit after two retries that each raised the limit
 15. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
+16. A mutant is tried only with the commands that compile its file. A command that does not compile it never makes it caught or survived
+17. A command whose GOOS or GOARCH differs from the environment hadome runs in is never run
 
 ## Deliberately left out
 
@@ -458,7 +505,9 @@ So hadome ends the tree as a whole.
 - Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
 - Ending the tree when hadome itself is stopped with `SIGKILL` on Unix. `SIGKILL` cannot be caught, so hadome stops before it ends the tree. macOS has no way to end children when their parent ends
 - Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
-- Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart. Every mutant of another language runs the tests
+- Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart. A mutant of another language is tried with every command of `test` and `builds`
 - Asking `go list` which files are in the build. Starting a command depends on module downloads and caches. What syntax cannot tell (a `mutation.test` that calls a shell script that changes the environment, and the like) is not told apart
-- Trying files outside the build in another environment (running again with `CGO_ENABLED=0`, and the like). The test command in configuration decides the environment the tests run in; hadome does not guess it
+- Guessing the environment to run the tests in from build conditions (adding `CGO_ENABLED=0` on seeing `//go:build !cgo`, and the like). `test` and `builds` in configuration decide the environments the tests run in. When the test command is a shell script, whether an added variable takes effect is unknown
+- Trying mutants by cross-compiling only. A build that compiles has run no test, so whether the tests catch the mutant is unknown
+- Running the tests of another OS or architecture (through a wrapper such as `go_windows_amd64_exec`, or an emulator). Whether they can start depends on the tools installed on the machine. Such files are tried by running `hadome mutate` in an environment that compiles them
 - Agent hooks (settings that run `hadome mutate` when an agent finishes its work). They would depend on a particular agent product. Agents are told through the `hadome agents` block, and CI makes it required
