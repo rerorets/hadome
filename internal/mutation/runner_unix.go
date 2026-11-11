@@ -82,16 +82,14 @@ func (t *processTree) started() error {
 // process running (a server it started, a daemon of the build tool) would otherwise keep it running
 // into the next mutant's run, and past hadome.
 func (t *processTree) end() {
-	t.mu.Lock()
-	pid := t.pid
-	t.mu.Unlock()
-	if pid != 0 {
-		killGroup(pid)
+	// pid is written only by started, on this goroutine; relay only reads it.
+	if t.pid != 0 {
+		killGroup(t.pid)
 	}
 	signal.Stop(t.sigs)
 	close(t.sigs)
 	<-t.relayed
-	// relay has returned, so nothing else writes dying or pid any more.
+	// relay has returned, so nothing else writes dying any more.
 	if t.dying != nil && t.pid == 0 {
 		t.raise(t.dying) // the command never started
 	}
