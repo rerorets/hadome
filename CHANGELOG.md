@@ -15,7 +15,7 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
-## 0.5.0 - 2026-11-10
+## 0.5.0 - 2026-11-11
 
 ### Finds more
 
