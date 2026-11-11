@@ -76,6 +76,7 @@ https://github.com/rerorets/hadome/releases
 - `hadome mutate` uses a fixed working directory per repository and refuses a second `mutate` in the same repository. (#110)
 - `hadome mutate` stops the whole process tree of a test run on timeout, cancellation and exit, so no test binary of a mutant that never stops is left running. (#119)
 - Symbols that share a short name are shown by their shortest distinct path. (#118)
+- The agents guide (`docs/for-agents.md`) shows how to stop the changes a team forbids with gates and invariants, and what hadome cannot stop. The instructions `hadome agents` prints point to these examples. (#131)
 - npm packages are staged through trusted publishing and approved by a maintainer with 2FA. (#115)
 - The hadome binary is larger by the SQL grammars it holds. (#120)
 - Release notes are written in the repository's `CHANGELOG.ja.md` and `CHANGELOG.md`. (#106, #107)
