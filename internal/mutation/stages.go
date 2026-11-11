@@ -58,7 +58,8 @@ func stages(test []string, sep string, p picked) [][]string {
 	return out
 }
 
-// names are the tests' names, each once, sorted.
+// names are the tests' names, each once, in the tests' order: testsCalling and reach give them
+// sorted by name.
 func names(tests []facts.Test) []string {
 	var out []string
 	for _, t := range tests {
@@ -66,7 +67,6 @@ func names(tests []facts.Test) []string {
 			out = append(out, t.Name)
 		}
 	}
-	slices.Sort(out)
 	return out
 }
 
