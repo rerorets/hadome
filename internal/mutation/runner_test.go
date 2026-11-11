@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -390,8 +391,12 @@ func TestATestCommandThatCannotStartStopsTheRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Unix reports the missing file, Windows the failed lookup of the executable.
 	err = r.clean()
-	if !errors.Is(err, fs.ErrNotExist) {
+	if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("want the run stopped because the command does not exist, got %v", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "no such command") {
+		t.Errorf("want the error to name the command, got %v", err)
 	}
 }
