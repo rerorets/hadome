@@ -94,6 +94,7 @@ npm のジョブは、パッケージを公開せず、段階公開（`npm stage
 | Allow npm publish | オフ |
 | Allow npm dist-tag | オフ |
 
+- 作った trusted publisher は、48 時間以内に一度使って確かめないと失効します。期限は npmjs.com のパッケージの設定に出ます。失効した設定は消して作り直します。そのため、trusted publisher を作るのと作り直すのは、タグを打つ日にします。
 - ジョブの中身は [packaging/npm/stage.sh](../../packaging/npm/stage.sh) です。段階公開には npm 11.15.0 以上と Node 22.14.0 以上が要るので、ジョブは版を固定した npm を入れます。
 - 試しの版（`1.2.0-rc.1`）は、dist-tag `next` で段階公開します。`npm install hadome` で入る版にはなりません。
 - provenance は、trusted publishing で公開すると npm が自動で付けます。
@@ -143,6 +144,7 @@ cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
 
 - `hadome` は、プラットフォームのパッケージをすべて作ってから、最後に作ります。
 - 試しの版でパッケージを作るときは、`--tag next` にします。
+- npm がパッケージの名前をスパムと判定すると、そのパッケージは作れません。`npm publish` は `403 Package name triggered spam detection` を、`npm stage publish` は `400 Version uniqueness check failed unexpectedly` を返すことがあります。この判定は手元からは解けないので、npm のサポートに名前の解除を頼みます。
 
 ## 変更履歴
 
