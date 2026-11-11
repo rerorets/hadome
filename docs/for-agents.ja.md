@@ -211,6 +211,68 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 確かめ方: `hadome self-test` が門番の `id` を挙げ、`hadome check` がそれを実行する。
 
+## やってはいけない変更を止める
+
+チームで決めた「やってはいけない変更」のうち、hadome で止められるものと、その書き方です。hadome が止めるのは、base より悪くなった変更だけです。そのため、「ここに触れたら人が見る」という決まりは、「ここを守るテストを減らさない」という決まりに置き換えて書きます。
+
+| 止めたいこと | 書き方 | 止まり方 |
+|---|---|---|
+| 本番のデータを書き換える SQL（`UPDATE`、`DELETE`） | 門番（`kind: finding`） | 増えると `1` |
+| 鍵、トークン、パスワードの混入 | 門番（`kind: finding`） | 増えると `1` |
+| 外部の AI の API を呼ぶ箇所の追加 | 門番（`kind: finding`） | 増えると `1` |
+| 書いた記録を書き換える変更 | 組み込みの不変条件 `append-only` | 守るテストが無くなると `1` |
+| 壊れた資格情報を通してしまう認証・認可の変更 | 組み込みの不変条件 `fail-closed` | 守るテストが無くなると `1` |
+| 課金の約束を破る変更 | 製品固有の不変条件 | 守るテストが無くなると `1` |
+| 上のどれかを緩める変更（門番や不変条件を消す、上限を上げる） | 書かなくても止まる | `3` |
+
+```yaml
+gates:
+  - id: acme/no-data-rewrite
+    kind: finding
+    run: [scripts/gates/no-data-rewrite]
+    paths: ["db/scripts/**"]
+    options:
+      forbidden: [UPDATE, DELETE]
+  - id: acme/no-secrets
+    kind: finding
+    run: [scripts/gates/no-secrets]
+  - id: acme/ai-calls
+    kind: finding
+    run: [scripts/gates/ai-calls]
+    paths: ["src/**"]
+
+invariants:
+  - type: append-only
+    target: audit.Append
+  - type: fail-closed
+    target: auth.Authorize
+  - id: billing-1
+    says: "An order is charged at most once"
+```
+
+```go
+// guards: fail-closed auth.Authorize
+func TestExpiredTokenIsRejected(t *testing.T) {
+```
+
+門番を書くときの要点です。
+
+- **見えたものを全部返す。** 門番は1つの版だけを見て、見つけたものをすべて返します。base と比べるのは hadome です。そのため、すでにある `UPDATE` は止まらず、増えたものだけが止まります。
+- **`anchor` は行番号を含めない。** 囲んでいる関数の名前や、空白をそろえた文を使います。行が動いても同じ違反だと分かるようにするためです。
+- **鍵そのものを出さない。** 鍵の門番は `message` と `anchor` に鍵の値を書きません。出力は CI のログに残るからです。`anchor` には、たとえば鍵の種類と変数の名前を使います。
+- **決まりごとに門番を分ける。** そうすると、`gate:allow <id> reason: …` の例外も決まりごとに書けます。
+
+次のものは hadome では止められません。
+
+| 止めたいこと | 止められない理由 |
+|---|---|
+| 公開された脆弱性情報（CVE など）に載ったパッケージ | 照合に通信が要る。hadome も門番も通信しない |
+| 触れただけで人のレビューに回す決まり（スキーマ、インフラ、環境変数） | hadome は変更の場所ではなく、base より悪くなったかで判断する。パスごとに必須のレビューを決める仕組みを使う |
+| 新しい外部の通信先 | 依存の図（`rules.deps`）は、リポジトリの中のユニットの間の import だけを数える |
+| 呼び出しの回数や費用の見積もり | 実際の回数や料金は、実行したときの量や料金表で決まり、ツリーからは分からない |
+
+確かめ方: `hadome config check` と `hadome self-test` が `0` で終わり、`hadome check` が門番を実行し、`tests/invariant-unguarded` を報告しない。
+
 ## ほかのエージェントに伝える
 
 ```sh
