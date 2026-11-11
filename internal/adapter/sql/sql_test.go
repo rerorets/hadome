@@ -32,7 +32,7 @@ var session = reuse.NewSession(nil, true)
 func run(v engine.Version) *reuse.Run { return session.Run(v.Label, v.FS, config.Analysis{}) }
 
 // analyze reads every .sql file of the version.
-func analyze(t *testing.T, a *sql.Adapter, v engine.Version, c config.Analysis) *facts.Analysis {
+func analyze(t *testing.T, a sql.Adapter, v engine.Version, c config.Analysis) *facts.Analysis {
 	t.Helper()
 	var paths []string
 	for p := range v.FS.(fstest.MapFS) {
@@ -78,7 +78,7 @@ func dialect(name string) config.Analysis {
 // target: sql.Adapter.Claims
 // A file is SQL by its extension alone.
 func TestSQLClaimsFilesEndingInSQL(t *testing.T) {
-	a := sql.New()
+	a := sql.Adapter{}
 	for p, want := range map[string]bool{"db/schema.sql": true, "db/SCHEMA.SQL": true, "db/schema.sql.tmpl": false, "db/seed.psql": false} {
 		if got := a.Claims(p); got != want {
 			t.Errorf("Claims(%q) = %v, want %v", p, got, want)
@@ -91,7 +91,7 @@ func TestSQLClaimsFilesEndingInSQL(t *testing.T) {
 // Functions, procedures, views and triggers are routines or views a test calls; tables and sequences
 // are relations it reads.
 func TestObjectKindsDecideTheSymbolKind(t *testing.T) {
-	an := analyze(t, sql.New(), version("db/schema.sql",
+	an := analyze(t, sql.Adapter{}, version("db/schema.sql",
 		"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\nCREATE VIEW v AS SELECT 1 AS n;\n"+
 			"CREATE TABLE t (id int);\nCREATE SEQUENCE s;\n"), postgres())
 	want := map[string]facts.SymbolKind{".sql/public.f": facts.SymbolRoutine, ".sql/public.v": facts.SymbolRelation,
@@ -146,7 +146,7 @@ func TestMigrationsLeaveTheObjectsThatRemain(t *testing.T) {
 			[]string{".sql/public.f"}},
 	}
 	for _, c := range cases {
-		an := analyze(t, sql.New(), version(c.files...), postgres())
+		an := analyze(t, sql.Adapter{}, version(c.files...), postgres())
 		if got := symbolIDs(an); !slices.Equal(got, c.want) {
 			t.Errorf("%s: symbols %v, want %v (unread %v)", c.name, got, c.want, unread(an))
 		}
@@ -157,7 +157,7 @@ func TestMigrationsLeaveTheObjectsThatRemain(t *testing.T) {
 // target: sql.Adapter.Analyze
 // psql's meta-commands and the data lines after COPY … FROM stdin are not SQL the grammar reads.
 func TestPsqlFormsAreNotRead(t *testing.T) {
-	an := analyze(t, sql.New(), version("db/schema.sql", "\\set ON_ERROR_STOP on\nCOPY t (id) FROM stdin;\n1\n2\n\\.\nCREATE TABLE t (id int);\n"), postgres())
+	an := analyze(t, sql.Adapter{}, version("db/schema.sql", "\\set ON_ERROR_STOP on\nCOPY t (id) FROM stdin;\n1\n2\n\\.\nCREATE TABLE t (id int);\n"), postgres())
 	if got, want := symbolIDs(an), []string{".sql/public.t"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
 	}
@@ -188,7 +188,7 @@ func TestDialectsAreNeverGuessed(t *testing.T) {
 			[]string{"db/a.sql", "CREATE TABLE t (id int);\nCREATE TABLE u (id int;\n"}, []string{"db/a.sql"}},
 	}
 	for _, c := range cases {
-		an := analyze(t, sql.New(), version(c.files...), c.c)
+		an := analyze(t, sql.Adapter{}, version(c.files...), c.c)
 		if got := unread(an); !slices.Equal(got, c.want) {
 			t.Errorf("%s: unread %v, want %v", c.name, got, c.want)
 		}
@@ -199,7 +199,7 @@ func TestDialectsAreNeverGuessed(t *testing.T) {
 // target: sql.Adapter.Analyze
 // Test .sql files, fixtures and files that are not definitions give no product symbols.
 func TestOnlyProductFilesDefineSymbols(t *testing.T) {
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", "CREATE TABLE accounts (id int);",
 		"tests/fixtures.sql", "CREATE TABLE fixture (id int);",
 		"warehouse/dbt_project.yml", "name: w\n",
@@ -225,7 +225,7 @@ func TestOnlyProductFilesDefineSymbols(t *testing.T) {
 // target: sql.Adapter.Analyze
 // Every .sql file uses the database, an input and output API, so a database unit is never pure.
 func TestSQLFilesUseTheDatabase(t *testing.T) {
-	an := analyze(t, sql.New(), version("db/schema.sql", "CREATE TABLE accounts (id int);"), postgres())
+	an := analyze(t, sql.Adapter{}, version("db/schema.sql", "CREATE TABLE accounts (id int);"), postgres())
 	if len(an.Imports) != 1 || !an.Imports[0].IO || !an.Imports[0].Global || an.Imports[0].FromUnit != ".sql" {
 		t.Errorf("imports %+v, want one global input and output use from .sql", an.Imports)
 	}
@@ -234,7 +234,7 @@ func TestSQLFilesUseTheDatabase(t *testing.T) {
 // linked reads the version's .sql files, then links one test holding the texts.
 func linked(t *testing.T, c config.Analysis, texts []facts.Text, files ...string) facts.Test {
 	t.Helper()
-	a := sql.New()
+	a := sql.Adapter{}
 	v := version(files...)
 	an := analyze(t, a, v, c)
 	an.Tests = append(an.Tests, facts.Test{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: texts})
@@ -398,7 +398,7 @@ func TestNoDatabaseNoTestSQL(t *testing.T) {
 // Tests written in SQL are tests: a pgTAP file that plans, a tSQLt procedure of a test class, a
 // utPLSQL --%test procedure; their assertions, skips and fakes count.
 func TestTestsWrittenInSQL(t *testing.T) {
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", schema,
 		"test/accounts.sql", "SELECT plan(2);\nSELECT ok(billing.is_active(1, 2));\nSELECT is(1, 1);\nSELECT * FROM finish();\n",
 		"test/empty.sql", "SELECT plan(1);\nSELECT billing.is_active(1, 2);\n",
@@ -424,7 +424,7 @@ func TestMySQLDefinitions(t *testing.T) {
 		"  DECLARE EXIT HANDLER FOR NOT FOUND RETURN 0;\n  RETURN p;\nEND //\nDELIMITER ;\n" +
 		"CREATE FUNCTION billing.one() RETURNS INT DETERMINISTIC RETURN 1;\n" +
 		"CREATE TABLE `sequence` (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB;\n"
-	an := analyze(t, sql.New(), version("db/V1__a.sql", src), config.Analysis{})
+	an := analyze(t, sql.Adapter{}, version("db/V1__a.sql", src), config.Analysis{})
 	if got, want := symbolIDs(an), []string{".sql/billing.one", ".sql/billing.skip", ".sql/sequence"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
 	}
@@ -455,7 +455,7 @@ func TestBigQueryDefinitions(t *testing.T) {
 		"CREATE TABLE FUNCTION ds.tvf(n INT64) AS SELECT n AS a;\n" +
 		"CREATE VIEW ds.v AS SELECT a.x FROM `proj.ds.t` a JOIN ds.made USING (a, b) QUALIFY ROW_NUMBER() OVER (PARTITION BY a.x) = 1;\n" +
 		"CREATE VIEW ds.w AS SELECT * FROM ds.tvf(1);\n"
-	an := analyze(t, sql.New(), version("bq/V1__a.sql", src), config.Analysis{})
+	an := analyze(t, sql.Adapter{}, version("bq/V1__a.sql", src), config.Analysis{})
 	want := []string{".sql/ds.made", ".sql/ds.p", ".sql/ds.t", ".sql/ds.tvf", ".sql/ds.v", ".sql/ds.w"}
 	if got := symbolIDs(an); !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
@@ -479,7 +479,7 @@ func TestBigQueryTestStrings(t *testing.T) {
 // target: sql.Adapter.Name
 // The adapter is the language sql of the configuration's languages.
 func TestTheAdapterIsTheLanguageSQL(t *testing.T) {
-	if got := sql.New().Name(); got != "sql" || !slices.ContainsFunc(config.Languages, func(v config.Value) bool { return v.Name == got }) {
+	if got := (sql.Adapter{}).Name(); got != "sql" || !slices.ContainsFunc(config.Languages, func(v config.Value) bool { return v.Name == got }) {
 		t.Errorf("name %q is not a language of the configuration", got)
 	}
 }
@@ -491,7 +491,7 @@ func TestTheAdapterIsTheLanguageSQL(t *testing.T) {
 func TestFilesTheirUnitsAndRoles(t *testing.T) {
 	c := postgres()
 	c.GeneratedFiles = []string{"db/gen/**"}
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", "\xef\xbb\xbfCREATE TABLE accounts (id int);",
 		"db/gen/out.sql", "CREATE TABLE generated_rows (id int);",
 		"db/1_a.down.sql", "DROP TABLE accounts;",
@@ -519,11 +519,11 @@ func TestFilesTheirUnitsAndRoles(t *testing.T) {
 // Link resolves against the files of the version it is given, even after the same adapter read
 // other contents at the same paths.
 func TestLinkUsesTheVersionItIsGiven(t *testing.T) {
-	a := sql.New()
+	a := sql.Adapter{}
 	before := version("db/schema.sql", "CREATE FUNCTION old_f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;")
 	analyze(t, a, before, postgres())
 	after := version("db/schema.sql", "CREATE FUNCTION new_f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;")
-	an := analyze(t, sql.New(), after, postgres())
+	an := analyze(t, sql.Adapter{}, after, postgres())
 	an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT new_f()")}}}
 	if err := a.Link(run(after), postgres(), an); err != nil {
 		t.Fatal(err)
@@ -548,9 +548,9 @@ func TestLinkUsesTheVersionItIsGiven(t *testing.T) {
 // The same files give the same facts every time they are read.
 func TestReadingIsDeterministic(t *testing.T) {
 	v := version("db/schema.sql", schema, "db/more.sql", "CREATE TABLE t (id int);\nCREATE VIEW w AS SELECT id FROM t;")
-	first := analyze(t, sql.New(), v, postgres())
+	first := analyze(t, sql.Adapter{}, v, postgres())
 	for i := 0; i < 3; i++ {
-		again := analyze(t, sql.New(), v, postgres())
+		again := analyze(t, sql.Adapter{}, v, postgres())
 		if strings.Join(symbolIDs(again), ",") != strings.Join(symbolIDs(first), ",") {
 			t.Fatalf("read %d gave %v, first %v", i, symbolIDs(again), symbolIDs(first))
 		}
@@ -576,7 +576,7 @@ func TestCommentsOfSQLFiles(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			an := analyze(t, sql.New(), version("db/schema.sql", tc.src), tc.c)
+			an := analyze(t, sql.Adapter{}, version("db/schema.sql", tc.src), tc.c)
 			var got []string
 			for _, c := range an.Comments {
 				got = append(got, fmt.Sprintf("%s:%d %q directive=%v", c.Path, c.Line, strings.TrimSpace(c.Text), c.Directive))
@@ -594,7 +594,7 @@ func TestCommentsOfSQLFiles(t *testing.T) {
 func TestLinkFailsOnAFileItCannotRead(t *testing.T) {
 	an := &facts.Analysis{Files: []facts.File{{Path: "db/gone.sql", Language: "sql"}},
 		Tests: []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT 1")}}}}
-	if err := sql.New().Link(run(version()), postgres(), an); err == nil {
+	if err := (sql.Adapter{}).Link(run(version()), postgres(), an); err == nil {
 		t.Error("no error for a file the version does not have")
 	}
 }
@@ -623,10 +623,10 @@ func TestLinkTellsVersionsApart(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			a := sql.New()
+			a := sql.Adapter{}
 			analyze(t, a, version(tc.read...), postgres())
 			v := version(tc.linkTo...)
-			an := analyze(t, sql.New(), v, postgres())
+			an := analyze(t, sql.Adapter{}, v, postgres())
 			an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1, Texts: []facts.Text{text("SELECT new_f()")}}}
 			if err := a.Link(run(v), postgres(), an); err != nil {
 				t.Fatal(err)

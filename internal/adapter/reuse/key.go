@@ -44,9 +44,9 @@ func plainSeen(t reflect.Type, seen map[reflect.Type]bool) bool {
 	return false
 }
 
-// encoder writes a value's canonical form into a hash. Every value is written with its length or
-// its fields' names, so that two different values never write the same bytes; byte slices are
-// written as their hash, which is also kept in contents.
+// encoder writes a value's canonical form into a hash. Values of one type are written so that two
+// different ones never write the same bytes: strings and lists with their length first, byte slices
+// and maps as a hash of fixed size. Byte slices' hashes are also kept in contents.
 type encoder struct {
 	h        hash.Hash
 	contents []Hash
@@ -91,7 +91,6 @@ func (e *encoder) value(v reflect.Value) {
 		if v.Type().Elem().Kind() == reflect.Uint8 {
 			c := Hash(sha256.Sum256(v.Bytes()))
 			e.contents = append(e.contents, c)
-			e.h.Write([]byte{'b'})
 			e.h.Write(c[:])
 			return
 		}
@@ -107,16 +106,15 @@ func (e *encoder) value(v reflect.Value) {
 			pairs = append(pairs, pair{e.sub(k), e.sub(v.MapIndex(k))})
 		}
 		slices.SortFunc(pairs, func(a, b pair) int { return bytes.Compare(a.k, b.k) })
-		e.uint(uint64(len(pairs)))
+		m := sha256.New()
 		for _, p := range pairs {
-			e.h.Write(p.k)
-			e.h.Write(p.v)
+			m.Write(p.k)
+			m.Write(p.v)
 		}
+		e.h.Write(m.Sum(nil))
 	case reflect.Struct:
-		t := v.Type()
-		e.uint(uint64(t.NumField()))
-		for i := range t.NumField() {
-			e.str(t.Field(i).Name)
+		// A stage's argument always has the same type, so its fields need no names to tell them apart.
+		for i := range v.NumField() {
 			e.value(v.Field(i))
 		}
 	default:

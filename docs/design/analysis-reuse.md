@@ -88,12 +88,12 @@ Work not split into stages runs on every version, every time. Work that runs eve
 
 ### Fingerprints of results
 
-When a stage reads another stage's result, it records that result's fingerprint. How the fingerprint is made depends on the result's type.
+When a stage reads another reading stage's result, it records that result's fingerprint. Calling a pure stage is not recorded, because its argument decides its result. How the fingerprint is made depends on the result's type.
 
 | Result type | Fingerprint |
 |---|---|
 | Made of values only | A hash of the whole result, made the same way as an argument's key |
-| Anything else (such as a syntax tree) | For a pure stage, the stage's key. For a reading stage, the hash of all its recorded reads |
+| Anything else (such as a syntax tree) | The hash of all the reads that stage recorded |
 
 A result made of values only keeps its fingerprint when its input changes but the result does not. A stage that read it then does not run again.
 
@@ -318,7 +318,6 @@ classDiagram
     +Label() string
     +FS() fs.FS
     +Config() config.Analysis
-    +Env() any
   }
   class Pure~A, T~ {
     <<reuse>>
@@ -364,7 +363,7 @@ classDiagram
 - The only hadome package `reuse` imports is `config` (`config.Analysis`). It receives versions as `fs.FS`. `internal/adapter` hands head's list of files to `Expect`
 - The engine does not know `reuse`. All the engine knows is `PairAnalyzer` and `Reuser`
 - The `Env` of a session is what both versions share (the languages). Reading stages receive it through `Reads.Env()`
-- `Session.Stats` counts, for each stage, how often its remembered result was returned and how often it ran. Tests and measurements use it
+- `Session.Stats` counts three things for each stage: how often its remembered result was returned, how often it ran, and how often a call waited for the same key to finish running elsewhere. Tests and measurements use it
 
 ## Tests
 
