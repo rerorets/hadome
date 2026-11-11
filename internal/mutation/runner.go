@@ -58,6 +58,7 @@ type Runner struct {
 	before map[string]baseline // by command
 	// skipped is told once of each narrowed command that fails with nothing broken.
 	skipped func(cmd []string)
+	clock   clock
 }
 
 // baseline is what a command did with nothing broken.
@@ -80,7 +81,7 @@ func newRunner(dir string, c config.Mutation, marked map[string]string, skipped 
 		return nil, err
 	}
 	return &Runner{Test: c.Test, Sep: c.TestsSeparator, Timeout: timeout, dir: dir, marked: marked, mark: hex.EncodeToString(b),
-		before: map[string]baseline{}, skipped: skipped}, nil
+		before: map[string]baseline{}, skipped: skipped, clock: wallClock}, nil
 }
 
 // clean runs every test once on the unbroken copy. Failing tests make every mutant look caught, so
@@ -119,7 +120,19 @@ func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
 		if err := os.WriteFile(p, broken, 0o644); err != nil {
 			return Caught, err
 		}
-		_, passed, err := r.run(cmd, b.limit)
+		_, passed, timedOut, err := r.run(cmd, b.limit)
+		// A timeout catches the mutant only against a confirmed limit: a run that went past it because
+		// the machine got loaded runs again with the limit raised, a bounded number of times.
+		for i := 0; err == nil && timedOut && r.Timeout == 0 && i < confirmations; i++ {
+			raised, cerr := r.confirm(cmd, p, orig, broken)
+			if cerr != nil {
+				return Caught, cerr
+			}
+			if !raised {
+				break
+			}
+			_, passed, timedOut, err = r.run(cmd, r.before[strings.Join(cmd, "\x00")].limit)
+		}
 		if err != nil || !passed {
 			return Caught, err
 		}
@@ -138,29 +151,16 @@ func (r *Runner) baseline(cmd []string) (baseline, error) {
 	if b, ok := r.before[key]; ok {
 		return b, nil
 	}
-	restore, err := r.addMarks()
+	m, err := r.measure(cmd)
 	if err != nil {
 		return baseline{}, err
 	}
-	limit := r.Timeout
-	if limit == 0 {
-		limit = time.Hour // nothing is known yet; a hung run still ends
-	}
-	start := time.Now()
-	out, passed, err := r.run(cmd, limit)
-	took := time.Since(start)
-	if rerr := restore(); err == nil {
-		err = rerr
-	}
-	if err != nil {
-		return baseline{}, err
-	}
-	b := baseline{passed: passed, limit: r.Timeout, out: out}
+	b := baseline{passed: m.passed, limit: r.Timeout, out: m.out}
 	if b.limit == 0 {
-		b.limit = 3*took + time.Second // three times a clean run; the second covers a run of almost nothing
+		b.limit = limitAfter(m.took)
 	}
 	r.before[key] = b
-	if !passed && r.skipped != nil && key != strings.Join(fill(r.Test, r.Sep, nil, nil), "\x00") {
+	if !b.passed && r.skipped != nil && key != strings.Join(fill(r.Test, r.Sep, nil, nil), "\x00") {
 		r.skipped(cmd)
 	}
 	return b, nil
@@ -214,14 +214,18 @@ func lineComment(language string) string {
 	return "//"
 }
 
-// run starts a command in the copy and reports whether it passed. A run that times out did not
-// pass: a mutant that made the tests stop finishing was noticed.
-func (r *Runner) run(argv []string, limit time.Duration) (string, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+// run starts a command in the copy and reports whether it passed, and whether it went past limit.
+// A run that times out did not pass.
+func (r *Runner) run(argv []string, limit time.Duration) (string, bool, bool, error) {
+	ctx, cancel, seen := r.clock.deadline(argv, limit)
 	defer cancel()
 	var out bytes.Buffer
-	passed, err := runTree(ctx, r.dir, argv, &out)
-	return out.String(), passed, err
+	var w io.Writer = &out
+	if seen != nil {
+		w = io.MultiWriter(&out, seen)
+	}
+	passed, err := runTree(ctx, r.dir, argv, w)
+	return out.String(), passed, ctx.Err() != nil, err
 }
 
 // runTree runs a command in dir until it ends or ctx is done, writing what it prints to out, and
