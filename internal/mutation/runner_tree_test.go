@@ -1,8 +1,10 @@
 package mutation
 
 import (
+	"bufio"
 	"context"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,7 +16,7 @@ import (
 // started running, as the test binary a go test killed for its time leaves when only go is killed.
 func TestAnEndedRunLeavesNothingItsCommandStartedRunning(t *testing.T) {
 	t.Parallel()
-	if passed := runLeavingALeaf(t, "hang"); passed {
+	if passed := runLeavingALeaf(t, "hang", "hold"); passed {
 		t.Error("an ended run passed")
 	}
 }
@@ -25,18 +27,31 @@ func TestAnEndedRunLeavesNothingItsCommandStartedRunning(t *testing.T) {
 // it running past the run: it would keep running into the next mutant's run.
 func TestARunEndsWhatItsCommandLeftRunning(t *testing.T) {
 	t.Parallel()
-	if passed := runLeavingALeaf(t, "exit"); !passed {
+	if passed := runLeavingALeaf(t, "exit", "-"); !passed {
 		t.Error("a command that exited 0 did not pass")
 	}
 }
 
-// runLeavingALeaf runs StandInTree in mode through runTree, and returns once the leaf has ended.
+// viewpoint: behaviour
+// target: mutation.runTree
+// A test command that exits 0 while a process it started keeps the run's output open passes once
+// the output has been waited for a while, and that process does not outlive the run: the run
+// neither hangs on the output nor takes the command for failed.
+func TestACommandWhoseLeftoverHoldsTheOutputPasses(t *testing.T) {
+	t.Parallel()
+	if passed := runLeavingALeaf(t, "exit", "open"); !passed {
+		t.Error("a command that exited 0 did not pass")
+	}
+}
+
+// runLeavingALeaf runs StandInTree in mode with hold through runTree, and returns once the leaf has
+// ended.
 //
 // With mode hang, it ends the run once the leaf is ready. The leaf holds the run's output and keeps
 // it full, and the output waits for the leaf to end, so the run cannot finish before. The leaf has
 // to end when the run is ended: a leaf ended only once the run has finished is still running when
 // the run gives up on its output, and says so.
-func runLeavingALeaf(t *testing.T, mode string) bool {
+func runLeavingALeaf(t *testing.T, mode, hold string) bool {
 	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
@@ -63,10 +78,6 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 			endErr = w.gone()
 		}
 	}}
-	hold := "-"
-	if mode == "hang" {
-		hold = "hold"
-	}
 	passed, err := runTree(ctx, t.TempDir(), []string{exe, StandInTree, mode, w.arg, hold}, out)
 	if err != nil {
 		t.Fatal(err)
@@ -81,4 +92,40 @@ func runLeavingALeaf(t *testing.T, mode string) bool {
 		t.Fatal(endErr)
 	}
 	return passed
+}
+
+// viewpoint: failure
+// target: the stand-ins' lifeline (WatchLifeline)
+// A stand-in ends once the test binary that started it has ended, even one killed before its
+// cleanups could run: a tree that code under test failed to end does not run on past the binary.
+// The leaf ends without saying it was still running, which only a leaf that was asked does.
+func TestStandInsEndWithTheTestBinaryThatStartedThem(t *testing.T) {
+	t.Parallel()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := watchLeaf(t)
+	holder := exec.Command(exe, StandInHolder, w.arg)
+	out, err := holder.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Start(); err != nil {
+		t.Fatal(err)
+	}
+	line, _ := bufio.NewReader(out).ReadString('\n')
+	n, ok := strings.CutPrefix(strings.TrimSpace(line), "leaf ")
+	if !ok {
+		holder.Process.Kill()
+		holder.Wait()
+		t.Fatalf("the test command did not say its leaf was ready: %q", line)
+	}
+	pid, _ := strconv.Atoi(n)
+	w.seen(pid)
+	holder.Process.Kill()
+	holder.Wait()
+	if err := w.gone(); err != nil {
+		t.Error(err)
+	}
 }

@@ -35,9 +35,12 @@ const catchChanges = "stand-in-tests-catch-changes"
 // mutant runs in (mutation.StandInStages) and a second hadome mutate holding the lock
 // (mutation.StandInHoldLock), and one that cannot write the lock
 // (mutation.StandInUnwritableLock), and a test command that starts a process of its own
-// (mutation.StandInTree, mutation.StandInLeaf) run by a hadome mutate (mutation.StandInRunTree).
+// (mutation.StandInTree, mutation.StandInLeaf) run by a hadome mutate (mutation.StandInRunTree) or
+// by a test binary holding a lifeline of its own (mutation.StandInHolder).
+// Every stand-in ends once the binary running the tests has ended (mutation.WatchLifeline).
 func TestMain(m *testing.M) {
-	if len(os.Args) > 1 {
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") { // a stand-in, not the tests
+		mutation.WatchLifeline()
 		switch os.Args[1] {
 		case catchChanges:
 			os.Exit(standInCatch(os.Args[2:]))
@@ -53,9 +56,18 @@ func TestMain(m *testing.M) {
 			os.Exit(mutation.StandInLeafRun(os.Args[2], os.Args[3]))
 		case mutation.StandInRunTree:
 			os.Exit(mutation.StandInRunTreeRun(os.Args[2]))
+		case mutation.StandInHolder:
+			os.Exit(mutation.StandInHolderRun(os.Args[2]))
+		case mutation.StandInEarlySignal:
+			os.Exit(mutation.StandInEarlySignalRun(os.Args[2], os.Args[3]))
+		case mutation.StandInAfterRun:
+			os.Exit(mutation.StandInAfterRunRun())
 		}
 	}
-	os.Exit(m.Run())
+	release := mutation.HoldLifeline()
+	code := m.Run()
+	release()
+	os.Exit(code)
 }
 
 func standInCatch(files []string) int {
