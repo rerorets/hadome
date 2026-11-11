@@ -53,9 +53,6 @@ func (r *Run) Config() config.Analysis {
 	return r.cfg
 }
 
-// Env is what the session was given to share between versions.
-func (r *Run) Env() any { return r.s.env }
-
 func (r *Run) real() *Run {
 	if r.outer != nil {
 		return r.outer
@@ -102,7 +99,6 @@ type recorder struct {
 	inner    *Run
 	mu       sync.Mutex
 	reads    []read
-	seen     map[string]bool
 	contents []Hash
 	// unreusable is set by a read that gave no answer: the result may not be reused.
 	unreusable bool
@@ -123,13 +119,8 @@ func (rc *recorder) unanswered() {
 
 func (rc *recorder) add(rd read) {
 	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	k := rd.op + "\x00" + rd.arg
-	if rc.seen[k] {
-		return
-	}
-	rc.seen[k] = true
 	rc.reads = append(rc.reads, rd)
+	rc.mu.Unlock()
 }
 
 func (rc *recorder) FS() fs.FS               { return recordingFS{rc} }

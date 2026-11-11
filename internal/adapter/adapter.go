@@ -75,7 +75,7 @@ func New() Analyzer {
 	for _, l := range treesitter.Languages() { // a different type with and without cgo
 		langs = append(langs, l)
 	}
-	langs = append(langs, terraform.Adapter{}, ansible.Adapter{}, sql.New())
+	langs = append(langs, terraform.Adapter{}, ansible.Adapter{}, sql.Adapter{})
 	return Analyzer{Languages: langs}
 }
 

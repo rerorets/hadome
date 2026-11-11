@@ -22,7 +22,7 @@ func TestTheCatalogKeptForLinkHoldsNoFile(t *testing.T) {
 	}
 	paths := []string{"db/billing.sql", "tests/billing_test.sql"}
 	r := reuse.Lone(tree)
-	an, err := New().Analyze(r, config.Analysis{}, paths)
+	an, err := Adapter{}.Analyze(r, config.Analysis{}, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,13 +60,13 @@ func TestACatalogIsNotUsedForFilesReadAnotherWay(t *testing.T) {
 			Tests: []facts.Test{{Name: "TestActive", Path: "app/billing_test.go",
 				Texts: []facts.Text{{Path: "app/billing_test.go", Line: 3, Value: "SELECT billing.is_active(1)", Times: 1}}}},
 		}
-		if err := New().Link(r, asTests, an); err != nil {
+		if err := (Adapter{}).Link(r, asTests, an); err != nil {
 			t.Fatal(err)
 		}
 		return an.Tests[0]
 	}
 	kept := reuse.Lone(tree)
-	if _, err := New().Analyze(kept, config.Analysis{}, []string{"db/billing.sql"}); err != nil {
+	if _, err := (Adapter{}).Analyze(kept, config.Analysis{}, []string{"db/billing.sql"}); err != nil {
 		t.Fatal(err)
 	}
 	got, want := link(kept), link(reuse.Lone(tree))

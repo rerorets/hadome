@@ -39,12 +39,10 @@ func deepCopy(v reflect.Value) reflect.Value {
 		}
 		return out
 	case reflect.Struct:
+		// Every field of a fact is exported, so every one can be set.
 		out := reflect.New(v.Type()).Elem()
-		out.Set(v) // fields that need no copy, unexported ones included
 		for i := range v.NumField() {
-			if out.Field(i).CanSet() {
-				out.Field(i).Set(deepCopy(v.Field(i)))
-			}
+			out.Field(i).Set(deepCopy(v.Field(i)))
 		}
 		return out
 	case reflect.Array:

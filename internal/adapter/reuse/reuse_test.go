@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -311,8 +312,8 @@ func TestAPairResultIsKeptUntilTheEnd(t *testing.T) {
 
 var pairStage = NewPure("test/pair", ScopePair, func(a nameArg) (string, error) { return a.Name, nil })
 
-var gate = make(chan struct{})
-var entered = make(chan struct{}, 2)
+// gate and entered hold the blocking stage; each test that uses them makes them anew.
+var gate, entered chan struct{}
 
 var blocking = NewPure("test/blocking", ScopePair, func(a nameArg) (string, error) {
 	called("test/blocking")
@@ -321,21 +322,86 @@ var blocking = NewPure("test/blocking", ScopePair, func(a nameArg) (string, erro
 	return a.Name, nil
 })
 
+// waitFor returns once the stage has had a call waiting for another, letting other goroutines run
+// until then.
+func waitFor(s *Session, id string) {
+	for s.Stats()[id].Waits == 0 {
+		runtime.Gosched()
+	}
+}
+
 // viewpoint: behaviour
 // target: reuse.Session.do
-// Two calls of a stage with the same key at once run it once and share its result.
+// Two calls of a stage with the same key at once run it once and share its result: the second
+// waits for the first, then gets what it computed.
 func TestConcurrentCallsWithOneKeyRunTheStageOnce(t *testing.T) {
 	s := NewSession(nil, true)
 	defer s.End()
 	r := s.Run("base", fstest.MapFS{}, cfg)
+	gate, entered = make(chan struct{}), make(chan struct{}, 2)
+	before := callsOf("test/blocking")
 	results := make(chan string, 2)
 	go func() { v, _ := blocking.Do(r, nameArg{Name: "x"}); results <- v }()
 	<-entered
 	go func() { v, _ := blocking.Do(r, nameArg{Name: "x"}); results <- v }()
+	waitFor(s, "test/blocking")
 	close(gate)
 	a, b := <-results, <-results
-	if a != "x" || b != "x" || callsOf("test/blocking") != 1 {
-		t.Errorf("results %q %q, ran %d times; want one run shared", a, b, callsOf("test/blocking"))
+	if ran := callsOf("test/blocking") - before; a != "x" || b != "x" || ran != 1 {
+		t.Errorf("results %q %q, ran %d times; want one run shared", a, b, ran)
+	}
+	if st := s.Stats()["test/blocking"]; st.Misses != 1 || st.Hits != 1 || st.Waits != 1 {
+		t.Errorf("stats %+v, want one run, one wait, one result shared", st)
+	}
+}
+
+// innerGate and innerEntered hold firstLine on a file that says "block"; made anew by each test.
+var innerGate, innerEntered chan struct{}
+
+// firstLine reads a file's first line, and stops before answering when the file says "block".
+var firstLine = NewReading("test/first-line", ScopeLanguage, func(rd Reads, a pathArg) (string, error) {
+	data, err := fs.ReadFile(rd.FS(), a.Path)
+	if err != nil {
+		return "", err
+	}
+	first, rest, _ := cutLine(string(data))
+	if rest == "block" {
+		innerEntered <- struct{}{}
+		<-innerGate
+	}
+	return first, nil
+})
+
+// aboveFirstLine reads only another stage's first line.
+var aboveFirstLine = NewReading("test/above-first-line", ScopeLanguage, func(rd Reads, a pathArg) (string, error) {
+	first, err := firstLine.Do(rd.Run(), a)
+	return "above:" + first, err
+})
+
+// viewpoint: behaviour
+// target: reuse.Session.do
+// A call that comes while another call checks base's result against head waits for that check,
+// and is then served the same result.
+func TestACallWaitsForTheCheckOfTheSameKey(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	base := s.Run("base", fstest.MapFS{"a.txt": {Data: []byte("first\nbody")}}, cfg)
+	head := s.Run("head", fstest.MapFS{"a.txt": {Data: []byte("first\nblock")}}, cfg)
+	innerGate, innerEntered = make(chan struct{}), make(chan struct{}, 1)
+	if _, err := aboveFirstLine.Do(base, pathArg{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	results := make(chan string, 2)
+	go func() { v, _ := aboveFirstLine.Do(head, pathArg{"a.txt"}); results <- v }()
+	<-innerEntered
+	go func() { v, _ := aboveFirstLine.Do(head, pathArg{"a.txt"}); results <- v }()
+	waitFor(s, "test/above-first-line")
+	close(innerGate)
+	if a, b := <-results, <-results; a != "above:first" || b != "above:first" {
+		t.Errorf("results %q %q", a, b)
+	}
+	if st := s.Stats()["test/above-first-line"]; st.Misses != 1 || st.Hits != 2 {
+		t.Errorf("stats %+v, want base's result served to both calls on head", st)
 	}
 }
 
@@ -415,7 +481,7 @@ func TestReadsThroughOpenAreRecorded(t *testing.T) {
 // A path a file system must refuse is refused through the recorded file system too.
 func TestAnInvalidPathIsRefused(t *testing.T) {
 	r := Lone(fstest.MapFS{"a.txt": {}})
-	rc := &recorder{run: r, seen: map[string]bool{}}
+	rc := &recorder{run: r}
 	if _, err := rc.FS().Open("../a.txt"); !errors.Is(err, fs.ErrInvalid) {
 		t.Errorf("opening ../a.txt gave %v, want an invalid path", err)
 	}
@@ -580,5 +646,148 @@ func TestAStageThatLookedAtExistingFilesIsReused(t *testing.T) {
 			t.Errorf("%s: stats %+v, want head served from base", path, st)
 		}
 		s.End()
+	}
+}
+
+// node is a recursive argument: a tree of names.
+type node struct {
+	Name string
+	Kids []node
+}
+
+var nodeNames = NewPure("test/node", ScopePair, func(n node) (int, error) { return len(n.Kids), nil })
+
+// viewpoint: behaviour
+// target: reuse.encode
+// Values of one type that differ anywhere have different keys: in a boolean, a number, a string, a
+// byte slice, a list, an array, a map's key or value, or where one list ends and the next begins.
+// A recursive type is made of values only too.
+func TestValuesThatDifferAnywhereHaveDifferentKeys(t *testing.T) {
+	type two struct{ A, B string }
+	type lists struct{ A, B []string }
+	pairs := [][2]any{
+		{two{"aB", ""}, two{"a", "B"}},
+		{two{"a", "b"}, two{"b", "a"}},
+		{[]bool{true, false}, []bool{false, true}},
+		{[]int{1, 2}, []int{2, 1}},
+		{[]uint{1, 2}, []uint{2, 1}},
+		{[]float64{1, 2}, []float64{2, 1}},
+		{[][]byte{[]byte("a")}, [][]byte{[]byte("b")}},
+		{[2]int{1, 2}, [2]int{2, 1}},
+		{[][]int{{1}}, [][]int{{2}}},
+		{lists{A: []string{"x"}}, lists{B: []string{"x"}}},
+		{map[string]string{"a": "x"}, map[string]string{"b": "x"}},
+		{map[string]string{"a": "x"}, map[string]string{"a": "y"}},
+		{node{Name: "r", Kids: []node{{Name: "a"}}}, node{Name: "r", Kids: []node{{Name: "b"}}}},
+	}
+	for i, p := range pairs {
+		if keyOf(p[0]) == keyOf(p[1]) {
+			t.Errorf("pair %d shares a key: %v and %v", i, p[0], p[1])
+		}
+	}
+	s := NewSession(nil, true)
+	defer s.End()
+	if n, err := nodeNames.Do(s.Run("base", fstest.MapFS{}, cfg), node{Name: "r", Kids: []node{{Name: "a"}}}); err != nil || n != 1 {
+		t.Errorf("a recursive argument gave %d %v", n, err)
+	}
+}
+
+// viewpoint: external contract
+// target: reuse.recordingFS
+// The recorded file system behaves as a file system: opening, reading, stating and listing, a
+// directory read a few entries at a time included.
+func TestTheRecordedFileSystemIsAFileSystem(t *testing.T) {
+	r := Lone(fstest.MapFS{"a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}, "lib/c.txt": {}, "lib/d/e.txt": {}})
+	if err := fstest.TestFS((&recorder{run: r}).FS(), "a.txt", "lib/b.txt", "lib/c.txt", "lib/d/e.txt"); err != nil {
+		t.Error(err)
+	}
+}
+
+// viewpoint: failure
+// target: reuse.Session.Expect
+// Learning head fails when a file head is said to have cannot be read.
+func TestExpectingAFileHeadDoesNotHaveFails(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	if err := s.Expect(s.Run("head", fstest.MapFS{}, cfg), []string{"missing.txt"}); err == nil {
+		t.Error("no error for a file head does not have")
+	}
+}
+
+// viewpoint: failure
+// target: reuse.Session.validate
+// A result is not served to head when checking it fails there: a stage it read fails on head, or
+// a file it read cannot be read on head.
+func TestAResultIsNotServedWhenCheckingItFails(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	present := fstest.MapFS{"a.txt": {Data: []byte("first\nbody")}}
+	if _, err := outer.Do(s.Run("base", present, cfg), pathArg{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := outer.Do(s.Run("head", fstest.MapFS{}, cfg), pathArg{"a.txt"}); err == nil {
+		t.Error("head without the file was served base's result instead of failing")
+	}
+	if _, err := probe.Do(s.Run("base", present, cfg), pathArg{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := probe.Do(s.Run("head", refusing{MapFS: present, path: "a.txt"}, cfg), pathArg{"a.txt"})
+	if err != nil || got != "none" {
+		t.Errorf("head that cannot read the file got %q %v, want it read again: none", got, err)
+	}
+}
+
+// probeTwo looks one file up, then reads another.
+var probeTwo = NewReading("test/probe-two", ScopeLanguage, func(rd Reads, a pathArg) (string, error) {
+	_, err := fs.Stat(rd.FS(), a.Path)
+	data, _ := fs.ReadFile(rd.FS(), "a.txt")
+	return fmt.Sprintf("%v %s", err == nil, data), nil
+})
+
+// viewpoint: failure
+// target: reuse.recorder
+// A stage goes on reading after a read that failed.
+func TestAStageReadsOnAfterAFailedRead(t *testing.T) {
+	r := Lone(refusing{MapFS: fstest.MapFS{"a.txt": {Data: []byte("x")}}, path: "locked.txt"})
+	if got, err := probeTwo.Do(r, pathArg{"locked.txt"}); err != nil || got != "false x" {
+		t.Errorf("got %q %v", got, err)
+	}
+}
+
+// viewpoint: behaviour
+// target: reuse.Session.EndLanguage
+// A result let go is never served again: the stage runs again for the same argument.
+func TestAResultLetGoIsNotServed(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	r := s.Run("base", fstest.MapFS{}, cfg)
+	if _, err := upper.Do(r, nameArg{Name: "gone"}); err != nil {
+		t.Fatal(err)
+	}
+	s.EndLanguage()
+	if _, err := upper.Do(r, nameArg{Name: "gone"}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Stats()["test/upper"]; st.Misses != 2 || st.Hits != 0 {
+		t.Errorf("stats %+v, want the stage run again", st)
+	}
+}
+
+// viewpoint: behaviour
+// target: reuse.Lone
+// A lone run remembers within itself, and keeps its version's label.
+func TestALoneRunRemembers(t *testing.T) {
+	r := Lone(fstest.MapFS{})
+	before := callsOf("test/upper")
+	for range 2 {
+		if _, err := upper.Do(r, nameArg{Name: "lone"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := callsOf("test/upper") - before; got != 1 {
+		t.Errorf("the stage ran %d times, want once", got)
+	}
+	if got := NewSession(nil, true).Run("base", fstest.MapFS{}, cfg).Label(); got != "base" {
+		t.Errorf("label %q", got)
 	}
 }

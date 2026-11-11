@@ -60,7 +60,7 @@ func TestSymbolsAreDocumentedExportedAndScoped(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			an := analyze(t, sql.New(), version("db/schema.sql", tc.src), tc.c)
+			an := analyze(t, sql.Adapter{}, version("db/schema.sql", tc.src), tc.c)
 			if got := symbolFacts(an); !slices.Equal(got, tc.want) {
 				t.Errorf("symbols\n%v\nwant\n%v\n(unread %v)", got, tc.want, unread(an))
 			}
@@ -77,7 +77,7 @@ func TestTriggersFollowTheirTable(t *testing.T) {
 		"CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW SET NEW.id = NEW.id;\n" +
 		"CREATE TRIGGER trg2 BEFORE INSERT ON t2 FOR EACH ROW SET NEW.id = NEW.id;\n" +
 		"RENAME TABLE t TO u;\nDROP TABLE t2;\n"}
-	an := analyze(t, sql.New(), version(files...), dialect("mysql"))
+	an := analyze(t, sql.Adapter{}, version(files...), dialect("mysql"))
 	if got, want := symbolIDs(an), []string{".sql/trg", ".sql/u"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v", got, want)
 	}
@@ -91,7 +91,7 @@ func TestTriggersFollowTheirTable(t *testing.T) {
 // target: sql.database.rename
 // SET SCHEMA moves an object and keeps its name; a rename of another kind of object leaves it.
 func TestRenamesMoveOnlyTheirKind(t *testing.T) {
-	an := analyze(t, sql.New(), version("db/schema.sql", "CREATE TABLE billing.a (id int);\n"+
+	an := analyze(t, sql.Adapter{}, version("db/schema.sql", "CREATE TABLE billing.a (id int);\n"+
 		"ALTER TABLE billing.a SET SCHEMA other;\nCREATE TABLE s (id int);\nALTER SEQUENCE s RENAME TO s2;\n"), postgres())
 	if got, want := symbolIDs(an), []string{".sql/other.a", ".sql/public.s"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v (unread %v)", got, want, unread(an))
@@ -133,7 +133,7 @@ func TestTheOrderFilesAreAppliedIn(t *testing.T) {
 			for i := 0; i < len(tc.files); i += 2 {
 				paths = append(paths, tc.files[i])
 			}
-			an, err := sql.New().Analyze(run(v), tc.c, paths)
+			an, err := sql.Adapter{}.Analyze(run(v), tc.c, paths)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -173,7 +173,7 @@ func TestWhereDefinitionsGo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			an := analyze(t, sql.New(), version(tc.files...), tc.c)
+			an := analyze(t, sql.Adapter{}, version(tc.files...), tc.c)
 			if got := symbolIDs(an); !slices.Equal(got, tc.want) {
 				t.Errorf("symbols %v, want %v (unread %v)", got, tc.want, unread(an))
 			}
@@ -185,7 +185,7 @@ func TestWhereDefinitionsGo(t *testing.T) {
 // target: sql.lastLine
 // A definition ends on the last line of its statement, even when its last token spans lines.
 func TestDefinitionsEndOnTheirLastLine(t *testing.T) {
-	an := analyze(t, sql.New(), version("db/a.sql",
+	an := analyze(t, sql.Adapter{}, version("db/a.sql",
 		"CREATE TABLE t (id int);\nCREATE VIEW v AS SELECT 'a\nb'"), postgres())
 	var got []string
 	for _, s := range an.Symbols {
@@ -230,7 +230,7 @@ func TestStatementsThatChangeObjects(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			an := analyze(t, sql.New(), version("db/schema.sql", tc.src), tc.c)
+			an := analyze(t, sql.Adapter{}, version("db/schema.sql", tc.src), tc.c)
 			if got := symbolLines(an); !slices.Equal(got, tc.want) {
 				t.Errorf("symbols %v, want %v (unread %v)", got, tc.want, unread(an))
 			}
