@@ -207,12 +207,12 @@ type pyWalk struct {
 }
 
 func (w *pyWalk) walk(body *sitter.Node) {
-	w.t.bodyIn(w.pf.f, w.pf.t, body, func(n *sitter.Node) bool { return pyLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.pf.f, w.pf.t, body, func(kind string) bool { return pyLoops[kind] }, w.visit)
 }
 
-func (w *pyWalk) visit(n *sitter.Node) bool {
+func (w *pyWalk) visit(n *sitter.Node, kind string) bool {
 	f := w.pf.f
-	switch n.Kind() {
+	switch kind {
 	case "assignment":
 		left, right := n.ChildByFieldName("left"), n.ChildByFieldName("right")
 		if left != nil && left.Kind() == "identifier" {

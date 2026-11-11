@@ -97,10 +97,11 @@ func (c *textCollector) use(f *file, tb *tables) {
 	}
 }
 
-// note records what node n, reached by the walk with loops loops around it, adds to the strings.
+// note records what node n, of the given kind, reached by the walk with loops loops around it, adds
+// to the strings.
 // at is where n is: its parent, and its index there when the walk knows it. The walk hands it
 // down because asking tree-sitter for a node's parent descends from the root.
-func (c *textCollector) note(n *sitter.Node, at place, loops int) {
+func (c *textCollector) note(n *sitter.Node, kind string, at place, loops int) {
 	g := c.g
 	if g == nil {
 		return
@@ -114,7 +115,6 @@ func (c *textCollector) note(n *sitter.Node, at place, loops int) {
 	if loops > 0 {
 		times = 2 // it runs more than once
 	}
-	kind := n.Kind()
 	if name, value := g.declare(f, n, kind); name != nil {
 		c.shadow[f.text(name)] = true
 		delete(c.locals, f.text(name))

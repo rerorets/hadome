@@ -134,14 +134,14 @@ type tsWalk struct {
 }
 
 func (w *tsWalk) walk(body *sitter.Node) {
-	w.t.bodyIn(w.tf.f, w.tf.t, body, func(n *sitter.Node) bool { return tsLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.tf.f, w.tf.t, body, func(kind string) bool { return tsLoops[kind] }, w.visit)
 }
 
-func (w *tsWalk) visit(n *sitter.Node) bool {
+func (w *tsWalk) visit(n *sitter.Node, kind string) bool {
 	if w.walked(n) {
 		return false
 	}
-	switch n.Kind() {
+	switch kind {
 	case "pair", "method_definition":
 		return w.setup == 0 || !tsHeldFunction(n)
 	case "variable_declarator":

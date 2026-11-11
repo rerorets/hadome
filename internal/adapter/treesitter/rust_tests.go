@@ -132,12 +132,12 @@ type rustWalk struct {
 }
 
 func (w *rustWalk) walk(body *sitter.Node) {
-	w.t.bodyIn(w.sc.f, w.sc.t, body, func(n *sitter.Node) bool { return rustLoops[n.Kind()] }, w.visit)
+	w.t.bodyIn(w.sc.f, w.sc.t, body, func(kind string) bool { return rustLoops[kind] }, w.visit)
 }
 
-func (w *rustWalk) visit(n *sitter.Node) bool {
+func (w *rustWalk) visit(n *sitter.Node, kind string) bool {
 	f := w.sc.f
-	switch n.Kind() {
+	switch kind {
 	case "let_declaration":
 		name := f.field(n, "pattern")
 		w.locals[name] = true
