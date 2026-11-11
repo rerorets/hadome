@@ -48,3 +48,18 @@ send module calls=[src.send] unresolved=0
 send renamed calls=[src.send] unresolved=0
 send two calls=[] unresolved=1`)
 }
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// A module of the repository loaded with import() and assigned to a variable inside the test, rather
+// than declared with it, is reached through that variable too.
+func TestAModuleAssignedInTheTestReachesTheModule(t *testing.T) {
+	expect(t, calls(t, "typescript",
+		"src/mail.ts", "export function send(to: string): boolean { return to !== '' }\n",
+		"src/mail.test.ts", `it('assigned', async () => {
+  let mail
+  mail = await import('./mail')
+  expect(mail.send('a')).toBe(true)
+})
+`), "assigned calls=[src.send] unresolved=0")
+}
