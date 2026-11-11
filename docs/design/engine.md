@@ -108,9 +108,42 @@ Each version is exposed as a read-only file system. Other version-control system
 
 Renames are detected by the engine, not by the source, so every source behaves the same:
 
-- A file missing from head whose exact content appears at a path missing from base is a rename (matched by content hash)
+- A file missing from head whose exact content appears at a path missing from base is a rename (matched by content hash; see "Content hashes" below)
 - A source may report more renames it knows about (git does, including files whose content changed slightly); those are added on top
 - Files that were renamed and changed, with a source that cannot tell, look like a removal and an addition. There is no similarity-based detection
+
+### Content hashes
+
+Both rename detection and the analyzer's reuse (see "Remembering only what head can hit" in [analysis-reuse.md](analysis-reuse.md)) use the hash of the content of every file of a version. So that no file is read and hashed twice, the engine wraps each version's file system in a type that remembers hashes before using it.
+
+```mermaid
+classDiagram
+  class FS {
+    <<interface, io/fs>>
+    +Open(name string) (fs.File, error)
+  }
+  class summedFS {
+    <<engine>>
+    +Open(name string) (fs.File, error)
+    +Sum(name string) ([32]byte, error)
+  }
+  class Version {
+    <<engine>>
+    +Label string
+    +FS fs.FS
+    +Root string
+  }
+  summedFS ..|> FS
+  summedFS --> FS : the version before wrapping
+  Version --> summedFS : held in FS
+```
+
+- **When it wraps.** Once the engine has a version from the source, it wraps its `FS` in `summedFS`, before rename detection and analysis. Rename detection and the analyzer receive the wrapped version
+- **`Sum(name)`.** Returns the SHA-256 of the file's content. It reads and hashes a file only the first time it is asked about it, and remembers the answer. When the file cannot be read, it remembers that error and returns it
+- **Operations as an `fs.FS`.** Opening, reading, looking at information and listing go straight to the file system before wrapping. Only hashes are remembered, never contents: holding contents would grow memory by the size of the version on a large repository
+- **Rename detection.** It gets the hashes of every file of both versions with `Sum`
+- **Concurrent calls.** `Sum` is safe to call concurrently. When the same file is asked about at once, it is read and hashed once, and every call gets the same answer
+- **Answers do not change.** For the whole run, `Sum` returns the hash of the content a file had when it was first read. Even for a version that may change during the run, such as the working tree, rename detection and the analyzer's reuse use the same answer
 
 ## Analysing the two versions
 
