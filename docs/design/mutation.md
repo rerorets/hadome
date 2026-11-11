@@ -275,6 +275,7 @@ So hadome can run only the tests that call the broken function. Which test calls
 |---|---|---|
 | `{tests}` | The names of the tests that call the broken function, as they are, joined by `tests-separator` | `-run, "^({tests})$"` |
 | `{packages}` | The packages those tests are in, spread into one element per package (see "Packages" below) | `go, test, "{packages}"` |
+| `{module}` | The directory of a Go module; the command runs once per module (see "Modules" below) | `go, -C, "{module}", test, "{packages}"` |
 
 For each mutant, the stages below run from the narrowest. When the tests fail in a stage, the mutant is caught there. Only a mutant that passes every stage up to the last survived.
 
@@ -353,13 +354,57 @@ What a package is differs between languages. hadome defines `{packages}` for Go 
 | TypeScript, Python, Rust, Java, Kotlin | Not defined | — | — |
 
 - `{packages}` takes a whole element. For example, `"{packages}"` is accepted and `"./{packages}/..."` is not, because it spreads into one element per package. It cannot be written twice either
-- When the test command has `-C <directory>` (or `-C=<directory>`), the paths are seen from that directory. A test outside it is not put into any package
+- When the test command has `-C <directory>` (or `-C=<directory>`), the paths are seen from that directory. A test outside it, or in another module than that directory's, is not put into any package
+- When the test command has `{module}`, the paths are seen from each module's directory (see "Modules" below)
 - When a test that calls the broken function is not a Go test, or is not put into a package, the mutant skips stage 1: narrowing by package would leave that test out. Stage 2 too, when a reaching test is such a test, narrows by name instead of by package
 
 `{packages}` cannot be used outside Go. So that no placeholder silently does nothing, these are configuration errors:
 
 - `{packages}` in a configuration whose `languages` lacks `go`. `hadome config check` and every command that reads the configuration stop with exit code `2`
 - `{packages}` in a configuration without `languages` when head has no Go file. `hadome mutate` stops with exit code `2`
+
+`{module}` can be used only in Go too. In the two cases above, it is a configuration error just like `{packages}`.
+
+#### Modules
+
+A Go repository may hold two or more `go.mod` files. For example, nested modules, or a workspace joined by `go.work`. `go test` handles only the packages of the module of the directory it runs in.
+
+| Command run in the root | Tests that run |
+|---|---|
+| `go test ./...` | Only the root module's tests. The tests of the nested module `tools/` do not run. The same holds with `go.work` |
+| `go test ./tools/lint` | Without `go.work`, it fails because the root module has no such package |
+
+So a mutant that breaks code in `tools/`, tried with `./...` in the root alone, runs none of `tools/`'s tests. If it survives, it has not survived all the tests.
+
+- A **module** is a directory holding `go.mod`
+- A file's module is the nearest module that contains the file. This is the same rule the adapter uses for import paths
+
+**With `{module}`**
+
+A command holding `{module}` runs once per module. `{module}` gets the module's directory seen from the root; the root module is `.`. `{module}` can also be part of an element. For example, `-C={module}`.
+
+| Stage | Modules it runs in | What `{packages}` gets | What `{tests}` gets |
+|---|---|---|---|
+| 1 | The modules holding tests that call the broken function | Those tests' packages in that module | Those tests' names in that module |
+| 2 | The modules holding reaching tests | The reaching tests' packages in that module | The reaching tests' names in that module |
+| 3 | Every module holding a `_test.go` file | `./...` | Taken out |
+
+For example, a test in `tools/lint/lint_test.go` gets `./lint` for `{packages}` in the `tools` module.
+
+- **The verdict of a stage.** It is decided from the runs of all the modules together. When a test fails in any run, the mutant is caught. When every run passes, the mutant goes to the next stage
+- **The run before breaking and the time limit.** Each is decided for each module's run. A run that fails before breaking is not used for the verdict. When any run of stage 3 fails before breaking, there is no result and the exit code is `2`
+- **Stage 2's command.** It is still one per unit. The runs per module are that one command run once per module
+- **A module without tests.** A module without any `_test.go` file is not run in stage 3, because it has no tests to run. When another module's tests reach its code, they run in that other module's run
+
+**Without `{module}`**
+
+The module containing the directory the command runs in (the root, or the directory of `-C`) is the command's module. In a version with two or more modules, the mutants of Go files outside the command's module are handled as follows.
+
+- **Their tests are run.** A caught mutant is caught, because every test run is a test of the repository
+- **A survivor is not a regression.** One review per file (exit code `3`) names the file and the module whose tests were not run. Those tests did not run, so the mutant has not survived all the tests (invariant 5)
+- **Only the tests of the command's module go into `{packages}` too.** A test in another module is treated as a test that is not put into a package (see "Packages" above)
+
+When the test command is a shell script that goes through the modules one by one, hadome cannot see it. Such a repository uses `{module}`.
 
 A regression is reported as `mutation/survived`.
 
@@ -415,7 +460,7 @@ mutation:
   - When the repeated run before breaking fails, the limit cannot be confirmed. The timeout counts as caught
   - A raised limit is used for that command for the mutants that come after too
   - When `timeout` is written, the limit is not confirmed. The written value is the limit
-- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}` or `{packages}` is changing `test`. So is changing `timeout` or `tests-separator`. So is changing `builds`, including adding, taking out or rewriting an element. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
+- Removing `mutation`, lowering `max-mutants` or changing `test` loosens the rules and asks for a person's review. Adding or taking out `{tests}`, `{packages}` or `{module}` is changing `test`. So is changing `timeout` or `tests-separator`. So is changing `builds`, including adding, taking out or rewriting an element. `max-mutants` uses the direction where a smaller number is looser (`LooserWhenLower`)
 - Adding `mutation` when base has none does not loosen anything, because base did not run `mutate` at all (`OmittedIsOff`)
 
 ## The working directory
@@ -491,6 +536,8 @@ So hadome ends the tree as a whole.
 15. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
 16. A mutant is tried only with the commands that compile its file. A command that does not compile it never makes it caught or survived
 17. A command whose GOOS or GOARCH differs from the environment hadome runs in is never run
+18. In a version with two or more Go modules, a mutant is never reported as a survivor without the tests of its file's module having run
+19. With `{module}`, stage 3 runs the tests in every module holding a `_test.go` file
 
 ## Deliberately left out
 
@@ -502,6 +549,7 @@ So hadome ends the tree as a whole.
 - Finding the reaching tests by calls between functions. Calls from product functions to product functions are not facts of the same shape in every language. The reaching tests are found by following units' imports backwards
 - Following the imports of test files. Test files' imports are not in the facts. What a test reaches is found from its `Calls` and from the unit of its file
 - Catching in stage 2 the calls decided at run time (reflection, plugins, another program a test builds and starts). What it misses, stage 3 checks
+- Guessing how to split the command per module (hadome adding `-C`, and the like). Where a directory goes in a command differs by runner and script. It is written with `{module}`
 - Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
 - Ending the tree when hadome itself is stopped with `SIGKILL` on Unix. `SIGKILL` cannot be caught, so hadome stops before it ends the tree. macOS has no way to end children when their parent ends
 - Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
