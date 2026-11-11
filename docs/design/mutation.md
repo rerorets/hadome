@@ -235,36 +235,83 @@ So hadome can run only the tests that call the broken function. Which test calls
 
 For each mutant, the stages below run from the narrowest. When the tests fail in a stage, the mutant is caught there. Only a mutant that passes every stage up to the last survived.
 
-| Stage | Tests run | `{packages}` | `{tests}` |
+| Stage | Tests run | With `{packages}` | Without `{packages}`, with `{tests}` |
 |---|---|---|---|
-| 1 | The tests that call the broken function, only in the packages they are in | the packages | the names |
-| 2 | The tests that call the broken function, in every package | every package | the names |
-| 3 | All the tests | every package | taken out |
+| 1 | The tests that call the broken function | in their packages, with the names | — |
+| 2 | The tests that reach the broken function (see "The callers' stage" below) | their packages, whole, not narrowed by name | every package, with the names |
+| 3 | All the tests | every package, not narrowed by name | not narrowed by name |
 
 - A stage that uses a placeholder the configuration does not have is the same command as the stage before. The same command runs only once. For example, with only `{tests}`, stages 2 and 3 run; with neither, only stage 3 runs
-- A mutant with no test found calling the broken function runs only stage 3
+- A mutant with no test found calling the broken function skips stage 1. When no test is found reaching it either, only stage 3 runs
+- When the tests stage 2 runs are all the tests, stage 2 does not run. For example, when the packages of the tests that reach the function are every package that has tests
 - Every stage's command also runs once before anything is broken (see "One run before breaking" below). A stage whose command fails then is not used to judge the mutant, which goes to the next stage: whether it failed because of the break or would fail anyway cannot be told
 
 Stacking the stages gives the same verdict as stage 3 alone.
 
-- **Caught in an earlier stage.** The tests each stage runs are part of the tests the next stage runs. A test that failed in an earlier stage runs and fails in the next one as well. So a mutant caught in an earlier stage is caught in stage 3 too
-- **Passed an earlier stage.** The next stage checks it again. When `Test.Calls` misses an indirect call and leaves that test out, stage 3 runs it, so no false survivor reaches the report
-- **Time.** Most mutants are caught in a narrow stage. Only those that pass the narrow stages run all the tests
+- **Caught in an earlier stage.** The tests stages 1 and 2 run are all part of all the tests. A test that failed in an earlier stage runs and fails in stage 3 as well. So a mutant caught in an earlier stage is caught in stage 3 too
+- **Passed an earlier stage.** The next stage checks it again. When finding the callers misses one and leaves that test out, stage 3 runs it, so no false survivor reaches the report
+- **Time.** Most mutants are caught in a narrow stage. Only those that pass stages 1 and 2 run all the tests
 
 The command with `{tests}` taken out drops the element holding `{tests}`, and the element before it when that one is a flag (starts with `-`). For example, stage 3 of `[go, test, "{packages}", -run, "^({tests})$"]` is `[go, test, ./...]`.
+
+#### The callers' stage
+
+Stage 2 runs the tests that do not call the broken function directly but reach it through other functions. For example, when a test calls `api.Handle` and `api` imports `store`, the test reaches a mutant of `store.Append`. Stage 1 does not run that test, because `store.Append` is not in its `Calls`.
+
+**Responsibility**
+
+- Finds the tests that reach the broken function, from the version's facts alone
+- Turns them into the form the configured test command can run (packages or names) and makes stage 2's command
+
+**Does not**
+
+- Start a command to find the callers (`go list -deps` and the like). It would depend on fetching modules and on caches. Only the facts the adapters already read are used
+- Decide the verdict. A mutant that passes stage 2 is checked again in stage 3. Stage 3 always decides a survivor
+- Run the tests instrumented. Which tests reach the function is read without running code
+
+**Finding the tests that reach the function**
+
+The unit is the one the dependency rules use (`facts.File.Unit`): a package in Go, a directory in TypeScript, a package in Java and Kotlin ([adapters.md](adapters.md)).
+
+1. The broken function's unit is found from the function's file
+2. The set of reaching units starts with the broken function's unit alone. Following the product code's imports (`facts.Import` with `Internal` true) backwards, each unit that imports a reaching unit is added, until nothing more is added
+3. The reaching tests are the tests that are not skipped and either
+   - have a `Calls` entry that calls a function of a reaching unit, or
+   - are in a file of a reaching unit
+4. Stage 2's command is made from the reaching tests
+   - With `{packages}`, when every reaching test is put into a package by the same rules as stage 1: their packages go into `{packages}` and `{tests}` is taken out
+   - Otherwise, with `{tests}`: the reaching tests' names go into `{tests}`, and `{packages}` is every package
+   - Otherwise stage 2 is the same command as all the tests, and does not run
+
+```mermaid
+flowchart TB
+  F["broken function<br/>store.Append"] --> U["its unit<br/>store"]
+  U --> R["reaching units<br/>imports followed backwards to the end<br/>store, api, worker/queue"]
+  R --> T["reaching tests<br/>call a function of a reaching unit,<br/>or are in a reaching unit"]
+  T --> P{"{packages}, and every test<br/>is put into a package"}
+  P -->|yes| S2a["stage 2: those packages, whole<br/>go test ./store ./api ./worker/queue"]
+  P -->|no| N{"{tests}"}
+  N -->|yes| S2b["stage 2: the reaching tests by name<br/>in every package"]
+  N -->|no| S3["stage 2 does not run"]
+```
+
+- **Why follow to the end.** Stopping at some depth of imports would send mutants of deep functions down to stage 3. There are far fewer units than functions, so following to the end costs little
+- **Why follow units.** Every language's adapter turns the product code's imports into facts of the same shape. Facts of calls between functions are not uniform across languages
+- **One per unit.** The reaching units depend only on the broken function's unit. Mutants of functions in the same unit use the same stage 2 command, so stage 2's runs before breaking are as many as the units broken
+- **Base too.** Stage 2 of a mutant tried again on base is worked out from base's facts
 
 #### Packages
 
 What a package is differs between languages. hadome defines `{packages}` for Go only.
 
-| Language | Package | `{packages}` in stage 1 | `{packages}` in stages 2 and 3 |
+| Language | Package | `{packages}` in stages 1 and 2 | `{packages}` in stage 3 |
 |---|---|---|---|
 | Go | The directory of the `_test.go` file | `./store`, `./worker/queue`; the root directory is `.` | `./...` |
 | TypeScript, Python, Rust, Java, Kotlin | Not defined | — | — |
 
 - `{packages}` takes a whole element. For example, `"{packages}"` is accepted and `"./{packages}/..."` is not, because it spreads into one element per package. It cannot be written twice either
 - When the test command has `-C <directory>` (or `-C=<directory>`), the paths are seen from that directory. A test outside it is not put into any package
-- When a test that calls the broken function is not a Go test, or is not put into a package, the mutant skips stage 1: narrowing by package would leave that test out
+- When a test that calls the broken function is not a Go test, or is not put into a package, the mutant skips stage 1: narrowing by package would leave that test out. Stage 2 too, when a reaching test is such a test, narrows by name instead of by package
 
 `{packages}` cannot be used outside Go. So that no placeholder silently does nothing, these are configuration errors:
 
@@ -308,11 +355,12 @@ mutation:
 - **One run before breaking.** Each stage's command runs once before anything is broken: per version (head and base), the first time the command is needed, and the result is kept for the rest of the run
   - Stage 3 (all the tests) runs before any mutant is tried. If it fails, nothing is broken and the exit code is `2`: with tests that already fail, whether a mutant was caught cannot be told
   - When the command of stage 1 or 2 fails, that stage is not used and the mutant goes to the next stage (see "Narrowing the tests run" above). A progress line names the command and says the stage was skipped
+  - Stage 2's command is one per unit of the broken function. Its run before breaking is once per unit too
 - **The comment added in the run before breaking.** In the run before breaking, a one-line comment is added at the end of every file that holds a mutant, and removed afterwards
   - The comment holds a mark used for that run only. For example: `// hadome mutate baseline 9c1e04d2-3`
   - The language decides how the comment is written: `#` in Python, `//` in the other languages
   - Why: build caches and test result caches are looked up by file contents. With the same contents as before, only the run before breaking hits the cache and is measured short. The limit then becomes too short, and a timeout wrongly catches a mutant. With the comment, the cache misses in the same files where a mutant makes it miss
-- **The time limit.** Per command, three times that command's run before breaking, plus one second. For example, stage 1's limit comes from stage 1's command and stage 3's from all the tests. When `timeout` is written, every stage uses it
+- **The time limit.** Per command, three times that command's run before breaking, plus one second. For example, stage 1's limit comes from stage 1's command, stage 2's from that unit's stage 2 command, and stage 3's from all the tests. When `timeout` is written, every stage uses it
 - **A timeout** against a confirmed limit counts as caught: a mutant that made the tests stop finishing did not let them pass
 - **Confirming the limit.** The limit comes from the run before breaking, so when the machine gets loaded, tests with nothing broken go past it too. Counting that as caught would miss mutants that survived. So when a run with a mutant goes past its limit:
   1. The command's run before breaking runs again, and the limit is worked out again from its time
@@ -384,16 +432,18 @@ So hadome ends the tree as a whole.
 4. A mutant that already survived in base never fails a change
 5. Mutants that could not be tried (beyond the limit, in a file outside the build, and functions touched in a language without a mutator) are reported, never passed silently, with exit code `3` (a person's review). A mutant not tried can be called neither caught nor survived
 6. A mutant that survived only a narrowed run is never reported. Only one that also survives all the tests is
-7. Stacking the stages gives the same verdict as stage 3 (all the tests) alone. A mutant caught in a narrow stage is caught in stage 3 too
-8. A command that fails before anything is broken never catches a mutant
-9. Before the tests run, the copy always holds exactly the version
-10. Two `hadome mutate` runs never run tests on the same repository at once
-11. No process the test command started is running after that run ends, whether it ends by the time limit, an interrupt or the command exiting
-12. A timeout catches a mutant only in these three cases (see "Confirming the limit" above)
+7. Stacking the stages gives the same verdict as stage 3 (all the tests) alone. The tests stages 1 and 2 run are all part of all the tests
+8. The tests stage 2 runs are decided from the version's facts alone. No command is started to find the callers
+9. Stage 2's command is one per unit of the broken function
+10. A command that fails before anything is broken never catches a mutant
+11. Before the tests run, the copy always holds exactly the version
+12. Two `hadome mutate` runs never run tests on the same repository at once
+13. No process the test command started is running after that run ends, whether it ends by the time limit, an interrupt or the command exiting
+14. A timeout catches a mutant only in these three cases (see "Confirming the limit" above)
     - It goes past a limit confirmed by running the run before breaking again
     - The repeated run before breaking fails, so the limit cannot be confirmed
     - It still goes past the limit after two retries that each raised the limit
-13. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
+15. The number of test runs for one mutant is bounded. A mutant that made the tests stop finishing still ends
 
 ## Deliberately left out
 
@@ -402,6 +452,9 @@ So hadome ends the tree as a whole.
 - A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
 - Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
+- Finding the reaching tests by calls between functions. Calls from product functions to product functions are not facts of the same shape in every language. The reaching tests are found by following units' imports backwards
+- Following the imports of test files. Test files' imports are not in the facts. What a test reaches is found from its `Calls` and from the unit of its file
+- Catching in stage 2 the calls decided at run time (reflection, plugins, another program a test builds and starts). What it misses, stage 3 checks
 - Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
 - Ending the tree when hadome itself is stopped with `SIGKILL` on Unix. `SIGKILL` cannot be caught, so hadome stops before it ends the tree. macOS has no way to end children when their parent ends
 - Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
