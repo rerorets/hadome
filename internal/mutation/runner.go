@@ -97,11 +97,10 @@ func (r *Runner) clean() error {
 	return nil
 }
 
-// try applies one mutant and runs the stages from the narrowest: tests names the tests that call the
-// broken function, pkgs the packages they are in (nil when they cannot be narrowed by package). A
-// stage that fails catches the mutant; one whose command fails with nothing broken is passed over.
-// The file is restored afterwards.
-func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
+// try applies one mutant and runs the stages from the narrowest (see stages). A stage that fails
+// catches the mutant; one whose command fails with nothing broken is passed over. The file is
+// restored afterwards.
+func (r *Runner) try(m facts.Mutant, sel picked) (Outcome, error) {
 	p := filepath.Join(r.dir, filepath.FromSlash(m.Path))
 	orig, err := os.ReadFile(p)
 	if err != nil {
@@ -109,7 +108,7 @@ func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
 	}
 	broken := append(append(append([]byte{}, orig[:m.Start]...), m.Replacement...), orig[m.End:]...)
 	defer os.WriteFile(p, orig, 0o644)
-	for _, cmd := range stages(r.Test, r.Sep, tests, pkgs) {
+	for _, cmd := range stages(r.Test, r.Sep, sel) {
 		b, err := r.baseline(cmd)
 		if err != nil {
 			return Caught, err
@@ -264,10 +263,23 @@ func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (pas
 	return true, nil
 }
 
-// stages are the commands that judge a mutant, narrowest first and without repeats: the tests that
-// call the broken function in their packages, the same tests in every package, then every test.
-// Each runs a part of the tests the next one runs.
-func stages(test []string, sep string, tests, pkgs []string) [][]string {
+// picked are the tests a mutant's stages are made from.
+type picked struct {
+	calling  []facts.Test // the tests that call the broken function
+	reaching []facts.Test // the tests that reach it (see reach)
+	all      []facts.Test // every test of the version, skipped ones included: what stage 3 runs
+}
+
+// stages are the commands that judge a mutant, narrowest first and without repeats (docs/design/
+// mutation.md, "Narrowing the tests run"):
+//  1. the tests that call the broken function, in their packages
+//  2. the tests that reach it: their packages whole, or by name in every package when they cannot
+//     be narrowed by package; left out when that is all the tests
+//  3. every test
+//
+// Each of stages 1 and 2 runs a part of the tests stage 3 runs, so they catch only what stage 3
+// catches.
+func stages(test []string, sep string, p picked) [][]string {
 	var out [][]string
 	add := func(cmd []string) {
 		for _, c := range out {
@@ -277,14 +289,49 @@ func stages(test []string, sep string, tests, pkgs []string) [][]string {
 		}
 		out = append(out, cmd)
 	}
-	if len(tests) > 0 {
-		if len(pkgs) > 0 {
-			add(fill(test, sep, tests, pkgs))
+	if hasPackages(test) && len(p.calling) > 0 {
+		if pkgs := goPackages(test, p.calling); len(pkgs) > 0 {
+			add(fill(test, sep, names(p.calling), pkgs))
 		}
-		add(fill(test, sep, tests, nil))
+	}
+	if len(p.reaching) > 0 {
+		pkgs := []string(nil)
+		if hasPackages(test) {
+			pkgs = goPackages(test, p.reaching)
+		}
+		switch {
+		case len(pkgs) > 0:
+			if !slices.Equal(pkgs, goPackages(test, p.all)) {
+				add(fill(test, sep, nil, pkgs))
+			}
+		case !covers(names(p.reaching), names(p.all)):
+			add(fill(test, sep, names(p.reaching), nil))
+		}
 	}
 	add(fill(test, sep, nil, nil))
 	return out
+}
+
+// names are the tests' names, each once, sorted.
+func names(tests []facts.Test) []string {
+	var out []string
+	for _, t := range tests {
+		if !slices.Contains(out, t.Name) {
+			out = append(out, t.Name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// covers reports whether some holds every one of all: names that pick out every test.
+func covers(some, all []string) bool {
+	for _, n := range all {
+		if !slices.Contains(some, n) {
+			return false
+		}
+	}
+	return true
 }
 
 // fill puts the tests and the packages into the command. No tests takes {tests} out: the element
