@@ -88,6 +88,7 @@ The npm job does not publish packages; it only stages them (`npm stage publish`)
 | Allow npm publish | off |
 | Allow npm dist-tag | off |
 
+- A trusted publisher that is not used within 48 hours of being created expires. npmjs.com shows the deadline in the package's settings. An expired one is deleted and created again. So trusted publishers are created and recreated on the day of the tag.
 - The job runs [packaging/npm/stage.sh](../../packaging/npm/stage.sh). Staging needs npm 11.15.0 or later and Node 22.14.0 or later, so the job installs a pinned npm.
 - A trial version (`1.2.0-rc.1`) is staged with the dist-tag `next`, so it never becomes what `npm install hadome` gets.
 - npm attaches provenance by itself to what trusted publishing publishes.
@@ -137,6 +138,7 @@ cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
 
 - Create `hadome` last, after every platform package exists.
 - When creating a package with a trial version, use `--tag next`.
+- When npm judges a package name to be spam, the package cannot be created. `npm publish` returns `403 Package name triggered spam detection`, and `npm stage publish` may return `400 Version uniqueness check failed unexpectedly`. This cannot be cleared from a maintainer's machine; ask npm support to allow the name.
 
 ## Changelog
 
