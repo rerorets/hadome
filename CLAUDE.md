@@ -49,4 +49,5 @@ This repository uses hadome to stop regressions in code and tests.
 - When a test guards a product-specific invariant, add `guards: <id>` to its doc comment; for `durable`, `erasable`, `append-only` and `fail-closed`, add `guards: <type> <target>`. `idempotent`, `round-trip` and `isolated` are recognised from the test's calls. `hadome explain invariants` lists them.
 - When `hadome check` lists invariant candidates and one covers behaviour that matters, propose it to the person instead of adding it yourself.
 - Before changing `.hadome.yml`, run `hadome explain <key>`. After changing it, run `hadome config check`.
+- When a person asks to stop a kind of change (for example SQL that rewrites production data, or a key in the code), write it as a gate or an invariant. Examples: https://github.com/rerorets/hadome/blob/main/docs/for-agents.md#stopping-changes-that-must-not-be-made
 <!-- hadome:end -->

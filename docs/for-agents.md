@@ -176,6 +176,68 @@ A gate that fails, prints anything but the protocol's JSON, or runs past its `ti
 
 Proved by: `hadome self-test` lists the gate's `id`, and `hadome check` runs it.
 
+## Stopping changes that must not be made
+
+Which of a team's "changes that must not be made" hadome can stop, and how to write each. hadome stops only a change that makes things worse than the base. A rule like "a person looks at any change here" is therefore written as "the tests guarding this never shrink".
+
+| To stop | Write | It stops with |
+|---|---|---|
+| SQL that rewrites production data (`UPDATE`, `DELETE`) | a gate (`kind: finding`) | `1` when one is added |
+| A key, token or password in the code | a gate (`kind: finding`) | `1` when one is added |
+| A new call to an external AI API | a gate (`kind: finding`) | `1` when one is added |
+| A change that rewrites records already written | the built-in invariant `append-only` | `1` when no test guards it |
+| An authentication or authorization change that lets broken credentials through | the built-in invariant `fail-closed` | `1` when no test guards it |
+| A change that breaks a billing promise | a product-specific invariant | `1` when no test guards it |
+| A change that loosens any of the above (removing a gate or an invariant, raising a limit) | nothing: it stops anyway | `3` |
+
+```yaml
+gates:
+  - id: acme/no-data-rewrite
+    kind: finding
+    run: [scripts/gates/no-data-rewrite]
+    paths: ["db/scripts/**"]
+    options:
+      forbidden: [UPDATE, DELETE]
+  - id: acme/no-secrets
+    kind: finding
+    run: [scripts/gates/no-secrets]
+  - id: acme/ai-calls
+    kind: finding
+    run: [scripts/gates/ai-calls]
+    paths: ["src/**"]
+
+invariants:
+  - type: append-only
+    target: audit.Append
+  - type: fail-closed
+    target: auth.Authorize
+  - id: billing-1
+    says: "An order is charged at most once"
+```
+
+```go
+// guards: fail-closed auth.Authorize
+func TestExpiredTokenIsRejected(t *testing.T) {
+```
+
+When writing the gates:
+
+- **Return everything you see.** A gate looks at one version and returns every finding in it. hadome compares it with the base, so an `UPDATE` already there does not stop the check; only a new one does.
+- **No line number in `anchor`.** Use the enclosing function's name or the statement with its spaces normalized, so the finding stays the same when lines move.
+- **Never print the key.** A secrets gate puts no key value in `message` or `anchor`, because the output stays in CI logs. Use, for example, the kind of key and the variable's name as the `anchor`.
+- **One gate per rule.** Then a `gate:allow <id> reason: …` exception also applies to one rule.
+
+hadome cannot stop these:
+
+| To stop | Why it cannot |
+|---|---|
+| A package listed in public vulnerability data (CVEs and the like) | Matching needs the network. Neither hadome nor a gate uses it |
+| A rule that sends any change in a place to a person (schemas, infrastructure, environment variables) | hadome judges whether a change is worse than the base, not where it is. Use the hosting's required reviews by path |
+| A new external endpoint | The dependency diagram (`rules.deps`) counts only imports between the repository's own units |
+| An estimate of call counts or cost | Real counts and prices come from load at run time and price lists, not from the tree |
+
+Proved by: `hadome config check` and `hadome self-test` end with `0`, and `hadome check` runs the gates and reports no `tests/invariant-unguarded`.
+
 ## Telling other agents
 
 ```sh
