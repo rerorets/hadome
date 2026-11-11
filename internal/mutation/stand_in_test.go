@@ -33,7 +33,7 @@ const (
 	StandInUnwritableLock = "stand-in-unwritable-lock"
 	// StandInTree makes the binary a test command that starts a process of its own:
 	// `<binary> stand-in-tree MODE WATCH HOLD` starts StandInLeaf with WATCH and HOLD, its standard
-	// error being the command's own when HOLD is "hold", waits until it is ready and says
+	// error being the command's own when HOLD is "hold" or "open", waits until it is ready and says
 	// "leaf PID". Then, with MODE hang, it blocks forever; with MODE exit, it exits 0, leaving the
 	// leaf running.
 	StandInTree = "stand-in-tree"
@@ -44,6 +44,20 @@ const (
 	// `<binary> stand-in-run-tree WATCH` runs StandInTree in mode hang with WATCH, its output going
 	// to standard output, until the binary is ended by a signal. No test starts it on Windows.
 	StandInRunTree = "stand-in-run-tree"
+	// StandInHolder makes the binary a test binary that runs a test command: `<binary>
+	// stand-in-holder WATCH` holds a lifeline of its own (HoldLifeline), starts StandInTree in mode
+	// hang with WATCH, passes on what it says and blocks until it is killed.
+	StandInHolder = "stand-in-holder"
+	// StandInEarlySignal makes the binary a hadome mutate interrupted before its test command
+	// started: `<binary> stand-in-early-signal MODE WATCH` takes a command's tree, has an interrupt
+	// arrive, then starts StandInLeaf with WATCH and tells the tree once it is ready (MODE started),
+	// or fails to start a command at all (MODE unstarted). It says "no signal" if it is still running
+	// after that. No test starts it on Windows.
+	StandInEarlySignal = "stand-in-early-signal"
+	// StandInAfterRun makes the binary a hadome mutate interrupted after its test command ran:
+	// `<binary> stand-in-after-run` runs a command that passes at once, then interrupts itself, and
+	// says "no signal" if it is still running. No test starts it on Windows.
+	StandInAfterRun = "stand-in-after-run"
 )
 
 // hanging is what StandInStage says when it starts to hang, so that a test's clock can end the run
@@ -112,7 +126,7 @@ func StandInTreeRoot(mode, watch, hold string) int {
 		return 2
 	}
 	leaf := exec.Command(exe, StandInLeaf, watch, hold)
-	if hold == "hold" {
+	if hold == "hold" || hold == "open" {
 		leaf.Stderr = os.Stderr
 	}
 	out, err := leaf.StdoutPipe()
@@ -151,6 +165,24 @@ func StandInRunTreeRun(watch string) int {
 	_, err = runTree(context.Background(), dir, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
 	fmt.Println("the run ended without a signal:", err)
 	return 2
+}
+
+// StandInHolderRun is the test binary of StandInHolder.
+func StandInHolderRun(watch string) int {
+	HoldLifeline()
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	tree := exec.Command(exe, StandInTree, "hang", watch, "-")
+	tree.Stdout = os.Stdout
+	if err := tree.Start(); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	blockForever()
+	return 0
 }
 
 // blockForever reads a pipe no one writes to. It holds the pipe's writing end itself, so the read
@@ -211,4 +243,21 @@ func standInLines(t *testing.T, log string) []string {
 		out = append(out, s.Text())
 	}
 	return out
+}
+
+// lifelineEnv names, in the environment every stand-in inherits, how to tell that the test binary
+// running the tests has ended (HoldLifeline). A stand-in left running by code under test, or by a
+// test binary killed before its cleanups ran, then ends with it instead of running on.
+const lifelineEnv = "HADOME_TEST_LIFELINE"
+
+// lifelineGone is the exit code of a stand-in that ended because the test binary had ended.
+const lifelineGone = 4
+
+// WatchLifeline makes a stand-in end once the test binary that started it, directly or through
+// other stand-ins, has ended. It never ends a stand-in while the binary runs, so a stand-in that
+// code under test should have ended still shows that it was not.
+func WatchLifeline() {
+	if v := os.Getenv(lifelineEnv); v != "" {
+		watchLifeline(v)
+	}
 }

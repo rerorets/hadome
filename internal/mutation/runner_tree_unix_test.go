@@ -24,6 +24,7 @@ import (
 // tell. A leaf that is asked on ping, or that finds the run's output given up on, writes "alive"
 // to out and exits: so a leaf left running is told apart at once instead of being waited for.
 type leafWatch struct {
+	t   *testing.T
 	arg string
 	out *os.File
 }
@@ -49,10 +50,20 @@ func watchLeaf(t *testing.T) *leafWatch {
 	}
 	out := os.NewFile(uintptr(fd), path)
 	t.Cleanup(func() { out.Close() })
-	return &leafWatch{arg: dir, out: out}
+	return &leafWatch{t: t, arg: dir, out: out}
 }
 
-func (w *leafWatch) seen(int) {}
+// seen is told the leaf's PID while the leaf runs. When the test ends, whatever is left of the
+// leaf's process group, the command's tree with its root, is killed: code under test that fails to
+// end the tree fails the test, and must not leave the tree running past it. The test's own group is
+// never killed.
+func (w *leafWatch) seen(pid int) {
+	pgid, err := syscall.Getpgid(pid)
+	if err != nil || pgid == syscall.Getpgrp() {
+		return
+	}
+	w.t.Cleanup(func() { syscall.Kill(-pgid, syscall.SIGKILL) })
+}
 
 // gone waits until the leaf has ended, after it said it was ready, and fails if it said it was
 // still running.
@@ -79,7 +90,8 @@ func (w *leafWatch) ended() error {
 }
 
 // StandInLeafRun is the process of StandInLeaf. It opens the FIFOs of WATCH, says "ready" and
-// blocks forever. Asked on ping, it says "alive" on out and exits. With HOLD "hold", it keeps
+// blocks forever, holding the run's output open when HOLD is "open". Asked on ping, it says "alive"
+// on out and exits. With HOLD "hold", it keeps
 // writing to its standard error, the run's output, and says "alive" and exits when that fails.
 func StandInLeafRun(watch, hold string) int {
 	out, err := os.OpenFile(filepath.Join(watch, "out"), os.O_WRONLY, 0)
@@ -143,6 +155,7 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 				return
 			}
 			pid, _ := strconv.Atoi(n)
+			w.seen(pid)
 			pgid, err := syscall.Getpgid(pid)
 			switch {
 			case err != nil:
@@ -180,11 +193,14 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 				t.Fatal(err)
 			}
 			line, _ := bufio.NewReader(out).ReadString('\n')
-			if !strings.HasPrefix(line, "leaf ") {
+			n, ok := strings.CutPrefix(strings.TrimSpace(line), "leaf ")
+			if !ok {
 				cmd.Process.Kill()
 				cmd.Wait()
 				t.Fatalf("the test command did not say its leaf was ready: %q", line)
 			}
+			pid, _ := strconv.Atoi(n)
+			w.seen(pid)
 			cmd.Process.Signal(sig)
 			err = cmd.Wait()
 			if err := w.ended(); err != nil {
@@ -195,5 +211,119 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 				t.Errorf("want hadome ended by %v, got %v", sig, err)
 			}
 		})
+	}
+}
+
+// StandInEarlySignalRun is the hadome mutate of StandInEarlySignal. The interrupt goes straight to
+// the tree's channel, as signal.Notify would deliver it, and has been taken in once relay returns.
+func StandInEarlySignalRun(mode, watch string) int {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	// A context, as runTree gives, without which a command that has Cancel set cannot start.
+	cmd := exec.CommandContext(context.Background(), exe, StandInLeaf, watch, "-")
+	if mode == "unstarted" {
+		cmd = exec.CommandContext(context.Background(), filepath.Join(watch, "no such command"))
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	tree, err := ownTree(cmd)
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	tree.sigs <- syscall.SIGINT
+	<-tree.relayed
+	defer fmt.Println("no signal")
+	defer tree.end()
+	if err := cmd.Start(); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
+		fmt.Printf("the leaf said %q\n", line)
+		return 2
+	}
+	tree.started()
+	return 2
+}
+
+// StandInAfterRunRun is the hadome mutate of StandInAfterRun.
+func StandInAfterRunRun() int {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	dir, err := os.MkdirTemp("", "stand-in-after-run")
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	defer os.RemoveAll(dir)
+	if passed, err := runTree(context.Background(), dir, []string{exe, "-test.run=^$"}, io.Discard); !passed || err != nil {
+		fmt.Println("the command did not pass:", err)
+		return 2
+	}
+	// Nothing is notified of it any more, so its default action ends the process.
+	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	blockForever()
+	return 2
+}
+
+// viewpoint: invariant
+// target: mutation.processTree
+// Invariant 11: an interrupt that arrives while the test command is being started ends what the
+// command started as soon as it has started, then hadome by that signal; one that arrives when the
+// command never starts ends hadome by that signal all the same.
+func TestAnInterruptBeforeTheCommandStartedEndsItsTreeThenHadome(t *testing.T) {
+	t.Parallel()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signal.Ignored(syscall.SIGINT) { // as under nohup; the stand-in would keep it ignored
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGINT)
+	}
+	for _, mode := range []string{"started", "unstarted"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			w := watchLeaf(t)
+			cmd := exec.Command(exe, StandInEarlySignal, mode, w.arg)
+			said, _ := cmd.Output()
+			if ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); !ok || !ws.Signaled() || ws.Signal() != syscall.SIGINT {
+				t.Errorf("want hadome ended by an interrupt, got %v saying %q", cmd.ProcessState, said)
+			}
+			if mode == "started" {
+				if err := w.ended(); err != nil {
+					t.Error(err)
+				}
+			}
+		})
+	}
+}
+
+// viewpoint: invariant
+// target: mutation.processTree.end
+// Once a run has ended, hadome takes interrupts as it did before the run: it ends by them, and
+// nothing of the run is told of them any more.
+func TestAnInterruptAfterARunEndsHadome(t *testing.T) {
+	t.Parallel()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signal.Ignored(syscall.SIGINT) {
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGINT)
+	}
+	cmd := exec.Command(exe, StandInAfterRun)
+	said, _ := cmd.CombinedOutput()
+	if ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); !ok || !ws.Signaled() || ws.Signal() != syscall.SIGINT {
+		t.Errorf("want hadome ended by an interrupt, got %v saying %q", cmd.ProcessState, said)
 	}
 }

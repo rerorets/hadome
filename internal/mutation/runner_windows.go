@@ -93,7 +93,18 @@ func ownTree(cmd *exec.Cmd) (*processTree, error) {
 }
 
 // started puts the suspended command in the job, then lets it run.
+// A command that cannot be put in the job is killed and waited for, since nothing would end its tree.
 func (t *processTree) started() error {
+	if err := t.join(); err != nil {
+		t.cmd.Process.Kill()
+		t.cmd.Wait()
+		return err
+	}
+	return nil
+}
+
+// join puts the started command in the job and resumes it.
+func (t *processTree) join() error {
 	pid := uint32(t.cmd.Process.Pid)
 	h, err := syscall.OpenProcess(processSetQuota|processTerminate, false, pid)
 	if err != nil {
