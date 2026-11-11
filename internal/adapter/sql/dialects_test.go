@@ -39,7 +39,7 @@ func TestDefinitionsBecomeSymbolsInEachDialect(t *testing.T) {
 			[]string{".sql/BILLING.IS_ACTIVE", ".sql/Mixed"}},
 	}
 	for _, c := range cases {
-		an := analyze(t, sql.New(), version("db/schema.sql", c.src), dialect(c.dialect))
+		an := analyze(t, sql.Adapter{}, version("db/schema.sql", c.src), dialect(c.dialect))
 		if got := symbolIDs(an); !slices.Equal(got, c.want) {
 			t.Errorf("%s: symbols %v, want %v (unread %v)", c.dialect, got, c.want, unread(an))
 		}
@@ -69,7 +69,7 @@ func TestClientSeparatorsSplitStatements(t *testing.T) {
 			[]string{".sql/public.t"}},
 	}
 	for _, c := range cases {
-		an := analyze(t, sql.New(), version("db/schema.sql", c.src), dialect(c.dialect))
+		an := analyze(t, sql.Adapter{}, version("db/schema.sql", c.src), dialect(c.dialect))
 		if got := symbolIDs(an); !slices.Equal(got, c.want) {
 			t.Errorf("%s: symbols %v, want %v (unread %v)", c.dialect, got, c.want, unread(an))
 		}
@@ -123,7 +123,7 @@ func TestWaitforIsASleep(t *testing.T) {
 func TestTSQLtAndUtPLSQLTests(t *testing.T) {
 	var an *facts.Analysis
 
-	an = analyze(t, sql.New(), version(
+	an = analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", "CREATE PROCEDURE dbo.CloseAccount @AccountId int AS SELECT 1\nGO\n",
 		"tests/close.sql", "EXEC tSQLt.NewTestClass 'CloseTests';\nGO\n"+
 			"CREATE PROCEDURE CloseTests.[test closes] AS BEGIN EXEC tSQLt.FakeTable 'dbo.Accounts'; EXEC dbo.CloseAccount 1; "+
@@ -134,7 +134,7 @@ func TestTSQLtAndUtPLSQLTests(t *testing.T) {
 		t.Errorf("tSQLt: %+v, want one test calling dbo.closeaccount with one assert and one mock", an.Tests)
 	}
 
-	an = analyze(t, sql.New(), version(
+	an = analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", "CREATE OR REPLACE FUNCTION billing.is_active(p NUMBER) RETURN NUMBER IS BEGIN RETURN 1; END;\n/\n",
 		"tests/accounts_test.sql", "CREATE OR REPLACE PACKAGE accounts_test AS\n  --%suite\n\n  --%test\n  PROCEDURE active;\n\n"+
 			"  --%test\n  --%disabled\n  PROCEDURE later;\n\n  PROCEDURE helper;\nEND;\n/\n"+
@@ -161,7 +161,7 @@ func TestTSQLtAndUtPLSQLTests(t *testing.T) {
 // An Oracle package replaced keeps only the routines it declares again, and a dropped package takes
 // its routines with it.
 func TestOraclePackagesAreReplacedAndDropped(t *testing.T) {
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/V1__a.sql", "CREATE OR REPLACE PACKAGE billing.p AS\n  FUNCTION a(x NUMBER) RETURN NUMBER;\n  PROCEDURE b(x NUMBER);\n"+
 			"END p;\n/\nCREATE OR REPLACE PACKAGE billing.q AS\n  PROCEDURE c(x NUMBER);\nEND q;\n/\n",
 		"db/V2__b.sql", "CREATE OR REPLACE PACKAGE billing.p AS\n  PROCEDURE b(x NUMBER);\nEND p;\n/\nDROP PACKAGE billing.q;\n",
@@ -194,7 +194,7 @@ func TestOraclePackageCallsResolveInTheDefaultSchema(t *testing.T) {
 // In SQL Server an ALTER of a procedure or a view defines it again, an ALTER of a table keeps it,
 // sp_rename moves an object (not a column), and not to a name on a linked server.
 func TestSQLServerStatementsThatChangeObjects(t *testing.T) {
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/a.sql", "CREATE PROCEDURE dbo.p AS SELECT 1\nGO\nALTER PROCEDURE dbo.p @x int AS SELECT 2\nGO\n"+
 			"CREATE VIEW dbo.v AS SELECT 1 AS n\nGO\nALTER VIEW dbo.v AS SELECT 2 AS n\nGO\n"+
 			"CREATE TABLE dbo.t (id int)\nGO\nALTER TABLE dbo.t ADD x int\nGO\n"+
@@ -231,7 +231,7 @@ func TestSQLServerTriggersRunOnTheirEvents(t *testing.T) {
 // test strings.
 func TestSQLiteQualifiedNames(t *testing.T) {
 	files := []string{"db/a.sql", "CREATE TABLE aux.t (id INTEGER);\nCREATE TABLE t (id INTEGER);\n"}
-	if got, want := symbolIDs(analyze(t, sql.New(), version(files...), dialect("sqlite"))), []string{".sql/aux.t", ".sql/main.t"}; !slices.Equal(got, want) {
+	if got, want := symbolIDs(analyze(t, sql.Adapter{}, version(files...), dialect("sqlite"))), []string{".sql/aux.t", ".sql/main.t"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v", got, want)
 	}
 	if got := linked(t, dialect("sqlite"), []facts.Text{text("SELECT id FROM aux.t")}, files...); got.Reads != 1 || got.Unresolved != 0 {

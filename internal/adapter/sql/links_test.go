@@ -13,7 +13,7 @@ import (
 // linkAt links one test at path, holding texts, against the version's files.
 func linkAt(t *testing.T, c config.Analysis, path string, texts []facts.Text, files ...string) facts.Test {
 	t.Helper()
-	a := sql.New()
+	a := sql.Adapter{}
 	v := version(files...)
 	an := analyze(t, a, v, c)
 	an.Tests = append(an.Tests, facts.Test{Name: "TestX", Path: path, Line: 1, Texts: texts})
@@ -123,7 +123,7 @@ func TestTestsUseTheirDatabases(t *testing.T) {
 // target: sql.merge
 // A routine the test's language already found called is one call, its times added.
 func TestSQLCallsMergeWithTheLanguagesCalls(t *testing.T) {
-	a := sql.New()
+	a := sql.Adapter{}
 	v := version("db/a.sql", "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;")
 	an := analyze(t, a, v, postgres())
 	an.Tests = []facts.Test{{Name: "TestX", Path: "app/x_test.go", Line: 1,
@@ -142,7 +142,7 @@ func TestSQLCallsMergeWithTheLanguagesCalls(t *testing.T) {
 // built-ins count nothing, the objects it creates are its setup, a name that is neither is
 // unresolved, and skip gives the reason it is written with (none for a count or no argument).
 func TestTAPTests(t *testing.T) {
-	an := analyze(t, sql.New(), version(
+	an := analyze(t, sql.Adapter{}, version(
 		"db/schema.sql", schema,
 		"test/a.sql", "SELECT no_plan();\nCREATE TABLE fixture_t (id int);\nINSERT INTO fixture_t VALUES (1);\n"+
 			"SELECT ok(billing.is_active(1, 2));\nSELECT diag('note');\nSELECT length('x');\nSELECT unknown_fn();\nSELECT other_unknown();\n"+
@@ -168,7 +168,7 @@ func TestTAPTests(t *testing.T) {
 	if _, ok := tests["test/d.sql"]; ok || len(an.Tests) != 3 {
 		t.Errorf("tests %v, want a, b and c", an.Tests)
 	}
-	my := analyze(t, sql.New(), version("db/schema.sql", "CREATE TABLE t (id INT);",
+	my := analyze(t, sql.Adapter{}, version("db/schema.sql", "CREATE TABLE t (id INT);",
 		"test/t.sql", "SELECT tap.plan(1);\nSELECT tap.ok(1, 'one');\n"), dialect("mysql"))
 	if len(my.Tests) != 1 || my.Tests[0].Asserts != 1 || my.Tests[0].Unresolved != 0 {
 		t.Errorf("myTAP: %+v, want one test with one assertion", my.Tests)

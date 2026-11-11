@@ -281,13 +281,13 @@ func (g *textGrammar) literalish(f *file, n *sitter.Node) bool {
 // member.
 func (g *textGrammar) reads(n *sitter.Node, at place) bool {
 	p := at.parent
-	if p == nil {
-		return false
-	}
-	if i := at.index(n); i >= 0 && g.notRead[p.FieldNameForChild(uint32(i))] {
-		return false
-	}
-	return g.notReadIn == nil || !g.notReadIn(n, p)
+	return p != nil && !g.inNotReadField(n, at) && (g.notReadIn == nil || !g.notReadIn(n, p))
+}
+
+// inNotReadField reports whether n is in a field of its parent where a name is not read.
+func (g *textGrammar) inNotReadField(n *sitter.Node, at place) bool {
+	i := at.index(n)
+	return i >= 0 && g.notRead[at.parent.FieldNameForChild(uint32(i))]
 }
 
 // flatten returns the content of the string n: literals joined into one, with a hole wherever a

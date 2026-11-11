@@ -31,14 +31,13 @@ type Pure[A, T any] struct {
 	id    string
 	scope Scope
 	fn    func(A) (T, error)
-	plain bool
 }
 
 // NewPure registers a pure stage. fn must be a top-level function: it sees nothing but its
 // argument, so that the argument is all its result depends on.
 func NewPure[A, T any](id string, scope Scope, fn func(A) (T, error)) *Pure[A, T] {
 	register(id, reflect.TypeFor[A]())
-	return &Pure[A, T]{id: id, scope: scope, fn: fn, plain: plain(reflect.TypeFor[T]())}
+	return &Pure[A, T]{id: id, scope: scope, fn: fn}
 }
 
 // Do returns the stage's result for a: remembered when a stage with the same key ran in the
@@ -50,11 +49,7 @@ func (st *Pure[A, T]) Do(r *Run, a A) (T, error) {
 		if err != nil {
 			return nil, err
 		}
-		e := &entry{id: st.id, key: key, scope: st.scope, value: v, contents: contents, print: hashAnswer(key)}
-		if st.plain {
-			e.print = valuePrint(v)
-		}
-		return e, nil
+		return &entry{id: st.id, key: key, scope: st.scope, value: v, contents: contents}, nil
 	}, st.id)
 	if err != nil {
 		var zero T
@@ -106,7 +101,7 @@ func (st *Reading[A, T]) Do(r *Run, a A) (T, error) {
 
 func (st *Reading[A, T]) do(r *Run, key Hash, a A) (*entry, error) {
 	return r.s.do(r, key, func() (*entry, error) {
-		rc := &recorder{run: r, seen: map[string]bool{}}
+		rc := &recorder{run: r}
 		rc.inner = &Run{s: r.s, label: r.label, fsys: r.fsys, cfg: r.cfg, cfgAnswer: r.cfgAnswer, outer: r, rec: rc}
 		v, err := st.fn(rc, a)
 		if err != nil {
@@ -117,7 +112,7 @@ func (st *Reading[A, T]) do(r *Run, key Hash, a A) (*entry, error) {
 		if st.plain {
 			e.print = valuePrint(v)
 		} else {
-			e.print = readsPrint(key, rc.reads)
+			e.print = readsPrint(rc.reads)
 		}
 		return e, nil
 	}, st.id)
@@ -130,16 +125,13 @@ func stageKey(id string, a any) (Hash, []Hash) {
 	return e.sum(), e.contents
 }
 
-func hashAnswer(h Hash) string { return contentAnswer(h) }
-
 func valuePrint(v any) string {
 	h, _ := encode(v)
 	return contentAnswer(h)
 }
 
-func readsPrint(key Hash, reads []read) string {
+func readsPrint(reads []read) string {
 	h := sha256.New()
-	h.Write(key[:])
 	for _, rd := range reads {
 		fmt.Fprintf(h, "%q %q %q\n", rd.op, rd.arg, rd.answer)
 	}
