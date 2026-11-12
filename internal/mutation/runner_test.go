@@ -19,36 +19,54 @@ import (
 
 // viewpoint: behaviour
 // target: mutation.stages
-// The stages run from the narrowest: the callers in their packages, the callers in every package
-// ({packages} as ./...), then every test ({tests} and the flag before it taken out). A placeholder
-// the command lacks makes a stage the same as the one before, and it runs once.
-func TestStagesGoFromTheCallersPackagesToEveryTest(t *testing.T) {
+// The stages run from the narrowest: the tests that call the broken function in their packages;
+// the tests that reach it, their packages whole, or by name in every package when they cannot be
+// narrowed by package; then every test ({tests} and the flag before it taken out). Stage 2 is left
+// out when it would run every test. A placeholder the command lacks makes a stage the same as the
+// one before, and it runs once.
+func TestStagesGoFromTheCallersToTheTestsThatReachToEveryTest(t *testing.T) {
 	t.Parallel()
+	test := func(name, path string) facts.Test { return facts.Test{Name: name, Path: path} }
+	a, b, c := test("TestA", "a/a_test.go"), test("TestB", "b/b_test.go"), test("TestC", "c/c_test.go")
+	web := test("TestW", "web/w.test.ts")
+	all := []facts.Test{a, b, c}
+	both := []string{"go", "test", "{packages}", "-run", "^({tests})$"}
 	for _, tc := range []struct {
-		name        string
-		test        []string
-		tests, pkgs []string
-		want        [][]string
+		name              string
+		test              []string
+		calling, reaching []facts.Test
+		all               []facts.Test
+		want              [][]string
 	}{
-		{"both placeholders", []string{"go", "test", "{packages}", "-run", "^({tests})$"}, []string{"TestA", "TestB"}, []string{"./a", "./b"},
+		{"both placeholders", both, []facts.Test{a}, []facts.Test{a, b}, all,
 			[][]string{
-				{"go", "test", "./a", "./b", "-run", "^(TestA|TestB)$"},
-				{"go", "test", "./...", "-run", "^(TestA|TestB)$"},
+				{"go", "test", "./a", "-run", "^(TestA)$"},
+				{"go", "test", "./a", "./b"},
 				{"go", "test", "./..."},
 			}},
-		{"tests only", []string{"go", "test", "./...", "-run", "{tests}"}, []string{"TestA"}, []string{"./a"},
-			[][]string{{"go", "test", "./...", "-run", "TestA"}, {"go", "test", "./..."}}},
-		{"packages only", []string{"go", "test", "{packages}"}, []string{"TestA"}, []string{"./a"},
-			[][]string{{"go", "test", "./a"}, {"go", "test", "./..."}}},
-		{"no caller", []string{"go", "test", "{packages}", "-run", "{tests}"}, nil, nil,
+		{"tests only", []string{"go", "test", "./...", "-run", "{tests}"}, []facts.Test{a}, []facts.Test{a, b}, all,
+			[][]string{{"go", "test", "./...", "-run", "TestA|TestB"}, {"go", "test", "./..."}}},
+		{"packages only", []string{"go", "test", "{packages}"}, []facts.Test{a}, []facts.Test{a, b}, all,
+			[][]string{{"go", "test", "./a"}, {"go", "test", "./a", "./b"}, {"go", "test", "./..."}}},
+		{"nothing calls or reaches", both, nil, nil, all,
 			[][]string{{"go", "test", "./..."}}},
-		{"callers not narrowed by package", []string{"go", "test", "{packages}", "-run", "{tests}"}, []string{"TestA"}, nil,
-			[][]string{{"go", "test", "./...", "-run", "TestA"}, {"go", "test", "./..."}}},
-		{"neither placeholder", []string{"go", "test", "./..."}, []string{"TestA"}, []string{"./a"},
+		{"nothing calls, something reaches", both, nil, []facts.Test{b}, all,
+			[][]string{{"go", "test", "./b"}, {"go", "test", "./..."}}},
+		{"the reaching tests are only the caller's package", both, []facts.Test{a}, []facts.Test{a}, all,
+			[][]string{{"go", "test", "./a", "-run", "^(TestA)$"}, {"go", "test", "./a"}, {"go", "test", "./..."}}},
+		{"a reaching test not narrowable by package", both, []facts.Test{a}, []facts.Test{a, web}, append(all, web),
+			[][]string{{"go", "test", "./a", "-run", "^(TestA)$"}, {"go", "test", "./...", "-run", "^(TestA|TestW)$"}, {"go", "test", "./..."}}},
+		{"a caller not narrowable by package", both, []facts.Test{a, web}, []facts.Test{a, web}, append(all, web),
+			[][]string{{"go", "test", "./...", "-run", "^(TestA|TestW)$"}, {"go", "test", "./..."}}},
+		{"reaching every package", both, []facts.Test{a}, all, all,
+			[][]string{{"go", "test", "./a", "-run", "^(TestA)$"}, {"go", "test", "./..."}}},
+		{"reaching every test by name", []string{"go", "test", "./...", "-run", "{tests}"}, []facts.Test{a}, all, all,
+			[][]string{{"go", "test", "./..."}}},
+		{"neither placeholder", []string{"go", "test", "./..."}, []facts.Test{a}, []facts.Test{a, b}, all,
 			[][]string{{"go", "test", "./..."}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := stages(tc.test, "|", tc.tests, tc.pkgs)
+			got := stages(tc.test, "|", picked{calling: tc.calling, reaching: tc.reaching, all: tc.all})
 			if !slices.EqualFunc(got, tc.want, slices.Equal[[]string]) {
 				t.Errorf("want %q, got %q", tc.want, got)
 			}
@@ -125,6 +143,15 @@ func fakeRunner(t *testing.T, spec string, skipped func([]string)) (*Runner, fac
 	return r, facts.Mutant{Path: "x.go", Start: at, End: at + len("ok"), Replacement: "BROKEN"}, log
 }
 
+// callerT1 picks T1 in ./a as the test that calls the broken function, and T1 and T2 in ./b as the
+// tests that reach it, in a version with tests in ./c too: the stages are T1 in ./a, ./a and ./b
+// whole, then every test.
+var callerT1 = picked{
+	calling:  []facts.Test{{Name: "T1", Path: "a/a_test.go"}},
+	reaching: []facts.Test{{Name: "T1", Path: "a/a_test.go"}, {Name: "T2", Path: "b/b_test.go"}},
+	all:      []facts.Test{{Name: "T1", Path: "a/a_test.go"}, {Name: "T2", Path: "b/b_test.go"}, {Name: "T3", Path: "c/c_test.go"}},
+}
+
 // scriptedClock is a clock that takes no account of the machine's load. The runs before breaking
 // take the durations of took in turn, and no time once they are used up. A run times out exactly
 // when the stand-in says it hangs (StandInStage), and never otherwise.
@@ -166,7 +193,7 @@ func brokenRuns(lines []string) []string {
 // broken never catches it: the stage is passed over, and said once. The file is restored.
 func TestAMutantIsCaughtByTheFirstStageThatFailsBecauseOfIt(t *testing.T) {
 	t.Parallel()
-	everyStage := []string{"./a -run T1", "./... -run T1", "./..."}
+	everyStage := []string{"./a -run T1", "./a ./b", "./..."}
 	for _, tc := range []struct {
 		name    string
 		spec    string
@@ -188,7 +215,7 @@ func TestAMutantIsCaughtByTheFirstStageThatFailsBecauseOfIt(t *testing.T) {
 				t.Fatal(err)
 			}
 			for range 2 { // the second try reuses what the runs before breaking found
-				got, err := r.try(mu, []string{"T1"}, []string{"./a"})
+				got, err := r.try(mu, callerT1)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -221,7 +248,7 @@ func TestRunsBeforeBreakingSeeAFreshCommentInEveryMarkedFile(t *testing.T) {
 	if err := r.clean(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.try(mu, []string{"T1"}, []string{"./a"}); err != nil {
+	if _, err := r.try(mu, callerT1); err != nil {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}
@@ -300,7 +327,7 @@ func TestATimeoutCatchesOnlyAgainstAConfirmedLimit(t *testing.T) {
 			if err := r.clean(); err != nil {
 				t.Fatal(err)
 			}
-			got, err := r.try(mu, []string{"T1"}, []string{"./a"})
+			got, err := r.try(mu, callerT1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -370,7 +397,7 @@ func TestTheLimitOfEveryRun(t *testing.T) {
 			if err := r.clean(); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := r.try(mu, []string{"T1"}, []string{"./a"}); err != nil {
+			if _, err := r.try(mu, callerT1); err != nil {
 				t.Fatal(err)
 			}
 			if !slices.Equal(limits, tc.want) {
