@@ -172,7 +172,7 @@ Every stage has a scope (`Scope`) for how long its results are remembered.
 | `ScopeLanguage` | head's analysis of that language ends | Syntax trees, per-file facts |
 | `ScopePair` | the analysis of both versions ends | The SQL catalog `Link` uses |
 
-- Results that hold memory outside Go have `Release`. Example: tree-sitter's syntax trees
+- Results that hold memory outside Go have `Release`. Example: a result holding memory allocated on the C side through cgo
 - The session calls `Release` exactly once when it lets go of a result
 - Without reuse, results are let go at the same times
 

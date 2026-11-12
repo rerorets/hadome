@@ -58,6 +58,109 @@ classDiagram
   - 危険と io の表
   - 読み手（`reader`）。ノードの種類と少しの関数からなり、パスをユニットにどう対応させるか、import をどう解決するか、何でシンボルが公開になるか、テストをどう読むかを決めます
 
+## 構文木
+
+tree-sitter で読んだ木は、読んだ直後に Go のノード（`node`）へ写します。C の木はその場で閉じます。読み手が受け取ってたどるのは、写した木だけです。
+
+- **理由**: 読み手は1つのファイルの木を何度もたどります。コメント、import、シンボル、テスト、文字列を、それぞれ別にたどるからです。C の木のノードを読むたびに cgo を越えると、越えるのにかかる時間が、解析の時間の大きな部分を占めます（大きなリポジトリで CPU 時間の3〜5割）。写しておけば、cgo を越えるのはノード1つにつき写すときの数回だけです
+- **責務**: ファイルを tree-sitter で読み、その木を写して、C の木を閉じます。`parseWith` がこれを1か所で受け持ちます
+- **やらないこと**: どの文法で読むか、どこを直して読み直すかは決めません。それは `reader` と `repairer` が決めます。写した木から事実を読むのも、各言語の読み手です
+
+```mermaid
+classDiagram
+  class parsed {
+    +src []byte
+    +root *node
+    +lifted []*node
+  }
+  class file {
+    +path string
+    +src []byte
+    +root *node
+    +lifted []*node
+  }
+  class node {
+    -kind uint16
+    -field uint16
+    -named bool
+    -index uint32
+    -startByte uint32
+    -endByte uint32
+    -startRow uint32
+    -startColumn uint32
+    -endRow uint32
+    -endColumn uint32
+    -parent *node
+    -children []node
+    +Kind() string
+    +IsNamed() bool
+    +Id() uintptr
+    +StartByte() uint
+    +EndByte() uint
+    +StartPosition() point
+    +EndPosition() point
+    +Child(i uint) *node
+    +ChildCount() uint
+    +NamedChild(i uint) *node
+    +NamedChildCount() uint
+    +ChildByFieldName(name string) *node
+    +FieldNameForChild(i uint) string
+    +Parent() *node
+    +NextSibling() *node
+    +PrevSibling() *node
+    +NextNamedSibling() *node
+    +PrevNamedSibling() *node
+  }
+  class names {
+    <<package var>>
+    +kind(g *sitter.Language, symbol uint16) uint16
+    +field(name string) uint16
+    +text(i uint16) string
+  }
+  class repairer {
+    <<interface>>
+    +repair(src []byte, root *node) ([]byte, []*node)
+  }
+  parsed --> node : root と lifted
+  parsed ..> file : 版ごとに1つ
+  file --> node : root と lifted
+  node --> names : 種類とフィールドの番号
+  repairer ..> node
+```
+
+- **`node`**: 写したノードです。読み手が使う tree-sitter のノードのメソッドと、同じ名前と同じ意味のメソッドを持ちます。どのメソッドも Go の中で答え、C を呼びません
+- **`point`**: 行と桁です。どちらも 0 から数え、桁は tree-sitter と同じくバイトで数えます
+- **`names`**: 種類とフィールドの名前の表です。ノードは名前を `uint16` の番号で持ち、表がそれを名前に引きます
+- **`parsed`**: 1つのファイルを読んだ結果です。読んだ木の写し（`root`）と、直す読み手が取り除いたノード（`lifted`）を持ちます。Go の外のメモリを持たないので、`Release` を持ちません（[analysis-reuse.ja.md](analysis-reuse.ja.md)）
+
+### 写し方
+
+- **順番**: 根から幅優先に写します。1つのノードの子は、写した配列の中で隣り合って並びます。`children` はその並びの部分スライスです
+- **配列**: 木1つにつき、ノードの配列を1つだけ割り当てます。大きさは根の `DescendantCount` で先に決めます。写している途中で配列を取り直さないので、ノードのポインタは動きません
+- **子の読み方**: 子は親から `Child(i)` で番号の順に読みます。ノード1つにつき C を呼ぶのは、次のものを読む数回だけです
+  - 種類の番号（`KindId`）
+  - 名前付きかどうか
+  - バイトの範囲
+  - 始まりと終わりの行と桁
+  - フィールドの名前（親の `FieldNameForChild(i)`）
+- **種類の名前**: 5言語の文法から、記号の番号を名前に引く表を、起動時に1回だけ作ります。TypeScript と TSX のように、同じ言語でも文法が違えば記号の番号も違うので、表は文法ごとに分けます。誤りのノード（記号 65535）は `ERROR` です
+- **見えるノードだけ**: 写すのは、tree-sitter が見せるノードだけです。名前付きのノードも名前なしのノード（`(` や `=` など）も写します。`Child` がたどるノードと同じです
+- **直す読み手**: Kotlin のように木を直す読み手（`repairer`）は、写した木を受け取ります。読み直すたびに新しい木を写します。取り除いたノード（`lifted`）には、前の写しのノードをそのまま入れます。前の写しは、`lifted` がそのノードを指している間は残ります
+- **共有**: 写した木は、作ったあと変えません。base と head が同じファイルの `parsed` を共有し、同時に読んでも安全です
+
+### メモリ
+
+C の木を閉じても、写しは C の木より大きいので、最大メモリは増えます。
+
+| 項目 | 見込み |
+|---|---|
+| ノード1つ | 72 バイト（行と桁を含む） |
+| 600 万ノードの版の写し | 約 430MB |
+| 最大メモリ | C の木だけで読むときの最大 1.5 倍ほど |
+
+- **見込みの根拠**: Kotlin と TypeScript の大きなリポジトリ（約 600 万ノード）で、64 バイトのノードを測ると最大 1.5 倍でした。ノードは桁のぶん 8 バイト大きいので、それより少し増える見込みです
+- **持つ期間**: 写しは、その言語の head の解析が終わるまで持ちます（[analysis-reuse.ja.md](analysis-reuse.ja.md) の `ScopeLanguage`）
+
 ## ユニット
 
 ユニットは **ID** と**場所**を持ちます。
@@ -438,6 +541,10 @@ Kotlin の文法は、ファイルの直下で、引数のあるアノテーシ�
 1. どの言語も同じ事実を埋める。事実がどの言語から来たかを調べるルールは無い
 2. 対応言語のファイルは、読むか、読めなかったと報告するかのどちらかで、無視されることは無い
 3. 文字列とコメントの中の文字から、危険、import、シンボルは生まれない
+4. 構文の解析が終わったあと、C の木は残らない。木は `parseWith` の中で写したらすぐ閉じる。tree-sitter のノードと木は `parseWith` の外に出ず、読み手は `node` だけを受け取る
+5. ノードの ID（`Id()`）はノードのポインタ。同じノードなら同じ値で、写しが生きている間は変わらない。直す前の写しのノード（`lifted`）は、読み直した写しのどのノードとも違う ID を持つ
+6. 写した木は、tree-sitter の見える木と同じ。ノードの並び、種類、名前付きかどうか、フィールド、バイトの範囲、行と桁がすべて一致する。だから、読み手の報告は C の木を直接たどった場合と同じになる。自己テストは、5言語の見本のファイルを読み、C の木と写しをノードごとに突き合わせる
+7. 写した木と名前の表は、作ったあと変えない
 
 ## 意図して入れなかったもの
 
@@ -450,3 +557,7 @@ Kotlin の文法は、ファイルの直下で、引数のあるアノテーシ�
 - Rust のマクロの呼び出し（`println!` など）を消すこと。マクロは、宣言や制御の流れを含むことがある
 - Python の `is` と `in` を反転すること
 - 構文の誤りのあるファイルを、読めなかったと報告すること。誤りのほとんどは、文法が正しいコードを読めずに出るもので、利用者がコードを直しても消せない確認になる
+- tree-sitter のカーソル（`TreeCursor`）で写すこと。カーソルは深さ優先に進むので、子を親ごとにまとめて並べる写し方と合いません。そのうえ、ノードを取り出すのに別の呼び出しが要ります
+- C の木を残して、変わったファイルを増分で読み直すこと（`Tree.Edit`）と、tree-sitter のクエリ。どちらも C の木が要ります。hadome は各版のファイルを1回ずつ読むだけなので、読み直す場面がありません
+- 読み手が使わないノードの印（`IsMissing`、`IsExtra`、`HasError` など）を写すこと。要るようになったら、写すものに足します
+- 桁を UTF-16 や文字の数で数えること。桁は tree-sitter と同じくバイトで数えます
