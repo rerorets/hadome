@@ -6,13 +6,14 @@
 </p>
 
 <p align="center">
+  <strong>AIエージェントに任せても、テストが守る範囲は減らさない。</strong><br>
   変更で増えた違反と、弱くなったテストを報告するチェッカー。
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
-  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin%20%7C%20Terraform%20%7C%20Ansible-555.svg">
+  <img alt="Languages" src="https://img.shields.io/badge/languages-TS%20%7C%20Python%20%7C%20Java%20%7C%20Kotlin%20%7C%20Go%20%7C%20Rust%20%7C%20Terraform%20%7C%20Ansible-555.svg">
 </p>
 
 <p align="center">
@@ -34,7 +35,52 @@ hadome（歯止め）は変更をmainと比べ、その変更で増えた違反�
 
 AIエージェントがコードの大半を書くリポジトリで使うことを想定しています。結果はJSONでも出せて、エージェントはそれを読んで直します。
 
-Go・TypeScript・Python・Rust・Java・Kotlin・Terraform・Ansibleを、1つのバイナリで読みます。
+TypeScript・Python・Java・Kotlin・Go・Rust・Terraform・Ansibleを、1つのバイナリで読みます。
+
+## 出力の例
+
+`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存の図に無いimportをした変更の結果です。
+
+```console
+$ hadome check --base main
+✗ deps/not-in-diagram          import not in the diagram: store → core (no arrow store --> core)
+  store/store.go:3
+  why: the diagram (docs/deps.md) is how people and agents know what may depend on what; an import it does not draw makes it wrong
+  fix: depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews
+✗ tests/no-sleep               test waits by sleeping: time.Sleep(10 * time.Millisecond)
+  worker/worker_test.go:11
+  why: a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event
+  fix: wait for the event itself: a channel, a callback, or a condition with a deadline that fails loudly
+✗ tests/scope-shrunk           guarded scope shrank: example.com/app/store.Append is no longer exercised by any active test (was: TestAppendKeepsRows)
+  store/store_test.go:9
+  why: the behaviour of example.com/app/store.Append can now change without any test noticing
+  fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
+3 regression(s). 0 existing finding(s) unchanged (not blocking).
+```
+
+出力は既定で英語です。`--lang ja`を付けると日本語で出ます。
+
+- 日本語になるもの: 違反の文言（`message`・`why`・`fix`）、`hadome explain <ルール>`の説明、最後のまとめの行
+- 変わらないもの: JSONのキー、ルールのID、終了コード
+
+毎回付けずに日本語にする設定は、下の「設定と例外」にあります。
+
+## 後退と整理
+
+hadomeはテストの本数ではなく「守っている範囲」を比べて、整理と後退を見分けます。テストが3本減っても、それが整理なのか後退なのかは、本数だけでは分かりません。
+
+- **対象**: テストが呼んでいる関数やメソッド。hadomeが割り出します
+- **守っている範囲**: 有効なテストが届く対象の集合
+
+| やったこと | 本数 | 守っている範囲 | 判定 |
+|---|---|---|---|
+| 重複していた3本を1本にまとめた | 減る | 変わらない | 整理 |
+| コードを消し、そのテストも消した | 減る | 対象ごと消えた | 整理 |
+| テストだけを消した・弱くした | 減るか同じ | 狭まった | 後退 |
+
+要らなくなった振る舞いは、テストだけでなくコードごと消すと、整理として通ります。
+
+テストを3つの段（不変条件・記載ルール・チェック）で考える背景は、[考え方](docs/model.ja.md)にあります。
 
 ## はじめかた
 
@@ -46,28 +92,62 @@ cd path/to/your-repo
 
 ### 1. 入れる
 
-使っている言語のものを選びます。どれもバージョンを固定して入れます。詳しくは[配布の設計](docs/design/distribution.ja.md)にあります。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。
+使っている言語の項目を開きます。どれもバージョンを固定して入れます。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。詳しくは[配布の設計](docs/design/distribution.ja.md)にあります。
 
 以降は`hadome …`と書きます。`npx hadome …`や`go tool hadome …`など、入れた方法の呼び方に読み替えてください。
 
-#### TypeScript / JavaScript
+<details>
+<summary>TypeScript / JavaScript（npm への公開待ち）</summary>
 
-> [!NOTE]
-> npmへの公開はnpmの審査を待っていて遅れています。それまでは、下の「それ以外」の入れ方を使ってください。
+npmへの公開はnpmの審査を待っていて遅れています。それまでは、下の「それ以外」の入れ方を使ってください。
 
 ```sh
 npm install --save-dev --save-exact hadome   # pnpm・yarn・bun でも同じ（bun add -d -E hadome → bunx hadome check）
 npx hadome check
 ```
 
-#### Python
+</details>
+
+<details>
+<summary>Python（uv・pip）</summary>
 
 ```sh
 uv add --dev hadome==0.5.0                   # pip なら pip install hadome==0.5.0
 uv run hadome check
 ```
 
-#### Go
+</details>
+
+<details>
+<summary>Java / Kotlin（Gradle）</summary>
+
+```kotlin
+// build.gradle.kts
+plugins { id("io.github.rerorets.hadome") version "0.5.0" }
+```
+
+`./gradlew hadomeCheck`で動かします。
+
+</details>
+
+<details>
+<summary>Java / Kotlin（Maven）</summary>
+
+```xml
+<!-- pom.xml の <build><plugins> -->
+<plugin>
+  <groupId>io.github.rerorets</groupId>
+  <artifactId>hadome-maven-plugin</artifactId>
+  <version>0.5.0</version>
+</plugin>
+```
+
+`mvn hadome:check`で動かします。
+
+</details>
+
+<details>
+<summary>Go（<code>go get -tool</code>）</summary>
 
 ```sh
 go get -tool github.com/rerorets/hadome/cmd/hadome
@@ -84,36 +164,20 @@ go get -modfile=tools.mod -tool github.com/rerorets/hadome/cmd/hadome
 go tool -modfile=tools.mod hadome check
 ```
 
-#### Java / Kotlin（Gradle）
+</details>
 
-```kotlin
-// build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.5.0" }
-```
-
-`./gradlew hadomeCheck`で動かします。
-
-#### Java / Kotlin（Maven）
-
-```xml
-<!-- pom.xml の <build><plugins> -->
-<plugin>
-  <groupId>io.github.rerorets</groupId>
-  <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.5.0</version>
-</plugin>
-```
-
-`mvn hadome:check`で動かします。
-
-#### Rust
+<details>
+<summary>Rust（cargo binstall）</summary>
 
 ```sh
 cargo binstall hadome@0.5.0
 hadome check
 ```
 
-#### それ以外（Terraform・Ansible など）
+</details>
+
+<details>
+<summary>それ以外（Homebrew・Windows・アーカイブ）</summary>
 
 ```sh
 brew install rerorets/tap/hadome
@@ -138,6 +202,8 @@ tar -xzf hadome_0.5.0_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```
+
+</details>
 
 ### 2. AIエージェントに覚えさせる
 
@@ -177,34 +243,6 @@ This repository uses hadome to stop regressions in code and tests.
 
 </details>
 
-## 出力の例
-
-`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存の図に無いimportをした変更の結果です。
-
-```console
-$ hadome check --base main
-✗ deps/not-in-diagram          import not in the diagram: store → core (no arrow store --> core)
-  store/store.go:3
-  why: the diagram (docs/deps.md) is how people and agents know what may depend on what; an import it does not draw makes it wrong
-  fix: depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews
-✗ tests/no-sleep               test waits by sleeping: time.Sleep(10 * time.Millisecond)
-  worker/worker_test.go:11
-  why: a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event
-  fix: wait for the event itself: a channel, a callback, or a condition with a deadline that fails loudly
-✗ tests/scope-shrunk           guarded scope shrank: example.com/app/store.Append is no longer exercised by any active test (was: TestAppendKeepsRows)
-  store/store_test.go:9
-  why: the behaviour of example.com/app/store.Append can now change without any test noticing
-  fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
-3 regression(s). 0 existing finding(s) unchanged (not blocking).
-```
-
-出力は既定で英語です。`--lang ja`を付けると日本語で出ます。
-
-- 日本語になるもの: 違反の文言（`message`・`why`・`fix`）、`hadome explain <ルール>`の説明、最後のまとめの行
-- 変わらないもの: JSONのキー、ルールのID、終了コード
-
-毎回付けずに日本語にする設定は、下の「設定と例外」にあります。
-
 ## 検査するもの
 
 | 分類 | ルール |
@@ -218,23 +256,6 @@ $ hadome check --base main
 | `config/` | `loosened`（確認待ち）: 自分を判定するルールを緩める変更 |
 
 どのルールもなぜ問題かと直し方を一緒に出します。ルールの仕様は[docs/design](docs/design)にあります。
-
-## 後退と整理
-
-hadomeはテストの本数ではなく「守っている範囲」を比べて、整理と後退を見分けます。テストが3本減っても、それが整理なのか後退なのかは、本数だけでは分かりません。
-
-- **対象**: テストが呼んでいる関数やメソッド。hadomeが割り出します
-- **守っている範囲**: 有効なテストが届く対象の集合
-
-| やったこと | 本数 | 守っている範囲 | 判定 |
-|---|---|---|---|
-| 重複していた3本を1本にまとめた | 減る | 変わらない | 整理 |
-| コードを消し、そのテストも消した | 減る | 対象ごと消えた | 整理 |
-| テストだけを消した・弱くした | 減るか同じ | 狭まった | 後退 |
-
-要らなくなった振る舞いは、テストだけでなくコードごと消すと、整理として通ります。
-
-テストを3つの段（不変条件・記載ルール・チェック）で考える背景は、[考え方](docs/model.ja.md)にあります。
 
 ## 使う場面と終了コード
 
@@ -285,6 +306,18 @@ mutation:
 ```
 
 壊し方ごとにテストを1回動かすので、`check`よりずっと時間がかかります。手元で、変更を仕上げる前に回すことを想定しています。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
+
+## 他の道具との違い
+
+hadomeは変更の前（base）と後（head）の両方を検査して、結果を比べます。似た道具とは比べ方が違うので、拾えるものも変わります。
+
+| 道具（例） | 比べ方 | hadomeとの違い |
+|---|---|---|
+| 差分の行だけを見るlinter（golangci-lintの`--new-from-rev`、reviewdog） | 変更した行に出た違反だけを出す | 変更した行の外で起きた後退は見えません。例: テストを消したせいで、触っていない関数がどのテストからも呼ばれなくなった |
+| 結果を記録して悪化を止める道具（Betterer） | 前回の結果をファイルに保存し、それより悪くなったら落とす | hadomeは結果を保存せず、毎回baseを検査し直します。記録のファイルを更新し続ける手間がありません |
+| 新しいコードだけを判定する仕組み（SonarQubeのNew Code） | サーバーに結果を貯めて、新しいコードを判定する | hadomeはサーバーを持たず、手元でもCIでも同じバイナリが動きます |
+| カバレッジの差分（Codecovなど） | テストを動かし、通った行を測る | `hadome check`はテストを動かさず、テストが呼ぶ関数を読みます。言語ごとのテストランナーに依存しません。実行するまで呼び先が決まらない呼び出しは読めないので、人の確認に回します |
+| AIのコードレビュー | 変更をLLMに読ませる | hadomeはLLMを使わず、通信もしません。同じ変更には毎回同じ結果を返します |
 
 ## 名前の由来
 
