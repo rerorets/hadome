@@ -84,3 +84,33 @@ func TestFunctionsSharingAnIDAreMatchedByTheirBody(t *testing.T) {
 		})
 	}
 }
+
+// viewpoint: behaviour
+// target: mutation.touched
+// Design "Where to break": an unchanged function is selected when a test the change rewrote calls
+// it, and not when the test is as it was. A test whose body hadome has no fingerprint of counts as
+// rewritten, since whether it changed cannot be told.
+func TestFunctionsCalledByRewrittenTestsAreSelected(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{"app.go": "package app\nfunc run() { work() }\n"}
+	for _, tc := range []struct {
+		name               string
+		baseBody, headBody string
+		want               []string
+	}{
+		{"the test as it was", "check run", "check run", nil},
+		{"the test rewritten", "check run", "check run less", []string{"app.go:2"}},
+		{"a test without a fingerprint", "", "", []string{"app.go:2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ba, bv := version("app.run", files)
+			ha, hv := version("app.run", files)
+			ba.Tests = []facts.Test{{Name: "TestRun", Path: "app_test.go", Body: tc.baseBody, Calls: []facts.Call{{Target: "app.run"}}}}
+			ha.Tests = []facts.Test{{Name: "TestRun", Path: "app_test.go", Body: tc.headBody, Calls: []facts.Call{{Target: "app.run"}}}}
+			if got := places(touched(ba, ha, bv, hv)); !slices.Equal(got, tc.want) {
+				t.Errorf("selected %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
