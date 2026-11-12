@@ -51,6 +51,12 @@ func (e *syntaxError) SyntaxError(_ antlr.Recognizer, offending interface{}, lin
 // LL prediction only when SLL fails. SLL may fail on input LL reads, never the other way round, so
 // the result is the same as LL alone.
 func (g antlrGrammar) Parse(text string, base, line int) (*Node, error) {
+	return g.parseAt(text, runeOffsets(text), base, line)
+}
+
+// parseAt is Parse with the offset of each rune of text given: offsets[i] is the offset of rune i
+// from base, and the last entry the offset of the end.
+func (g antlrGrammar) parseAt(text string, offsets []int, base, line int) (*Node, error) {
 	tree, p, err := g.run(text, antlr.PredictionModeSLL)
 	if err != nil {
 		tree, p, err = g.run(text, antlr.PredictionModeLL)
@@ -59,7 +65,7 @@ func (g antlrGrammar) Parse(text string, base, line int) (*Node, error) {
 		return nil, shiftError(err, line)
 	}
 	c := converter{rules: p.GetRuleNames(), symbols: p.GetSymbolicNames(),
-		bytes: runeOffsets(text), base: base, line: line - 1, inlined: g.inlined}
+		bytes: offsets, base: base, line: line - 1, inlined: g.inlined}
 	return c.node(tree, nil), nil
 }
 

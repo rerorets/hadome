@@ -79,6 +79,9 @@ type Statement struct {
 	Text  string
 	Start int
 	Line  int
+	// offsets, when set, is the offset in the piece of each rune of Text, and of its end: Text was
+	// rewritten (a product view's query replaced), and every position still comes from the piece.
+	offsets []int
 }
 
 // Ident is one part of a name as written.

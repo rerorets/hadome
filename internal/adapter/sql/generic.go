@@ -88,6 +88,9 @@ func (d tableDialect) Parse(s Statement) (*Node, error) {
 	if !ok {
 		return nil, fmt.Errorf("this build of hadome has no grammar for %s", d.name)
 	}
+	if m, ok := g.(antlrGrammar); ok && s.offsets != nil {
+		return m.parseAt(s.Text, s.offsets, s.Start, s.Line)
+	}
 	return g.Parse(s.Text, s.Start, s.Line)
 }
 

@@ -23,6 +23,8 @@ func TestProductViewQueriesAreNotParsed(t *testing.T) {
 	}{
 		{"postgresql view", "CREATE VIEW sales.daily AS " + broken + ";\nCREATE TABLE sales.t (id int);",
 			postgres(), []string{".sql/sales.daily", ".sql/sales.t"}},
+		{"postgresql view whose query is one word", "CREATE VIEW sales.daily AS x;\nCREATE TABLE sales.t (id int);",
+			postgres(), []string{".sql/sales.daily", ".sql/sales.t"}},
 		{"postgresql recursive view", "CREATE OR REPLACE RECURSIVE VIEW sales.daily (n) AS " + broken + ";",
 			postgres(), []string{".sql/sales.daily"}},
 		{"postgresql materialized view", "CREATE MATERIALIZED VIEW sales.daily AS " + broken + "\nWITH NO DATA;",
@@ -57,7 +59,9 @@ func TestErrorsAroundViewQueriesStillMakeTheFileUnread(t *testing.T) {
 	cases := []struct{ name, path, src string }{
 		{"an error before AS", "db/a.sql", "CREATE VIEW sales.daily daily AS SELECT 1;"},
 		{"an unclosed string in the query", "db/a.sql", "CREATE VIEW sales.daily AS SELECT 'open;\nCREATE TABLE t (id int);"},
+		{"an unclosed dollar-quoted string in the query", "db/a.sql", "CREATE VIEW sales.daily AS SELECT $$open;\nCREATE TABLE t (id int);"},
 		{"an unclosed comment in the query", "db/a.sql", "CREATE VIEW sales.daily AS SELECT 1 /* open;"},
+		{"a comment opened by the file's last bytes", "db/a.sql", "CREATE VIEW sales.daily AS SELECT FROM FROM t /*/"},
 		{"a query with no token", "db/a.sql", "CREATE VIEW sales.daily AS /* nothing */;"},
 		{"a broken query in a test file", "test/views.sql", "CREATE VIEW sales.daily AS SELECT FROM FROM t;"},
 		{"a temporary view, which the table does not list", "db/a.sql", "CREATE TEMP VIEW sales.daily AS SELECT FROM FROM t;"},
@@ -84,6 +88,16 @@ func TestViewQueriesKeepPositionsAndTheirHead(t *testing.T) {
 		got = append(got, fmt.Sprintf("%s %d-%d", s.ID, s.Line, s.EndLine))
 	}
 	if want := []string{".sql/sales.daily 1-4", ".sql/sales.t 5-5"}; !slices.Equal(got, want) {
+		t.Errorf("symbols %v, want %v", got, want)
+	}
+
+	an = analyze(t, sql.Adapter{}, version("db/b.sql",
+		"CREATE VIEW sales.daily AS SELECT a FROM FROM sales.orders WHERE a > 1;\n-- Orders per day.\nCREATE TABLE sales.t (id int);\n"), postgres())
+	got = nil
+	for _, s := range an.Symbols {
+		got = append(got, fmt.Sprintf("%s %d doc=%v", s.ID, s.Line, s.Doc))
+	}
+	if want := []string{".sql/sales.daily 1 doc=false", ".sql/sales.t 3 doc=true"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v", got, want)
 	}
 
