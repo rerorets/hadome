@@ -124,8 +124,8 @@ func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope
 	return t.done()
 }
 
-func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
-	switch n.Kind() {
+func (w *jvmWalk) ktVisit(n *sitter.Node, kind string) bool {
+	switch kind {
 	case "property_declaration":
 		w.ktProperty(n)
 	case "call_expression":

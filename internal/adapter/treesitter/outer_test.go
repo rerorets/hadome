@@ -277,3 +277,23 @@ describe('required', () => {
 		`required seeds calls=[src.seed×1] reads=0 asserts=1 hazards=[]
 support calls=[src.createStore×1] reads=0 asserts=1 hazards=[]`)
 }
+
+// viewpoint: behaviour
+// target: the TypeScript reader
+// A statement outside the tests that uses two of the values a test uses runs once for the test,
+// not once per value: its calls, the ones in its arguments too, count once.
+func TestASetupSharedByTwoValuesRunsOnce(t *testing.T) {
+	expect(t, tsTestFacts(t,
+		"src/store.ts", "export function register(app: object, db: object, at: number) {}\nexport function stamp(): number { return 0 }\n",
+		"src/store.test.ts", `import { describe, it, expect } from 'vitest'
+import { register, stamp } from './store'
+
+describe('wired', () => {
+  const app = { routes: {} }
+  const db = { rows: [] }
+  register(app, db, stamp())
+  it('uses both', () => { expect(app.routes).toEqual({}); expect(db.rows).toEqual([]) })
+})
+`),
+		`wired uses both calls=[src.register×1 src.stamp×1] reads=0 asserts=2 hazards=[]`)
+}

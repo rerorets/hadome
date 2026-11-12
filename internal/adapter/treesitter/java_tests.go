@@ -218,8 +218,8 @@ type jvmWalk struct {
 	builtins map[string]string
 }
 
-func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node) bool) {
-	w.t.bodyIn(w.jf.f, w.jf.t, body, func(n *sitter.Node) bool { return loops[n.Kind()] }, visit)
+func (w *jvmWalk) walk(body *sitter.Node, loops map[string]bool, visit func(*sitter.Node, string) bool) {
+	w.t.bodyIn(w.jf.f, w.jf.t, body, func(kind string) bool { return loops[kind] }, visit)
 }
 
 // invoke handles a call to name on obj ("" for an unqualified call). It reports hazards,
@@ -293,9 +293,9 @@ func jvmAlwaysTrue(f *file, name string, args []*sitter.Node) bool {
 	return false
 }
 
-func (w *jvmWalk) javaVisit(n *sitter.Node) bool {
+func (w *jvmWalk) javaVisit(n *sitter.Node, kind string) bool {
 	f := w.jf.f
-	switch n.Kind() {
+	switch kind {
 	case "local_variable_declaration":
 		typ := f.field(n, "type")
 		for _, d := range named(n) {

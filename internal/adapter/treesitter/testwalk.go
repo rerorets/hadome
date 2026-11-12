@@ -143,8 +143,9 @@ func (t *testFacts) done() facts.Test {
 }
 
 // bodyIn walks a test body, or a helper's, written in f; tb are the tables of f's language. The
-// strings it reaches belong to the test (see textCollector).
-func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+// strings it reaches belong to the test (see textCollector). isLoop and visit are given each node's
+// kind, read once for all of them: reading it from tree-sitter costs a call into C every time.
+func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(kind string) bool, visit func(n *sitter.Node, kind string) bool) {
 	in, inTables := t.texts.in, t.texts.tables
 	t.texts.use(f, tb)
 	t.body(n, placeOf(n), isLoop, visit)
@@ -155,11 +156,12 @@ func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sit
 // children; loops are tracked here for every language, and so are the strings the walk reaches.
 // A loop's children are each walked as a body of their own, so that n itself is never taken for a
 // loop.
-func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+func (t *testFacts) body(n *sitter.Node, at place, isLoop func(kind string) bool, visit func(n *sitter.Node, kind string) bool) {
 	var step func(c *sitter.Node, at place)
 	step = func(c *sitter.Node, at place) {
-		t.texts.note(c, at, t.loops)
-		if c != n && isLoop(c) {
+		kind := c.Kind()
+		t.texts.note(c, kind, at, t.loops)
+		if c != n && isLoop(kind) {
 			t.loops++
 			for i := uint(0); i < c.ChildCount(); i++ {
 				t.body(c.Child(i), place{parent: c, i: int(i)}, isLoop, visit)
@@ -167,7 +169,7 @@ func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) boo
 			t.loops--
 			return
 		}
-		if !visit(c) {
+		if !visit(c, kind) {
 			return
 		}
 		for i := uint(0); i < c.ChildCount(); i++ {
