@@ -44,6 +44,8 @@ func TestMain(m *testing.M) {
 		switch os.Args[1] {
 		case catchChanges:
 			os.Exit(standInCatch(os.Args[2:]))
+		case logGoTest:
+			os.Exit(standInLogGoTest(os.Args[2], os.Args[3:]))
 		case mutation.StandInStages:
 			os.Exit(mutation.StandInStage(os.Args[2:]))
 		case mutation.StandInHoldLock:

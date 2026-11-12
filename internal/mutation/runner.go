@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -97,11 +96,10 @@ func (r *Runner) clean() error {
 	return nil
 }
 
-// try applies one mutant and runs the stages from the narrowest: tests names the tests that call the
-// broken function, pkgs the packages they are in (nil when they cannot be narrowed by package). A
-// stage that fails catches the mutant; one whose command fails with nothing broken is passed over.
-// The file is restored afterwards.
-func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
+// try applies one mutant and runs the stages from the narrowest (see stages). A stage that fails
+// catches the mutant; one whose command fails with nothing broken is passed over. The file is
+// restored afterwards.
+func (r *Runner) try(m facts.Mutant, sel picked) (Outcome, error) {
 	p := filepath.Join(r.dir, filepath.FromSlash(m.Path))
 	orig, err := os.ReadFile(p)
 	if err != nil {
@@ -109,7 +107,7 @@ func (r *Runner) try(m facts.Mutant, tests, pkgs []string) (Outcome, error) {
 	}
 	broken := append(append(append([]byte{}, orig[:m.Start]...), m.Replacement...), orig[m.End:]...)
 	defer os.WriteFile(p, orig, 0o644)
-	for _, cmd := range stages(r.Test, r.Sep, tests, pkgs) {
+	for _, cmd := range stages(r.Test, r.Sep, sel) {
 		b, err := r.baseline(cmd)
 		if err != nil {
 			return Caught, err
@@ -262,114 +260,6 @@ func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (pas
 		return passed, err
 	}
 	return true, nil
-}
-
-// stages are the commands that judge a mutant, narrowest first and without repeats: the tests that
-// call the broken function in their packages, the same tests in every package, then every test.
-// Each runs a part of the tests the next one runs.
-func stages(test []string, sep string, tests, pkgs []string) [][]string {
-	var out [][]string
-	add := func(cmd []string) {
-		for _, c := range out {
-			if slices.Equal(c, cmd) {
-				return
-			}
-		}
-		out = append(out, cmd)
-	}
-	if len(tests) > 0 {
-		if len(pkgs) > 0 {
-			add(fill(test, sep, tests, pkgs))
-		}
-		add(fill(test, sep, tests, nil))
-	}
-	add(fill(test, sep, nil, nil))
-	return out
-}
-
-// fill puts the tests and the packages into the command. No tests takes {tests} out: the element
-// that holds it, and the flag before it. No packages puts every package in place of {packages}.
-func fill(test []string, sep string, tests, pkgs []string) []string {
-	var out []string
-	for i, a := range test {
-		switch {
-		case a == packagesHole && len(pkgs) == 0:
-			out = append(out, allPackages)
-		case a == packagesHole:
-			out = append(out, pkgs...)
-		case strings.Contains(a, testsHole) && len(tests) == 0:
-			if i > 0 && strings.HasPrefix(test[i-1], "-") && len(out) > 0 {
-				out = out[:len(out)-1]
-			}
-		case strings.Contains(a, testsHole):
-			out = append(out, strings.ReplaceAll(a, testsHole, strings.Join(tests, sep)))
-		default:
-			out = append(out, a)
-		}
-	}
-	return out
-}
-
-// hasPackages reports whether the command narrows by package.
-func hasPackages(test []string) bool { return slices.Contains(test, packagesHole) }
-
-// goPackages are the Go packages of the tests, as go test names them from the directory it runs in:
-// the repository root, or the directory of -C in the command. It returns nil when a test is not a Go
-// test or is outside that directory: narrowing by package would leave it out.
-func goPackages(test []string, tests []facts.Test) []string {
-	root, ok := goDir(test)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, t := range tests {
-		if !strings.HasSuffix(t.Path, "_test.go") {
-			return nil
-		}
-		dir := path.Dir(t.Path)
-		switch {
-		case root == ".":
-		case dir == root:
-			dir = "."
-		case strings.HasPrefix(dir, root+"/"):
-			dir = strings.TrimPrefix(dir, root+"/")
-		default:
-			return nil
-		}
-		pkg := "./" + dir
-		if dir == "." {
-			pkg = "."
-		}
-		if !slices.Contains(out, pkg) {
-			out = append(out, pkg)
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// goDir is the directory, relative to the root of the copy, that the command's -C makes go run in.
-// It is not ok when that directory cannot be seen from the root.
-func goDir(test []string) (string, bool) {
-	dir := "."
-	for i, a := range test {
-		var v string
-		switch {
-		case a == "-C" && i+1 < len(test):
-			v = test[i+1]
-		case strings.HasPrefix(a, "-C="):
-			v = strings.TrimPrefix(a, "-C=")
-		default:
-			continue
-		}
-		if filepath.IsAbs(v) || path.IsAbs(filepath.ToSlash(v)) {
-			return "", false
-		}
-		if dir = path.Join(dir, filepath.ToSlash(v)); dir == ".." || strings.HasPrefix(dir, "../") {
-			return "", false
-		}
-	}
-	return dir, true
 }
 
 func tail(s string) string {

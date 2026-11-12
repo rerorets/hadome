@@ -146,11 +146,10 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 	if err != nil {
 		return nil, err
 	}
-	callers := testsCalling(vs.headFacts)
+	pick := picker(vs.headFacts)
 	var survivors []facts.Mutant
 	for i, mu := range mutants {
-		names, pkgs := callers.of(mu.Func, c.Test)
-		out, err := head.try(mu, names, pkgs)
+		out, err := head.try(mu, pick(mu.Func))
 		if err != nil {
 			return nil, err
 		}
@@ -205,11 +204,10 @@ func (m *Mutate) inBase(bv engine.Version, baseFacts *facts.Analysis, survivors 
 	if err != nil {
 		return nil, fmt.Errorf("base: %w", err)
 	}
-	callers, shown := testsCalling(baseFacts), baseFacts.Names()
+	pick, shown := picker(baseFacts), baseFacts.Names()
 	var out []engine.Finding
 	for _, mu := range counterparts {
-		names, pkgs := callers.of(mu.Func, c.Test)
-		o, err := base.try(mu, names, pkgs)
+		o, err := base.try(mu, pick(mu.Func))
 		if err != nil {
 			return nil, err
 		}
@@ -285,16 +283,12 @@ func testsCalling(a *facts.Analysis) callers {
 	return out
 }
 
-// of returns the names of the tests that call a function, and their packages when the test command
-// narrows by package and they can be narrowed so.
-func (c callers) of(fn string, test []string) (names, pkgs []string) {
-	for _, t := range c[fn] {
-		names = append(names, t.Name)
+// picker returns what picks, for a function of the version, the tests its mutants' stages run.
+func picker(a *facts.Analysis) func(fn string) picked {
+	calling, r := testsCalling(a), reaching(a)
+	return func(fn string) picked {
+		return picked{calling: calling[fn], reaching: r.of(fn), all: a.Tests}
 	}
-	if hasPackages(test) {
-		pkgs = goPackages(test, c[fn])
-	}
-	return names, pkgs
 }
 
 // hasGo reports whether a version has a Go file.
