@@ -10,21 +10,14 @@ import (
 	"github.com/rerorets/hadome/internal/adapter/reuse"
 )
 
-// parsed is one file's syntax trees: the tree read from src, and the earlier trees a repairer read
-// before it. Base and head share it when the file is the same in both, so nothing changes it after
-// it is made; what a version learns about the file goes in that version's file.
+// parsed is one file read: the copy of the tree read from src, and the nodes a repairer took out of
+// earlier copies. It holds only Go memory: every C tree is closed once copied. Base and head share
+// it when the file is the same in both, so nothing changes it after it is made; what a version
+// learns about the file goes in that version's file.
 type parsed struct {
 	src    []byte
-	root   *sitter.Node
-	lifted []*sitter.Node
-	trees  []*sitter.Tree
-}
-
-// Release frees the trees, after which no node of them may be used.
-func (pr *parsed) Release() {
-	for _, t := range pr.trees {
-		t.Close()
-	}
+	root   *node
+	lifted []*node
 }
 
 // file is the parsed file as one version reads it.
@@ -60,26 +53,33 @@ func parseFile(in parseInput) (*parsed, error) {
 }
 
 // parseWith parses src with the grammar r gives the path, reading it again while a repairer
-// finds parts the grammar misread.
+// finds parts the grammar misread. Each tree is copied and closed at once, so no C tree outlives it.
 func parseWith(r reader, parser *sitter.Parser, p string, src []byte) (*parsed, error) {
-	if err := parser.SetLanguage(r.grammar(p)); err != nil {
+	g := r.grammar(p)
+	if err := parser.SetLanguage(g); err != nil {
 		return nil, err
 	}
-	tree := parser.Parse(src, nil)
-	pr := &parsed{src: src, trees: []*sitter.Tree{tree}}
+	root := parseCopy(parser, g, src)
+	pr := &parsed{src: src}
 	if rp, ok := r.(repairer); ok {
 		read := src
 		for range 4 { // a repair may uncover another misreading further on
-			fixed, lifted := rp.repair(read, tree.RootNode())
+			fixed, lifted := rp.repair(read, root)
 			if fixed == nil {
 				break
 			}
 			pr.lifted = append(pr.lifted, lifted...)
 			read = fixed
-			tree = parser.Parse(read, nil)
-			pr.trees = append(pr.trees, tree)
+			root = parseCopy(parser, g, read)
 		}
 	}
-	pr.root = tree.RootNode()
+	pr.root = root
 	return pr, nil
+}
+
+// parseCopy parses src with the parser, set to grammar g, and returns the copy of the tree.
+func parseCopy(parser *sitter.Parser, g *sitter.Language, src []byte) *node {
+	tree := parser.Parse(src, nil)
+	defer tree.Close()
+	return copyTree(tree, g)
 }

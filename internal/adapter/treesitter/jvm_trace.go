@@ -6,8 +6,6 @@ import (
 	"strings"
 	"unicode"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -22,12 +20,12 @@ var jvmEntryAnnotations = set("GetMapping", "PostMapping", "PutMapping", "PatchM
 // traceBinds binds the classes of the file's package and what it imports: a class of the
 // repository, a static import of one of its members, or a class of a package that does input or
 // output.
-func (j *jvm) traceBinds(f *file, t *tables, imports func(visit func(name string, wildcard bool, n *sitter.Node))) map[string]tbind {
+func (j *jvm) traceBinds(f *file, t *tables, imports func(visit func(name string, wildcard bool, n *node))) map[string]tbind {
 	out := map[string]tbind{}
 	for c := range j.classes[f.unit] {
 		out[c] = tbind{id: f.unit + "." + c, unit: f.unit}
 	}
-	imports(func(name string, wildcard bool, _ *sitter.Node) {
+	imports(func(name string, wildcard bool, _ *node) {
 		pkg, class, internal := j.resolve(name, wildcard)
 		switch {
 		case !internal && !wildcard:
@@ -46,7 +44,7 @@ func (j *jvm) traceBinds(f *file, t *tables, imports func(visit func(name string
 }
 
 func newJVMTracing(f *file, syn tsyntax, binds map[string]tbind, funcs map[string]bool) *tracing {
-	return &tracing{f: f, syn: syn, binds: binds, values: map[string]*sitter.Node{}, funcs: funcs,
+	return &tracing{f: f, syn: syn, binds: binds, values: map[string]*node{}, funcs: funcs,
 		types: func(name string) tbind { return binds[simpleType(name)] }}
 }
 
@@ -54,7 +52,7 @@ var javaSyntax = tsyntax{
 	idents: set("identifier"),
 	selves: set("this"),
 	funcs:  set("method_declaration", "constructor_declaration"),
-	member: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
+	member: func(f *file, n *node) (*node, *node) {
 		switch n.Kind() {
 		case "method_invocation":
 			if obj := n.ChildByFieldName("object"); obj != nil {
@@ -65,13 +63,13 @@ var javaSyntax = tsyntax{
 		}
 		return nil, nil
 	},
-	built: func(f *file, n *sitter.Node) string {
+	built: func(f *file, n *node) string {
 		if n.Kind() == "object_creation_expression" {
 			return simpleType(f.field(n, "type"))
 		}
 		return ""
 	},
-	vars: func(f *file, n *sitter.Node) map[string]string {
+	vars: func(f *file, n *node) map[string]string {
 		switch n.Kind() {
 		case "formal_parameter":
 			return map[string]string{f.field(n, "name"): f.field(n, "type")}
@@ -90,10 +88,10 @@ var javaSyntax = tsyntax{
 
 func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
-		tr := newJVMTracing(f, javaSyntax, j.traceBinds(f, t, func(v func(string, bool, *sitter.Node)) { javaImports(f, v) }), funcs)
+		tr := newJVMTracing(f, javaSyntax, j.traceBinds(f, t, func(v func(string, bool, *node)) { javaImports(f, v) }), funcs)
 		var fns []tfunc
-		var collect func(n *sitter.Node, prefix string)
-		collect = func(n *sitter.Node, prefix string) {
+		var collect func(n *node, prefix string)
+		collect = func(n *node, prefix string) {
 			class := prefix + "." + f.field(n, "name")
 			body := n.ChildByFieldName("body")
 			for _, m := range named(body) {
@@ -130,7 +128,7 @@ var kotlinSyntax = tsyntax{
 	idents: set("identifier"),
 	selves: set("this_expression", "this"),
 	funcs:  set("function_declaration"),
-	member: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
+	member: func(f *file, n *node) (*node, *node) {
 		if n.Kind() != "navigation_expression" || n.NamedChildCount() < 2 {
 			return nil, nil
 		}
@@ -140,7 +138,7 @@ var kotlinSyntax = tsyntax{
 		}
 		return n.NamedChild(0), name
 	},
-	built: func(f *file, n *sitter.Node) string {
+	built: func(f *file, n *node) string {
 		if n.Kind() != "call_expression" || n.NamedChildCount() == 0 {
 			return ""
 		}
@@ -150,7 +148,7 @@ var kotlinSyntax = tsyntax{
 		}
 		return ""
 	},
-	vars: func(f *file, n *sitter.Node) map[string]string {
+	vars: func(f *file, n *node) map[string]string {
 		switch n.Kind() {
 		case "class_parameter", "parameter", "variable_declaration":
 			name, typ := "", ""
@@ -177,10 +175,10 @@ var ktorRoutes = set("get", "post", "put", "patch", "delete", "head", "options")
 
 func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
-		tr := newJVMTracing(f, kotlinSyntax, k.traceBinds(f, t, func(v func(string, bool, *sitter.Node)) { ktImports(f, v) }), funcs)
+		tr := newJVMTracing(f, kotlinSyntax, k.traceBinds(f, t, func(v func(string, bool, *node)) { ktImports(f, v) }), funcs)
 		var fns []tfunc
-		var collect func(n *sitter.Node, prefix string)
-		collect = func(n *sitter.Node, prefix string) {
+		var collect func(n *node, prefix string)
+		collect = func(n *node, prefix string) {
 			class := prefix + "." + f.field(n, "name")
 			for _, m := range ktMembers(n) {
 				switch {
@@ -231,7 +229,7 @@ func (k *kotlin) entries(tr *tracing, fns []tfunc) []facts.Entry {
 		}
 	}
 	top := tfunc{own: f.unit}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.Kind() != "call_expression" || n.NamedChildCount() < 2 {
 			return true
 		}

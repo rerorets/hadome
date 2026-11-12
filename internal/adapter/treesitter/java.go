@@ -16,7 +16,9 @@ import (
 // java reads Java.
 type java struct{ jvm }
 
-func (*java) grammar(string) *sitter.Language { return sitter.NewLanguage(javagrammar.Language()) }
+var javaGrammar = sitter.NewLanguage(javagrammar.Language())
+
+func (*java) grammar(string) *sitter.Language { return javaGrammar }
 
 var javaBranches = branches{
 	kinds: set("if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement",
@@ -36,7 +38,7 @@ func (j *java) index(_ engine.Version, files []*file) {
 	for _, f := range files {
 		pkg := ""
 		var classes []string
-		var types []*sitter.Node
+		var types []*node
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_declaration" && n.NamedChildCount() > 0:
@@ -62,7 +64,7 @@ func (j *java) index(_ engine.Version, files []*file) {
 }
 
 // javaImports lists the import declarations as (name, wildcard, node).
-func javaImports(f *file, visit func(name string, wildcard bool, n *sitter.Node)) {
+func javaImports(f *file, visit func(name string, wildcard bool, n *node)) {
 	for _, n := range named(f.root) {
 		if n.Kind() != "import_declaration" || n.NamedChildCount() == 0 {
 			continue
@@ -77,7 +79,7 @@ func javaImports(f *file, visit func(name string, wildcard bool, n *sitter.Node)
 
 func (j *java) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
-	javaImports(f, func(name string, wildcard bool, n *sitter.Node) {
+	javaImports(f, func(name string, wildcard bool, n *node) {
 		pkg, _, internal := j.resolve(name, wildcard)
 		out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: pkg,
 			Internal: internal, IO: !internal && t.isIO(name)})
@@ -105,7 +107,7 @@ func (j *java) symbols(f *file) []facts.Symbol {
 }
 
 // public reports whether a declaration's modifiers include the keyword.
-func modifier(f *file, n *sitter.Node, word string) bool {
+func modifier(f *file, n *node, word string) bool {
 	for _, c := range named(n) {
 		if c.Kind() == "modifiers" {
 			for _, w := range strings.Fields(f.text(c)) {
@@ -119,7 +121,7 @@ func modifier(f *file, n *sitter.Node, word string) bool {
 }
 
 // typeSymbols lists a type and its members; visible says whether the enclosing type is public.
-func (j *java) typeSymbols(f *file, n *sitter.Node, prefix string, visible bool) []facts.Symbol {
+func (j *java) typeSymbols(f *file, n *node, prefix string, visible bool) []facts.Symbol {
 	id := prefix + "." + f.field(n, "name")
 	iface := n.Kind() == "interface_declaration"
 	public := visible && modifier(f, n, "public")
@@ -147,7 +149,7 @@ func (j *java) typeSymbols(f *file, n *sitter.Node, prefix string, visible bool)
 	return out
 }
 
-func javaParams(f *file, m *sitter.Node) []string {
+func javaParams(f *file, m *node) []string {
 	var out []string
 	for _, p := range named(m.ChildByFieldName("parameters")) {
 		if name := f.field(p, "name"); name != "" {

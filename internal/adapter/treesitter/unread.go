@@ -16,8 +16,8 @@ type unread struct{ lang string }
 
 // Languages returns, in a build without cgo, readers that list each language's files as unread.
 func Languages() []unread {
-	out := make([]unread, len(names))
-	for i, n := range names {
+	out := make([]unread, len(languageNames))
+	for i, n := range languageNames {
 		out[i] = unread{lang: n}
 	}
 	return out

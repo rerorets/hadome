@@ -21,17 +21,16 @@ func TestAPlaceGivesTheIndexOfItsNode(t *testing.T) {
 	}
 	parser := sitter.NewParser()
 	defer parser.Close()
-	f, done, err := py.parse(parser, "a.py", []byte("x = f(a, b)\n"))
+	f, err := py.parse(parser, "a.py", []byte("x = f(a, b)\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer done()
 	args := f.root.NamedChild(0).NamedChild(0).ChildByFieldName("right").ChildByFieldName("arguments")
 	b := args.Child(3) // ( a , b )
 	cases := []struct {
 		name string
 		at   place
-		n    *sitter.Node
+		n    *node
 		want int
 	}{
 		{"known", place{parent: args, i: 3}, b, 3},

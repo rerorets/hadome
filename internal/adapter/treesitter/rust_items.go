@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	fswalk "github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/facts"
@@ -15,7 +13,7 @@ import (
 // fsFiles lists every file of the version that hadome reads.
 func fsFiles(v engine.Version) ([]string, error) { return fswalk.Files(v.FS) }
 
-func rustPub(f *file, n *sitter.Node) bool {
+func rustPub(f *file, n *node) bool {
 	for _, c := range named(n) {
 		if c.Kind() == "visibility_modifier" {
 			return f.text(c) == "pub"
@@ -29,7 +27,7 @@ var rustTypes = set("struct_item", "enum_item", "type_item", "union_item")
 func (r *rust) symbols(f *file) []facts.Symbol { return r.items(f, f.root, f.unit) }
 
 // items lists the symbols declared in a module body, leaving out modules compiled only for tests.
-func (r *rust) items(f *file, body *sitter.Node, prefix string) []facts.Symbol {
+func (r *rust) items(f *file, body *node, prefix string) []facts.Symbol {
 	var out []facts.Symbol
 	for _, c := range named(body) {
 		name := f.field(c, "name")
@@ -59,7 +57,7 @@ func (r *rust) items(f *file, body *sitter.Node, prefix string) []facts.Symbol {
 }
 
 // methods lists the functions of an impl or trait body; all are exported when public says so.
-func (r *rust) methods(f *file, body *sitter.Node, prefix string, public bool) []facts.Symbol {
+func (r *rust) methods(f *file, body *node, prefix string, public bool) []facts.Symbol {
 	var out []facts.Symbol
 	for _, m := range named(body) {
 		if m.Kind() == "function_item" || m.Kind() == "function_signature_item" {
@@ -69,7 +67,7 @@ func (r *rust) methods(f *file, body *sitter.Node, prefix string, public bool) [
 	return out
 }
 
-func (r *rust) function(f *file, n *sitter.Node, prefix string, kind facts.SymbolKind, exported bool) facts.Symbol {
+func (r *rust) function(f *file, n *node, prefix string, kind facts.SymbolKind, exported bool) facts.Symbol {
 	s := facts.Symbol{ID: prefix + "." + f.field(n, "name"), Kind: kind, Exported: exported, Doc: rustDoc(f, n)}
 	var params []string
 	for _, p := range named(n.ChildByFieldName("parameters")) {

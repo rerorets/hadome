@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -51,11 +49,11 @@ type tbind struct {
 // tfunc is a function of a file, to be traced.
 type tfunc struct {
 	id    string
-	class string       // the ID of its class or impl, whose members self and this name; "" outside one
-	own   string       // the prefix of the names its file declares at the top: <own>.<name>
-	decl  *sitter.Node // the declaration: its parameters and annotations
-	body  *sitter.Node
-	scope *sitter.Node // the class or impl body whose fields it sees, or nil
+	class string // the ID of its class or impl, whose members self and this name; "" outside one
+	own   string // the prefix of the names its file declares at the top: <own>.<name>
+	decl  *node  // the declaration: its parameters and annotations
+	body  *node
+	scope *node // the class or impl body whose fields it sees, or nil
 }
 
 // tsyntax is how a language writes what tracing reads.
@@ -64,15 +62,15 @@ type tsyntax struct {
 	selves map[string]bool // the names, or node kinds, of the object itself: self, this
 	funcs  map[string]bool // kinds of function declarations
 	// member returns the object and the member's name node of a member access (a.b), or nil.
-	member func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node)
+	member func(f *file, n *node) (*node, *node)
 	// built returns the class name a new object is made of (Store() in Python, new Store() in
 	// Java), or "".
-	built func(f *file, n *sitter.Node) string
+	built func(f *file, n *node) string
 	// vars returns the variables a declaration types, by name: a parameter, a field, a local.
-	vars func(f *file, n *sitter.Node) map[string]string
+	vars func(f *file, n *node) map[string]string
 	// special reads a node the generic reading does not, such as Rust's a::b::f; it reports whether
 	// it did.
-	special func(tr *tracing, fn tfunc, n *sitter.Node, got *reached) bool
+	special func(tr *tracing, fn tfunc, n *node, got *reached) bool
 }
 
 // tracing reads the functions of one file.
@@ -80,7 +78,7 @@ type tracing struct {
 	f      *file
 	syn    tsyntax
 	binds  map[string]tbind        // names the file binds: imports, and its package's classes
-	values map[string]*sitter.Node // values declared at the top of the file, by name: their initial values
+	values map[string]*node        // values declared at the top of the file, by name: their initial values
 	funcs  map[string]bool         // the IDs of the version's functions and methods
 	types  func(name string) tbind // what a type name stands for in the file
 	io     func(path string) bool  // whether a whole path names something that does input or output
@@ -122,7 +120,7 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 }
 
 // reach reads what code of a function reaches.
-func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
+func (tr *tracing) reach(fn tfunc, code *node) reached {
 	got := newReached()
 	tr.locals, tr.fields = map[string]string{}, map[string]string{}
 	if tr.syn.vars != nil {
@@ -130,7 +128,7 @@ func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
 			if cached, ok := tr.classFields[fn.scope.Id()]; ok {
 				tr.fields = cached
 			} else {
-				walk(fn.scope, func(n *sitter.Node) bool {
+				walk(fn.scope, func(n *node) bool {
 					if tr.syn.funcs[n.Kind()] {
 						return false
 					}
@@ -146,7 +144,7 @@ func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
 			}
 		}
 		if fn.decl != nil {
-			walk(fn.decl, func(n *sitter.Node) bool {
+			walk(fn.decl, func(n *node) bool {
 				for k, v := range tr.syn.vars(tr.f, n) {
 					tr.locals[k] = v
 				}
@@ -159,9 +157,9 @@ func (tr *tracing) reach(fn tfunc, code *sitter.Node) reached {
 	return got
 }
 
-func (tr *tracing) reachInto(fn tfunc, code *sitter.Node, got *reached) {
+func (tr *tracing) reachInto(fn tfunc, code *node, got *reached) {
 	f := tr.f
-	walk(code, func(n *sitter.Node) bool {
+	walk(code, func(n *node) bool {
 		if tr.syn.special != nil && tr.syn.special(tr, fn, n, got) {
 			return false
 		}
@@ -178,7 +176,7 @@ func (tr *tracing) reachInto(fn tfunc, code *sitter.Node, got *reached) {
 }
 
 // memberName reports whether an identifier is the member side of a member access.
-func (tr *tracing) memberName(n *sitter.Node) bool {
+func (tr *tracing) memberName(n *node) bool {
 	p := n.Parent()
 	if p == nil {
 		return false
@@ -224,7 +222,7 @@ func (tr *tracing) use(b tbind, got *reached) {
 // memberOf records a.b where a is the object itself, a variable or field of a known type, a name
 // the file binds, a field of the object itself or a new object of a known class. It reports
 // whether a is the object itself or a name it knew, which then needs no reading of its own.
-func (tr *tracing) memberOf(fn tfunc, obj *sitter.Node, name string, got *reached) bool {
+func (tr *tracing) memberOf(fn tfunc, obj *node, name string, got *reached) bool {
 	if tr.self(obj) {
 		if fn.class != "" && tr.funcs[fn.class+"."+name] {
 			got.calls[fn.class+"."+name] = true
@@ -252,7 +250,7 @@ func (tr *tracing) memberOf(fn tfunc, obj *sitter.Node, name string, got *reache
 }
 
 // self reports whether a node is the object itself: self, this.
-func (tr *tracing) self(n *sitter.Node) bool {
+func (tr *tracing) self(n *node) bool {
 	return tr.syn.selves[n.Kind()] || tr.syn.selves[tr.f.text(n)]
 }
 
@@ -282,7 +280,7 @@ func (tr *tracing) named(x string) (tbind, bool) {
 
 // object returns what an object of more than a name stands for: a field of the object itself, or
 // a new object of a known class. Anything else stands for nothing known.
-func (tr *tracing) object(fn tfunc, obj *sitter.Node) tbind {
+func (tr *tracing) object(fn tfunc, obj *node) tbind {
 	f := tr.f
 	if inner, field := tr.syn.member(f, obj); inner != nil && field != nil && tr.self(inner) {
 		return tr.typed(tr.fields[f.text(field)])
@@ -298,7 +296,7 @@ func (tr *tracing) object(fn tfunc, obj *sitter.Node) tbind {
 // enclosing returns the function whose declaration holds n, whose parameters and class code there
 // sees, or top when n is outside every function. The functions listed never nest, so at most one
 // holds n.
-func enclosing(fns []tfunc, n *sitter.Node, top tfunc) tfunc {
+func enclosing(fns []tfunc, n *node, top tfunc) tfunc {
 	for _, fn := range fns {
 		if fn.decl.StartByte() <= n.StartByte() && n.EndByte() <= fn.decl.EndByte() {
 			return fn
@@ -335,7 +333,7 @@ func simpleType(s string) string {
 
 // handlers returns the entries a handler value is: the functions of the repository it names, or a
 // function written in place, whose calls are listed.
-func (tr *tracing) handlers(fn tfunc, a *sitter.Node, inline map[string]bool) []facts.Entry {
+func (tr *tracing) handlers(fn tfunc, a *node, inline map[string]bool) []facts.Entry {
 	got := tr.reach(fn, a)
 	if inline[a.Kind()] {
 		return []facts.Entry{{Path: tr.f.path, Line: line(a), Calls: keys(got.calls)}}

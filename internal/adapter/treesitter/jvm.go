@@ -8,8 +8,6 @@ import (
 	"strings"
 	"unicode"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -29,7 +27,7 @@ type jvm struct {
 // jvmDecl is a declaration with the file that holds it.
 type jvmDecl struct {
 	f *file
-	n *sitter.Node
+	n *node
 }
 
 var jvmTestDir = regexp.MustCompile(`(^|/)src/[A-Za-z]*[tT]est[A-Za-z]*/`)
@@ -46,7 +44,7 @@ func (j *jvm) isClass(target string) bool {
 
 // noteType records a top-level class of a file after place: a test class, which a test class of
 // another file may extend, or the constants of an enum class of the product.
-func (j *jvm) noteType(f *file, n *sitter.Node, name string, entries []string) {
+func (j *jvm) noteType(f *file, n *node, name string, entries []string) {
 	if f.test {
 		j.testTypes[name] = append(j.testTypes[name], jvmDecl{f, n})
 		return

@@ -2,10 +2,6 @@
 
 package treesitter
 
-import (
-	sitter "github.com/tree-sitter/go-tree-sitter"
-)
-
 // The locals a Java or Kotlin test builds as strings or standard collections. A method called on
 // one is the language's own (sql.contains("SELECT")): neither a call of the product nor a call
 // hadome could not resolve.
@@ -54,7 +50,7 @@ func (w *jvmWalk) builtinType(t string) string {
 
 // ktBuiltin is what a Kotlin expression holds: a string literal or a member of a string
 // ("…".trimIndent().split(" ")) is a string, a call of a builder a collection.
-func (w *jvmWalk) ktBuiltin(e *sitter.Node) string {
+func (w *jvmWalk) ktBuiltin(e *node) string {
 	f := w.jf.f
 	switch e.Kind() {
 	case "string_literal", "multiline_string_literal":
@@ -79,7 +75,7 @@ func (w *jvmWalk) ktBuiltin(e *sitter.Node) string {
 
 // javaBuiltin is what a Java expression holds: a string literal, a concatenation with a string, or
 // a method called on a string is a string.
-func (w *jvmWalk) javaBuiltin(e *sitter.Node) string {
+func (w *jvmWalk) javaBuiltin(e *node) string {
 	if e == nil {
 		return ""
 	}

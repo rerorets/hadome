@@ -5,8 +5,6 @@ package treesitter
 import (
 	"slices"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // What a name in a TypeScript test holds: a value the test built itself, an argument a helper
@@ -26,7 +24,7 @@ var (
 // plainValue reports whether v is built from literals, the language's built-ins, external libraries
 // or other such values, so that a method called on it is not the repository's: [1, 2], new Map(),
 // JSON.parse(s), xs.filter(…), userEvent.setup(). A name of the repository is never plain.
-func (w *tsWalk) plainValue(v *sitter.Node) bool {
+func (w *tsWalk) plainValue(v *node) bool {
 	v = tsUnwrap(v)
 	if v == nil {
 		return false
@@ -70,7 +68,7 @@ func (w *tsWalk) plainName(name string, builtins map[string]bool) bool {
 }
 
 // tsRoot is the name a chain of members starts with: o in o.items[0].push.
-func tsRoot(f *file, n *sitter.Node) string {
+func tsRoot(f *file, n *node) string {
 	for n = tsUnwrap(n); n != nil; n = tsUnwrap(n.ChildByFieldName("object")) {
 		switch n.Kind() {
 		case "identifier":
@@ -86,16 +84,16 @@ func tsRoot(f *file, n *sitter.Node) string {
 // tsParam is one parameter of a function: its name, or the pattern it destructures.
 type tsParam struct {
 	name    string
-	pattern *sitter.Node
+	pattern *node
 }
 
 // tsParamList reads a parameter list in order. A parameter with a default value keeps its name: the
 // grammar gives it as a parameter with a value, also in JavaScript files.
-func tsParamList(f *file, params *sitter.Node) []tsParam {
+func tsParamList(f *file, params *node) []tsParam {
 	if params == nil {
 		return nil
 	}
-	list := []*sitter.Node{params}
+	list := []*node{params}
 	if params.Kind() == "formal_parameters" {
 		list = arguments(params)
 	}
@@ -122,7 +120,7 @@ type tsBinding struct {
 }
 
 // binding is what an argument passed by from holds.
-func (from *tsWalk) binding(arg *sitter.Node) tsBinding {
+func (from *tsWalk) binding(arg *node) tsBinding {
 	arg = tsUnwrap(arg)
 	if arg == nil {
 		return tsBinding{}
@@ -146,7 +144,7 @@ func (from *tsWalk) binding(arg *sitter.Node) tsBinding {
 // called as call(route, 'a') that calls r.GET() calls the module route holds, whatever the
 // parameter is named. A parameter that gets nothing it can name, or destructures, holds nothing
 // known, and hides an outer name it shares. It returns what puts the walker's names back.
-func (w *tsWalk) bindArgs(from *tsWalk, params *sitter.Node, args []*sitter.Node) func() {
+func (w *tsWalk) bindArgs(from *tsWalk, params *node, args []*node) func() {
 	type saved struct {
 		name string
 		b    tsBinding
@@ -213,7 +211,7 @@ func (w *tsWalk) set(name string, b tsBinding) {
 // with (fn) => binds fn to both. A row that is not an array is the one argument, and a row that is
 // an object binds the names a destructuring parameter takes by key. A tagged template table binds
 // nothing.
-func (tf *tsFile) rowBindings(table, params *sitter.Node) map[string][]string {
+func (tf *tsFile) rowBindings(table, params *node) map[string][]string {
 	args := arguments(table)
 	if table == nil || table.Kind() != "arguments" || len(args) != 1 || args[0].Kind() != "array" {
 		return nil
@@ -221,7 +219,7 @@ func (tf *tsFile) rowBindings(table, params *sitter.Node) map[string][]string {
 	list := tsParamList(tf.f, params)
 	out := map[string][]string{}
 	for _, row := range arguments(args[0]) {
-		cells := []*sitter.Node{row}
+		cells := []*node{row}
 		if row.Kind() == "array" {
 			cells = arguments(row)
 		}
@@ -233,8 +231,8 @@ func (tf *tsFile) rowBindings(table, params *sitter.Node) map[string][]string {
 }
 
 // bindCell binds one parameter to the cell of a row in its position.
-func (tf *tsFile) bindCell(out map[string][]string, p tsParam, cell *sitter.Node) {
-	add := func(name string, cell *sitter.Node) {
+func (tf *tsFile) bindCell(out map[string][]string, p tsParam, cell *node) {
+	add := func(name string, cell *node) {
 		if cell = tsUnwrap(cell); cell != nil && (cell.Kind() == "identifier" || cell.Kind() == "shorthand_property_identifier") {
 			if t := tf.names[tf.f.text(cell)]; t != "" && !slices.Contains(out[name], t) {
 				out[name] = append(out[name], t)
@@ -249,8 +247,8 @@ func (tf *tsFile) bindCell(out map[string][]string, p tsParam, cell *sitter.Node
 }
 
 // rowKeys binds the names an object pattern takes to the values of an object row with those keys.
-func (tf *tsFile) rowKeys(pattern, row *sitter.Node, add func(string, *sitter.Node)) {
-	values := map[string]*sitter.Node{}
+func (tf *tsFile) rowKeys(pattern, row *node, add func(string, *node)) {
+	values := map[string]*node{}
 	for _, m := range arguments(row) {
 		switch m.Kind() {
 		case "pair":
@@ -273,12 +271,12 @@ func (tf *tsFile) rowKeys(pattern, row *sitter.Node, add func(string, *sitter.No
 
 // tsImportedNames are the local names an import statement, or the pattern a require() is
 // assigned to, binds.
-func tsImportedNames(f *file, n *sitter.Node) []string {
+func tsImportedNames(f *file, n *node) []string {
 	if k := n.Kind(); k == "identifier" || k == "object_pattern" {
 		return tsPatternNames(f, n)
 	}
 	var out []string
-	walk(n, func(x *sitter.Node) bool {
+	walk(n, func(x *node) bool {
 		switch x.Kind() {
 		case "import_specifier":
 			local := f.field(x, "alias")

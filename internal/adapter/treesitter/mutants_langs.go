@@ -5,8 +5,6 @@ package treesitter
 import (
 	"slices"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // Each language's spelling of the five breaks (docs/design/adapters-treesitter.md, Mutants).
@@ -14,8 +12,8 @@ import (
 var lowerBools = map[string]string{"true": "false", "false": "true"}
 
 // statementOf returns a matcher of statements of a kind that hold nothing but a call.
-func statementOf(statement string, calls ...string) func(f *file, n *sitter.Node) bool {
-	return func(_ *file, n *sitter.Node) bool { return n.Kind() == statement && only(n, calls...) }
+func statementOf(statement string, calls ...string) func(f *file, n *node) bool {
+	return func(_ *file, n *node) bool { return n.Kind() == statement && only(n, calls...) }
 }
 
 var tsBreaks = &breaks{
@@ -39,7 +37,7 @@ var tsBreaks = &breaks{
 		"for_in_statement": "left", "function_declaration": "name", "class_declaration": "name"},
 }
 
-func tsZero(f *file, fn *sitter.Node) string {
+func tsZero(f *file, fn *node) string {
 	t := fn.ChildByFieldName("return_type")
 	if t == nil {
 		return ""
@@ -88,7 +86,7 @@ var pyBinders = map[string]string{"parameters": "", "assignment": "left", "augme
 	"nonlocal_statement": "", "import_statement": "", "import_from_statement": "", "function_definition": "name",
 	"class_definition": "name"}
 
-func pyZero(f *file, fn *sitter.Node) string {
+func pyZero(f *file, fn *node) string {
 	t := fn.ChildByFieldName("return_type")
 	if t == nil {
 		return ""
@@ -130,8 +128,8 @@ var rustBreaks = &breaks{
 }
 
 // rustTail returns the last expression of a block, the value it gives without a return.
-func rustTail(body *sitter.Node) *sitter.Node {
-	var last *sitter.Node
+func rustTail(body *node) *node {
+	var last *node
 	for _, c := range named(body) {
 		if !strings.Contains(c.Kind(), "comment") {
 			last = c
@@ -146,7 +144,7 @@ func rustTail(body *sitter.Node) *sitter.Node {
 
 var rustIntegers = set("i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize")
 
-func rustZero(f *file, fn *sitter.Node) string {
+func rustZero(f *file, fn *node) string {
 	t := fn.ChildByFieldName("return_type")
 	if t == nil {
 		return ""
@@ -190,7 +188,7 @@ var javaBreaks = &breaks{
 		"lambda_expression": "parameters", "resource": "name"},
 }
 
-func javaZero(f *file, fn *sitter.Node) string {
+func javaZero(f *file, fn *node) string {
 	t := fn.ChildByFieldName("type")
 	if t == nil {
 		return ""
@@ -223,11 +221,11 @@ var ktBreaks = &breaks{
 	bools:     set("identifier"), // true and false are not keywords to this grammar
 	literals:  lowerBools,
 	returns:   set("return_expression"),
-	call: func(_ *file, n *sitter.Node) bool {
+	call: func(_ *file, n *node) bool {
 		return n.Kind() == "call_expression" && n.Parent() != nil && n.Parent().Kind() == "block"
 	},
 	removed: "Unit",
-	body: func(fn *sitter.Node) *sitter.Node {
+	body: func(fn *node) *node {
 		for _, c := range named(fn) {
 			if c.Kind() == "function_body" {
 				return c
@@ -244,8 +242,8 @@ var ktBreaks = &breaks{
 var ktZeros = map[string]string{"Int": "0", "Short": "0", "Byte": "0", "Long": "0L", "Double": "0.0", "Float": "0f",
 	"Boolean": "false", "String": `""`}
 
-func ktZero(f *file, fn *sitter.Node) string {
-	var typ, body *sitter.Node
+func ktZero(f *file, fn *node) string {
+	var typ, body *node
 	params := false
 	for _, c := range named(fn) {
 		switch {

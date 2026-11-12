@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -27,8 +25,8 @@ type tsTrace struct {
 	r        *typescript
 	f        *file
 	bindings map[string]tsImported
-	top      map[string]*sitter.Node // names declared at the top of the file, and their declarations
-	funcs    map[string]bool         // the IDs of the version's functions and methods
+	top      map[string]*node // names declared at the top of the file, and their declarations
+	funcs    map[string]bool  // the IDs of the version's functions and methods
 }
 
 func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
@@ -44,7 +42,7 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		if f.test || f.generatedGlob || declarationFile(f.path) {
 			continue
 		}
-		tr := &tsTrace{r: r, f: f, bindings: map[string]tsImported{}, top: map[string]*sitter.Node{}, funcs: funcs}
+		tr := &tsTrace{r: r, f: f, bindings: map[string]tsImported{}, top: map[string]*node{}, funcs: funcs}
 		tr.bind(t)
 		for id, body := range tr.bodies() {
 			i, ok := at[id]
@@ -86,7 +84,7 @@ func (tr *tsTrace) bind(t *tables) {
 	}
 }
 
-func (tr *tsTrace) bindImport(n *sitter.Node, t *tables) {
+func (tr *tsTrace) bindImport(n *node, t *tables) {
 	f := tr.f
 	spec := unquote(f.field(n, "source"))
 	p, kind := tr.r.project.resolve(f.path, spec)
@@ -103,7 +101,7 @@ func (tr *tsTrace) bindImport(n *sitter.Node, t *tables) {
 		b.name = name
 		tr.bindings[local] = b
 	}
-	walk(n, func(x *sitter.Node) bool {
+	walk(n, func(x *node) bool {
 		switch x.Kind() {
 		case "import_specifier":
 			name, local := f.field(x, "name"), f.field(x, "alias")
@@ -125,9 +123,9 @@ func (tr *tsTrace) bindImport(n *sitter.Node, t *tables) {
 }
 
 // bodies maps the IDs of the file's functions and methods to their bodies, as symbols lists them.
-func (tr *tsTrace) bodies() map[string]*sitter.Node {
+func (tr *tsTrace) bodies() map[string]*node {
 	f, r := tr.f, tr.r
-	out := map[string]*sitter.Node{}
+	out := map[string]*node{}
 	for name, d := range tr.top {
 		switch d.Kind() {
 		case "function_declaration", "generator_function_declaration":
@@ -151,15 +149,15 @@ func (tr *tsTrace) bodies() map[string]*sitter.Node {
 // at the top of the file. Only the name is read, so a local variable of the same name counts too.
 // A value declared at the top of the file (const db = drizzle(pool)) gives what its initial value
 // reaches.
-func (tr *tsTrace) reach(n *sitter.Node) reached {
+func (tr *tsTrace) reach(n *node) reached {
 	got := newReached()
 	tr.reachInto(n, &got, true)
 	return got
 }
 
-func (tr *tsTrace) reachInto(n *sitter.Node, got *reached, values bool) {
+func (tr *tsTrace) reachInto(n *node, got *reached, values bool) {
 	f := tr.f
-	walk(n, func(x *sitter.Node) bool {
+	walk(n, func(x *node) bool {
 		if tsGlobalIO(f, x) != "" {
 			got.io = true
 		}
@@ -186,7 +184,7 @@ func (tr *tsTrace) reachInto(n *sitter.Node, got *reached, values bool) {
 
 // imported records the use of an imported name: a package that does input or output, a function
 // of the repository, or a value of one of its units.
-func (tr *tsTrace) imported(x *sitter.Node, b tsImported, got *reached) {
+func (tr *tsTrace) imported(x *node, b tsImported, got *reached) {
 	if b.file == "" {
 		got.io = got.io || b.io
 		return
@@ -241,7 +239,7 @@ func (tr *tsTrace) entries() []facts.Entry {
 			out = append(out, tr.exported(top, served)...)
 		}
 	}
-	walk(f.root, func(x *sitter.Node) bool {
+	walk(f.root, func(x *node) bool {
 		switch x.Kind() {
 		case "call_expression":
 			out = append(out, tr.route(x)...)
@@ -258,7 +256,7 @@ func (tr *tsTrace) entries() []facts.Entry {
 }
 
 // exported returns the entries an export statement declares, by the names the framework serves.
-func (tr *tsTrace) exported(top *sitter.Node, served func(string) bool) []facts.Entry {
+func (tr *tsTrace) exported(top *node, served func(string) bool) []facts.Entry {
 	f := tr.f
 	d := top.ChildByFieldName("declaration")
 	if d == nil {
@@ -289,7 +287,7 @@ func (tr *tsTrace) exported(top *sitter.Node, served func(string) bool) []facts.
 
 // declared returns the entry a served const is: its function when it holds one, or else the code
 // of its value (an actions object, a handler made by a call).
-func (tr *tsTrace) declared(name string, val *sitter.Node) []facts.Entry {
+func (tr *tsTrace) declared(name string, val *node) []facts.Entry {
 	if id := tr.r.symbolID(tr.f.path, name); tr.funcs[id] {
 		return []facts.Entry{{Path: tr.f.path, Line: line(val), Symbol: id}}
 	}
@@ -297,7 +295,7 @@ func (tr *tsTrace) declared(name string, val *sitter.Node) []facts.Entry {
 }
 
 // route returns the entries a router call registers: app.post('/orders', createOrder).
-func (tr *tsTrace) route(call *sitter.Node) []facts.Entry {
+func (tr *tsTrace) route(call *node) []facts.Entry {
 	fn := call.ChildByFieldName("function")
 	if fn == nil || !tsRouteMethods[tr.f.field(fn, "property")] { // only a member access has a property
 		return nil
@@ -315,7 +313,7 @@ func (tr *tsTrace) route(call *sitter.Node) []facts.Entry {
 
 // consumer returns the handlers a queue consumer is given: Bull's queue.process(handler) and the
 // handler options of kafkajs and sqs-consumer.
-func (tr *tsTrace) consumer(call *sitter.Node) []facts.Entry {
+func (tr *tsTrace) consumer(call *node) []facts.Entry {
 	f := tr.f
 	fn := call.ChildByFieldName("function")
 	if fn == nil || fn.Kind() != "member_expression" {
@@ -348,7 +346,7 @@ func (tr *tsTrace) consumer(call *sitter.Node) []facts.Entry {
 
 // handler returns the entry a handler value is: a function of the repository it names, or the code
 // of a function written in place. Anything else is no entry.
-func (tr *tsTrace) handler(a *sitter.Node) []facts.Entry {
+func (tr *tsTrace) handler(a *node) []facts.Entry {
 	switch a.Kind() {
 	case "arrow_function", "function_expression", "function":
 		return []facts.Entry{{Path: tr.f.path, Line: line(a), Calls: keys(tr.reach(a).calls)}}

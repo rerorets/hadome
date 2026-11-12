@@ -4,15 +4,13 @@ package treesitter
 
 import (
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // Python's reading of the names a file declares, for the zero-constant skip in zeroconst.go.
 
 func pyConstants(f *file) consts {
 	out := consts{}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		switch n.Kind() {
 		case "function_definition", "class_definition":
 			out.add(f.field(n, "name"), "")
@@ -43,7 +41,7 @@ func pyConstants(f *file) consts {
 		return true
 	})
 	// A function that declares a name global can reassign it.
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.Kind() == "global_statement" {
 			out.unread(f, n)
 		}
@@ -55,7 +53,7 @@ func pyConstants(f *file) consts {
 // pyImportBinds lists the names a Python import binds: the alias of each aliased name, the name
 // itself otherwise, and the first part of a dotted module (import a.b binds a). The module it
 // imports from and the original names behind aliases are not bound.
-func pyImportBinds(f *file, n *sitter.Node) []string {
+func pyImportBinds(f *file, n *node) []string {
 	var out []string
 	for i := uint(0); i < n.ChildCount(); i++ {
 		if n.FieldNameForChild(uint32(i)) != "name" {

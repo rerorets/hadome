@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -23,8 +21,8 @@ type rustScope struct {
 	t       *tables
 	names   map[string]string // local name -> target ("src/store.append", "src/store.Store")
 	spaces  map[string]string // local name -> module location
-	helpers map[string]*sitter.Node
-	mocks   []*sitter.Node
+	helpers map[string]*node
+	mocks   []*node
 }
 
 // tests reads a test file whole, or a source file's #[cfg(test)] modules.
@@ -41,12 +39,12 @@ func (r *rust) tests(f *file, t *tables) []facts.Test {
 	return out
 }
 
-func (r *rust) moduleTests(f *file, t *tables, body *sitter.Node, prefix string, inline bool) []facts.Test {
-	sc := &rustScope{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, helpers: map[string]*sitter.Node{}}
+func (r *rust) moduleTests(f *file, t *tables, body *node, prefix string, inline bool) []facts.Test {
+	sc := &rustScope{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, helpers: map[string]*node{}}
 	for _, u := range append(uses(f, f.root), uses(f, body)...) {
 		sc.bind(u, inline)
 	}
-	var tests []*sitter.Node
+	var tests []*node
 	for _, c := range named(body) {
 		if c.Kind() != "function_item" {
 			continue
@@ -64,7 +62,7 @@ func (r *rust) moduleTests(f *file, t *tables, body *sitter.Node, prefix string,
 	return out
 }
 
-func hasTestAttr(f *file, fn *sitter.Node) bool {
+func hasTestAttr(f *file, fn *node) bool {
 	for _, a := range attributes(f, fn) {
 		if rustTestAttrs[strings.SplitN(a, "(", 2)[0]] {
 			return true
@@ -97,12 +95,12 @@ func (sc *rustScope) bind(u useLeaf, inline bool) {
 	}
 }
 
-func (sc *rustScope) test(name string, fn *sitter.Node) facts.Test {
+func (sc *rustScope) test(name string, fn *node) facts.Test {
 	t := newTest(sc.f, name, fn)
 	// The attributes sit before the function, and they hold the inputs of a parameterised test.
-	nodes := []*sitter.Node{fn}
+	nodes := []*node{fn}
 	for p := fn.PrevSibling(); p != nil && (p.Kind() == "attribute_item" || strings.Contains(p.Kind(), "comment")); p = p.PrevSibling() {
-		nodes = append([]*sitter.Node{p}, nodes...)
+		nodes = append([]*node{p}, nodes...)
 	}
 	t.fingerprint(nodes, append(rustNameOnly(sc.f, nodes), fn.ChildByFieldName("name")))
 	for _, a := range attributes(sc.f, fn) {
@@ -131,11 +129,11 @@ type rustWalk struct {
 	walking map[string]bool
 }
 
-func (w *rustWalk) walk(body *sitter.Node) {
+func (w *rustWalk) walk(body *node) {
 	w.t.bodyIn(w.sc.f, w.sc.t, body, func(kind string) bool { return rustLoops[kind] }, w.visit)
 }
 
-func (w *rustWalk) visit(n *sitter.Node, kind string) bool {
+func (w *rustWalk) visit(n *node, kind string) bool {
 	f := w.sc.f
 	switch kind {
 	case "let_declaration":
@@ -173,7 +171,7 @@ func (w *rustWalk) product(name string) bool {
 }
 
 // typeOf returns the type a value is built as: Store::new(...) or Store { .. } of a bound type.
-func (w *rustWalk) typeOf(v *sitter.Node) string {
+func (w *rustWalk) typeOf(v *node) string {
 	f := w.sc.f
 	switch v.Kind() {
 	case "call_expression":
@@ -186,7 +184,7 @@ func (w *rustWalk) typeOf(v *sitter.Node) string {
 	return ""
 }
 
-func (w *rustWalk) macro(n *sitter.Node) {
+func (w *rustWalk) macro(n *node) {
 	f := w.sc.f
 	name := f.field(n, "macro") + "!"
 	w.t.assertion(name, w.sc.t.asserts, "panic")
@@ -212,9 +210,9 @@ func (w *rustWalk) macro(n *sitter.Node) {
 // macroNames reads the names inside a macro's arguments. The parser keeps them as tokens, not as
 // expressions, so a call cannot be told from a read: a product name counts as a read, and a helper
 // named there is walked.
-func (w *rustWalk) macroNames(n *sitter.Node) {
+func (w *rustWalk) macroNames(n *node) {
 	f := w.sc.f
-	walk(n, func(c *sitter.Node) bool {
+	walk(n, func(c *node) bool {
 		if c.Kind() != "identifier" && c.Kind() != "crate" && c.Kind() != "super" || c.Parent() == nil || c.Parent().Kind() != "token_tree" {
 			return true
 		}
@@ -230,7 +228,7 @@ func (w *rustWalk) macroNames(n *sitter.Node) {
 	})
 }
 
-func (w *rustWalk) call(n *sitter.Node) {
+func (w *rustWalk) call(n *node) {
 	f := w.sc.f
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
@@ -284,7 +282,7 @@ func (w *rustWalk) scoped(p, name string) string {
 
 // testCases reads the test-case cases among the attributes before fn: their checked results, and
 // the cases that do not run.
-func (sc *rustScope) testCases(t *testFacts, attrs []*sitter.Node, fn *sitter.Node) {
+func (sc *rustScope) testCases(t *testFacts, attrs []*node, fn *node) {
 	cases, ignored := 0, 0
 	for _, a := range attrs {
 		c, ok := rustTestCase(sc.f, a)
@@ -313,7 +311,7 @@ type rustCase struct {
 }
 
 // rustTestCase reads an attribute item as a case of the test-case crate.
-func rustTestCase(f *file, item *sitter.Node) (rustCase, bool) {
+func rustTestCase(f *file, item *node) (rustCase, bool) {
 	var c rustCase
 	if item.Kind() != "attribute_item" || item.NamedChildCount() == 0 {
 		return c, false
@@ -340,7 +338,7 @@ func rustTestCase(f *file, item *sitter.Node) (rustCase, bool) {
 }
 
 // rustCaseArgs returns the arguments of a #[test_case(...)] attribute, or nil for any other one.
-func rustCaseArgs(f *file, attr *sitter.Node) *sitter.Node {
+func rustCaseArgs(f *file, attr *node) *node {
 	if attr.Kind() != "attribute" || attr.NamedChildCount() < 2 {
 		return nil
 	}
