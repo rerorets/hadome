@@ -62,6 +62,7 @@ The SQL adapter reads with SLL first, and reads again with LL only the statement
 | Dialect | Form | Why it is not changed |
 |---|---|---|
 | MySQL | Queries joined with `UNION` (`SELECT 1 UNION SELECT 2`) | In the grammar, `querySpecificationNointo` may hold a `UNION` too, so deciding where to split needs LL. Changing it to read with SLL changes the shape of the tree of a query joining three or more |
+| PostgreSQL | A row of two or more values in parentheses (`(a.x, a.id) < (b.x, b.id)`) | The grammar's `implicit_row` is `( expr_list , a_expr )`, so ending `expr_list` before the last value needs LL. Changing it to read with SLL changes the shape of the `implicit_row` tree |
 
 ## When a dialect is enabled
 
