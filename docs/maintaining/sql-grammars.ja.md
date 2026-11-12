@@ -62,6 +62,7 @@ SQL のアダプタは、まず SLL で読み、読めなかった文だけを L
 | 方言 | 形 | 直さない理由 |
 |---|---|---|
 | MySQL | `UNION` でつないだ問い合わせ（`SELECT 1 UNION SELECT 2`） | 文法では `querySpecificationNointo` も `UNION` を持てるので、どこで区切るかを決めるのに LL が要る。SLL で読めるように直すと、3つ以上をつないだ問い合わせの木の形が変わる |
+| PostgreSQL | 2つ以上の値を括弧に並べた行（`(a.x, a.id) < (b.x, b.id)`） | 文法の `implicit_row` は `( expr_list , a_expr )` なので、最後の値の前で `expr_list` を終えるのに LL が要る。SLL で読めるように直すと、`implicit_row` の木の形が変わる |
 
 ## 方言を有効にする条件
 
