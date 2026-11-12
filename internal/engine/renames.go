@@ -1,14 +1,13 @@
 package engine
 
 import (
-	"crypto/sha256"
 	"io/fs"
 )
 
 // detectRenames finds files that moved with unchanged content: a path that exists only in base
 // whose content hash equals a path that exists only in head. Renames the source already knows
 // take precedence.
-func detectRenames(base, head fs.FS, known map[string]string) (map[string]string, error) {
+func detectRenames(base, head *summedFS, known map[string]string) (map[string]string, error) {
 	baseFiles, err := hashes(base)
 	if err != nil {
 		return nil, err
@@ -41,17 +40,18 @@ func detectRenames(base, head fs.FS, known map[string]string) (map[string]string
 	return out, nil
 }
 
-func hashes(fsys fs.FS) (map[string][32]byte, error) {
+// hashes are the hashes of every file of a version, from the version's remembered sums.
+func hashes(fsys *summedFS) (map[string][32]byte, error) {
 	out := map[string][32]byte{}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := fs.ReadFile(fsys, p)
+		sum, err := fsys.Sum(p)
 		if err != nil {
 			return err
 		}
-		out[p] = sha256.Sum256(b)
+		out[p] = sum
 		return nil
 	})
 	return out, err

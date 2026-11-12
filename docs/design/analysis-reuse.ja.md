@@ -85,6 +85,7 @@
 - ディレクトリを並べるのは粗い読み取りです。並べた段はそのディレクトリにファイルが1つ増えても減っても走り直します。粗く読むほど再利用は減りますが、事実は変わりません
 - 問い直しで読むほかの段の結果は head で先にその段を呼んで得ます。その段も、覚えた結果が使えるかを同じように確かめます
 - 記録しない情報があります。ファイルの更新時刻です。版を読む場所が違えば変わり、どのアダプタも読まないからです
+- `FS()` でファイルを読んだ答えは、その読み取りで得た中身から計算します。版が `Sum` を持っていても使いません。段が使った中身と記録する答えを、いつも同じ1回の読み取りから得るためです
 
 ### 結果の指紋
 
@@ -143,7 +144,7 @@ sequenceDiagram
   participant S as reuse.Session
   participant L as 言語
   E->>A: AnalyzePair(base, head)
-  A->>S: 始める（head の全ファイルの中身のハッシュ）
+  A->>S: 始める（head の全ファイルの中身のハッシュ。版の Sum から）
   loop 言語ごと
     A->>L: Analyze(base の Run)
     L->>S: 段を呼ぶ（求めて覚える）
@@ -171,7 +172,7 @@ sequenceDiagram
 | `ScopeLanguage` | その言語の head の解析が終わったとき | 構文木、ファイルごとの事実 |
 | `ScopePair` | 2つの版の解析が終わったとき | `Link` が使う SQL のカタログ |
 
-- Go の外のメモリを持つ結果は `Release` を持ちます。例: tree-sitter の構文木
+- Go の外のメモリを持つ結果は `Release` を持ちます。例: cgo で C の側に割り当てたメモリを持つ結果
 - セッションは結果を手放すときに `Release` を1回だけ呼びます
 - 再利用しないときも、同じ時期に手放します
 
@@ -179,7 +180,10 @@ sequenceDiagram
 
 base で求めた結果のうち、覚えておくのは head で当たりうるものだけです。
 
-- セッションは解析を始める前に、head の全ファイルの中身のハッシュを1回求めます
+- セッションは解析を始める前に、head の全ファイルの中身のハッシュを1回求めます（`Expect`）
+  - 版のファイルシステムが `Sum` を持つときは、それで求めます。エンジンが包んだ版は持ちます（[engine.ja.md](engine.ja.md) の「中身のハッシュ」）。改名の検出で求めたハッシュを使うので、ファイルを読み直しません
+  - `Sum` を持たないときは、ファイルを読んでハッシュを計算します。例: 自己テストや単体テストが渡す、包んでいない版
+  - どちらで求めても、ハッシュは同じ SHA-256 なので、覚える結果は変わりません
 - base の結果を覚えるのは、それを求めるのに使ったファイルの中身のハッシュが、すべて head にあるときだけです。使った中身とは、引数のバイト列と、`FS()` で読んだファイルの答えです
 - 覚えなかった結果はその言語の base の解析が終わったら手放します
 
@@ -204,6 +208,7 @@ base で求めた結果のうち、覚えておくのは head で当たりうる
 
 - 2つの版と言語は1つずつ順に解析します
 - セッションは同時に呼ばれても安全です。同じ鍵の段が同時に呼ばれたら、1回だけ走らせて、結果を分け合います
+- `Expect` が使う版の `Sum` も、同時に呼ばれても安全です（[engine.ja.md](engine.ja.md) の「中身のハッシュ」）
 - 段の結果は渡した後に誰も書き換えません
 - 後から埋める情報は結果ではなく `Run` の側に置きます。例: tree-sitter のアダプタが、テストが初めて名前を読んだときに作る、文字列の定数の表
 
@@ -343,6 +348,15 @@ classDiagram
     ScopeLanguage
     ScopePair
   }
+  class summer {
+    <<interface, reuse>>
+    +Sum(name string) ([32]byte, error)
+  }
+  class summedFS {
+    <<engine>>
+    +Open(name string) (fs.File, error)
+    +Sum(name string) ([32]byte, error)
+  }
   Analyzer <|-- PairAnalyzer
   adapterAnalyzer ..|> PairAnalyzer
   adapterAnalyzer ..|> Reuser
@@ -357,10 +371,13 @@ classDiagram
   Pure --> Scope
   Reading --> Scope
   Session ..> Releaser
+  Session ..> summer : Expect が版の FS に尋ねる
+  summedFS ..|> summer
 ```
 
 - `internal/adapter/reuse` は、セッションと段の仕組みのパッケージです。言語のパッケージ（`golang`、`treesitter`、`sql`、`terraform`、`ansible`）と `internal/adapter` が import します
 - `reuse` が import する hadome のパッケージは、`config`（`config.Analysis`）だけです。版は `fs.FS` として受け取ります。head のファイルの一覧は、`internal/adapter` が `Expect` に渡します
+- `summer` は `reuse` の中の小さなインターフェースです。`Expect` は版の `fs.FS` がこれを満たすかを型で尋ね、満たせば `Sum` を使います。`reuse` はエンジンの型を import しません。`summedFS` は、同じメソッドを持つことで `summer` を満たします
 - エンジンは `reuse` を知りません。エンジンが知るのは `PairAnalyzer` と `Reuser` だけです
 - `Session.Run` の `Env` は、2つの版で同じもの（言語の一覧）です。読む段は `Reads.Env()` で受け取ります
 - `Session.Stats` は段ごとに3つの回数を数えます。覚えた結果を返した回数、段を走らせた回数、同じ鍵の段がほかで走り終わるのを待った回数です。テストと計測に使います

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -347,4 +348,59 @@ func TestPurityLostNamesWhatMadeTheUnitImpure(t *testing.T) {
 			t.Errorf("%s: want [%s], got %q", c.name, want, got)
 		}
 	}
+}
+
+// viewpoint: invariant
+// target: engine.Engine.Check
+// Design "Content hashes": in a check, rename detection and the analyzer's reuse share one hash of
+// every file. A file no language reads, and that moved between the versions, is read once in each
+// version, for that hash.
+func TestACheckHashesEveryFileOnce(t *testing.T) {
+	t.Parallel()
+	base := module("")
+	base["notes/old.txt"] = &fstest.MapFile{Data: []byte("kept as it was\n")}
+	head := module("")
+	head["notes/new.txt"] = &fstest.MapFile{Data: []byte("kept as it was\n")}
+	bc, hc := newCountingFS(base), newCountingFS(head)
+	e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All()}
+	if _, err := e.Check(treeSource{base: bc, head: hc}); err != nil {
+		t.Fatal(err)
+	}
+	if n := bc.count("notes/old.txt"); n != 1 {
+		t.Errorf("base's notes/old.txt was read %d times, want 1", n)
+	}
+	if n := hc.count("notes/new.txt"); n != 1 {
+		t.Errorf("head's notes/new.txt was read %d times, want 1", n)
+	}
+}
+
+// countingFS is a file system that counts how often each file's content is read.
+type countingFS struct {
+	fstest.MapFS
+	mu    sync.Mutex
+	reads map[string]int
+}
+
+func newCountingFS(files fstest.MapFS) *countingFS {
+	return &countingFS{MapFS: files, reads: map[string]int{}}
+}
+
+func (c *countingFS) Open(name string) (fs.File, error) {
+	c.mu.Lock()
+	c.reads[name]++
+	c.mu.Unlock()
+	return c.MapFS.Open(name)
+}
+
+func (c *countingFS) ReadFile(name string) ([]byte, error) {
+	c.mu.Lock()
+	c.reads[name]++
+	c.mu.Unlock()
+	return c.MapFS.ReadFile(name)
+}
+
+func (c *countingFS) count(name string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reads[name]
 }
