@@ -77,6 +77,7 @@ classDiagram
     -kind uint16
     -field uint16
     -named bool
+    -childCount uint32
     -index uint32
     -startByte uint32
     -endByte uint32
@@ -85,7 +86,9 @@ classDiagram
     -endRow uint32
     -endColumn uint32
     -parent *node
-    -children []node
+    -firstChild *node
+    -nextSibling *node
+    -prevSibling *node
     +Kind() string
     +IsNamed() bool
     +Id() uintptr
@@ -108,7 +111,7 @@ classDiagram
   class names {
     <<package var>>
     +kind(g *sitter.Language, symbol uint16) uint16
-    +field(name string) uint16
+    +field(g *sitter.Language, fieldID uint16) uint16
     +text(i uint16) string
   }
   class repairer {
@@ -129,16 +132,17 @@ classDiagram
 
 ### How a tree is copied
 
-- **Order**: breadth first from the root. A node's children sit next to each other in the copied array, and `children` is a subslice of that run
+- **Walk**: each tree is walked once, depth first from the root, with a tree-sitter cursor (`TreeCursor`), and nodes are copied in the order they are met. The cursor is used only for copying
+- **Links**: a copied node holds pointers to its parent, its first child, and its next and previous siblings. `Child(i)` follows siblings i times from the first child and answers in Go
 - **Array**: one node array per tree, sized beforehand from the root's `DescendantCount`. The array is never reallocated while copying, so node pointers do not move
-- **Reading children**: children are read from their parent with `Child(i)`, in index order. C is called only a few times per node, to read:
+- **Calls into C**: per node, C is called only to move the cursor and a few times to read:
   - the kind number (`KindId`)
   - whether it is named
   - its byte range
   - the row and column where it starts and ends
-  - its field name (the parent's `FieldNameForChild(i)`)
-- **Kind names**: a table from symbol numbers to names is built once at start-up from the five languages' grammars. Different grammars of one language, such as TypeScript and TSX, number their symbols differently, so there is one table per grammar. An error node (symbol 65535) is `ERROR`
-- **Visible nodes only**: only the nodes tree-sitter shows are copied, both named and anonymous ones (`(`, `=` and the like). They are the nodes `Child` walks
+  - its field number (the cursor's `FieldId`)
+- **Kind and field names**: tables from symbol and field numbers to names are built once at start-up from the five languages' grammars. Different grammars of one language, such as TypeScript and TSX, number them differently, so there is one table per grammar. An error node (symbol 65535) is `ERROR`
+- **Visible nodes only**: only the nodes tree-sitter shows are copied, both named and anonymous ones (`(`, `=` and the like). They are the nodes the cursor walks, and the nodes tree-sitter's `Child` returns
 - **Repairing readers**: a reader that repairs the tree, such as Kotlin's (`repairer`), receives the copy. Each reading again copies a new tree. The nodes taken out (`lifted`) are the earlier copy's nodes, kept as they are. The earlier copy stays as long as `lifted` points at its nodes
 - **Sharing**: a copy never changes after it is made. Base and head share one file's `parsed`, and reading it from both at once is safe
 
@@ -481,7 +485,7 @@ At the top level of a file, the Kotlin grammar may read annotations with argumen
 1. Every language fills the same facts; no rule tests which language a fact came from
 2. A file of a supported language is either read or reported as unread, never ignored
 3. Text in strings and comments never yields a hazard, an import or a symbol
-4. Once parsing ends, no C tree remains. A tree is closed inside `parseWith` as soon as it is copied. tree-sitter's nodes and trees never leave `parseWith`, and readers receive only `node`
+4. Once parsing ends, no C tree remains. A tree is closed inside `parseWith` as soon as it is copied. tree-sitter's nodes, trees and cursors never leave `parseWith`, and readers receive only `node`. Walking a copy calls no C API, the cursor included
 5. A node's ID (`Id()`) is its pointer. The same node always has the same value, which does not change while the copy is alive. A node of the copy before a repair (`lifted`) has an ID different from every node of the copy read again
 6. A copy is the same as tree-sitter's visible tree: the order of nodes, their kinds, whether they are named, their fields, byte ranges, rows and columns all match. So what readers report is the same as walking the C tree directly. The self-test reads sample files of the five languages and compares the C tree with the copy node by node
 7. A copy and the name tables never change after they are made
@@ -497,7 +501,7 @@ At the top level of a file, the Kotlin grammar may read annotations with argumen
 - Removing Rust macro calls (`println!` and the like). A macro may hold declarations or control flow
 - Flipping Python's `is` and `in`
 - Reporting a file with a syntax error as unread. Almost every such error comes from a grammar failing on correct code, so it would ask for a review that changing the code cannot clear
-- Copying with tree-sitter's cursor (`TreeCursor`). A cursor moves depth first, which does not fit a copy that keeps each node's children together, and getting a node out of it takes another call
+- Readers walking a tree with tree-sitter's cursor (`TreeCursor`). Getting the node at the cursor calls C each time, which is slower than walking the copy. The cursor walks a tree only once, to copy it
 - Keeping the C tree to read a changed file again incrementally (`Tree.Edit`), and tree-sitter queries. Both need the C tree. hadome reads each version's files once, so nothing is read again
 - Copying node flags readers do not use (`IsMissing`, `IsExtra`, `HasError` and the like). They are added to what is copied when they are needed
 - Counting columns in UTF-16 units or characters. Columns count bytes, as tree-sitter does
