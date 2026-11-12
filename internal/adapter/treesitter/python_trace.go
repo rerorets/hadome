@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -16,13 +14,13 @@ var pySyntax = tsyntax{
 	idents: set("identifier"),
 	selves: set("self", "cls"),
 	funcs:  set("function_definition"),
-	built: func(f *file, n *sitter.Node) string {
+	built: func(f *file, n *node) string {
 		if fn := n.ChildByFieldName("function"); n.Kind() == "call" && fn != nil && fn.Kind() == "identifier" {
 			return f.text(fn)
 		}
 		return ""
 	},
-	member: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
+	member: func(f *file, n *node) (*node, *node) {
 		if n.Kind() != "attribute" {
 			return nil, nil
 		}
@@ -32,7 +30,7 @@ var pySyntax = tsyntax{
 
 func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
-		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t), values: map[string]*sitter.Node{}, funcs: funcs,
+		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t), values: map[string]*node{}, funcs: funcs,
 			types: func(string) tbind { return tbind{} }}
 		mod := module(f.path)
 		var fns []tfunc
@@ -101,7 +99,7 @@ func (r *python) entries(tr *tracing, fns []tfunc, mod string) []facts.Entry {
 		}
 	}
 	top := tfunc{own: mod}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.Kind() != "call" {
 			return true
 		}
@@ -123,13 +121,13 @@ func (r *python) entries(tr *tracing, fns []tfunc, mod string) []facts.Entry {
 
 // pyEntryDecorated reports a definition with a decorator that serves it for a path or runs it as a
 // task: @app.post("/orders"), @router.get("/"), @shared_task, @app.task.
-func pyEntryDecorated(f *file, decl *sitter.Node) bool {
+func pyEntryDecorated(f *file, decl *node) bool {
 	for _, d := range named(decl) {
 		if d.Kind() != "decorator" || d.NamedChildCount() == 0 {
 			continue
 		}
 		e := d.NamedChild(0)
-		var args []*sitter.Node
+		var args []*node
 		if e.Kind() == "call" {
 			args = arguments(e.ChildByFieldName("arguments"))
 			e = e.ChildByFieldName("function")
@@ -144,7 +142,7 @@ func pyEntryDecorated(f *file, decl *sitter.Node) bool {
 
 // view returns the entries a URL pattern routes to: a view function, or a class-based view's
 // methods for OrderView.as_view().
-func (r *python) view(tr *tracing, top tfunc, a *sitter.Node) []facts.Entry {
+func (r *python) view(tr *tracing, top tfunc, a *node) []facts.Entry {
 	if a.Kind() == "call" {
 		if fn := a.ChildByFieldName("function"); fn != nil && fn.Kind() == "attribute" && tr.f.field(fn, "attribute") == "as_view" {
 			return r.viewClass(tr, top, fn.ChildByFieldName("object"))
@@ -154,7 +152,7 @@ func (r *python) view(tr *tracing, top tfunc, a *sitter.Node) []facts.Entry {
 }
 
 // viewClass returns the request handling methods of the class a name stands for.
-func (r *python) viewClass(tr *tracing, top tfunc, a *sitter.Node) []facts.Entry {
+func (r *python) viewClass(tr *tracing, top tfunc, a *node) []facts.Entry {
 	class := ""
 	text := tr.f.text(a)
 	if b, ok := tr.binds[text]; ok {

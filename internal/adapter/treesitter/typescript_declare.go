@@ -6,8 +6,6 @@ import (
 	"maps"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -32,16 +30,16 @@ type tsDecl struct {
 	suite       bool
 	skipped     bool // never runs: .skip, .todo, .fixme, xit
 	conditional bool // runs only in some cases: .skipIf(cond), .runIf(cond)
-	table       *sitter.Node
-	name, fn    *sitter.Node
+	table       *node
+	name, fn    *node
 }
 
 // declaration reads x as a declaration of a suite or a test: a head and its parts, called with a
 // name first and a function after it. The function is the last argument that is one, since vitest
 // takes options between the name and the function and jest takes a timeout after it.
-func (tf *tsFile) declaration(x *sitter.Node) (tsDecl, bool) {
+func (tf *tsFile) declaration(x *node) (tsDecl, bool) {
 	callee := x.ChildByFieldName("function")
-	var first *sitter.Node // the call that takes the table or the condition
+	var first *node // the call that takes the table or the condition
 	if callee != nil && callee.Kind() == "call_expression" {
 		first, callee = callee, callee.ChildByFieldName("function")
 	}
@@ -60,7 +58,7 @@ func (tf *tsFile) declaration(x *sitter.Node) (tsDecl, bool) {
 }
 
 // tsBody finds the name and the function among the arguments of a declaration.
-func tsBody(args []*sitter.Node) (name, fn *sitter.Node) {
+func tsBody(args []*node) (name, fn *node) {
 	for i := len(args) - 1; i >= 1; i-- {
 		if k := args[i].Kind(); k == "arrow_function" || k == "function_expression" {
 			return args[0], args[i]
@@ -107,16 +105,16 @@ type tsScope struct {
 	prefix      string
 	skipped     bool
 	conditional bool
-	skipAt      *sitter.Node // the declaration that skips the suite, whose comment gives the reason
+	skipAt      *node // the declaration that skips the suite, whose comment gives the reason
 	// preludes run before each test of the scope: the bodies of beforeEach and beforeAll, the
 	// tables of .each, and describe-level test.skip(cond) and fake timers.
-	preludes []*sitter.Node
+	preludes []*node
 	// rows bind the parameters of the describe.each callbacks around the test (see tsWalk.rows).
 	rows map[string][]string
 }
 
-func (sc tsScope) with(preludes ...*sitter.Node) tsScope {
-	sc.preludes = append(append([]*sitter.Node{}, sc.preludes...), preludes...)
+func (sc tsScope) with(preludes ...*node) tsScope {
+	sc.preludes = append(append([]*node{}, sc.preludes...), preludes...)
 	return sc
 }
 
@@ -145,14 +143,14 @@ func (tf *tsFile) tabled(sc tsScope, d tsDecl) tsScope {
 
 // helperOfSupport reports whether x is a helper function of a test support file that is not also a
 // test file.
-func (tf *tsFile) helperOfSupport(x *sitter.Node) bool {
+func (tf *tsFile) helperOfSupport(x *node) bool {
 	return tf.f.support && !tf.f.testGlob && !tsTestFile.MatchString(tf.f.path) && tsHelperFunction(x)
 }
 
 // suite finds the tests under n, the program or the body of a describe block.
-func (tf *tsFile) suite(n *sitter.Node, sc tsScope, out *[]facts.Test) {
+func (tf *tsFile) suite(n *node, sc tsScope, out *[]facts.Test) {
 	sc = sc.with(tf.preludes(n)...)
-	walk(n, func(x *sitter.Node) bool {
+	walk(n, func(x *node) bool {
 		if tf.helperOfSupport(x) {
 			return false // a support file's helper declares its tests in the file that calls it
 		}
@@ -180,7 +178,7 @@ func (tf *tsFile) suite(n *sitter.Node, sc tsScope, out *[]facts.Test) {
 	})
 }
 
-func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts.Test {
+func (tf *tsFile) test(name string, at *node, d tsDecl, sc tsScope) facts.Test {
 	t := newTest(tf.f, name, at)
 	if sc.skipped || sc.conditional {
 		reason := tf.reasonAt(sc.skipAt)
@@ -223,12 +221,12 @@ func (tf *tsFile) test(name string, at *sitter.Node, d tsDecl, sc tsScope) facts
 	for _, p := range sc.preludes {
 		context = append(context, codeIn{tf.f, p})
 	}
-	t.fingerprint([]*sitter.Node{at}, []*sitter.Node{d.name}, append(context, t.setups...)...)
+	t.fingerprint([]*node{at}, []*node{d.name}, append(context, t.setups...)...)
 	return t.done()
 }
 
 // reasonAt is the comment on the line of n or the line before it.
-func (tf *tsFile) reasonAt(n *sitter.Node) string {
+func (tf *tsFile) reasonAt(n *node) string {
 	if n == nil {
 		return ""
 	}
@@ -241,7 +239,7 @@ func (tf *tsFile) reasonAt(n *sitter.Node) string {
 // tsHelperFunction reports whether n is a function that runs only when something calls it: a
 // declaration, a method, or a function held by a name or returned. A function passed straight to a
 // call ([1, 2].forEach((n) => it(…))) runs where it is written.
-func tsHelperFunction(n *sitter.Node) bool {
+func tsHelperFunction(n *node) bool {
 	if !tsFunctions[n.Kind()] {
 		return false
 	}

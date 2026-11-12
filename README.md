@@ -6,17 +6,22 @@
 </p>
 
 <p align="center">
+  <strong>Hand the work to AI agents without shrinking what your tests guard.</strong><br>
   A checker that reports the violations a change adds and the tests it weakens.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
-  <img alt="Languages" src="https://img.shields.io/badge/languages-Go%20%7C%20TS%20%7C%20Python%20%7C%20Rust%20%7C%20Java%20%7C%20Kotlin%20%7C%20Terraform%20%7C%20Ansible-555.svg">
+  <img alt="Languages" src="https://img.shields.io/badge/languages-TS%20%7C%20Python%20%7C%20Java%20%7C%20Kotlin%20%7C%20Go%20%7C%20Rust%20%7C%20Terraform%20%7C%20Ansible-555.svg">
 </p>
 
 <p align="center">
   English · <a href="README.ja.md">日本語</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Deleting only a test stops with tests/scope-shrunk and exit code 1; deleting the code along with it passes as cleanup with exit code 0">
 </p>
 
 ## Overview
@@ -34,7 +39,44 @@ It looks at how code is written (dependency direction, size, comments) and how t
 
 It is meant for repositories where AI agents write most of the code. The result is also available as JSON, which agents read to fix what it reports.
 
-One binary reads Go, TypeScript, Python, Rust, Java, Kotlin, Terraform and Ansible.
+One binary reads TypeScript, Python, Java, Kotlin, Go, Rust, Terraform and Ansible.
+
+## Example output
+
+A change that deletes the only test of `store.Append`, adds a sleep to another test, and adds an import the dependency diagram does not draw:
+
+```console
+$ hadome check --base main
+✗ deps/not-in-diagram          import not in the diagram: store → core (no arrow store --> core)
+  store/store.go:3
+  why: the diagram (docs/deps.md) is how people and agents know what may depend on what; an import it does not draw makes it wrong
+  fix: depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews
+✗ tests/no-sleep               test waits by sleeping: time.Sleep(10 * time.Millisecond)
+  worker/worker_test.go:11
+  why: a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event
+  fix: wait for the event itself: a channel, a callback, or a condition with a deadline that fails loudly
+✗ tests/scope-shrunk           guarded scope shrank: example.com/app/store.Append is no longer exercised by any active test (was: TestAppendKeepsRows)
+  store/store_test.go:9
+  why: the behaviour of example.com/app/store.Append can now change without any test noticing
+  fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
+3 regression(s). 0 existing finding(s) unchanged (not blocking).
+```
+
+The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
+
+## Regression vs. cleanup
+
+When three tests disappear, their number alone cannot tell cleanup from regression. hadome works out the functions and methods each test calls (its targets), and compares the set of targets that active tests reach: the guarded scope.
+
+| What you did | Count | Guarded scope | Verdict |
+|---|---|---|---|
+| Merged three duplicate tests into one | Down | Unchanged | Cleanup |
+| Deleted code together with its tests | Down | Gone with the targets | Cleanup |
+| Deleted or weakened only the tests | Down or same | Narrower | Regression |
+
+A behaviour you no longer need passes as cleanup when you delete the code along with its tests.
+
+The background, thinking of tests in three layers (invariants, writing rules, check), is in [the model](docs/model.md).
 
 ## Quick start
 
@@ -46,28 +88,62 @@ cd path/to/your-repo
 
 ### 1. Install
 
-Pick the one for your language. Each pins the version ([distribution](docs/design/distribution.md)). Every way installs the same binary and reads the same `.hadome.yml`.
+Open the one for your language. Each pins the version. Every way installs the same binary and reads the same `.hadome.yml` ([distribution](docs/design/distribution.md)).
 
 From here on, commands are written as `hadome …`. Use the form for how you installed it, such as `npx hadome …` or `go tool hadome …`.
 
-#### TypeScript / JavaScript
+<details>
+<summary>TypeScript / JavaScript (npm publishing pending)</summary>
 
-> [!NOTE]
-> Publishing to npm is delayed while npm reviews the package names. Until then, use one of the ways under "Anything else" below.
+Publishing to npm is delayed while npm reviews the package names. Until then, use one of the ways under "Anything else" below.
 
 ```sh
 npm install --save-dev --save-exact hadome   # pnpm, yarn and bun work too (bun add -d -E hadome, then bunx hadome check)
 npx hadome check
 ```
 
-#### Python
+</details>
+
+<details>
+<summary>Python (uv, pip)</summary>
 
 ```sh
 uv add --dev hadome==0.5.0                   # or pip install hadome==0.5.0
 uv run hadome check
 ```
 
-#### Go
+</details>
+
+<details>
+<summary>Java / Kotlin (Gradle)</summary>
+
+```kotlin
+// build.gradle.kts
+plugins { id("io.github.rerorets.hadome") version "0.5.0" }
+```
+
+Run it with `./gradlew hadomeCheck`.
+
+</details>
+
+<details>
+<summary>Java / Kotlin (Maven)</summary>
+
+```xml
+<!-- in pom.xml, under <build><plugins> -->
+<plugin>
+  <groupId>io.github.rerorets</groupId>
+  <artifactId>hadome-maven-plugin</artifactId>
+  <version>0.5.0</version>
+</plugin>
+```
+
+Run it with `mvn hadome:check`.
+
+</details>
+
+<details>
+<summary>Go (<code>go get -tool</code>)</summary>
 
 ```sh
 go get -tool github.com/rerorets/hadome/cmd/hadome
@@ -84,36 +160,20 @@ go get -modfile=tools.mod -tool github.com/rerorets/hadome/cmd/hadome
 go tool -modfile=tools.mod hadome check
 ```
 
-#### Java / Kotlin (Gradle)
+</details>
 
-```kotlin
-// build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.5.0" }
-```
-
-Run it with `./gradlew hadomeCheck`.
-
-#### Java / Kotlin (Maven)
-
-```xml
-<!-- in pom.xml, under <build><plugins> -->
-<plugin>
-  <groupId>io.github.rerorets</groupId>
-  <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.5.0</version>
-</plugin>
-```
-
-Run it with `mvn hadome:check`.
-
-#### Rust
+<details>
+<summary>Rust (cargo binstall)</summary>
 
 ```sh
 cargo binstall hadome@0.5.0
 hadome check
 ```
 
-#### Anything else (Terraform, Ansible and others)
+</details>
+
+<details>
+<summary>Anything else (Homebrew, Windows, archives)</summary>
 
 ```sh
 brew install rerorets/tap/hadome
@@ -138,6 +198,8 @@ tar -xzf hadome_0.5.0_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```
+
+</details>
 
 ### 2. Tell your AI agents
 
@@ -177,29 +239,6 @@ This repository uses hadome to stop regressions in code and tests.
 
 </details>
 
-## Example output
-
-A change that deletes the only test of `store.Append`, adds a sleep to another test, and adds an import the dependency diagram does not draw:
-
-```console
-$ hadome check --base main
-✗ deps/not-in-diagram          import not in the diagram: store → core (no arrow store --> core)
-  store/store.go:3
-  why: the diagram (docs/deps.md) is how people and agents know what may depend on what; an import it does not draw makes it wrong
-  fix: depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews
-✗ tests/no-sleep               test waits by sleeping: time.Sleep(10 * time.Millisecond)
-  worker/worker_test.go:11
-  why: a sleep is either too long (a slow suite) or too short (a flaky test); it never waits for the actual event
-  fix: wait for the event itself: a channel, a callback, or a condition with a deadline that fails loudly
-✗ tests/scope-shrunk           guarded scope shrank: example.com/app/store.Append is no longer exercised by any active test (was: TestAppendKeepsRows)
-  store/store_test.go:9
-  why: the behaviour of example.com/app/store.Append can now change without any test noticing
-  fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
-3 regression(s). 0 existing finding(s) unchanged (not blocking).
-```
-
-The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
-
 ## What it checks
 
 | Group | Rules |
@@ -213,20 +252,6 @@ The output is in English by default. With `--lang ja` it comes out in Japanese: 
 | `config/` | `loosened` (review): a change that loosens the rules judging it |
 
 Every rule reports why it matters and how to fix it. The rules are specified in [docs/design](docs/design).
-
-## Regression vs. cleanup
-
-When three tests disappear, their number alone cannot tell cleanup from regression. hadome works out the functions and methods each test calls (its targets), and compares the set of targets that active tests reach: the guarded scope.
-
-| What you did | Count | Guarded scope | Verdict |
-|---|---|---|---|
-| Merged three duplicate tests into one | Down | Unchanged | Cleanup |
-| Deleted code together with its tests | Down | Gone with the targets | Cleanup |
-| Deleted or weakened only the tests | Down or same | Narrower | Regression |
-
-A behaviour you no longer need passes as cleanup when you delete the code along with its tests.
-
-The background, thinking of tests in three layers (invariants, writing rules, check), is in [the model](docs/model.md).
 
 ## Where it runs and exit codes
 
@@ -277,6 +302,18 @@ mutation:
 ```
 
 It runs the tests once per break, so it takes far longer than `check`. It is meant to run locally, before a change is finished. The [guide for agents](docs/for-agents.md) has the details.
+
+## How it differs from other tools
+
+hadome checks both sides of a change, before (base) and after (head), and compares the results. Similar tools compare differently, so they catch different things.
+
+| Tool (example) | How it compares | How hadome differs |
+|---|---|---|
+| Linters that look only at changed lines (golangci-lint's `--new-from-rev`, reviewdog) | Reports only the violations on lines the change touched | They cannot see a regression outside the changed lines. Example: deleting a test leaves an untouched function that no test calls any more |
+| Tools that record results and stop them getting worse (Betterer) | Saves the last results to a file and fails when the new ones are worse | hadome saves no results and checks base again every time. There is no results file to keep updating |
+| Judging only new code (SonarQube's New Code) | Keeps results on a server and judges the new code | hadome has no server. The same binary runs locally and in CI |
+| Coverage diffs (Codecov and the like) | Runs the tests and measures the lines they pass through | `hadome check` does not run the tests; it reads the functions they call, so it does not depend on each language's test runner. A call whose destination is decided only at run time cannot be read, and goes to a person's review |
+| AI code review | Has an LLM read the change | hadome uses no LLM and talks to no network. The same change gets the same result every time |
 
 ## The name
 

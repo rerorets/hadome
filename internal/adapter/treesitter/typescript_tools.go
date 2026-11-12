@@ -2,10 +2,6 @@
 
 package treesitter
 
-import (
-	sitter "github.com/tree-sitter/go-tree-sitter"
-)
-
 // The testing tools a TypeScript test calls that hadome reads: skips from inside a test, fake
 // timers, and the matchers after expect.
 
@@ -21,7 +17,7 @@ var (
 // skips records test.skip() and test.fixme() called in a test or a describe block: with no
 // arguments they skip it, with a condition they skip it only in some cases. The reason is the
 // description after the condition, or the comment on the line.
-func (w *tsWalk) skips(n *sitter.Node, callee string, args []*sitter.Node) bool {
+func (w *tsWalk) skips(n *node, callee string, args []*node) bool {
 	if !tsInBodySkips[callee] {
 		return false
 	}
@@ -61,7 +57,7 @@ func (w *tsWalk) timers(callee string) bool {
 // matched reports whether expect(x) is followed by a matcher: called (expect(x).toBe(1),
 // expect(x).not.toBe(1)), or chai's assertion by property (expect(x).to.be.true). expect(x) alone
 // and expect(x).toBeTruthy without the call check nothing.
-func (w *tsWalk) matched(call *sitter.Node) bool {
+func (w *tsWalk) matched(call *node) bool {
 	n, chai := call, false
 	for p := n.Parent(); p != nil && p.Kind() == "member_expression" && isField(p, "object", n); p = n.Parent() {
 		n = p
@@ -75,7 +71,7 @@ func (w *tsWalk) matched(call *sitter.Node) bool {
 }
 
 // tsDiscarded reports whether the value of a call is thrown away: await import('./m'); as a statement.
-func tsDiscarded(call *sitter.Node) bool {
+func tsDiscarded(call *node) bool {
 	n := call
 	for p := n.Parent(); p != nil; p = n.Parent() {
 		switch p.Kind() {

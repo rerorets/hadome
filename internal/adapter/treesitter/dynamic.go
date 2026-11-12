@@ -6,15 +6,13 @@ import (
 	"path"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	fswalk "github.com/rerorets/hadome/internal/adapter/walk"
 	"github.com/rerorets/hadome/internal/facts"
 )
 
 // dynamicCall is a call that imports whatever its first argument names when the code runs.
 type dynamicCall struct {
-	at *sitter.Node
+	at *node
 	// spec is the argument when it is a string literal; empty when the destination is unknown.
 	spec string
 }
@@ -24,7 +22,7 @@ type dynamicCall struct {
 // whose text substitutes values, for a grammar that keeps that inside the literal's text.
 func dynamicCalls(f *file, kinds, callees map[string]bool, interpolates func(string) bool) []dynamicCall {
 	var out []dynamicCall
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if !kinds[n.Kind()] {
 			return true
 		}
@@ -44,13 +42,13 @@ func dynamicCalls(f *file, kinds, callees map[string]bool, interpolates func(str
 }
 
 // unknownImport is the fact for a dynamic import whose destination is decided at run time.
-func unknownImport(f *file, at *sitter.Node) facts.Import {
+func unknownImport(f *file, at *node) facts.Import {
 	return facts.Import{Path: f.path, Line: line(at), FromUnit: f.unit, Unknown: true,
 		Text: strings.Join(strings.Fields(f.text(at)), " ")}
 }
 
 // unreadImport is the fact for an import naming a path in a directory hadome does not read.
-func unreadImport(f *file, at *sitter.Node, spec string) facts.Import {
+func unreadImport(f *file, at *node, spec string) facts.Import {
 	return facts.Import{Path: f.path, Line: line(at), FromUnit: f.unit, Unknown: true, Unread: true, Text: spec}
 }
 
@@ -67,9 +65,9 @@ func inUnreadDir(p string) bool {
 }
 
 // firstArgument returns the first argument of a call in any of the five grammars.
-func firstArgument(call *sitter.Node) *sitter.Node {
-	var args *sitter.Node
-	walk(call, func(n *sitter.Node) bool {
+func firstArgument(call *node) *node {
+	var args *node
+	walk(call, func(n *node) bool {
 		switch n.Kind() {
 		case "arguments", "argument_list", "value_arguments":
 			if args == nil {
@@ -90,12 +88,12 @@ func firstArgument(call *sitter.Node) *sitter.Node {
 }
 
 // literal reports a string written out in full: no interpolation, substitution or concatenation.
-func literal(n *sitter.Node) bool {
+func literal(n *node) bool {
 	if !strings.Contains(n.Kind(), "string") {
 		return false
 	}
 	fixed := true
-	walk(n, func(c *sitter.Node) bool {
+	walk(n, func(c *node) bool {
 		if k := c.Kind(); strings.Contains(k, "interpolat") || strings.Contains(k, "substitution") {
 			fixed = false
 		}

@@ -6,8 +6,6 @@ import (
 	"maps"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -25,7 +23,7 @@ type tsFile struct {
 	// unresolved are the names imported from what looks like the repository's own code but names
 	// no file of it. Calling one is a call hadome cannot identify.
 	unresolved map[string]bool
-	helpers    map[string]*sitter.Node
+	helpers    map[string]*node
 	// loaders are the functions of the file that load one module of the repository with import():
 	// function name -> unit. A test that takes names from what they return calls that module.
 	loaders map[string]string
@@ -37,7 +35,7 @@ type tsFile struct {
 	// outer types the variables declared outside the tests (in a describe block, set in beforeEach):
 	// name -> class, by the class they are built with or declared as. A name given two classes is "".
 	outer map[string]string
-	mocks []*sitter.Node // file-level evidence that the file mocks
+	mocks []*node // file-level evidence that the file mocks
 	// drivers are the local names of the HTTP test clients the file imports (supertest's request),
 	// whose calls drive the application from outside.
 	drivers map[string]bool
@@ -46,7 +44,7 @@ type tsFile struct {
 	browser  bool
 	comments map[int]string
 	// params are the parameter lists of the helpers, whose default values run on each call.
-	params map[string]*sitter.Node
+	params map[string]*node
 	// setups are what sets up each variable declared outside the tests (see bindSetups), and
 	// setupNodes the same nodes, by ID.
 	setups     map[string][]tsSetup
@@ -108,7 +106,7 @@ func (tf *tsFile) bind() {
 type tsWalk struct {
 	tf      *tsFile
 	t       *testFacts
-	at      *sitter.Node      // the call that declares the test
+	at      *node             // the call that declares the test
 	vars    map[string]string // local variable -> class target, for variables built with new
 	locals  map[string]bool
 	walking map[string]bool
@@ -133,15 +131,15 @@ type tsWalk struct {
 	rows map[string][]string
 }
 
-func (w *tsWalk) walk(body *sitter.Node) {
-	w.t.bodyIn(w.tf.f, w.tf.t, body, func(n *sitter.Node) bool { return tsLoops[n.Kind()] }, w.visit)
+func (w *tsWalk) walk(body *node) {
+	w.t.bodyIn(w.tf.f, w.tf.t, body, func(kind string) bool { return tsLoops[kind] }, w.visit)
 }
 
-func (w *tsWalk) visit(n *sitter.Node) bool {
+func (w *tsWalk) visit(n *node, kind string) bool {
 	if w.walked(n) {
 		return false
 	}
-	switch n.Kind() {
+	switch kind {
 	case "pair", "method_definition":
 		return w.setup == 0 || !tsHeldFunction(n)
 	case "variable_declarator":
@@ -161,7 +159,7 @@ func (w *tsWalk) visit(n *sitter.Node) bool {
 }
 
 // walked reports whether n sets up an outer variable and the test has walked it already.
-func (w *tsWalk) walked(n *sitter.Node) bool {
+func (w *tsWalk) walked(n *node) bool {
 	if !w.tf.setupNodes[n.Id()] {
 		return false
 	}
@@ -173,7 +171,7 @@ func (w *tsWalk) walked(n *sitter.Node) bool {
 }
 
 // declare records a local of the test, which shadows a variable of the same name outside it.
-func (w *tsWalk) declare(n *sitter.Node) {
+func (w *tsWalk) declare(n *node) {
 	f := w.tf.f
 	name := f.field(n, "name")
 	w.locals[name] = true
@@ -194,7 +192,7 @@ func (w *tsWalk) declare(n *sitter.Node) {
 	}
 }
 
-func (w *tsWalk) construct(n *sitter.Node) {
+func (w *tsWalk) construct(n *node) {
 	f := w.tf.f
 	if f.text(n) == "new Date()" {
 		if !w.fake {
@@ -208,7 +206,7 @@ func (w *tsWalk) construct(n *sitter.Node) {
 }
 
 // name records a read of a name of the repository, or runs the setup of an outer variable.
-func (w *tsWalk) name(n *sitter.Node) {
+func (w *tsWalk) name(n *node) {
 	text := w.tf.f.text(n)
 	_, imported := w.tf.names[text]
 	_, space := w.tf.spaces[text]
@@ -225,7 +223,7 @@ var tsUses = useGrammar{
 	types:   set("type_annotation", "type_arguments", "type_query"),
 }
 
-func (w *tsWalk) call(n *sitter.Node) {
+func (w *tsWalk) call(n *node) {
 	f := w.tf.f
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
@@ -263,7 +261,7 @@ func (w *tsWalk) call(n *sitter.Node) {
 
 // tool records a call of the testing tools: an assertion, an HTTP test client, a skip, fake
 // timers, loading a module for what it does, or a hazard. It reports whether the call is done with.
-func (w *tsWalk) tool(n, fn *sitter.Node, callee string, args []*sitter.Node) bool {
+func (w *tsWalk) tool(n, fn *node, callee string, args []*node) bool {
 	if (callee != "expect" && callee != "expect.soft") || w.matched(n) {
 		w.t.assertion(callee, w.tf.t.asserts)
 	}
@@ -287,7 +285,7 @@ func (w *tsWalk) tool(n, fn *sitter.Node, callee string, args []*sitter.Node) bo
 // memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
 // it follows a function an object of the file holds, and a method of a local value of unknown type
 // counts as unresolved, unless the test built it itself (see plain).
-func (w *tsWalk) memberTarget(obj, prop string, args []*sitter.Node) string {
+func (w *tsWalk) memberTarget(obj, prop string, args []*node) string {
 	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
 	for _, files := range []map[string]string{w.tf.spaces, w.modules} {
 		if p, ok := files[obj]; ok {
@@ -314,7 +312,7 @@ func (w *tsWalk) memberTarget(obj, prop string, args []*sitter.Node) string {
 }
 
 // alwaysTrue recognises expect(x).toBe(x), expect(true).toBe(true) and assert(true).
-func (w *tsWalk) alwaysTrue(fn *sitter.Node, args []*sitter.Node) bool {
+func (w *tsWalk) alwaysTrue(fn *node, args []*node) bool {
 	f := w.tf.f
 	if f.text(fn) == "assert" || f.text(fn) == "assert.ok" {
 		return len(args) == 1 && f.text(args[0]) == "true"
@@ -337,7 +335,7 @@ func (w *tsWalk) alwaysTrue(fn *sitter.Node, args []*sitter.Node) bool {
 
 // element records a JSX element of a component of the repository as a call: rendering <Page /> runs
 // Page. Lowercase names are HTML elements.
-func (w *tsWalk) element(n *sitter.Node) {
+func (w *tsWalk) element(n *node) {
 	f := w.tf.f
 	name := n.ChildByFieldName("name")
 	if name == nil {
@@ -368,12 +366,12 @@ func (w *tsWalk) element(n *sitter.Node) {
 
 // follow walks a helper of the file the test calls with args, once per chain of calls, and reports
 // whether there was one.
-func (w *tsWalk) follow(name string, args []*sitter.Node) bool {
+func (w *tsWalk) follow(name string, args []*node) bool {
 	return w.followFrom(w, name, args)
 }
 
 // followFrom walks a helper called from the walker from, which binds its arguments (see bindArgs).
-func (w *tsWalk) followFrom(from *tsWalk, name string, args []*sitter.Node) bool {
+func (w *tsWalk) followFrom(from *tsWalk, name string, args []*node) bool {
 	body, ok := w.tf.helpers[name]
 	if !ok {
 		return false

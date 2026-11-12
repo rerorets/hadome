@@ -32,10 +32,15 @@ type typescript struct {
 func (*typescript) grammar(p string) *sitter.Language {
 	switch path.Ext(p) {
 	case ".ts", ".mts", ".cts":
-		return sitter.NewLanguage(tsx.LanguageTypescript())
+		return typescriptGrammar
 	}
-	return sitter.NewLanguage(tsx.LanguageTSX())
+	return tsxGrammar
 }
+
+var (
+	typescriptGrammar = sitter.NewLanguage(tsx.LanguageTypescript())
+	tsxGrammar        = sitter.NewLanguage(tsx.LanguageTSX())
+)
 
 var tsBranches = branches{
 	kinds: set("if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement",
@@ -88,7 +93,7 @@ func (r *typescript) imports(f *file, t *tables) []facts.Import {
 	}
 	var out []facts.Import
 	globals := map[string]bool{}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if name := tsGlobalIO(f, n); name != "" && !globals[name] {
 			globals[name] = true
 			out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: name, IO: true, Global: true})
@@ -139,7 +144,7 @@ var tsGlobals = set("fetch", "navigator.sendBeacon", "WebSocket", "XMLHttpReques
 // tsGlobalIO returns the global API that performs input or output this node uses, or "": a call of
 // fetch, a new WebSocket, a member of localStorage, with or without window., globalThis. or self.
 // in front. Only the name is read: a local variable of the same name counts too.
-func tsGlobalIO(f *file, n *sitter.Node) string {
+func tsGlobalIO(f *file, n *node) string {
 	name := ""
 	switch n.Kind() {
 	case "call_expression":
@@ -172,11 +177,11 @@ var tsDeclarationFile = regexp.MustCompile(`\.d(\.[^./]+)?\.[cm]?ts$`)
 // typeOnly reports an import or export that brings in only types: `import type`, `export type
 // {...} from`, or named imports that are all marked `type`. TypeScript erases them, so they are no
 // dependency of the running code.
-func typeOnly(n *sitter.Node) bool {
+func typeOnly(n *node) bool {
 	if hasToken(n, "type") {
 		return true
 	}
-	clause := (*sitter.Node)(nil)
+	clause := (*node)(nil)
 	for _, c := range named(n) {
 		if c.Kind() == "import_clause" {
 			clause = c
@@ -203,7 +208,7 @@ func typeOnly(n *sitter.Node) bool {
 }
 
 // hasToken reports whether n has an unnamed child of this kind, such as the keyword `type`.
-func hasToken(n *sitter.Node, kind string) bool {
+func hasToken(n *node, kind string) bool {
 	for i := uint(0); i < n.ChildCount(); i++ {
 		if c := n.Child(i); !c.IsNamed() && c.Kind() == kind {
 			return true
@@ -227,7 +232,7 @@ func (r *typescript) symbols(f *file) []facts.Symbol {
 	return out
 }
 
-func (r *typescript) declaration(f *file, n *sitter.Node, exported, doc bool) []facts.Symbol {
+func (r *typescript) declaration(f *file, n *node, exported, doc bool) []facts.Symbol {
 	id := r.symbolID(f.path, f.field(n, "name"))
 	typ := facts.Symbol{ID: id, Kind: facts.SymbolType, Path: f.path, Line: line(n), EndLine: endLine(n), Exported: exported, Doc: doc}
 	switch n.Kind() {
@@ -246,7 +251,7 @@ func (r *typescript) declaration(f *file, n *sitter.Node, exported, doc bool) []
 	case "class_declaration", "abstract_class_declaration":
 		return append([]facts.Symbol{typ}, r.methods(f, n, id, exported)...)
 	case "interface_declaration":
-		walk(n.ChildByFieldName("body"), func(x *sitter.Node) bool {
+		walk(n.ChildByFieldName("body"), func(x *node) bool {
 			if x.Kind() == "method_signature" {
 				typ.Methods++
 			}
@@ -261,7 +266,7 @@ func (r *typescript) declaration(f *file, n *sitter.Node, exported, doc bool) []
 }
 
 // methods lists a class's methods; private ones (#name, or the private modifier) are not exported.
-func (r *typescript) methods(f *file, class *sitter.Node, id string, exported bool) []facts.Symbol {
+func (r *typescript) methods(f *file, class *node, id string, exported bool) []facts.Symbol {
 	var out []facts.Symbol
 	for _, m := range named(class.ChildByFieldName("body")) {
 		if m.Kind() != "method_definition" {
@@ -277,7 +282,7 @@ func (r *typescript) methods(f *file, class *sitter.Node, id string, exported bo
 }
 
 // tsOverride reports whether a method is marked override.
-func tsOverride(m *sitter.Node) bool {
+func tsOverride(m *node) bool {
 	for _, c := range named(m) {
 		if c.Kind() == "override_modifier" {
 			return true
@@ -287,7 +292,7 @@ func tsOverride(m *sitter.Node) bool {
 }
 
 // function completes a function's symbol: at is where it is declared, fn holds its parameters and body.
-func (r *typescript) function(f *file, at, fn *sitter.Node, s facts.Symbol) facts.Symbol {
+func (r *typescript) function(f *file, at, fn *node, s facts.Symbol) facts.Symbol {
 	var params []string
 	if ps := fn.ChildByFieldName("parameters"); ps != nil {
 		for _, p := range named(ps) {

@@ -2,18 +2,14 @@
 
 package treesitter
 
-import (
-	sitter "github.com/tree-sitter/go-tree-sitter"
-)
-
 // How a Python test is followed into its file's helpers, the test support modules it imports, and
 // the pytest fixtures it receives.
 
 // testFile reads what a test file, or a test support file, binds.
 func (r *python) testFile(f *file, t *tables) *pyFile {
 	pf := &pyFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, via: map[string][2]string{},
-		unresolved: map[string]bool{}, helpers: map[string]*sitter.Node{}, fixtures: map[string]string{},
-		fixtureDefs: map[string]*sitter.Node{}}
+		unresolved: map[string]bool{}, helpers: map[string]*node{}, fixtures: map[string]string{},
+		fixtureDefs: map[string]*node{}}
 	pf.bind()
 	pf.bindSetup()
 	return pf

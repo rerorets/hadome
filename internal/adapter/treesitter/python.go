@@ -32,7 +32,9 @@ type python struct {
 	modules map[string]*pyFile
 }
 
-func (*python) grammar(string) *sitter.Language { return sitter.NewLanguage(py.Language()) }
+var pythonGrammar = sitter.NewLanguage(py.Language())
+
+func (*python) grammar(string) *sitter.Language { return pythonGrammar }
 
 var pyBranches = branches{
 	kinds: set("if_statement", "elif_clause", "for_statement", "while_statement", "except_clause",
@@ -164,7 +166,7 @@ func (r *python) relative(from, prefix, dotted string) (mod, unit string, ok boo
 
 // pyImport is one module a file imports, and what it binds.
 type pyImport struct {
-	at       *sitter.Node
+	at       *node
 	dotted   string // as written, for external modules
 	mod      string // the module's path when internal
 	unit     string
@@ -178,7 +180,7 @@ type pyImport struct {
 
 func (r *python) parseImports(f *file) []pyImport {
 	var out []pyImport
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		switch n.Kind() {
 		case "import_statement":
 			for _, c := range named(n) {
@@ -201,7 +203,7 @@ func (r *python) parseImports(f *file) []pyImport {
 	return out
 }
 
-func (r *python) fromImport(f *file, n *sitter.Node) pyImport {
+func (r *python) fromImport(f *file, n *node) pyImport {
 	src := n.ChildByFieldName("module_name")
 	im := pyImport{at: n, dotted: f.text(src), names: map[string]string{}}
 	if src.Kind() == "relative_import" {
@@ -291,7 +293,7 @@ func (r *python) symbols(f *file) []facts.Symbol {
 }
 
 // definition unwraps a decorated definition.
-func definition(n *sitter.Node) *sitter.Node {
+func definition(n *node) *node {
 	if n.Kind() == "decorated_definition" {
 		if d := n.ChildByFieldName("definition"); d != nil {
 			return d
@@ -301,7 +303,7 @@ func definition(n *sitter.Node) *sitter.Node {
 }
 
 // docstring reports whether a function or class body starts with a string.
-func docstring(def *sitter.Node) bool {
+func docstring(def *node) bool {
 	body := def.ChildByFieldName("body")
 	if body == nil || body.NamedChildCount() == 0 {
 		return false
@@ -311,7 +313,7 @@ func docstring(def *sitter.Node) bool {
 }
 
 // function completes a def's symbol; visible says whether its class (if any) is public.
-func (r *python) function(f *file, def *sitter.Node, id string, kind facts.SymbolKind, visible bool) facts.Symbol {
+func (r *python) function(f *file, def *node, id string, kind facts.SymbolKind, visible bool) facts.Symbol {
 	params := pyParams(f, def)
 	r.scopes[id] = scopeOf(params)
 	name := f.field(def, "name")
@@ -320,7 +322,7 @@ func (r *python) function(f *file, def *sitter.Node, id string, kind facts.Symbo
 }
 
 // pyParams lists a def's parameter names, without self and cls.
-func pyParams(f *file, def *sitter.Node) []string {
+func pyParams(f *file, def *node) []string {
 	var out []string
 	for _, p := range named(def.ChildByFieldName("parameters")) {
 		name := f.text(p)

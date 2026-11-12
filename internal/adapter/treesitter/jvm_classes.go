@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -18,7 +16,7 @@ import (
 // jvmCode is a node of a test file with the file that holds it, which may not be the test's.
 type jvmCode struct {
 	jf *jvmFile
-	n  *sitter.Node
+	n  *node
 }
 
 // jvmScope is what a test class gives its tests beyond its file: its fields with those of the
@@ -34,7 +32,7 @@ type jvmScope struct {
 	setups []jvmCode
 	// inputs are the annotations of the parameterised classes around the test (@ParameterizedClass
 	// with its @ValueSource): the test's inputs, which its fingerprint includes.
-	inputs []*sitter.Node
+	inputs []*node
 	// setupHazards are the clock and sleep hazards of each setup, by the setup's node, once it has
 	// been walked for one test of the class: what the walk finds depends only on the class, so every
 	// test of the class shares it. A nested class starts with none of its own, since its fields differ.
@@ -60,22 +58,22 @@ func (s jvmScope) nested() jvmScope {
 
 // withInputs adds the annotations of a class to the scope's inputs when the class is parameterised.
 // anns are the class's annotations by name; they join in the order they are written.
-func (s jvmScope) withInputs(anns map[string]*sitter.Node) jvmScope {
+func (s jvmScope) withInputs(anns map[string]*node) jvmScope {
 	if anns["ParameterizedClass"] == nil {
 		return s
 	}
-	var add []*sitter.Node
+	var add []*node
 	for _, a := range anns {
 		add = append(add, a)
 	}
 	sort.Slice(add, func(i, j int) bool { return add[i].StartByte() < add[j].StartByte() })
-	s.inputs = append(append([]*sitter.Node{}, s.inputs...), add...)
+	s.inputs = append(append([]*node{}, s.inputs...), add...)
 	return s
 }
 
 // startTest records what a test has from its file and class before its body runs, the mocks and
 // the hazards of its setup, and returns the walker for its body. walk walks a body of code.
-func (jf *jvmFile) startTest(t *testFacts, scope jvmScope, walk func(*jvmWalk, *sitter.Node)) *jvmWalk {
+func (jf *jvmFile) startTest(t *testFacts, scope jvmScope, walk func(*jvmWalk, *node)) *jvmWalk {
 	for _, mk := range jf.mocks {
 		t.fileHazard(facts.HazardMock, mk)
 	}
@@ -180,7 +178,7 @@ var restAssuredResponses = set("ValidatableResponse", "ValidatableResponseOption
 // jvmReturnType is the declared return type of a Java method or a Kotlin function, without its type
 // arguments and nullability; "" when it declares none. A Kotlin function's receiver type comes
 // before its parameters, and its return type after them.
-func jvmReturnType(f *file, decl *sitter.Node) string {
+func jvmReturnType(f *file, decl *node) string {
 	if decl == nil {
 		return ""
 	}
@@ -211,10 +209,10 @@ var jvmDrivers = map[string][]string{
 
 // noteValueField records a field of a test class whose initializer names something of the product,
 // and reports whether it does.
-func (jf *jvmFile) noteValueField(name string, init *sitter.Node) bool {
+func (jf *jvmFile) noteValueField(name string, init *node) bool {
 	uses := false
 	if name != "" && init != nil {
-		walk(init, func(n *sitter.Node) bool {
+		walk(init, func(n *node) bool {
 			uses = uses || (strings.Contains(n.Kind(), "identifier") && jf.names[jf.f.text(n)] != "")
 			return !uses
 		})
@@ -245,7 +243,7 @@ func (w *jvmWalk) valueField(name string) bool {
 
 // readsValueField reports whether an identifier in a test reads a value field of its class: not a
 // local of the same name, and not the member side of a.b.
-func (w *jvmWalk) readsValueField(n *sitter.Node) bool {
+func (w *jvmWalk) readsValueField(n *node) bool {
 	if !w.valueField(w.jf.f.text(n)) {
 		return false
 	}

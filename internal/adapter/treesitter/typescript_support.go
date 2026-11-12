@@ -5,8 +5,6 @@ package treesitter
 import (
 	"maps"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // How a TypeScript test file binds what it imports, and how a test is followed into a test support
@@ -15,8 +13,8 @@ import (
 // testFile reads what a test file, or a test support file, binds.
 func (r *typescript) testFile(f *file, t *tables) *tsFile {
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, via: map[string][2]string{},
-		unresolved: map[string]bool{}, loaderFns: map[string]string{}, external: map[string]bool{}, helpers: map[string]*sitter.Node{}, comments: map[int]string{}, loaders: map[string]string{},
-		outer: map[string]string{}, params: map[string]*sitter.Node{}, setups: map[string][]tsSetup{},
+		unresolved: map[string]bool{}, loaderFns: map[string]string{}, external: map[string]bool{}, helpers: map[string]*node{}, comments: map[int]string{}, loaders: map[string]string{},
+		outer: map[string]string{}, params: map[string]*node{}, setups: map[string][]tsSetup{},
 		setupNodes: map[uintptr]bool{}, outerLoaded: map[string]string{}, outerModules: map[string]string{}}
 	tf.bind()
 	tf.bindLoaders()
@@ -39,7 +37,7 @@ func (r *typescript) supportFile(p string, t *tables) *tsFile {
 }
 
 // required returns the specifier of require('./x'), named by a string, or "".
-func (tf *tsFile) required(call *sitter.Node) string {
+func (tf *tsFile) required(call *node) string {
 	if call == nil || call.Kind() != "call_expression" || tf.f.field(call, "function") != "require" {
 		return ""
 	}
@@ -51,7 +49,7 @@ func (tf *tsFile) required(call *sitter.Node) string {
 
 // bindImport binds the names an import statement, or the pattern a require() is assigned to,
 // takes from spec.
-func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
+func (tf *tsFile) bindImport(n *node, spec string) {
 	p, kind := tf.r.project.resolve(tf.f.path, spec)
 	if kind == tsExternal || n == nil {
 		tf.bindExternal(n, kind)
@@ -72,7 +70,7 @@ func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
 		}
 		return
 	}
-	walk(n, func(x *sitter.Node) bool {
+	walk(n, func(x *node) bool {
 		switch x.Kind() {
 		case "import_specifier":
 			name := tf.f.field(x, "name")
@@ -95,7 +93,7 @@ func (tf *tsFile) bindImport(n *sitter.Node, spec string) {
 }
 
 // bindExternal records the names an import from outside the repository binds.
-func (tf *tsFile) bindExternal(n *sitter.Node, kind tsKind) {
+func (tf *tsFile) bindExternal(n *node, kind tsKind) {
 	if n == nil || kind != tsExternal {
 		return
 	}
@@ -129,7 +127,7 @@ func (tf *tsFile) bindModule(local, p string, kind tsKind) {
 // followSupport walks a function of a test support file the test calls. Its calls resolve through
 // the support file's own imports, and its hazards are reported at its own lines. A name the file
 // holds no function for counts as unresolved.
-func (w *tsWalk) followSupport(p, name string, args []*sitter.Node) {
+func (w *tsWalk) followSupport(p, name string, args []*node) {
 	sf := w.tf.r.supportFile(p, w.tf.t)
 	if sf == nil || sf.helpers[name] == nil {
 		w.t.test.Unresolved++
@@ -147,7 +145,7 @@ func (w *tsWalk) followSupport(p, name string, args []*sitter.Node) {
 
 // appRequest recognises a request handed in memory to an application that serves HTTP the fetch
 // way: Hono's app.request('/rows'), and app.fetch(new Request(...)) of any such framework.
-func (w *tsWalk) appRequest(fn *sitter.Node, args []*sitter.Node) bool {
+func (w *tsWalk) appRequest(fn *node, args []*node) bool {
 	f := w.tf.f
 	if fn.Kind() != "member_expression" || len(args) == 0 {
 		return false

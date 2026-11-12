@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -27,12 +25,12 @@ type counted struct {
 }
 
 // complexity is 1, plus one per branch inside nodes outside nested functions. A node may be nil.
-func (b branches) complexity(f *file, nodes ...*sitter.Node) counted {
+func (b branches) complexity(f *file, nodes ...*node) counted {
 	c := counted{own: 1}
 	for _, n := range nodes {
-		walk(n, func(x *sitter.Node) bool {
+		walk(n, func(x *node) bool {
 			if x.IsNamed() && b.nested[x.Kind()] { // Python names both the lambda and its keyword "lambda"
-				var children []*sitter.Node // not x itself, which would be nested again
+				var children []*node // not x itself, which would be nested again
 				for i := uint(0); i < x.ChildCount(); i++ {
 					children = append(children, x.Child(i))
 				}
@@ -68,7 +66,7 @@ func set(items ...string) map[string]bool {
 
 // docBefore reports whether a doc comment (one starting with one of prefixes) ends on the line
 // right before n, or on n's own first line.
-func docBefore(f *file, n *sitter.Node, prefixes ...string) bool {
+func docBefore(f *file, n *node, prefixes ...string) bool {
 	prev := n.PrevSibling()
 	for prev != nil && strings.Contains(prev.Kind(), "comment") {
 		text := strings.TrimSpace(f.text(prev))
@@ -87,7 +85,7 @@ func docBefore(f *file, n *sitter.Node, prefixes ...string) bool {
 
 // funcSymbol completes the symbol of a function or method declared at n. s carries what the
 // language knows (ID, kind, exported, doc); params are the parameter names in order.
-func funcSymbol(f *file, n *sitter.Node, s facts.Symbol, params []string, cx counted) facts.Symbol {
+func funcSymbol(f *file, n *node, s facts.Symbol, params []string, cx counted) facts.Symbol {
 	for _, p := range params {
 		s.Scoped = s.Scoped || facts.IsScopeName(p)
 	}

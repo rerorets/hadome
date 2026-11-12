@@ -18,7 +18,7 @@ var extensions = map[string][]string{
 	"kotlin":     {".kt", ".kts"},
 }
 
-// names lists the languages in a fixed order.
-var names = []string{"typescript", "python", "rust", "java", "kotlin"}
+// languageNames lists the languages in a fixed order.
+var languageNames = []string{"typescript", "python", "rust", "java", "kotlin"}
 
 func claims(lang, p string) bool { return slices.Contains(extensions[lang], path.Ext(p)) }

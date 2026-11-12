@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -25,21 +23,21 @@ type textGrammar struct {
 	// content "$" and the content "name" rather than as an interpolation.
 	dollarHoles bool
 	// raw reports whether a literal is written raw, so that its backslashes are content.
-	raw    func(f *file, n *sitter.Node) bool
+	raw    func(f *file, n *node) bool
 	idents map[string]bool // names that may read a constant
 	// notRead are the fields of a parent in which a name is not read: the member side of a.b, a
 	// declared name, a keyword argument's name.
 	notRead map[string]bool
 	// notReadIn reports, for grammars without fields there, whether a name is not read where it is,
 	// in its parent p.
-	notReadIn func(n, p *sitter.Node) bool
+	notReadIn func(n, p *node) bool
 	// declare returns the name and the value of a local declaration of the given kind, or nils.
-	declare func(f *file, n *sitter.Node, kind string) (name, value *sitter.Node)
+	declare func(f *file, n *node, kind string) (name, value *node)
 	// call returns, for a call of the given kind, what it calls as written, the last name of it and
 	// its first argument.
-	call func(f *file, n *sitter.Node, kind string) (callee, last string, first *sitter.Node, ok bool)
+	call func(f *file, n *node, kind string) (callee, last string, first *node, ok bool)
 	// consts returns the file's constants by name with their value.
-	consts func(f *file) map[string]*sitter.Node
+	consts func(f *file) map[string]*node
 	sinks  []sqlSink
 }
 
@@ -97,10 +95,10 @@ func (c *textCollector) use(f *file, tb *tables) {
 	}
 }
 
-// note records what node n, reached by the walk with loops loops around it, adds to the strings.
-// at is where n is: its parent, and its index there when the walk knows it. The walk hands it
-// down because asking tree-sitter for a node's parent descends from the root.
-func (c *textCollector) note(n *sitter.Node, at place, loops int) {
+// note records what node n, of the given kind, reached by the walk with loops loops around it, adds
+// to the strings.
+// at is where n is: its parent, and its index there.
+func (c *textCollector) note(n *node, kind string, at place, loops int) {
 	g := c.g
 	if g == nil {
 		return
@@ -114,7 +112,6 @@ func (c *textCollector) note(n *sitter.Node, at place, loops int) {
 	if loops > 0 {
 		times = 2 // it runs more than once
 	}
-	kind := n.Kind()
 	if name, value := g.declare(f, n, kind); name != nil {
 		c.shadow[f.text(name)] = true
 		delete(c.locals, f.text(name))
@@ -147,7 +144,7 @@ func (c *textCollector) note(n *sitter.Node, at place, loops int) {
 }
 
 // add records a text for node n, the literal or the name that reads it.
-func (c *textCollector) add(t facts.Text, n *sitter.Node) {
+func (c *textCollector) add(t facts.Text, n *node) {
 	if c.sinks[n.Id()] {
 		t.Sink = facts.TextSinkSQL
 	}
@@ -158,7 +155,7 @@ func (c *textCollector) add(t facts.Text, n *sitter.Node) {
 }
 
 // sink records the first argument of a call when the call takes SQL there.
-func (c *textCollector) sink(g *textGrammar, callee, last string, arg *sitter.Node, times int) {
+func (c *textCollector) sink(g *textGrammar, callee, last string, arg *node, times int) {
 	entry, ok := c.sinkEntry(g, callee, last)
 	if !ok {
 		return
@@ -237,9 +234,9 @@ func (c *textCollector) done() []facts.Text {
 }
 
 // stringConsts returns the file's constants that hold a string, read once per file.
-func stringConsts(g *textGrammar, f *file) map[string]*sitter.Node {
+func stringConsts(g *textGrammar, f *file) map[string]*node {
 	if f.stringConsts == nil {
-		f.stringConsts = map[string]*sitter.Node{}
+		f.stringConsts = map[string]*node{}
 		for name, v := range g.consts(f) {
 			for v.Kind() == "parenthesized_expression" && v.NamedChildCount() == 1 {
 				v = v.NamedChild(0)
@@ -253,23 +250,23 @@ func stringConsts(g *textGrammar, f *file) map[string]*sitter.Node {
 }
 
 // joins reports whether n joins the strings below it into one.
-func (g *textGrammar) joins(f *file, n *sitter.Node) bool {
+func (g *textGrammar) joins(f *file, n *node) bool {
 	return n != nil && g.joinsAs(f, n, n.Kind())
 }
 
 // joinsAs is joins for a node whose kind is known.
-func (g *textGrammar) joinsAs(f *file, n *sitter.Node, kind string) bool {
+func (g *textGrammar) joinsAs(f *file, n *node, kind string) bool {
 	return g.adjacent[kind] || (g.concat[kind] && f.field(n, "operator") == "+")
 }
 
 // top reports whether n, of the given kind and below parent, is a whole string: a literal, or
 // literals joined, that is not part of a larger one.
-func (g *textGrammar) top(f *file, n *sitter.Node, kind string, parent *sitter.Node) bool {
+func (g *textGrammar) top(f *file, n *node, kind string, parent *node) bool {
 	return (g.literals[kind] || g.joinsAs(f, n, kind)) && !g.joins(f, parent)
 }
 
 // literalish reports whether n is a string: a literal, or a join holding at least one.
-func (g *textGrammar) literalish(f *file, n *sitter.Node) bool {
+func (g *textGrammar) literalish(f *file, n *node) bool {
 	if !g.literals[n.Kind()] && !g.joins(f, n) {
 		return false
 	}
@@ -279,20 +276,20 @@ func (g *textGrammar) literalish(f *file, n *sitter.Node) bool {
 
 // reads reports whether the name n, at at, is read where it is, rather than declared or used as a
 // member.
-func (g *textGrammar) reads(n *sitter.Node, at place) bool {
+func (g *textGrammar) reads(n *node, at place) bool {
 	p := at.parent
 	return p != nil && !g.inNotReadField(n, at) && (g.notReadIn == nil || !g.notReadIn(n, p))
 }
 
 // inNotReadField reports whether n is in a field of its parent where a name is not read.
-func (g *textGrammar) inNotReadField(n *sitter.Node, at place) bool {
+func (g *textGrammar) inNotReadField(n *node, at place) bool {
 	i := at.index(n)
 	return i >= 0 && g.notRead[at.parent.FieldNameForChild(uint32(i))]
 }
 
 // flatten returns the content of the string n: literals joined into one, with a hole wherever a
 // value that is not a literal is joined or interpolated, and the number of literals in it.
-func (g *textGrammar) flatten(f *file, n *sitter.Node) (string, []int, int) {
+func (g *textGrammar) flatten(f *file, n *node) (string, []int, int) {
 	var b textBuf
 	lits := g.flattenInto(f, n, &b)
 	return b.String(), b.holes, lits
@@ -306,7 +303,7 @@ type textBuf struct {
 
 func (b *textBuf) hole() { b.holes = append(b.holes, b.Len()) }
 
-func (g *textGrammar) flattenInto(f *file, n *sitter.Node, b *textBuf) int {
+func (g *textGrammar) flattenInto(f *file, n *node, b *textBuf) int {
 	switch {
 	case g.literals[n.Kind()]:
 		raw := g.raw != nil && g.raw(f, n)
@@ -332,7 +329,7 @@ func (g *textGrammar) flattenInto(f *file, n *sitter.Node, b *textBuf) int {
 // holes. The common escapes (\n, \t, \r, \", \', \\, \`, \$) are decoded, so that a string reads
 // as the program sees it; other escapes are kept as written, and a raw literal keeps them all.
 // inner is true inside a part of the literal, where text between child nodes is content too.
-func (g *textGrammar) content(f *file, n *sitter.Node, b *textBuf, raw, inner bool) {
+func (g *textGrammar) content(f *file, n *node, b *textBuf, raw, inner bool) {
 	at := n.StartByte()
 	for i := uint(0); i < n.ChildCount(); i++ {
 		c := n.Child(i)

@@ -20,7 +20,7 @@ import (
 type file struct {
 	path string
 	src  []byte
-	root *sitter.Node
+	root *node
 	test bool // a test file: every function in it is test code
 	// support is a test support file (test/helpers.ts, conftest.py): test code too, and a test that
 	// calls one of its functions is followed into it.
@@ -32,16 +32,16 @@ type file struct {
 	unitPath                             string // the unit's location, as diagrams name it
 	// lifted are the nodes a repairer took out of the source before the reading root comes from.
 	// They belong to an earlier reading of the same bytes, so their positions and text are src's.
-	lifted []*sitter.Node
+	lifted []*node
 	// consts are the file's constants that hold a string, by name (see stringConsts); nil
 	// until a test first reads a name of the file.
-	stringConsts map[string]*sitter.Node
+	stringConsts map[string]*node
 }
 
-func (f *file) text(n *sitter.Node) string { return n.Utf8Text(f.src) }
+func (f *file) text(n *node) string { return n.Utf8Text(f.src) }
 
-func line(n *sitter.Node) int    { return int(n.StartPosition().Row) + 1 }
-func endLine(n *sitter.Node) int { return int(n.EndPosition().Row) + 1 }
+func line(n *node) int    { return int(n.StartPosition().Row) + 1 }
+func endLine(n *node) int { return int(n.EndPosition().Row) + 1 }
 
 // reader is what one language adds to the shared walk.
 type reader interface {
@@ -143,17 +143,16 @@ func (l *lang) analyze(r *reuse.Run, c config.Analysis, paths []string, texts bo
 // read in its place, with those parts of the code blanked out, and the nodes of root it blanked; or
 // nil when root is read right. The copy keeps every byte's position and line.
 type repairer interface {
-	repair(src []byte, root *sitter.Node) ([]byte, []*sitter.Node)
+	repair(src []byte, root *node) ([]byte, []*node)
 }
 
-// parse parses one file with the grammar its path calls for. done frees the file's trees, after
-// which its nodes must not be used.
-func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (f *file, done func(), err error) {
+// parse parses one file with the grammar its path calls for.
+func (l *lang) parse(parser *sitter.Parser, p string, src []byte) (*file, error) {
 	pr, err := parseWith(l.r, parser, p, src)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return pr.file(p), pr.Release, nil
+	return pr.file(p), nil
 }
 
 var generatedMark = regexp.MustCompile(`(?i)(@generated|code generated .* do not edit|auto-generated)`)
@@ -173,7 +172,7 @@ func generated(cs []facts.Comment) bool {
 // comments lists the comments of a file, without their delimiters.
 func comments(f *file, directive func(string) bool) []facts.Comment {
 	var out []facts.Comment
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if !strings.Contains(n.Kind(), "comment") {
 			return true
 		}
@@ -202,7 +201,7 @@ func trimComment(s string) string {
 }
 
 // walk visits n and its descendants depth first; visit returns false to skip a node's children.
-func walk(n *sitter.Node, visit func(*sitter.Node) bool) {
+func walk(n *node, visit func(*node) bool) {
 	if n == nil || !visit(n) {
 		return
 	}
@@ -212,8 +211,8 @@ func walk(n *sitter.Node, visit func(*sitter.Node) bool) {
 }
 
 // named returns the named children of n.
-func named(n *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
+func named(n *node) []*node {
+	var out []*node
 	for i := uint(0); i < n.NamedChildCount(); i++ {
 		out = append(out, n.NamedChild(i))
 	}
@@ -227,12 +226,12 @@ var callKinds = set("call_expression", "call", "method_invocation", "object_crea
 // sameValue reports whether two expressions are one value compared with itself: spelled the same,
 // and calling nothing. Two calls spelled the same may return different values, so comparing them is
 // a check that can fail.
-func sameValue(f *file, a, b *sitter.Node) bool {
+func sameValue(f *file, a, b *node) bool {
 	if f.text(a) != f.text(b) {
 		return false
 	}
 	calls := false
-	walk(a, func(n *sitter.Node) bool {
+	walk(a, func(n *node) bool {
 		calls = calls || callKinds[n.Kind()]
 		return !calls
 	})
@@ -241,11 +240,11 @@ func sameValue(f *file, a, b *sitter.Node) bool {
 
 // arguments returns the named children of an argument list without its comments, which the
 // grammars keep as named children: a comment between arguments is not one.
-func arguments(list *sitter.Node) []*sitter.Node {
+func arguments(list *node) []*node {
 	if list == nil {
 		return nil
 	}
-	var out []*sitter.Node
+	var out []*node
 	for _, c := range named(list) {
 		if !strings.Contains(c.Kind(), "comment") {
 			out = append(out, c)
@@ -255,7 +254,7 @@ func arguments(list *sitter.Node) []*sitter.Node {
 }
 
 // field returns the text of a field of n, or "".
-func (f *file) field(n *sitter.Node, name string) string {
+func (f *file) field(n *node, name string) string {
 	if c := n.ChildByFieldName(name); c != nil {
 		return f.text(c)
 	}

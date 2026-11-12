@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -24,13 +22,13 @@ func (r *rust) traceSyntax() tsyntax {
 		idents: set("identifier"),
 		selves: set("self"),
 		funcs:  set("function_item"),
-		member: func(f *file, n *sitter.Node) (*sitter.Node, *sitter.Node) {
+		member: func(f *file, n *node) (*node, *node) {
 			if n.Kind() != "field_expression" {
 				return nil, nil
 			}
 			return n.ChildByFieldName("value"), n.ChildByFieldName("field")
 		},
-		built: func(f *file, n *sitter.Node) string {
+		built: func(f *file, n *node) string {
 			switch n.Kind() {
 			case "struct_expression":
 				return simpleType(f.field(n, "name"))
@@ -41,7 +39,7 @@ func (r *rust) traceSyntax() tsyntax {
 			}
 			return ""
 		},
-		vars: func(f *file, n *sitter.Node) map[string]string {
+		vars: func(f *file, n *node) map[string]string {
 			switch n.Kind() {
 			case "parameter", "let_declaration":
 				if t := f.field(n, "type"); t != "" {
@@ -58,7 +56,7 @@ func (r *rust) traceSyntax() tsyntax {
 
 // path reads a::b::f: Self::f, a name a use declaration binds followed by a member, or a whole
 // path of the repository or of a crate that does input or output.
-func (r *rust) path(tr *tracing, fn tfunc, n *sitter.Node, got *reached) bool {
+func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 	if n.Kind() != "scoped_identifier" {
 		return false
 	}
@@ -110,17 +108,17 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 	syn := r.traceSyntax()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		binds := r.traceBinds(f, t)
-		tr := &tracing{f: f, syn: syn, binds: binds, values: map[string]*sitter.Node{}, funcs: funcs, io: t.isIO,
+		tr := &tracing{f: f, syn: syn, binds: binds, values: map[string]*node{}, funcs: funcs, io: t.isIO,
 			types: func(name string) tbind {
 				if b, ok := binds[simpleType(name)]; ok {
 					return b
 				}
 				return tbind{id: f.unit + "." + simpleType(name), unit: f.unit}
 			}}
-		structs := map[string]*sitter.Node{}
+		structs := map[string]*node{}
 		var fns []tfunc
-		var collect func(body *sitter.Node, prefix string)
-		collect = func(body *sitter.Node, prefix string) {
+		var collect func(body *node, prefix string)
+		collect = func(body *node, prefix string) {
 			for _, c := range named(body) {
 				switch {
 				case c.Kind() == "function_item":
@@ -197,7 +195,7 @@ func (r *rust) entries(tr *tracing, fns []tfunc) []facts.Entry {
 	}
 	inline := set("closure_expression")
 	top := tfunc{own: f.unit}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.Kind() != "call_expression" {
 			return true
 		}
@@ -210,7 +208,7 @@ func (r *rust) entries(tr *tracing, fns []tfunc) []facts.Entry {
 		switch f.field(callee, "field") {
 		case "route":
 			if len(args) == 2 && args[0].Kind() == "string_literal" {
-				walk(args[1], func(c *sitter.Node) bool {
+				walk(args[1], func(c *node) bool {
 					if c.Kind() != "call_expression" {
 						return true
 					}

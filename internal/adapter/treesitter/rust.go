@@ -31,7 +31,9 @@ type rust struct {
 	automocks map[string]bool
 }
 
-func (*rust) grammar(string) *sitter.Language { return sitter.NewLanguage(rustgrammar.Language()) }
+var rustGrammar = sitter.NewLanguage(rustgrammar.Language())
+
+func (*rust) grammar(string) *sitter.Language { return rustGrammar }
 
 var rustBranches = branches{
 	kinds:  set("if_expression", "while_expression", "loop_expression", "for_expression", "match_arm"),
@@ -72,7 +74,7 @@ func (r *rust) index(v engine.Version, files []*file) {
 		f.unit = rustModule(f.path)
 		f.unitPath = f.unit
 		r.modules[f.unit] = true
-		walk(f.root, func(n *sitter.Node) bool {
+		walk(f.root, func(n *node) bool {
 			if (n.Kind() == "trait_item" || n.Kind() == "impl_item" || rustTypes[n.Kind()]) && automocked(f, n) {
 				name := f.field(n, "name")
 				if n.Kind() == "impl_item" {
@@ -86,7 +88,7 @@ func (r *rust) index(v engine.Version, files []*file) {
 }
 
 // automocked reports an item under #[automock], #[mockall::automock] or #[cfg_attr(test, automock)].
-func automocked(f *file, n *sitter.Node) bool {
+func automocked(f *file, n *node) bool {
 	for _, a := range attributes(f, n) {
 		if strings.Contains(a, "automock") {
 			return true
@@ -152,11 +154,11 @@ func (r *rust) resolve(from string, segs []string) (string, bool) {
 type useLeaf struct {
 	segs  []string
 	local string
-	at    *sitter.Node
+	at    *node
 }
 
 // uses flattens the use declarations directly under n.
-func uses(f *file, n *sitter.Node) []useLeaf {
+func uses(f *file, n *node) []useLeaf {
 	var out []useLeaf
 	for _, c := range named(n) {
 		if c.Kind() == "use_declaration" {
@@ -166,8 +168,8 @@ func uses(f *file, n *sitter.Node) []useLeaf {
 	return out
 }
 
-func flatten(f *file, n *sitter.Node, prefix []string, at *sitter.Node, out *[]useLeaf) {
-	segs := func(x *sitter.Node) []string {
+func flatten(f *file, n *node, prefix []string, at *node, out *[]useLeaf) {
+	segs := func(x *node) []string {
 		return append(append([]string{}, prefix...), strings.Split(f.text(x), "::")...)
 	}
 	switch n.Kind() {
@@ -202,7 +204,7 @@ func flatten(f *file, n *sitter.Node, prefix []string, at *sitter.Node, out *[]u
 
 func (r *rust) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.Kind() == "mod_item" && testModule(f, n) {
 			return false
 		}
@@ -217,7 +219,7 @@ func (r *rust) imports(f *file, t *tables) []facts.Import {
 }
 
 // attributes returns the attributes written right before n, innermost first.
-func attributes(f *file, n *sitter.Node) []string {
+func attributes(f *file, n *node) []string {
 	var out []string
 	for p := n.PrevSibling(); p != nil && (p.Kind() == "attribute_item" || strings.Contains(p.Kind(), "comment")); p = p.PrevSibling() {
 		if p.Kind() == "attribute_item" {
@@ -228,7 +230,7 @@ func attributes(f *file, n *sitter.Node) []string {
 }
 
 // testModule reports a module compiled only for tests: #[cfg(test)].
-func testModule(f *file, n *sitter.Node) bool {
+func testModule(f *file, n *node) bool {
 	for _, a := range attributes(f, n) {
 		if strings.ReplaceAll(a, " ", "") == "cfg(test)" {
 			return true
@@ -238,7 +240,7 @@ func testModule(f *file, n *sitter.Node) bool {
 }
 
 // rustDoc reports a /// or /** doc comment before n, above its attributes.
-func rustDoc(f *file, n *sitter.Node) bool {
+func rustDoc(f *file, n *node) bool {
 	for p := n.PrevSibling(); p != nil; p = p.PrevSibling() {
 		switch {
 		case p.Kind() == "attribute_item":

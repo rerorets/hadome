@@ -4,8 +4,6 @@ package treesitter
 
 import (
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // The helpers a Java or Kotlin test calls by bare names, and the top-level functions of Kotlin test
@@ -50,7 +48,7 @@ func (jf *jvmFile) bindTopHelpers() {
 	for name, d := range jf.kt.testFunctions[jf.f.unit] {
 		jf.topHelpers[name] = d
 	}
-	ktImports(jf.f, func(name string, wildcard bool, _ *sitter.Node) {
+	ktImports(jf.f, func(name string, wildcard bool, _ *node) {
 		if wildcard {
 			for fn, d := range jf.kt.testFunctions[name] {
 				jf.topHelpers[fn] = d
