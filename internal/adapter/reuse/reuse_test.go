@@ -1,6 +1,7 @@
 package reuse
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -789,5 +790,47 @@ func TestALoneRunRemembers(t *testing.T) {
 	}
 	if got := NewSession(nil, true).Run("base", fstest.MapFS{}, cfg).Label(); got != "base" {
 		t.Errorf("label %q", got)
+	}
+}
+
+// summing is a version that knows its files' hashes without reading them, as the file system the
+// engine wraps around a version does.
+type summing struct{ counting }
+
+func (s summing) Sum(name string) ([32]byte, error) {
+	f, ok := s.MapFS[name]
+	if !ok {
+		return [32]byte{}, &fs.PathError{Op: "sum", Path: name, Err: fs.ErrNotExist}
+	}
+	return sha256.Sum256(f.Data), nil
+}
+
+// viewpoint: behaviour
+// target: reuse.Session.Expect
+// Design "Remembering only what head can hit": a head that knows its files' hashes is learned
+// without reading any file, and those hashes answer the check of remembered results against head,
+// so head's results are served from base without head's files being read at all.
+func TestAHeadThatKnowsItsHashesIsNotRead(t *testing.T) {
+	s := NewSession(nil, true)
+	defer s.End()
+	files := fstest.MapFS{"app/a.txt": {Data: []byte("x")}, "lib/b.txt": {Data: []byte("b")}}
+	head := summing{counting{MapFS: files, reads: map[string]int{}}}
+	b, h := s.Run("base", files, cfg), s.Run("head", head, cfg)
+	if err := s.Expect(h, pathsOf(h)); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"app/a.txt", "lib/b.txt"} {
+		if _, err := readOne.Do(b, pathArg{p}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readOne.Do(h, pathArg{p}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if head.reads["app/a.txt"] != 0 || head.reads["lib/b.txt"] != 0 {
+		t.Errorf("head's files were read %v times, want none", head.reads)
+	}
+	if err := s.Expect(s.Run("head", summing{counting{MapFS: fstest.MapFS{}, reads: map[string]int{}}}, cfg), []string{"missing.txt"}); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("learning a head whose file has no hash: got %v, want not-exist", err)
 	}
 }

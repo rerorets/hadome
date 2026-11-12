@@ -54,11 +54,12 @@ func NewSession(env any, reuse bool) *Session {
 }
 
 // Expect tells the session which version head is, and which files it has: it hashes the content
-// of each, so that a result computed on base is remembered only when head can use it.
+// of each, so that a result computed on base is remembered only when head can use it. The hashes
+// come from the version when it knows them (Run.sum).
 func (s *Session) Expect(head *Run, paths []string) error {
 	contents := map[Hash]bool{}
 	for _, p := range paths {
-		_, sum, _, _, err := head.readFile(p)
+		sum, err := head.sum(p)
 		if err != nil {
 			return err
 		}
