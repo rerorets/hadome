@@ -210,9 +210,55 @@ These are the rules of reading.
 
 - **Two passes.** It reads with ANTLR's fast prediction (SLL) first, and reads again with the full prediction (LL) only when that finds an error. No input reads with SLL and fails with LL, so the result is the same as reading with LL alone
   - Reading again with LL reads the statement once more from its start. So the grammars are changed for common forms to read with SLL (see "Changes so that SLL reads" in [sql-grammars.md](../maintaining/sql-grammars.md)). The changes leave the tree of every statement that reads the same
-- **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong
+- **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong. A syntax error inside the query of a product view is not one of these (see "View queries" below)
 - **Bodies.** Function bodies (inside PostgreSQL's `$$`, the JavaScript or Python bodies of BigQuery and Snowflake) are not read, because calls from a body to other objects are not facts. T-SQL and PL/SQL bodies are part of the statement, so they are parsed to find where the statement ends
+- **Product view queries.** In product `.sql` files, the query after `AS` of views and table functions is not read with the grammar. See "View queries" below
 - **Output.** The error reports the ANTLR runtime writes to standard output are stopped, so that they never mix with hadome's output
+
+### View queries
+
+In product `.sql` files, the query of views and table functions (after `AS`) is read as tokens only, not with the grammar. The kind, name, parameters and doc the catalog uses all come before `AS`. Parsing the queries takes most of the time spent reading SQL.
+
+Example: in the statement below, the kind, name and doc of `sales.daily` are read from before `AS`. From `SELECT` to `;` only the tokens are read.
+
+```sql
+CREATE OR REPLACE VIEW sales.daily OPTIONS(description = "Sales per day") AS
+SELECT day, SUM(amount) AS total FROM sales.orders GROUP BY day;
+```
+
+**Statements it applies to**
+
+| Dialect | Statements |
+|---|---|
+| PostgreSQL | `CREATE [OR REPLACE] [RECURSIVE] VIEW`, `CREATE MATERIALIZED VIEW` |
+| MySQL | `CREATE [OR REPLACE] [ALGORITHM=…] [DEFINER=…] [SQL SECURITY …] VIEW` |
+| SQLite | `CREATE VIEW` |
+| BigQuery | `CREATE [OR REPLACE] VIEW`, `CREATE [OR REPLACE] MATERIALIZED VIEW`, `CREATE [OR REPLACE] TABLE FUNCTION` |
+| Snowflake | `CREATE [OR REPLACE] [SECURE] VIEW`, `CREATE [OR REPLACE] [SECURE] MATERIALIZED VIEW` |
+
+- It does not apply to T-SQL or Oracle. In T-SQL the `;` that ends a statement may be left out, so the tokens cannot tell where the query ends. In Oracle the `WITH` of a query may declare PL/SQL functions, so a `;` can appear inside the query
+- It does not apply to test `.sql` files. Test files are read whole with the grammar, which builds their trees. The ways of writing tests in SQL read tests from those trees
+
+**How it reads**
+
+1. When the tokens at the start of a statement (the start of a piece, or after `;`) have a form in the table above, it looks for the first `AS` outside parentheses after the kind word (`VIEW` or `FUNCTION`)
+2. From after that `AS` up to the next `;` (or the end of the piece when there is none) is the query. A `;` inside a string or a comment is told apart by the tokens
+3. The grammar is given the statement with the query replaced by `SELECT 1`. Clauses that follow the query (MySQL's `WITH CHECK OPTION`, PostgreSQL's `WITH NO DATA`) are inside the replaced range
+4. The positions and lines of the other statements, and the symbol's `Line` and `EndLine`, are those of the original file
+
+- A statement with no `AS` outside parentheses is read whole with the grammar
+- A statement whose query has no token (`CREATE VIEW sales.daily AS;`) is a statement it cannot read
+
+**Errors**
+
+| Where the error is | How it is treated |
+|---|---|
+| Before `AS` (kind, name, parameters, `OPTIONS`) | A statement it cannot read. The grammar finds it, and the file is unread |
+| In the query's tokens (an unclosed string or comment) | A statement it cannot read, because where the statement ends is not known |
+| In the query's syntax | Not found. The file is not unread, and the view's definition is read |
+
+- A syntax error in the query does not make the file unread because the effect of a view statement is decided before `AS`. A statement it cannot read makes the file unread because that statement may be a `DROP` or a rename. A view statement creates or recreates the view even when its query has an error. The symbols built from the other statements never become wrong
+- The tokens decide only where the query ends. A query holds no `;`, so where it ends does not depend on how complete the grammar is. The start of the statement and the part before `AS` are read with the dialect's grammar. Functions and procedures, whose bodies hold `;`, are not covered. So the reason "a purpose-built hand-written reader" was rejected ("What is deliberately left out") does not apply here
 
 ### Splitting statements
 
@@ -521,7 +567,7 @@ Exception markers (`gate:allow`) are written in comments, as in other languages.
 The following files are marked `Unread`, and nothing is read from them.
 
 - Files whose dialect is not decided
-- Files with even one statement the dialect's grammar cannot read
+- Files with even one statement the dialect's grammar cannot read. A syntax error in the query of a product view is not one of these ("View queries")
 - Files whose markers point to a dialect that is not enabled
 
 `unknown/unread` returns `3` when such a file newly appears at head.
@@ -585,7 +631,7 @@ The self-test cases pass SQL from Go tests, which every build reads. Name resolu
 | `tests/scope-shrunk` | Deleting the only Go test guarding an SQL function fails · deleting the function and its test passes · redefining the function in a new migration file passes · renaming the function passes · deleting the only test writing to a table with a trigger fails · deleting the only pgTAP test fails |
 | `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins fails · in a repository without `.sql` files it fails |
 | `tests/target-unknown` | A new test naming only names absent from the database returns `3` · a new test passing only non-literal values to a call that takes SQL returns `3` · SQL with a driver's parameter in a value position resolves and passes |
-| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` |
+| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` · a file whose only syntax error is in the query of a product view is read · a file with an error before a view's `AS` returns `3` |
 | `tests/no-clock`, `tests/no-sleep` | `now()` in test SQL is `clock` · `pg_sleep` is `sleep` · `now()` in a string that is not SQL does not count |
 | `tests/no-assertion`, `tests/skip-without-reason` | A pgTAP file without asserts fails · a pgTAP `skip` without a reason fails |
 
@@ -604,6 +650,7 @@ The self-test cases pass SQL from Go tests, which every build reads. Name resolu
 
 - **dbt and Jinja-templated SQL.** Models named by `{{ ref('x') }}` are a different mechanism, where the file name is the object name. A separate design
 - **Names inside function bodies.** Calls between product objects are not facts in other languages either
+- **Checking the syntax of product view queries.** No fact is made from a query. A syntax error shows when the database applies the migration
 - **Telling overloads apart by parameter type.** It needs type inference over call arguments
 - **Making row-level security policies, check constraints, defaults and generated columns symbols.** They are logic, but tests have no way of naming them. Triggers are the only thing a write to a table can be said to run
 - **Guessing SQL from ORM models or query builders.** Things like `knex('accounts').where(…)` are not read. ORM models are product code, which the other language adapters handle
