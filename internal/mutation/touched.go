@@ -12,10 +12,17 @@ import (
 // touched returns the functions of head to break, sorted by ID: those whose code the change changed
 // (new ones included), and those that a test the change wrote or rewrote calls. The second catches
 // a change that weakens only a test.
+//
+// A version may hold several functions with one ID (the same name in files split by build tags,
+// a package's init functions), so a function is matched by its ID and its body: it is unchanged
+// while base has a function of that ID with the same body not yet matched to another.
 func touched(base, head *facts.Analysis, bv, hv engine.Version) []facts.Symbol {
-	baseText := map[string]string{}
+	baseText := map[string]map[string]int{} // ID -> body -> how many base functions have it
 	for _, s := range functions(base) {
-		baseText[s.ID] = bodyText(bv, s)
+		if baseText[s.ID] == nil {
+			baseText[s.ID] = map[string]int{}
+		}
+		baseText[s.ID][bodyText(bv, s)]++
 	}
 	baseBody := map[string]string{}
 	for _, t := range base.Tests {
@@ -32,8 +39,12 @@ func touched(base, head *facts.Analysis, bv, hv engine.Version) []facts.Symbol {
 	}
 	var out []facts.Symbol
 	for _, s := range functions(head) {
-		old, ok := baseText[s.ID]
-		if !ok || old != bodyText(hv, s) || called[s.ID] {
+		body := bodyText(hv, s)
+		unchanged := baseText[s.ID][body] > 0
+		if unchanged {
+			baseText[s.ID][body]--
+		}
+		if !unchanged || called[s.ID] {
 			out = append(out, s)
 		}
 	}

@@ -142,6 +142,8 @@ flowchart TB
 Only functions that are one of these:
 
 - A function whose code the change changed (new functions included)
+  - A version may hold several functions with the same ID. For example: functions of the same name in files split by build tags (`*_unix.go` and `*_windows.go`), or the several `init` functions of one Go package
+  - So functions are matched with base by their body as well as their ID. A function is unchanged when base still has a function with the same ID and the same body. Each base function pairs with one head function only. For example, changing only `run` in `run_unix.go` does not select `run` in `run_windows.go`
 - A function called (`Test.Calls`) by a test the change rewrote. This catches a change that weakens only a test and leaves the code alone
 
 ## How to break
