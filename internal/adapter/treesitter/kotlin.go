@@ -23,7 +23,9 @@ type kotlin struct {
 	testFunctions map[string]map[string]jvmDecl
 }
 
-func (*kotlin) grammar(string) *sitter.Language { return sitter.NewLanguage(kotlingrammar.Language()) }
+var kotlinGrammar = sitter.NewLanguage(kotlingrammar.Language())
+
+func (*kotlin) grammar(string) *sitter.Language { return kotlinGrammar }
 
 var ktBranches = branches{
 	kinds:  set("if_expression", "for_statement", "while_statement", "do_while_statement", "catch_block", "when_entry"),
@@ -48,7 +50,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 	for _, f := range files {
 		pkg := ""
 		var classes, functions, values []string
-		var types, fns []*sitter.Node
+		var types, fns []*node
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_header" && n.NamedChildCount() > 0:
@@ -86,7 +88,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 }
 
 // ktImports lists the imports as (name, wildcard, node).
-func ktImports(f *file, visit func(name string, wildcard bool, n *sitter.Node)) {
+func ktImports(f *file, visit func(name string, wildcard bool, n *node)) {
 	for _, n := range named(f.root) {
 		if n.Kind() != "import" || n.NamedChildCount() == 0 {
 			continue
@@ -97,7 +99,7 @@ func ktImports(f *file, visit func(name string, wildcard bool, n *sitter.Node)) 
 
 func (k *kotlin) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
-	ktImports(f, func(name string, wildcard bool, n *sitter.Node) {
+	ktImports(f, func(name string, wildcard bool, n *node) {
 		pkg, _, internal := k.resolve(name, wildcard)
 		out = append(out, facts.Import{Path: f.path, Line: line(n), FromUnit: f.unit, ToUnit: pkg,
 			Internal: internal, IO: !internal && t.isIO(name)})
@@ -115,7 +117,7 @@ func (k *kotlin) imports(f *file, t *tables) []facts.Import {
 }
 
 // ktPublic reports whether a declaration is visible outside its module: Kotlin's default is public.
-func ktPublic(f *file, n *sitter.Node) bool {
+func ktPublic(f *file, n *node) bool {
 	for _, c := range named(n) {
 		if c.Kind() != "modifiers" {
 			continue
@@ -130,7 +132,7 @@ func ktPublic(f *file, n *sitter.Node) bool {
 }
 
 // ktOverride reports whether a declaration has the override modifier.
-func ktOverride(f *file, n *sitter.Node) bool {
+func ktOverride(f *file, n *node) bool {
 	for _, c := range named(n) {
 		if c.Kind() != "modifiers" {
 			continue
@@ -145,7 +147,7 @@ func ktOverride(f *file, n *sitter.Node) bool {
 }
 
 // ktInterface reports whether a class declaration is an interface.
-func ktInterface(f *file, n *sitter.Node) bool {
+func ktInterface(f *file, n *node) bool {
 	for i := uint(0); i < n.ChildCount(); i++ {
 		if c := n.Child(i); !c.IsNamed() && f.text(c) == "interface" {
 			return true
@@ -167,7 +169,7 @@ func (k *kotlin) symbols(f *file) []facts.Symbol {
 	return out
 }
 
-func (k *kotlin) typeSymbols(f *file, n *sitter.Node, prefix string, visible bool) []facts.Symbol {
+func (k *kotlin) typeSymbols(f *file, n *node, prefix string, visible bool) []facts.Symbol {
 	id := prefix + "." + f.field(n, "name")
 	public := visible && ktPublic(f, n)
 	typ := facts.Symbol{ID: id, Kind: facts.SymbolType, Path: f.path, Line: line(n), EndLine: endLine(n),
@@ -192,7 +194,7 @@ func (k *kotlin) typeSymbols(f *file, n *sitter.Node, prefix string, visible boo
 
 // ktDoc reports whether a declaration has a /** */ comment right before it, or before the
 // annotations repair lifted off it.
-func ktDoc(f *file, n *sitter.Node) bool {
+func ktDoc(f *file, n *node) bool {
 	_, doc := ktLeading(f, n)
 	return doc || docBefore(f, n, "/**")
 }
@@ -202,10 +204,10 @@ func ktDoc(f *file, n *sitter.Node) bool {
 // own (@Suppress("x")) before a declaration may be read so, and with two of them the declaration
 // after them is read as part of that expression and lost. Without them, the declaration reads as
 // it should, and ktLeading finds them again.
-func (*kotlin) repair(src []byte, root *sitter.Node) ([]byte, []*sitter.Node) {
-	var lifted []*sitter.Node
-	var lift func(x *sitter.Node)
-	lift = func(x *sitter.Node) {
+func (*kotlin) repair(src []byte, root *node) ([]byte, []*node) {
+	var lifted []*node
+	var lift func(x *node)
+	lift = func(x *node) {
 		for i, c := range named(x) {
 			switch c.Kind() {
 			case "annotation":
@@ -240,8 +242,8 @@ func (*kotlin) repair(src []byte, root *sitter.Node) ([]byte, []*sitter.Node) {
 // ktLeading returns the annotations repair lifted off a declaration, by name, each as the node
 // holding its arguments, and whether a /** */ comment ends on the line before the first of them.
 // They are the ones between the declaration and the code or comment before it.
-func ktLeading(f *file, n *sitter.Node) (map[string]*sitter.Node, bool) {
-	anns := map[string]*sitter.Node{}
+func ktLeading(f *file, n *node) (map[string]*node, bool) {
+	anns := map[string]*node{}
 	prev, from := n.PrevNamedSibling(), uint(0)
 	switch {
 	case prev != nil:
@@ -249,7 +251,7 @@ func ktLeading(f *file, n *sitter.Node) (map[string]*sitter.Node, bool) {
 	case n.Parent() != nil:
 		from = n.Parent().StartByte()
 	}
-	var first *sitter.Node
+	var first *node
 	for _, a := range f.lifted {
 		if a.Kind() != "annotation" || a.StartByte() < from || a.EndByte() > n.StartByte() {
 			continue
@@ -265,9 +267,9 @@ func ktLeading(f *file, n *sitter.Node) (map[string]*sitter.Node, bool) {
 }
 
 // ktAnnotationName is the simple name of an annotation's type.
-func ktAnnotationName(f *file, a *sitter.Node) string {
+func ktAnnotationName(f *file, a *node) string {
 	name := ""
-	walk(a, func(t *sitter.Node) bool {
+	walk(a, func(t *node) bool {
 		if name == "" && t.Kind() == "user_type" {
 			name = lastElem(f.text(t))
 		}
@@ -277,7 +279,7 @@ func ktAnnotationName(f *file, a *sitter.Node) string {
 }
 
 // ktEntries are the constants of an enum class.
-func ktEntries(f *file, n *sitter.Node) []string {
+func ktEntries(f *file, n *node) []string {
 	var out []string
 	for _, m := range ktMembers(n) {
 		if m.Kind() == "enum_entry" && m.NamedChildCount() > 0 {
@@ -288,7 +290,7 @@ func ktEntries(f *file, n *sitter.Node) []string {
 }
 
 // ktMembers returns the declarations in a class or object body.
-func ktMembers(n *sitter.Node) []*sitter.Node {
+func ktMembers(n *node) []*node {
 	for _, c := range named(n) {
 		if c.Kind() == "class_body" || c.Kind() == "enum_class_body" {
 			return named(c)
@@ -297,12 +299,12 @@ func ktMembers(n *sitter.Node) []*sitter.Node {
 	return nil
 }
 
-func (k *kotlin) function(f *file, n *sitter.Node, prefix string, kind facts.SymbolKind, visible bool) facts.Symbol {
+func (k *kotlin) function(f *file, n *node, prefix string, kind facts.SymbolKind, visible bool) facts.Symbol {
 	s := facts.Symbol{ID: prefix + "." + f.field(n, "name"), Kind: kind, Exported: visible && ktPublic(f, n), Doc: ktDoc(f, n),
 		DocElsewhere: ktOverride(f, n)}
 	params := ktParams(f, n)
 	k.scopes[s.ID] = scopeOf(params)
-	var body *sitter.Node
+	var body *node
 	for _, c := range named(n) {
 		if c.Kind() == "function_body" {
 			body = c
@@ -311,7 +313,7 @@ func (k *kotlin) function(f *file, n *sitter.Node, prefix string, kind facts.Sym
 	return funcSymbol(f, n, s, params, ktBranches.complexity(f, body))
 }
 
-func ktParams(f *file, n *sitter.Node) []string {
+func ktParams(f *file, n *node) []string {
 	var out []string
 	for _, c := range named(n) {
 		if c.Kind() != "function_value_parameters" {
@@ -332,7 +334,7 @@ var ktTemplate = regexp.MustCompile(`(^|[^\\])\$[A-Za-z_{]`)
 
 // ktAnnotationHolder is the node holding a lifted annotation's arguments: the annotation, or the
 // parenthesized expression this grammar may read them as after it.
-func ktAnnotationHolder(a *sitter.Node) *sitter.Node {
+func ktAnnotationHolder(a *node) *node {
 	if next := a.NextNamedSibling(); next != nil && next.Kind() == "parenthesized_expression" {
 		return next
 	}

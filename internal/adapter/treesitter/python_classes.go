@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strconv"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // What a Python test class inherits: the setup methods and autouse fixtures of its base classes,
@@ -15,7 +13,7 @@ import (
 // pyCode is a node of Python code with the file that holds it, which may not be the test's.
 type pyCode struct {
 	pf *pyFile
-	n  *sitter.Node
+	n  *node
 }
 
 func (c pyCode) key() string {
@@ -24,7 +22,7 @@ func (c pyCode) key() string {
 
 // mro lists a test class and the base classes hadome finds, in the order Python looks up a method
 // on it (C3 linearization). class is the class's possibly decorated definition.
-func (pf *pyFile) mro(class *sitter.Node) []pyCode {
+func (pf *pyFile) mro(class *node) []pyCode {
 	return pyMRO(pyCode{pf, definition(class)}, map[string]bool{})
 }
 
@@ -95,14 +93,14 @@ func inTails(seqs [][]pyCode, c pyCode) bool {
 
 // testClass reports whether a class holds tests: pytest collects a class named Test…, and unittest,
 // and pytest with it, collects any subclass of unittest.TestCase whatever its name.
-func (pf *pyFile) testClass(class *sitter.Node) bool {
+func (pf *pyFile) testClass(class *node) bool {
 	return strings.HasPrefix(pf.f.field(definition(class), "name"), "Test") || pf.unittestCase(class)
 }
 
 // unittestCase reports whether a class extends, itself or through a base class hadome finds, a
 // class outside the repository whose name ends in TestCase: unittest's TestCase and
 // IsolatedAsyncioTestCase, and the frameworks' subclasses of them, such as Django's TestCase.
-func (pf *pyFile) unittestCase(class *sitter.Node) bool {
+func (pf *pyFile) unittestCase(class *node) bool {
 	for _, c := range pf.mro(class) {
 		list := c.n.ChildByFieldName("superclasses")
 		if list == nil {
@@ -125,7 +123,7 @@ func (pf *pyFile) unittestCase(class *sitter.Node) bool {
 }
 
 // bases are the base classes of a class definition that hadome finds.
-func (pf *pyFile) bases(def *sitter.Node) []pyCode {
+func (pf *pyFile) bases(def *node) []pyCode {
 	list := def.ChildByFieldName("superclasses")
 	if list == nil {
 		return nil
@@ -141,7 +139,7 @@ func (pf *pyFile) bases(def *sitter.Node) []pyCode {
 
 // classOf finds the class an expression of the file names: a class of the file, a class imported
 // by name, or a class of an imported module (base.BaseCase).
-func (pf *pyFile) classOf(e *sitter.Node) (pyCode, bool) {
+func (pf *pyFile) classOf(e *node) (pyCode, bool) {
 	f := pf.f
 	switch e.Kind() {
 	case "identifier":
@@ -180,7 +178,7 @@ func (pf *pyFile) classIn(mod, name string) (pyCode, bool) {
 }
 
 // classDef is the class of a name at the top of the file.
-func (pf *pyFile) classDef(name string) *sitter.Node {
+func (pf *pyFile) classDef(name string) *node {
 	for _, n := range named(pf.f.root) {
 		if def := definition(n); def.Kind() == "class_definition" && pf.f.field(def, "name") == name {
 			return def
@@ -210,7 +208,7 @@ func (r *python) moduleFile(mod string, t *tables) *pyFile {
 // classSetups are the setup methods that run for a test of a class: for each name of pySetupNames,
 // the first definition along the class's MRO, and the next one each time a definition calls the
 // method of its name on super() or on a base class by name.
-func (pf *pyFile) classSetups(class *sitter.Node) []pyCode {
+func (pf *pyFile) classSetups(class *node) []pyCode {
 	mro := pf.mro(class)
 	var out []pyCode
 	for _, name := range pySetupNames {
@@ -231,7 +229,7 @@ func (pf *pyFile) classSetups(class *sitter.Node) []pyCode {
 
 // classAutouse are the bodies of the autouse fixtures a test class and its base classes hold. A
 // fixture of a name already found earlier in the MRO overrides a later one, as pytest does.
-func (pf *pyFile) classAutouse(class *sitter.Node) []pyCode {
+func (pf *pyFile) classAutouse(class *node) []pyCode {
 	seen := map[string]bool{}
 	var out []pyCode
 	for _, c := range pf.mro(class) {
@@ -254,7 +252,7 @@ func (pf *pyFile) classAutouse(class *sitter.Node) []pyCode {
 }
 
 // method is the method of a name a class definition holds itself.
-func (pf *pyFile) method(def *sitter.Node, name string) *sitter.Node {
+func (pf *pyFile) method(def *node, name string) *node {
 	for _, m := range named(def.ChildByFieldName("body")) {
 		if md := definition(m); md.Kind() == "function_definition" && pf.f.field(md, "name") == name {
 			return md
@@ -265,9 +263,9 @@ func (pf *pyFile) method(def *sitter.Node, name string) *sitter.Node {
 
 // callsInherited reports whether a method body calls the method of its name on super(), or on a
 // class by name (Base.setUp(self)), which runs the next definition along the MRO.
-func (pf *pyFile) callsInherited(body *sitter.Node, name string) bool {
+func (pf *pyFile) callsInherited(body *node, name string) bool {
 	found := false
-	walk(body, func(n *sitter.Node) bool {
+	walk(body, func(n *node) bool {
 		if found || n.Kind() == "function_definition" || n.Kind() == "class_definition" {
 			return false
 		}

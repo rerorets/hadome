@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -30,7 +28,7 @@ type callCount struct {
 	scopes map[string]bool
 }
 
-func newTest(f *file, name string, at *sitter.Node) *testFacts {
+func newTest(f *file, name string, at *node) *testFacts {
 	return &testFacts{f: f, calls: map[string]*callCount{},
 		test: facts.Test{Name: name, Path: f.path, Line: line(at), Declared: declaredBefore(f, at)}}
 }
@@ -39,7 +37,7 @@ func newTest(f *file, name string, at *sitter.Node) *testFacts {
 // ends on the line right before the test, or before the attributes on it. The test is the node
 // itself, or the statement or decorated definition that holds it. extra adds lines the language
 // keeps elsewhere, such as a Python docstring.
-func declaredBefore(f *file, at *sitter.Node, extra ...string) map[string][]string {
+func declaredBefore(f *file, at *node, extra ...string) map[string][]string {
 	n := at
 	for p := n.Parent(); p != nil && (p.Kind() == "expression_statement" || p.Kind() == "decorated_definition"); p = p.Parent() {
 		n = p
@@ -73,7 +71,7 @@ func commentLines(text string) []string {
 
 // call records one call site of a target; scope is the argument where the user or tenant goes, or
 // nil. A call inside a loop counts twice, because it runs more than once.
-func (t *testFacts) call(target string, scope *sitter.Node) {
+func (t *testFacts) call(target string, scope *node) {
 	cc := t.calls[target]
 	if cc == nil {
 		cc = &callCount{scopes: map[string]bool{}}
@@ -88,18 +86,18 @@ func (t *testFacts) call(target string, scope *sitter.Node) {
 	}
 }
 
-func (t *testFacts) hazard(cat facts.HazardCategory, n *sitter.Node) {
+func (t *testFacts) hazard(cat facts.HazardCategory, n *node) {
 	t.hazardIn(t.f, cat, n)
 }
 
 // hazardIn records a hazard at n in f, a file other than the test's when the test inherits it.
-func (t *testFacts) hazardIn(f *file, cat facts.HazardCategory, n *sitter.Node) {
+func (t *testFacts) hazardIn(f *file, cat facts.HazardCategory, n *node) {
 	t.addHazard(facts.Hazard{Category: cat, Path: f.path, Line: line(n), Evidence: f.text(n)})
 }
 
 // fileHazard records a hazard at n in the test's file that is outside the tests and applies to each
 // of them, such as a module mocked at the top of the file.
-func (t *testFacts) fileHazard(cat facts.HazardCategory, n *sitter.Node) {
+func (t *testFacts) fileHazard(cat facts.HazardCategory, n *node) {
 	t.addHazard(facts.Hazard{Category: cat, Path: t.f.path, Line: line(n), Evidence: t.f.text(n), FileWide: true})
 }
 
@@ -112,19 +110,19 @@ func (t *testFacts) addHazard(hz facts.Hazard) {
 	t.test.Hazards = append(t.test.Hazards, hz)
 }
 
-func (t *testFacts) skip(reason string, at *sitter.Node) {
+func (t *testFacts) skip(reason string, at *node) {
 	t.test.Skip = facts.Skip{Skipped: true, Reason: reason, Line: line(at)}
 }
 
 // skipIf records a skip that happens only in some cases; an unconditional skip wins over it.
-func (t *testFacts) skipIf(reason string, at *sitter.Node) {
+func (t *testFacts) skipIf(reason string, at *node) {
 	if !t.test.Skip.Skipped {
 		t.test.Skip = facts.Skip{Conditional: true, Reason: reason, Line: line(at)}
 	}
 }
 
 // conditional reports whether n runs only in some cases: it is inside a branch below stop.
-func conditional(n, stop *sitter.Node, branchKinds map[string]bool) bool {
+func conditional(n, stop *node, branchKinds map[string]bool) bool {
 	for p := n.Parent(); p != nil && p.Id() != stop.Id(); p = p.Parent() {
 		if branchKinds[p.Kind()] {
 			return true
@@ -144,7 +142,7 @@ func (t *testFacts) done() facts.Test {
 
 // bodyIn walks a test body, or a helper's, written in f; tb are the tables of f's language. The
 // strings it reaches belong to the test (see textCollector).
-func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
+func (t *testFacts) bodyIn(f *file, tb *tables, n *node, isLoop func(*node) bool, visit func(*node) bool) {
 	in, inTables := t.texts.in, t.texts.tables
 	t.texts.use(f, tb)
 	t.body(n, placeOf(n), isLoop, visit)
@@ -155,9 +153,9 @@ func (t *testFacts) bodyIn(f *file, tb *tables, n *sitter.Node, isLoop func(*sit
 // children; loops are tracked here for every language, and so are the strings the walk reaches.
 // A loop's children are each walked as a body of their own, so that n itself is never taken for a
 // loop.
-func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) bool, visit func(*sitter.Node) bool) {
-	var step func(c *sitter.Node, at place)
-	step = func(c *sitter.Node, at place) {
+func (t *testFacts) body(n *node, at place, isLoop func(*node) bool, visit func(*node) bool) {
+	var step func(c *node, at place)
+	step = func(c *node, at place) {
 		t.texts.note(c, at, t.loops)
 		if c != n && isLoop(c) {
 			t.loops++
@@ -182,24 +180,23 @@ func (t *testFacts) body(n *sitter.Node, at place, isLoop func(*sitter.Node) boo
 // place is where a node is in its tree: its parent, nil at the root, and its index among the
 // parent's children, or -1 when the walk does not know it.
 type place struct {
-	parent *sitter.Node
+	parent *node
 	i      int
 }
 
-// placeOf is the place of n, asking tree-sitter for its parent.
-func placeOf(n *sitter.Node) place { return place{parent: n.Parent(), i: -1} }
+// placeOf is the place of n, with its parent and no index.
+func placeOf(n *node) place { return place{parent: n.Parent(), i: -1} }
 
-// index returns n's index among its parent's children, or -1 when n has no parent.
-func (at place) index(n *sitter.Node) int {
+// index returns n's index among its parent's children, or -1 when n has no parent or is not one
+// of the place's children.
+func (at place) index(n *node) int {
 	if at.i >= 0 || at.parent == nil {
 		return at.i
 	}
-	for i := uint(0); i < at.parent.ChildCount(); i++ {
-		if at.parent.Child(i).Id() == n.Id() {
-			return int(i)
-		}
+	if n.parent != at.parent {
+		return -1
 	}
-	return -1
+	return int(n.index)
 }
 
 // assertPrefixes start the names of the functions that check something in the common test
@@ -244,7 +241,7 @@ type useGrammar struct {
 
 // readName counts n, an identifier naming product code, as a read unless it is being called or it
 // sits in a type. A.b.c is one use: it is a call only when the whole of it is called.
-func (t *testFacts) readName(n *sitter.Node, g useGrammar) {
+func (t *testFacts) readName(n *node, g useGrammar) {
 	if p := n.Parent(); p != nil {
 		if field, ok := g.names[p.Kind()]; ok && isField(p, field, n) {
 			return // the member side of a.b: a decides what b is
@@ -273,8 +270,8 @@ func (t *testFacts) readName(n *sitter.Node, g useGrammar) {
 	t.test.Reads++
 }
 
-func isField(p *sitter.Node, field string, c *sitter.Node) bool {
-	var got *sitter.Node
+func isField(p *node, field string, c *node) bool {
+	var got *node
 	switch {
 	case field == "" && p.NamedChildCount() > 0:
 		got = p.NamedChild(0)
@@ -292,7 +289,7 @@ func isField(p *sitter.Node, field string, c *sitter.Node) bool {
 // string some grammars keep outside any node, is a token too. context is the setup that runs for the
 // test, possibly in another file; tests with the same body under different setup check different
 // things, so its tokens are part of the Body, after a separator no source holds.
-func (t *testFacts) fingerprint(nodes []*sitter.Node, names []*sitter.Node, context ...codeIn) {
+func (t *testFacts) fingerprint(nodes []*node, names []*node, context ...codeIn) {
 	leaveOut := map[uintptr]bool{}
 	for _, n := range names {
 		if n != nil {
@@ -300,8 +297,8 @@ func (t *testFacts) fingerprint(nodes []*sitter.Node, names []*sitter.Node, cont
 		}
 	}
 	var toks []string
-	var add func(f *file, n *sitter.Node)
-	add = func(f *file, n *sitter.Node) {
+	var add func(f *file, n *node)
+	add = func(f *file, n *node) {
 		if leaveOut[n.Id()] || strings.Contains(n.Kind(), "comment") {
 			return
 		}
@@ -366,5 +363,5 @@ func testedName(name string) string {
 // codeIn is a node with the file that holds it.
 type codeIn struct {
 	f *file
-	n *sitter.Node
+	n *node
 }

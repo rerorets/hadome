@@ -6,8 +6,6 @@ import (
 	"path"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -34,7 +32,7 @@ func (pf *pyFile) bindSetup() {
 }
 
 // pyFixture reports whether a decorated function is a pytest fixture.
-func pyFixture(f *file, n *sitter.Node) bool {
+func pyFixture(f *file, n *node) bool {
 	for _, d := range named(n) {
 		if d.Kind() == "decorator" && strings.Contains(f.text(d), "fixture") {
 			return true
@@ -45,7 +43,7 @@ func pyFixture(f *file, n *sitter.Node) bool {
 
 // pyAutouse reports whether a decorated function is a pytest fixture marked autouse=True: pytest
 // runs it before every test it reaches without the test asking for it.
-func pyAutouse(f *file, n *sitter.Node) bool {
+func pyAutouse(f *file, n *node) bool {
 	for _, d := range named(n) {
 		if d.Kind() == "decorator" && strings.Contains(f.text(d), "fixture") &&
 			strings.Contains(strings.ReplaceAll(f.text(d), " ", ""), "autouse=True") {
@@ -60,7 +58,7 @@ func pyAutouse(f *file, n *sitter.Node) bool {
 // base classes, its class's setUp and the like, its own or inherited, and the module's setup_module
 // and setup_function. Reading the clock or sleeping there makes every test they run for depend on time, so each hazard is reported at the
 // setup's own line. Only those hazards are the test's: what the setup calls is not what it guards.
-func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
+func (pf *pyFile) setupHazards(t *testFacts, class *node) {
 	sw := &pyWalk{pf: pf, t: newTest(pf.f, "", pf.f.root), vars: map[string]string{}, locals: map[string]bool{},
 		walking: map[string]bool{}}
 	for _, name := range pf.autouseInReach() {
@@ -82,7 +80,7 @@ func (pf *pyFile) setupHazards(t *testFacts, class *sitter.Node) {
 // setupBodies are the bodies of the setup functions that run before a test of class, or of the
 // module when class is nil, other than the fixtures of the file and its conftest.py files: the
 // module's, then the class's own and those it inherits.
-func (pf *pyFile) setupBodies(class *sitter.Node) []pyCode {
+func (pf *pyFile) setupBodies(class *node) []pyCode {
 	var out []pyCode
 	if body := pf.helpers["setup_module"]; body != nil {
 		out = append(out, pyCode{pf, body})
@@ -126,9 +124,9 @@ func (pf *pyFile) autouseInReach() []string {
 
 // built returns the class a fixture's body returns or yields when it builds one of the product's:
 // return Store(), or yield Store().
-func (pf *pyFile) built(body *sitter.Node) string {
+func (pf *pyFile) built(body *node) string {
 	class := ""
-	walk(body, func(n *sitter.Node) bool {
+	walk(body, func(n *node) bool {
 		if class != "" || n.Kind() == "function_definition" || n.Kind() == "lambda" {
 			return false
 		}
@@ -143,7 +141,7 @@ func (pf *pyFile) built(body *sitter.Node) string {
 }
 
 // lambdaHelper records helper = lambda …: as a helper whose body is the lambda's.
-func (pf *pyFile) lambdaHelper(n *sitter.Node) {
+func (pf *pyFile) lambdaHelper(n *node) {
 	if n == nil || n.Kind() != "assignment" {
 		return
 	}
@@ -159,7 +157,7 @@ func (pf *pyFile) lambdaHelper(n *sitter.Node) {
 // given types what a test receives from its setup: the fixtures it takes as parameters, and what
 // its class's autouse fixtures and setUp or setup_method, its own or inherited, store on self
 // (self.store = Store()).
-func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
+func (pf *pyFile) given(def, class *node) map[string]string {
 	f := pf.f
 	out := map[string]string{}
 	for _, p := range pyParams(f, def) {
@@ -181,7 +179,7 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 	}
 	for _, c := range order {
 		cf := c.pf.f
-		walk(c.n, func(n *sitter.Node) bool {
+		walk(c.n, func(n *node) bool {
 			if n.Kind() != "assignment" {
 				return true
 			}
@@ -200,7 +198,7 @@ func (pf *pyFile) given(def, class *sitter.Node) map[string]string {
 
 // fixtureDef finds the pytest fixture a name stands for: in the file, or else in the conftest.py of
 // its directory and the directories above, nearest first. It returns the file that holds it.
-func (pf *pyFile) fixtureDef(name string) (*pyFile, *sitter.Node) {
+func (pf *pyFile) fixtureDef(name string) (*pyFile, *node) {
 	if d := pf.fixtureDefs[name]; d != nil {
 		return pf, d
 	}

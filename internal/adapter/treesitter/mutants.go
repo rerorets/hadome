@@ -42,16 +42,16 @@ type breaks struct {
 	literals  map[string]string // each boolean literal and its negation
 	returns   map[string]bool   // return statements; their first named child is the value
 	// call reports whether a statement is only a call, which removing it breaks.
-	call func(f *file, n *sitter.Node) bool
+	call func(f *file, n *node) bool
 	// removed replaces a removed call statement.
 	removed string
 	// tail is set where a body's last expression is its value (Rust).
-	tail func(body *sitter.Node) *sitter.Node
+	tail func(body *node) *node
 	// body returns a function's body; nil for a function without one.
-	body func(fn *sitter.Node) *sitter.Node
+	body func(fn *node) *node
 	// zero returns the zero value of a function's declared result type, or "" when it has none
 	// that hadome mutate knows.
-	zero func(f *file, fn *sitter.Node) string
+	zero func(f *file, fn *node) string
 	// constants reads the names a file declares outside functions, for zeroConstant.
 	constants func(f *file) consts
 	// binders are the nodes that declare names inside a function, each with the field that holds
@@ -64,7 +64,7 @@ type breaks struct {
 	floatsOnly bool
 }
 
-func bodyField(fn *sitter.Node) *sitter.Node { return fn.ChildByFieldName("body") }
+func bodyField(fn *node) *node { return fn.ChildByFieldName("body") }
 
 // Mutants makes the mutants of the given functions of a version. It reads syntax only and runs
 // nothing. The order is that of the files' paths, then of the functions' lines, then of positions.
@@ -99,11 +99,10 @@ func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms
 	if err != nil {
 		return nil, err
 	}
-	f, done, err := l.parse(parser, p, src)
+	f, err := l.parse(parser, p, src)
 	if err != nil {
 		return nil, err
 	}
-	defer done()
 	sort.Slice(syms, func(i, j int) bool { return syms[i].Line < syms[j].Line })
 	var declared consts
 	if l.breaks.constants != nil {
@@ -128,9 +127,9 @@ func (l *lang) mutantsIn(parser *sitter.Parser, v engine.Version, p string, syms
 }
 
 // functionAt returns the outermost function that starts on a line, as the symbol's line names it.
-func (l *lang) functionAt(f *file, at int) *sitter.Node {
-	var found *sitter.Node
-	walk(f.root, func(n *sitter.Node) bool {
+func (l *lang) functionAt(f *file, at int) *node {
+	var found *node
+	walk(f.root, func(n *node) bool {
 		if found != nil || endLine(n) < at || line(n) > at {
 			return false
 		}
@@ -148,15 +147,15 @@ type mutator struct {
 	b      *breaks
 	f      *file
 	fn     string
-	decl   *sitter.Node // the function's declaration
+	decl   *node // the function's declaration
 	zero   string
 	consts consts
 	seen   map[string]int // anchor without its index -> how many so far
 	out    []facts.Mutant
 }
 
-func (m *mutator) function(body *sitter.Node) {
-	walk(body, func(n *sitter.Node) bool {
+func (m *mutator) function(body *node) {
+	walk(body, func(n *node) bool {
 		kind := n.Kind()
 		if n != body && (m.b.functions[kind] || m.b.nested[kind]) || strings.Contains(kind, "comment") {
 			return false // a nested function is not broken, as with Go's function literals
@@ -170,7 +169,7 @@ func (m *mutator) function(body *sitter.Node) {
 }
 
 // node makes the mutants of one node, without its children.
-func (m *mutator) node(n *sitter.Node) {
+func (m *mutator) node(n *node) {
 	kind := n.Kind()
 	switch {
 	case m.b.binary[kind]:
@@ -189,7 +188,7 @@ func (m *mutator) node(n *sitter.Node) {
 }
 
 // negation drops the operator of a negation: !x becomes x.
-func (m *mutator) negation(n *sitter.Node) {
+func (m *mutator) negation(n *node) {
 	op := n.Child(0)
 	if op != nil && !op.IsNamed() && (m.f.text(op) == "!" || m.f.text(op) == "not") && n.ChildCount() > 1 {
 		m.add(negateBoolean, op.StartByte(), n.Child(1).StartByte(), "")
@@ -198,7 +197,7 @@ func (m *mutator) negation(n *sitter.Node) {
 
 // returned breaks a returned value into the zero value, unless negating a boolean already breaks it
 // or it is the zero value already, written out or as a constant.
-func (m *mutator) returned(v *sitter.Node) {
+func (m *mutator) returned(v *node) {
 	if v == nil || m.zero == "" {
 		return
 	}
@@ -210,7 +209,7 @@ func (m *mutator) returned(v *sitter.Node) {
 }
 
 // value is the first named child of n that is not a comment.
-func value(n *sitter.Node) *sitter.Node {
+func value(n *node) *node {
 	for _, c := range named(n) {
 		if !strings.Contains(c.Kind(), "comment") {
 			return c
@@ -219,7 +218,7 @@ func value(n *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func (m *mutator) binary(n *sitter.Node) {
+func (m *mutator) binary(n *node) {
 	for i := uint(0); i < n.ChildCount(); i++ {
 		op := n.Child(i)
 		if op.IsNamed() {
@@ -236,7 +235,7 @@ func (m *mutator) binary(n *sitter.Node) {
 }
 
 // stringy reports a string literal on either side: + on strings joins them.
-func (m *mutator) stringy(n *sitter.Node) bool {
+func (m *mutator) stringy(n *node) bool {
 	for _, c := range named(n) {
 		if m.b.strings[c.Kind()] {
 			return true
@@ -260,7 +259,7 @@ func (m *mutator) add(kind string, start, end uint, replacement string) {
 // reformatting the line or commenting it does not make its mutants new.
 func tokens(f *file, row uint) string {
 	var out []string
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		if n.EndPosition().Row < row || n.StartPosition().Row > row || strings.Contains(n.Kind(), "comment") {
 			return false
 		}
@@ -275,7 +274,7 @@ func tokens(f *file, row uint) string {
 }
 
 // only reports whether a statement holds nothing but one node of a kind (and its semicolon).
-func only(n *sitter.Node, kinds ...string) bool {
+func only(n *node, kinds ...string) bool {
 	v := value(n)
 	return v != nil && n.NamedChildCount() == 1 && slices.Contains(kinds, v.Kind())
 }

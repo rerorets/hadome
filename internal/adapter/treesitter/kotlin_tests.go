@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -32,7 +30,7 @@ func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
 	// kotest's matchers: x.shouldBe(3), and x shouldBe 3 as an infix call. MockK's checks of
 	// suspending calls (coVerify, coVerifyOrder) and confirmVerified start with neither verify nor
 	// assert.
-	jf := &jvmFile{f: f, j: &k.jvm, kt: k, t: t, names: map[string]string{}, helpers: map[string]*sitter.Node{},
+	jf := &jvmFile{f: f, j: &k.jvm, kt: k, t: t, names: map[string]string{}, helpers: map[string]*node{},
 		assertPrefixes: []string{"should", "coverify", "confirmverified"}}
 	for _, fn := range k.functions[f.unit] {
 		jf.names[fn] = f.unit + "." + fn
@@ -40,14 +38,14 @@ func (k *kotlin) testFile(f *file, t *tables) *jvmFile {
 	for _, v := range k.values[f.unit] {
 		jf.names[v] = f.unit + "." + v
 	}
-	jf.bindClasses(func(v func(string, bool, *sitter.Node)) { ktImports(f, v) })
+	jf.bindClasses(func(v func(string, bool, *node)) { ktImports(f, v) })
 	jf.bindTopHelpers()
 	return jf
 }
 
 // ktAnnotations returns a declaration's annotations by name.
-func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
-	out := map[string]*sitter.Node{}
+func ktAnnotations(f *file, n *node) map[string]*node {
+	out := map[string]*node{}
 	for _, c := range named(n) {
 		if c.Kind() != "modifiers" {
 			continue
@@ -56,7 +54,7 @@ func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
 			if a.Kind() != "annotation" {
 				continue
 			}
-			walk(a, func(x *sitter.Node) bool {
+			walk(a, func(x *node) bool {
 				if x.Kind() == "user_type" {
 					out[lastElem(f.text(x))] = a
 					return false
@@ -68,7 +66,7 @@ func ktAnnotations(f *file, n *sitter.Node) map[string]*sitter.Node {
 	return out
 }
 
-func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node, outer jvmScope) []facts.Test {
+func (jf *jvmFile) ktClass(n *node, prefix string, classSkip *node, outer jvmScope) []facts.Test {
 	f := jf.f
 	name := prefix + f.field(n, "name")
 	anns := ktAnnotations(f, n)
@@ -97,7 +95,7 @@ func (jf *jvmFile) ktClass(n *sitter.Node, prefix string, classSkip *sitter.Node
 	return out
 }
 
-func ktBody(fn *sitter.Node) *sitter.Node {
+func ktBody(fn *node) *node {
 	for _, c := range named(fn) {
 		if c.Kind() == "function_body" {
 			return c
@@ -106,9 +104,9 @@ func ktBody(fn *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope) facts.Test {
+func (jf *jvmFile) ktTest(name string, m, classSkip *node, scope jvmScope) facts.Test {
 	t := newTest(jf.f, name, m)
-	nodes := append(append([]*sitter.Node{}, scope.inputs...), m)
+	nodes := append(append([]*node{}, scope.inputs...), m)
 	t.fingerprint(nodes, append(jvmNameOnly(jf.f, nodes), m.ChildByFieldName("name")))
 	skip := classSkip
 	for k, a := range ktAnnotations(jf.f, m) {
@@ -119,12 +117,12 @@ func (jf *jvmFile) ktTest(name string, m, classSkip *sitter.Node, scope jvmScope
 	if skip != nil {
 		t.skip(annotationReason(jf.f, skip), skip)
 	}
-	w := jf.startTest(t, scope, func(w *jvmWalk, n *sitter.Node) { w.walk(n, ktLoops, w.ktVisit) })
+	w := jf.startTest(t, scope, func(w *jvmWalk, n *node) { w.walk(n, ktLoops, w.ktVisit) })
 	w.walk(ktBody(m), ktLoops, w.ktVisit)
 	return t.done()
 }
 
-func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
+func (w *jvmWalk) ktVisit(n *node) bool {
 	switch n.Kind() {
 	case "property_declaration":
 		w.ktProperty(n)
@@ -132,7 +130,7 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 		w.ktCall(n)
 	case "binary_expression":
 		if callee, arg := ktTypedCall(n); callee != nil {
-			w.ktInvoke(n, callee, []*sitter.Node{arg})
+			w.ktInvoke(n, callee, []*node{arg})
 			w.walk(arg, ktLoops, w.ktVisit) // not the type argument, which is no value the test reads
 			return false
 		}
@@ -154,7 +152,7 @@ func (w *jvmWalk) ktVisit(n *sitter.Node) bool {
 
 // ktTemplateReads counts the product values and value fields a string substitutes by name
 // ("IN ($COUNTED)").
-func (w *jvmWalk) ktTemplateReads(n *sitter.Node) {
+func (w *jvmWalk) ktTemplateReads(n *node) {
 	for _, name := range ktTemplateNames(w.jf.f, n) {
 		if !w.locals[name] && (w.jf.names[name] != "" || w.valueField(name)) {
 			w.t.test.Reads++
@@ -165,7 +163,7 @@ func (w *jvmWalk) ktTemplateReads(n *sitter.Node) {
 // ktTemplateNames lists the names a one-line string substitutes as $name. This grammar keeps them
 // in the string's text, though it reads ${…}, and the $name of a multi-line string, as code of their
 // own. An escaped \$ is a dollar sign.
-func ktTemplateNames(f *file, n *sitter.Node) []string {
+func ktTemplateNames(f *file, n *node) []string {
 	text := []byte(f.text(n))
 	for _, c := range named(n) {
 		if c.Kind() == "interpolation" {
@@ -194,7 +192,7 @@ var ktUses = useGrammar{
 }
 
 // ktProperty records a local variable, typed when it holds an object of a known class (ktBuilt).
-func (w *jvmWalk) ktProperty(n *sitter.Node) {
+func (w *jvmWalk) ktProperty(n *node) {
 	f := w.jf.f
 	name := ""
 	for _, c := range named(n) {
@@ -224,12 +222,12 @@ var (
 	ktScopeFunctions = set("apply", "also", "let", "run", "takeIf", "takeUnless")
 )
 
-func (w *jvmWalk) ktCall(n *sitter.Node) {
+func (w *jvmWalk) ktCall(n *node) {
 	callee := n.NamedChild(0)
 	if callee.Kind() == "call_expression" {
 		return // f(x) { … }: the call is the inner f(x), visited on its own
 	}
-	var args []*sitter.Node
+	var args []*node
 	for _, c := range named(n) {
 		if c.Kind() == "value_arguments" {
 			for _, a := range arguments(c) {
@@ -243,7 +241,7 @@ func (w *jvmWalk) ktCall(n *sitter.Node) {
 }
 
 // ktInvoke handles the call n of callee: a constructor of the product, or what invoke handles.
-func (w *jvmWalk) ktInvoke(n, callee *sitter.Node, args []*sitter.Node) {
+func (w *jvmWalk) ktInvoke(n, callee *node, args []*node) {
 	f := w.jf.f
 	obj, name, built := "", f.text(callee), ""
 	if callee.Kind() == "navigation_expression" && callee.NamedChildCount() == 2 {
@@ -256,7 +254,7 @@ func (w *jvmWalk) ktInvoke(n, callee *sitter.Node, args []*sitter.Node) {
 		w.t.call(w.jf.names[name], nil) // a constructor call: Store()
 		return
 	}
-	w.invoke(n, obj, name, args, func(body *sitter.Node) { w.walk(body, ktLoops, w.ktVisit) })
+	w.invoke(n, obj, name, args, func(body *node) { w.walk(body, ktLoops, w.ktVisit) })
 	if built != "" {
 		w.t.call(built+"."+name, scopeArg(w.jf.j.scopes, built+"."+name, args))
 	}
@@ -271,9 +269,9 @@ func packageOf(class string) string {
 // object its initializer builds (ktBuilt), or, with no initializer (lateinit, injected), by its
 // declared type. A property built some other way (mockk(), a factory) is left untyped: what it holds
 // is unknown.
-func (jf *jvmFile) ktFieldType(n *sitter.Node) (string, string) {
+func (jf *jvmFile) ktFieldType(n *node) (string, string) {
 	f := jf.f
-	name, declared, init := "", "", (*sitter.Node)(nil)
+	name, declared, init := "", "", (*node)(nil)
 	for _, c := range named(n) {
 		switch c.Kind() {
 		case "variable_declaration":
@@ -300,7 +298,7 @@ func (jf *jvmFile) ktFieldType(n *sitter.Node) (string, string) {
 
 // ktConstructorFields types the val and var parameters of a test class's primary constructor
 // (constructor injection) by their declared types.
-func (jf *jvmFile) ktConstructorFields(class *sitter.Node) map[string]string {
+func (jf *jvmFile) ktConstructorFields(class *node) map[string]string {
 	f := jf.f
 	out := map[string]string{}
 	for _, c := range named(class) {
@@ -328,9 +326,9 @@ func (jf *jvmFile) ktConstructorFields(class *sitter.Node) map[string]string {
 	return out
 }
 
-func ktClassParameters(ctor *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	walk(ctor, func(n *sitter.Node) bool {
+func ktClassParameters(ctor *node) []*node {
+	var out []*node
+	walk(ctor, func(n *node) bool {
 		if n.Kind() == "class_parameter" {
 			out = append(out, n)
 			return false
@@ -358,7 +356,7 @@ func copyMap(m map[string]string) map[string]string {
 
 // ktArgumentValue is the expression of a value_argument: its last named child, since a named
 // argument (expected = 1) starts with the name. Nil when it holds none.
-func ktArgumentValue(a *sitter.Node) *sitter.Node {
+func ktArgumentValue(a *node) *node {
 	if a.NamedChildCount() == 0 {
 		return nil
 	}
@@ -368,7 +366,7 @@ func ktArgumentValue(a *sitter.Node) *sitter.Node {
 // ktNoteValueField records a property of a test class whose initializer names something of the
 // product: its expression after the declaration (val query = QUERY.trim()). It returns the
 // property's name, and whether it is such a field.
-func (jf *jvmFile) ktNoteValueField(n *sitter.Node) (string, bool) {
+func (jf *jvmFile) ktNoteValueField(n *node) (string, bool) {
 	name, uses := "", false // what comes before the name (modifiers) is not the initializer
 	for _, c := range named(n) {
 		switch {
@@ -376,7 +374,7 @@ func (jf *jvmFile) ktNoteValueField(n *sitter.Node) (string, bool) {
 			name = jf.f.text(c.NamedChild(0))
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
 			uses = jf.noteValueField(name, c) || uses
-			walk(c, func(x *sitter.Node) bool {
+			walk(c, func(x *node) bool {
 				if x.Kind() != "string_literal" {
 					return true
 				}

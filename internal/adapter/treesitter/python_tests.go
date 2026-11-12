@@ -5,8 +5,6 @@ package treesitter
 import (
 	"strings"
 
-	sitter "github.com/tree-sitter/go-tree-sitter"
-
 	"github.com/rerorets/hadome/internal/facts"
 )
 
@@ -23,12 +21,12 @@ type pyFile struct {
 	// unresolved are the names imported from what looks like the repository's own module but
 	// resolves to none. Calling one is a call hadome cannot identify.
 	unresolved map[string]bool
-	helpers    map[string]*sitter.Node
-	mocks      []*sitter.Node
+	helpers    map[string]*node
+	mocks      []*node
 	// fixtures types the pytest fixtures of the file: name -> the class it returns or yields.
 	fixtures map[string]string
 	// fixtureDefs are the pytest fixtures of the file: name -> the function.
-	fixtureDefs map[string]*sitter.Node
+	fixtureDefs map[string]*node
 	// autouse are the names of the file's pytest fixtures marked autouse=True, in file order.
 	autouse []string
 }
@@ -117,7 +115,7 @@ func (pf *pyFile) importsMock(im pyImport) bool {
 }
 
 // test reads one test; n is its (possibly decorated) definition, class the enclosing class's.
-func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
+func (pf *pyFile) test(name string, n, class *node) facts.Test {
 	f := pf.f
 	def := definition(n)
 	t := newTest(f, name, def)
@@ -129,7 +127,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 		}
 	}
 	// A class's decorators (@pytest.mark.parametrize) give every test in it its inputs.
-	var inputs []*sitter.Node
+	var inputs []*node
 	if class != nil && class.Kind() == "decorated_definition" {
 		for _, c := range named(class) {
 			if c.Kind() == "decorator" {
@@ -139,7 +137,7 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 	}
 	nodes := append(inputs, n)
 	t.fingerprint(nodes, append(pyNameOnly(f, nodes), def.ChildByFieldName("name")), context...)
-	for _, d := range []*sitter.Node{class, n} {
+	for _, d := range []*node{class, n} {
 		if d != nil && d.Kind() == "decorated_definition" {
 			pf.decorators(t, d)
 		}
@@ -161,13 +159,13 @@ func (pf *pyFile) test(name string, n, class *sitter.Node) facts.Test {
 	return t.done()
 }
 
-func (pf *pyFile) decorators(t *testFacts, d *sitter.Node) {
+func (pf *pyFile) decorators(t *testFacts, d *node) {
 	for _, dec := range named(d) {
 		if dec.Kind() != "decorator" || dec.NamedChildCount() == 0 {
 			continue
 		}
 		e := dec.NamedChild(0)
-		callee, args := pf.f.text(e), (*sitter.Node)(nil)
+		callee, args := pf.f.text(e), (*node)(nil)
 		if e.Kind() == "call" {
 			callee, args = pf.f.field(e, "function"), e.ChildByFieldName("arguments")
 		}
@@ -181,7 +179,7 @@ func (pf *pyFile) decorators(t *testFacts, d *sitter.Node) {
 }
 
 // reason is the reason= argument of a skip, or else its first string argument.
-func (pf *pyFile) reason(args *sitter.Node) string {
+func (pf *pyFile) reason(args *node) string {
 	if args == nil {
 		return ""
 	}
@@ -198,7 +196,7 @@ func (pf *pyFile) reason(args *sitter.Node) string {
 }
 
 type pyWalk struct {
-	body    *sitter.Node // the test's own body; branches above it do not count
+	body    *node // the test's own body; branches above it do not count
 	pf      *pyFile
 	t       *testFacts
 	vars    map[string]string
@@ -206,11 +204,11 @@ type pyWalk struct {
 	walking map[string]bool
 }
 
-func (w *pyWalk) walk(body *sitter.Node) {
-	w.t.bodyIn(w.pf.f, w.pf.t, body, func(n *sitter.Node) bool { return pyLoops[n.Kind()] }, w.visit)
+func (w *pyWalk) walk(body *node) {
+	w.t.bodyIn(w.pf.f, w.pf.t, body, func(n *node) bool { return pyLoops[n.Kind()] }, w.visit)
 }
 
-func (w *pyWalk) visit(n *sitter.Node) bool {
+func (w *pyWalk) visit(n *node) bool {
 	f := w.pf.f
 	switch n.Kind() {
 	case "assignment":
@@ -241,7 +239,7 @@ func (w *pyWalk) visit(n *sitter.Node) bool {
 	return true
 }
 
-func alwaysTruePy(f *file, n *sitter.Node) bool {
+func alwaysTruePy(f *file, n *node) bool {
 	if n.NamedChildCount() == 0 {
 		return false
 	}
@@ -253,7 +251,7 @@ func alwaysTruePy(f *file, n *sitter.Node) bool {
 	return e.Kind() == "comparison_operator" && len(ops) == 2 && strings.Contains(f.text(e), "==") && sameValue(f, ops[0], ops[1])
 }
 
-func (w *pyWalk) call(n *sitter.Node) {
+func (w *pyWalk) call(n *node) {
 	f := w.pf.f
 	fn := n.ChildByFieldName("function")
 	callee := f.text(fn)
@@ -278,7 +276,7 @@ func (w *pyWalk) call(n *sitter.Node) {
 
 // target names what a call's function is when it is the product's. Else it follows a helper, a
 // function of a test support module, or counts the call as unresolved when it cannot tell.
-func (w *pyWalk) target(fn *sitter.Node) string {
+func (w *pyWalk) target(fn *node) string {
 	f := w.pf.f
 	if fn.Kind() == "identifier" {
 		name := f.text(fn)
@@ -318,11 +316,11 @@ func (w *pyWalk) target(fn *sitter.Node) string {
 	return ""
 }
 
-func positional(args *sitter.Node) []*sitter.Node {
+func positional(args *node) []*node {
 	if args == nil {
 		return nil
 	}
-	var out []*sitter.Node
+	var out []*node
 	for _, a := range named(args) {
 		if a.Kind() != "keyword_argument" {
 			out = append(out, a)
@@ -332,7 +330,7 @@ func positional(args *sitter.Node) []*sitter.Node {
 }
 
 // scopeArg returns the argument at the target's scope position, or the first when unknown.
-func scopeArg(scopes map[string]int, target string, args []*sitter.Node) *sitter.Node {
+func scopeArg(scopes map[string]int, target string, args []*node) *node {
 	pos, ok := scopes[target]
 	if !ok {
 		pos = 0
@@ -345,7 +343,7 @@ func scopeArg(scopes map[string]int, target string, args []*sitter.Node) *sitter
 
 // checks counts a call that checks something. A method of the test's own class, or self handed on,
 // may check something the adapter does not read.
-func (w *pyWalk) checks(callee string, args *sitter.Node) {
+func (w *pyWalk) checks(callee string, args *node) {
 	switch {
 	case pytestChecks[callee]:
 		w.t.test.Asserts++
@@ -359,7 +357,7 @@ func (w *pyWalk) checks(callee string, args *sitter.Node) {
 var pytestChecks = set("pytest.raises", "pytest.fail", "pytest.warns")
 
 // passes reports whether one of the arguments is the name itself.
-func passes(f *file, args *sitter.Node, name string) bool {
+func passes(f *file, args *node, name string) bool {
 	if args == nil {
 		return false
 	}
@@ -373,7 +371,7 @@ func passes(f *file, args *sitter.Node, name string) bool {
 
 // docstringLines returns the lines of a function's docstring. Python's doc comment lives there
 // rather than before the function.
-func docstringLines(f *file, def *sitter.Node) []string {
+func docstringLines(f *file, def *node) []string {
 	if !docstring(def) {
 		return nil
 	}

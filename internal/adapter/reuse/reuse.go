@@ -23,8 +23,8 @@ const (
 	ScopePair
 )
 
-// Releaser is a result holding memory outside Go, such as a tree-sitter syntax tree. The session
-// calls Release once, when it lets go of the result.
+// Releaser is a result holding memory outside Go, such as memory allocated on the C side through
+// cgo. The session calls Release once, when it lets go of the result.
 type Releaser interface{ Release() }
 
 // Stat counts how often a stage's remembered result was returned, how often it ran, and how often a

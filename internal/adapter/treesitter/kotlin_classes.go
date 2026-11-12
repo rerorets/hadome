@@ -2,16 +2,12 @@
 
 package treesitter
 
-import (
-	sitter "github.com/tree-sitter/go-tree-sitter"
-)
-
 // What a Kotlin test class inherits, and the shapes of Kotlin code that build or call product
 // objects in ways the plain reading of a call misses.
 
 // ktCollect reads the members of a class into scope (its fields, helpers and setup) and returns its
 // tests and its mock fields.
-func (jf *jvmFile) ktCollect(n *sitter.Node, scope *jvmScope) (tests, mocks []*sitter.Node) {
+func (jf *jvmFile) ktCollect(n *node, scope *jvmScope) (tests, mocks []*node) {
 	f := jf.f
 	for name, class := range jf.ktConstructorFields(n) {
 		scope.fields[name] = class
@@ -54,7 +50,7 @@ func (jf *jvmFile) ktCollect(n *sitter.Node, scope *jvmScope) (tests, mocks []*s
 // ktInherit adds to scope what a test class inherits from the test class it extends, which may be
 // declared in another test file: its fields, helpers, mock fields and setup, and those of the class
 // that one extends in turn.
-func (jf *jvmFile) ktInherit(n *sitter.Node, scope *jvmScope, depth int) {
+func (jf *jvmFile) ktInherit(n *node, scope *jvmScope, depth int) {
 	super := ktSuperclass(jf.f, n)
 	if super == "" || jf.kt == nil || depth > 8 {
 		return
@@ -84,13 +80,13 @@ func (jf *jvmFile) ktInherit(n *sitter.Node, scope *jvmScope, depth int) {
 
 // ktSuperclass is the simple name of the class a class extends: the supertype it calls a
 // constructor of (class StoreTest : StoreTestSupport()).
-func ktSuperclass(f *file, n *sitter.Node) string {
+func ktSuperclass(f *file, n *node) string {
 	super := ""
 	for _, c := range named(n) {
 		if c.Kind() != "delegation_specifiers" {
 			continue
 		}
-		walk(c, func(x *sitter.Node) bool {
+		walk(c, func(x *node) bool {
 			if super == "" && x.Kind() == "constructor_invocation" && x.NamedChildCount() > 0 {
 				super = lastElem(typeName(f.text(x.NamedChild(0))))
 			}
@@ -102,7 +98,7 @@ func ktSuperclass(f *file, n *sitter.Node) string {
 
 // ktReadsProperty reports whether an identifier is a variable of a product class whose property
 // the test reads (cache.ttlSeconds), not one whose method it calls (cache.get()).
-func (w *jvmWalk) ktReadsProperty(n *sitter.Node) bool {
+func (w *jvmWalk) ktReadsProperty(n *node) bool {
 	if w.vars[w.jf.f.text(n)] == "" {
 		return false
 	}
@@ -117,7 +113,7 @@ func (w *jvmWalk) ktReadsProperty(n *sitter.Node) bool {
 // ktTypedCall recognises a call with type arguments and a lambda, which this grammar reads as two
 // comparisons: assertThrows<E> { … } and assertThrows<E>({ … }) are (assertThrows < E) > { … }.
 // It returns the callee and the lambda's expression, or nil.
-func ktTypedCall(n *sitter.Node) (callee, arg *sitter.Node) {
+func ktTypedCall(n *node) (callee, arg *node) {
 	if n.NamedChildCount() != 2 || ktOperator(n) != ">" {
 		return nil, nil
 	}
@@ -137,7 +133,7 @@ func ktTypedCall(n *sitter.Node) (callee, arg *sitter.Node) {
 }
 
 // ktOperator is the operator of a binary expression: its first unnamed child.
-func ktOperator(n *sitter.Node) string {
+func ktOperator(n *node) string {
 	for i := uint(0); i < n.ChildCount(); i++ {
 		if c := n.Child(i); !c.IsNamed() {
 			return c.Kind()
@@ -149,7 +145,7 @@ func ktOperator(n *sitter.Node) string {
 // ktBuilt is the product class of the object an expression builds: a constructor call (Store()),
 // apply or also on one, which return their receiver (Store().apply { … }), or a constant of an enum
 // class (Kind.DAILY).
-func (jf *jvmFile) ktBuilt(e *sitter.Node) string {
+func (jf *jvmFile) ktBuilt(e *node) string {
 	f := jf.f
 	switch e.Kind() {
 	case "call_expression":
@@ -172,8 +168,8 @@ func (jf *jvmFile) ktBuilt(e *sitter.Node) string {
 
 // ktClassMembers lists a class's members with those of its companion object, whose properties and
 // functions the class's tests use by their bare names.
-func ktClassMembers(n *sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
+func ktClassMembers(n *node) []*node {
+	var out []*node
 	for _, m := range ktMembers(n) {
 		if m.Kind() == "companion_object" {
 			out = append(out, ktMembers(m)...)

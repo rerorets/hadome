@@ -4,8 +4,6 @@ package treesitter
 
 import (
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // The parts of a test's annotations, decorators and attributes that only give it a name to show,
@@ -18,9 +16,9 @@ var jvmNamedAnnotations = set("ParameterizedTest", "RepeatedTest", "Parameterize
 
 // jvmNameOnly lists the parts of the Java or Kotlin annotations in roots that only name a test:
 // @DisplayName, and the name element of jvmNamedAnnotations.
-func jvmNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	walkAnnotations(roots, map[string]bool{"block": true, "function_body": true, "class_body": true}, func(n *sitter.Node) {
+func jvmNameOnly(f *file, roots []*node) []*node {
+	var out []*node
+	walkAnnotations(roots, map[string]bool{"block": true, "function_body": true, "class_body": true}, func(n *node) {
 		if n.Kind() != "annotation" && n.Kind() != "marker_annotation" {
 			return
 		}
@@ -29,14 +27,14 @@ func jvmNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 			out = append(out, n)
 		case jvmNamedAnnotations[name]:
 			list, args := jvmAnnotationArgs(n)
-			var drop []*sitter.Node
+			var drop []*node
 			for _, arg := range args {
 				if key, ok := jvmArgKey(f, arg); ok && key == "name" {
 					drop = append(drop, withSeparator(arg)...)
 				}
 			}
 			if len(drop) > 0 && len(args) == 1 { // @ParameterizedTest(name = "x") is @ParameterizedTest
-				drop = []*sitter.Node{list}
+				drop = []*node{list}
 			}
 			out = append(out, drop...)
 		}
@@ -46,8 +44,8 @@ func jvmNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 
 // jvmAnnotationName is the simple name of an annotation: DisplayName for @DisplayName("x") and for
 // @org.junit.jupiter.api.DisplayName("x").
-func jvmAnnotationName(f *file, n *sitter.Node) string {
-	var name *sitter.Node
+func jvmAnnotationName(f *file, n *node) string {
+	var name *node
 	if name = n.ChildByFieldName("name"); name == nil { // Kotlin
 		for _, c := range named(n) {
 			switch c.Kind() {
@@ -71,7 +69,7 @@ func jvmAnnotationName(f *file, n *sitter.Node) string {
 
 // jvmAnnotationArgs returns the argument list of an annotation and the arguments in it: the element
 // value pairs and values of a Java annotation, the value arguments of a Kotlin one.
-func jvmAnnotationArgs(n *sitter.Node) (*sitter.Node, []*sitter.Node) {
+func jvmAnnotationArgs(n *node) (*node, []*node) {
 	if args := n.ChildByFieldName("arguments"); args != nil { // Java
 		return args, named(args)
 	}
@@ -90,7 +88,7 @@ func jvmAnnotationArgs(n *sitter.Node) (*sitter.Node, []*sitter.Node) {
 
 // jvmArgKey is the key of a named annotation argument: name for name = "x" in Java or Kotlin. It
 // reports false for an argument given by position.
-func jvmArgKey(f *file, arg *sitter.Node) (string, bool) {
+func jvmArgKey(f *file, arg *node) (string, bool) {
 	if arg.Kind() == "element_value_pair" {
 		return f.text(arg.ChildByFieldName("key")), true
 	}
@@ -107,9 +105,9 @@ func jvmArgKey(f *file, arg *sitter.Node) (string, bool) {
 
 // pyNameOnly lists the parts of the decorators in roots that only name a test: the ids= argument of
 // pytest.mark.parametrize and the id= argument of pytest.param.
-func pyNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	walkAnnotations(roots, map[string]bool{"block": true}, func(n *sitter.Node) {
+func pyNameOnly(f *file, roots []*node) []*node {
+	var out []*node
+	walkAnnotations(roots, map[string]bool{"block": true}, func(n *node) {
 		if n.Kind() != "call" {
 			return
 		}
@@ -138,9 +136,9 @@ func pyNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 // rustNameOnly lists the parts of the attributes in roots that only name a test: the description
 // of an rstest case, ::small in #[case::small(1)], and of a test-case case, ; "small" in
 // #[test_case(1 ; "small")].
-func rustNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
-	var out []*sitter.Node
-	walkAnnotations(roots, map[string]bool{"block": true}, func(n *sitter.Node) {
+func rustNameOnly(f *file, roots []*node) []*node {
+	var out []*node
+	walkAnnotations(roots, map[string]bool{"block": true}, func(n *node) {
 		if n.Kind() != "attribute" || n.NamedChildCount() == 0 {
 			return
 		}
@@ -169,9 +167,9 @@ func rustNameOnly(f *file, roots []*sitter.Node) []*sitter.Node {
 
 // walkAnnotations calls visit on every node of roots, not descending into the kinds in stop: the
 // body of the test, whose tokens are its code and never only its name.
-func walkAnnotations(roots []*sitter.Node, stop map[string]bool, visit func(*sitter.Node)) {
-	var walk func(n *sitter.Node)
-	walk = func(n *sitter.Node) {
+func walkAnnotations(roots []*node, stop map[string]bool, visit func(*node)) {
+	var walk func(n *node)
+	walk = func(n *node) {
 		if stop[n.Kind()] {
 			return
 		}
@@ -189,12 +187,12 @@ func walkAnnotations(roots []*sitter.Node, stop map[string]bool, visit func(*sit
 
 // withSeparator returns an argument and the comma that separates it from its neighbours, so that
 // leaving both out leaves the tokens the list would have without the argument.
-func withSeparator(n *sitter.Node) []*sitter.Node {
+func withSeparator(n *node) []*node {
 	if p := n.PrevSibling(); p != nil && p.Kind() == "," {
-		return []*sitter.Node{n, p}
+		return []*node{n, p}
 	}
 	if s := n.NextSibling(); s != nil && s.Kind() == "," {
-		return []*sitter.Node{n, s}
+		return []*node{n, s}
 	}
-	return []*sitter.Node{n}
+	return []*node{n}
 }

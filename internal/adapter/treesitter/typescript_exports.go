@@ -5,8 +5,6 @@ package treesitter
 import (
 	"path"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // How the TypeScript reader names the symbol an imported name stands for: the file that declares
@@ -48,7 +46,7 @@ func (r *typescript) module(p string) *tsModule {
 			continue
 		}
 		clause := false
-		walk(top, func(x *sitter.Node) bool {
+		walk(top, func(x *node) bool {
 			if x.Kind() == "export_specifier" {
 				clause = true
 				name, alias := f.field(x, "name"), f.field(x, "alias")
@@ -68,7 +66,7 @@ func (r *typescript) module(p string) *tsModule {
 }
 
 // tsDeclared lists the names a top-level statement declares as symbols.
-func tsDeclared(f *file, top *sitter.Node) []string {
+func tsDeclared(f *file, top *node) []string {
 	n := top
 	if top.Kind() == "export_statement" {
 		if d := top.ChildByFieldName("declaration"); d != nil {

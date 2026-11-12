@@ -5,12 +5,10 @@ package treesitter
 import (
 	"slices"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // childField returns the child of n in field name, or nil.
-func childField(n *sitter.Node, name string) *sitter.Node {
+func childField(n *node, name string) *node {
 	if n == nil {
 		return nil
 	}
@@ -18,7 +16,7 @@ func childField(n *sitter.Node, name string) *sitter.Node {
 }
 
 // kindOf returns n's kind, or "" for nil.
-func kindOf(n *sitter.Node) string {
+func kindOf(n *node) string {
 	if n == nil {
 		return ""
 	}
@@ -26,7 +24,7 @@ func kindOf(n *sitter.Node) string {
 }
 
 // firstArg returns the first argument of an argument list, or nil.
-func firstArg(list *sitter.Node) *sitter.Node {
+func firstArg(list *node) *node {
 	if args := arguments(list); len(args) > 0 {
 		return args[0]
 	}
@@ -61,13 +59,13 @@ var tsText = &textGrammar{
 	escapes:  set("escape_sequence"),
 	idents:   set("identifier"),
 	notRead:  set("name", "key", "label"),
-	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+	declare: func(f *file, n *node, kind string) (*node, *node) {
 		if kind != "variable_declarator" || kindOf(childField(n, "name")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("name"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+	call: func(f *file, n *node, kind string) (string, string, *node, bool) {
 		if kind != "call_expression" {
 			return "", "", nil, false
 		}
@@ -82,8 +80,8 @@ var tsText = &textGrammar{
 		callee := strings.ReplaceAll(f.text(fn), "?.", ".")
 		return callee, lastName(callee), first, true
 	},
-	consts: func(f *file) map[string]*sitter.Node {
-		out := map[string]*sitter.Node{}
+	consts: func(f *file) map[string]*node {
+		out := map[string]*node{}
 		for _, top := range named(f.root) {
 			if top.Kind() == "export_statement" {
 				if d := top.ChildByFieldName("declaration"); d != nil {
@@ -113,31 +111,31 @@ var pyText = &textGrammar{
 	concat:   set("binary_operator"),
 	holes:    set("interpolation"),
 	escapes:  set("escape_sequence"),
-	raw: func(f *file, n *sitter.Node) bool {
+	raw: func(f *file, n *node) bool {
 		start := n.Child(0)
 		return start != nil && strings.ContainsAny(f.text(start), "rR")
 	},
 	idents:  set("identifier"),
 	notRead: set("attribute", "name", "left"),
-	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+	declare: func(f *file, n *node, kind string) (*node, *node) {
 		if kind != "assignment" || kindOf(childField(n, "left")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("left"), n.ChildByFieldName("right")
 	},
-	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+	call: func(f *file, n *node, kind string) (string, string, *node, bool) {
 		if kind != "call" || n.ChildByFieldName("function") == nil {
 			return "", "", nil, false
 		}
-		var first *sitter.Node
+		var first *node
 		if args := positional(n.ChildByFieldName("arguments")); len(args) > 0 {
 			first = args[0]
 		}
 		callee := f.field(n, "function")
 		return callee, lastName(callee), first, true
 	},
-	consts: func(f *file) map[string]*sitter.Node {
-		out := map[string]*sitter.Node{}
+	consts: func(f *file) map[string]*node {
+		out := map[string]*node{}
 		for _, top := range named(f.root) {
 			if top.Kind() != "expression_statement" || top.NamedChildCount() != 1 {
 				continue
@@ -158,16 +156,16 @@ var pyText = &textGrammar{
 var rustText = &textGrammar{
 	literals: set("string_literal", "raw_string_literal"),
 	escapes:  set("escape_sequence"),
-	raw:      func(f *file, n *sitter.Node) bool { return n.Kind() == "raw_string_literal" },
+	raw:      func(f *file, n *node) bool { return n.Kind() == "raw_string_literal" },
 	idents:   set("identifier"),
 	notRead:  set("name", "pattern", "field"),
-	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+	declare: func(f *file, n *node, kind string) (*node, *node) {
 		if kind != "let_declaration" || kindOf(childField(n, "pattern")) != "identifier" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("pattern"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+	call: func(f *file, n *node, kind string) (string, string, *node, bool) {
 		switch kind {
 		case "call_expression":
 			fn := n.ChildByFieldName("function")
@@ -181,7 +179,7 @@ var rustText = &textGrammar{
 			return callee, lastName(callee), firstArg(n.ChildByFieldName("arguments")), true
 		case "macro_invocation":
 			callee := f.field(n, "macro") + "!"
-			var first *sitter.Node
+			var first *node
 			for i := uint(0); i < n.NamedChildCount(); i++ {
 				if tt := n.NamedChild(i); tt.Kind() == "token_tree" {
 					first = firstArg(tt)
@@ -191,9 +189,9 @@ var rustText = &textGrammar{
 		}
 		return "", "", nil, false
 	},
-	consts: func(f *file) map[string]*sitter.Node {
-		out := map[string]*sitter.Node{}
-		walk(f.root, func(n *sitter.Node) bool {
+	consts: func(f *file) map[string]*node {
+		out := map[string]*node{}
+		walk(f.root, func(n *node) bool {
 			if n.Kind() == "function_item" {
 				return false
 			}
@@ -218,13 +216,13 @@ var javaText = &textGrammar{
 	escapes:  set("escape_sequence"),
 	idents:   set("identifier"),
 	notRead:  set("name", "field"),
-	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+	declare: func(f *file, n *node, kind string) (*node, *node) {
 		if kind != "variable_declarator" {
 			return nil, nil
 		}
 		return n.ChildByFieldName("name"), n.ChildByFieldName("value")
 	},
-	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+	call: func(f *file, n *node, kind string) (string, string, *node, bool) {
 		if kind != "method_invocation" {
 			return "", "", nil, false
 		}
@@ -235,9 +233,9 @@ var javaText = &textGrammar{
 		}
 		return callee, name, firstArg(n.ChildByFieldName("arguments")), true
 	},
-	consts: func(f *file) map[string]*sitter.Node {
-		out := map[string]*sitter.Node{}
-		walk(f.root, func(n *sitter.Node) bool {
+	consts: func(f *file) map[string]*node {
+		out := map[string]*node{}
+		walk(f.root, func(n *node) bool {
 			if n.Kind() == "method_declaration" || n.Kind() == "constructor_declaration" {
 				return false
 			}
@@ -272,7 +270,7 @@ var ktText = &textGrammar{
 	escapes:     set("escape_sequence"),
 	dollarHoles: true,
 	idents:      set("identifier", "simple_identifier"),
-	notReadIn: func(n, p *sitter.Node) bool {
+	notReadIn: func(n, p *node) bool {
 		switch p.Kind() {
 		case "navigation_expression": // a.b: b is a member
 			return p.NamedChild(0).Id() != n.Id()
@@ -283,17 +281,17 @@ var ktText = &textGrammar{
 		}
 		return false
 	},
-	declare: func(f *file, n *sitter.Node, kind string) (*sitter.Node, *sitter.Node) {
+	declare: func(f *file, n *node, kind string) (*node, *node) {
 		if kind != "property_declaration" {
 			return nil, nil
 		}
 		return ktPropertyValue(n)
 	},
-	call: func(f *file, n *sitter.Node, kind string) (string, string, *sitter.Node, bool) {
+	call: func(f *file, n *node, kind string) (string, string, *node, bool) {
 		if kind != "call_expression" || n.NamedChildCount() < 2 {
 			return "", "", nil, false
 		}
-		var args *sitter.Node
+		var args *node
 		for _, c := range named(n) {
 			if c.Kind() == "value_arguments" {
 				args = c
@@ -302,16 +300,16 @@ var ktText = &textGrammar{
 		if args == nil {
 			return "", "", nil, false
 		}
-		var first *sitter.Node
+		var first *node
 		if list := arguments(args); len(list) > 0 {
 			first = ktArgumentValue(list[0])
 		}
 		callee := strings.ReplaceAll(f.text(n.NamedChild(0)), "?.", ".")
 		return callee, lastName(callee), first, true
 	},
-	consts: func(f *file) map[string]*sitter.Node {
-		out := map[string]*sitter.Node{}
-		walk(f.root, func(n *sitter.Node) bool {
+	consts: func(f *file) map[string]*node {
+		out := map[string]*node{}
+		walk(f.root, func(n *node) bool {
 			switch n.Kind() {
 			case "function_declaration", "class_declaration":
 				return n.Kind() == "class_declaration" // a class's companion object holds constants; its members do not
@@ -332,9 +330,9 @@ var ktText = &textGrammar{
 }
 
 // ktPropertyValue returns the name and the initial value of a Kotlin property declaration.
-func ktPropertyValue(n *sitter.Node) (name, value *sitter.Node) {
+func ktPropertyValue(n *node) (name, value *node) {
 	kids := named(n)
-	i := slices.IndexFunc(kids, func(c *sitter.Node) bool { return c.Kind() == "variable_declaration" })
+	i := slices.IndexFunc(kids, func(c *node) bool { return c.Kind() == "variable_declaration" })
 	if i < 0 {
 		return nil, nil
 	}
@@ -353,7 +351,7 @@ func ktPropertyValue(n *sitter.Node) (name, value *sitter.Node) {
 
 // ktConstScope reports whether a property is declared where it is one value for the whole file: at
 // the top level, or in an object or a companion object.
-func ktConstScope(n *sitter.Node) bool {
+func ktConstScope(n *node) bool {
 	p := n.Parent()
 	if p.Kind() == "source_file" {
 		return true
@@ -366,7 +364,7 @@ func ktConstScope(n *sitter.Node) bool {
 }
 
 // ktAfterModifiers returns the text of a property declaration after its modifiers: val … or var ….
-func ktAfterModifiers(f *file, n *sitter.Node) string {
+func ktAfterModifiers(f *file, n *node) string {
 	for i := uint(0); i < n.ChildCount(); i++ {
 		if c := n.Child(i); c.Kind() != "modifiers" && !strings.Contains(c.Kind(), "comment") {
 			return string(f.src[c.StartByte():n.EndByte()])

@@ -5,8 +5,6 @@ package treesitter
 import (
 	"slices"
 	"strings"
-
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // Returning the zero value in place of a constant whose value is already the zero value changes
@@ -27,16 +25,16 @@ func (c consts) add(name, value string) {
 }
 
 // unread records every identifier under n as declared in a form not read.
-func (c consts) unread(f *file, n *sitter.Node) {
+func (c consts) unread(f *file, n *node) {
 	for _, name := range identifiers(f, n) {
 		c.add(name, "")
 	}
 }
 
 // identifiers lists the names of the identifiers under n, type names left out.
-func identifiers(f *file, n *sitter.Node) []string {
+func identifiers(f *file, n *node) []string {
 	var out []string
-	walk(n, func(c *sitter.Node) bool {
+	walk(n, func(c *node) bool {
 		if k := c.Kind(); strings.Contains(k, "identifier") && !strings.Contains(k, "type") {
 			out = append(out, f.text(c))
 		}
@@ -65,7 +63,7 @@ func (m *mutator) zeroValue(text string) bool {
 // value, and that the function does not declare a name of its own that hides it. In Java and Kotlin
 // the name may be qualified by the class of the file that declares it (Defaults.ZERO); the function
 // must then not hide the class's name.
-func (m *mutator) zeroConstant(v *sitter.Node) bool {
+func (m *mutator) zeroConstant(v *node) bool {
 	name, bound := m.f.text(v), m.f.text(v)
 	switch v.Kind() {
 	case "identifier": // every grammar's plain name, Kotlin's too
@@ -93,7 +91,7 @@ var jvmTypes = set("class_declaration", "object_declaration", "interface_declara
 
 // addMember records a member of a Java or Kotlin class under its own name, and under the name
 // qualified by the class that declares it: a companion object's members by the class around it.
-func (c consts) addMember(f *file, n *sitter.Node, name, value string) {
+func (c consts) addMember(f *file, n *node, name, value string) {
 	c.add(name, value)
 	for p := n.Parent(); p != nil; p = p.Parent() {
 		if jvmTypes[p.Kind()] {
@@ -107,9 +105,9 @@ func (c consts) addMember(f *file, n *sitter.Node, name, value string) {
 
 // binds reports whether n declares name anywhere inside it: as a parameter, a local, a loop
 // variable, a pattern.
-func (m *mutator) binds(n *sitter.Node, name string) bool {
+func (m *mutator) binds(n *node, name string) bool {
 	found := false
-	walk(n, func(c *sitter.Node) bool {
+	walk(n, func(c *node) bool {
 		field, ok := m.b.binders[c.Kind()]
 		if !ok || found {
 			return !found
@@ -193,7 +191,7 @@ func afterExponent(suffix string) (string, bool) {
 }
 
 // valueAfterEquals returns the named child after a declaration's "=", for grammars without a field.
-func valueAfterEquals(n *sitter.Node) *sitter.Node {
+func valueAfterEquals(n *node) *node {
 	seen := false
 	for i := uint(0); i < n.ChildCount(); i++ {
 		c := n.Child(i)
@@ -205,7 +203,7 @@ func valueAfterEquals(n *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func textOr(f *file, n *sitter.Node) string {
+func textOr(f *file, n *node) string {
 	if n == nil {
 		return ""
 	}
@@ -238,7 +236,7 @@ func tsConstants(f *file) consts {
 
 func rustConstants(f *file) consts {
 	out := consts{}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		switch n.Kind() {
 		case "function_item", "impl_item", "trait_item":
 			return false
@@ -262,7 +260,7 @@ func rustConstants(f *file) consts {
 
 func javaConstants(f *file) consts {
 	out := consts{}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		switch n.Kind() {
 		case "method_declaration", "constructor_declaration", "lambda_expression", "block", "static_initializer":
 			return false
@@ -297,7 +295,7 @@ func javaConstants(f *file) consts {
 
 func ktConstants(f *file) consts {
 	out := consts{}
-	walk(f.root, func(n *sitter.Node) bool {
+	walk(f.root, func(n *node) bool {
 		switch n.Kind() {
 		case "function_body", "lambda_literal", "anonymous_function", "getter", "setter", "anonymous_initializer":
 			return false
@@ -317,7 +315,7 @@ func ktConstants(f *file) consts {
 
 // ktProperty records a property: its literal value when it is a val nothing can override or
 // compute, and as not read otherwise.
-func ktProperty(f *file, n *sitter.Node, out consts) {
+func ktProperty(f *file, n *node, out consts) {
 	value := ""
 	if ktReadable(f, n) {
 		value = textOr(f, valueAfterEquals(n))
@@ -336,7 +334,7 @@ func ktProperty(f *file, n *sitter.Node, out consts) {
 
 // ktReadable reports a val without open, abstract or override, and without a getter, a setter or
 // a delegate.
-func ktReadable(f *file, n *sitter.Node) bool {
+func ktReadable(f *file, n *node) bool {
 	val := false
 	for i := uint(0); i < n.ChildCount(); i++ {
 		c := n.Child(i)
