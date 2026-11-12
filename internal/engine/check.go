@@ -123,7 +123,11 @@ func read(src Source) (Version, Version, map[string]string, error) {
 	if err != nil {
 		return Version{}, Version{}, nil, fmt.Errorf("reading renames: %w", err)
 	}
-	renames, err := detectRenames(bv.FS, hv.FS, known)
+	// Each version's file system remembers its files' hashes from here on, for rename detection and
+	// the analyzer alike.
+	bs, hs := newSummedFS(bv.FS), newSummedFS(hv.FS)
+	bv.FS, hv.FS = bs, hs
+	renames, err := detectRenames(bs, hs, known)
 	if err != nil {
 		return Version{}, Version{}, nil, fmt.Errorf("detecting renames: %w", err)
 	}

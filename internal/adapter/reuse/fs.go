@@ -41,6 +41,30 @@ func (r *Run) readFile(name string) (data []byte, sum Hash, answer string, ok bo
 	return data, sum, answer, true, nil
 }
 
+// summer is a version that knows the hashes of its files' contents, as the file system the engine
+// wraps around each version does. reuse asks for it by its method alone and imports nothing of the
+// engine.
+type summer interface {
+	Sum(name string) ([32]byte, error)
+}
+
+// sum is the hash of name's content, answered as readFile would answer reading it. It comes from
+// the version when it knows it, so that the file is not read again, and is read and hashed
+// otherwise. A stage's read never uses it: what a stage records comes from its own read (readFile).
+func (r *Run) sum(name string) (Hash, error) {
+	sm, ok := r.fsys.(summer)
+	if !ok {
+		_, sum, _, _, err := r.readFile(name)
+		return sum, err
+	}
+	sum, err := sm.Sum(name)
+	if err != nil {
+		return Hash{}, err
+	}
+	r.remember("file", name, contentAnswer(sum))
+	return sum, nil
+}
+
 // stat answers whether name exists, and as what: a directory, or a file of some size.
 func (r *Run) stat(name string) (info fs.FileInfo, answer string, ok bool, err error) {
 	info, err = fs.Stat(r.fsys, name)
