@@ -85,6 +85,7 @@ Work not split into stages runs on every version, every time. Work that runs eve
 - Listing a directory is a coarse read. A stage that listed a directory runs again when a single file is added to it or removed from it. The coarser the reads, the less is reused, but the facts never change
 - Another stage's result read while asking again is obtained by first calling that stage on head. That stage confirms in the same way whether its remembered result can be used
 - One piece of information is not recorded: a file's modification time. It differs when the version is read from another place, and no adapter reads it
+- The answer for a file read through `FS()` is computed from the content that read returned. The version's `Sum` is not used, even when it has one, so that the content a stage used and the answer recorded always come from the same single read
 
 ### Fingerprints of results
 
@@ -143,7 +144,7 @@ sequenceDiagram
   participant S as reuse.Session
   participant L as language
   E->>A: AnalyzePair(base, head)
-  A->>S: start (hash of every head file's content)
+  A->>S: start (hash of every head file's content, from the version's Sum)
   loop each language
     A->>L: Analyze(base's Run)
     L->>S: call stages (compute and remember)
@@ -179,7 +180,10 @@ Every stage has a scope (`Scope`) for how long its results are remembered.
 
 Of the results computed for base, only those head can hit are remembered.
 
-- Before the analysis starts, the session hashes the content of every head file once
+- Before the analysis starts, the session hashes the content of every head file once (`Expect`)
+  - When the version's file system has `Sum`, it gets them from it. A version the engine wrapped has it (see "Content hashes" in [engine.md](engine.md)). It uses the hashes rename detection worked out, so no file is read again
+  - Without `Sum`, it reads the files and computes their hashes. Example: a version the self-test or a unit test hands over unwrapped
+  - Either way the hash is the same SHA-256, so what is remembered does not change
 - A base result is remembered only when the hashes of every file content used to compute it are all present in head. The contents used are the byte slices of the argument and the answers for files read through `FS()`
 - A result not remembered is let go when base's analysis of that language ends
 
@@ -204,6 +208,7 @@ Remembered syntax trees are used in head without being rebuilt. At any moment wh
 
 - The two versions and the languages are analysed one at a time
 - The session is safe to call concurrently. When stages with the same key are called at once, it runs one and shares its result
+- The version's `Sum` that `Expect` uses is safe to call concurrently too (see "Content hashes" in [engine.md](engine.md))
 - No one changes a stage's result after it has been handed out
 - Information filled in later lives on the `Run` side, not in a result. Example: the table of string constants the tree-sitter adapter builds the first time a test reads a name
 
@@ -343,6 +348,15 @@ classDiagram
     ScopeLanguage
     ScopePair
   }
+  class summer {
+    <<interface, reuse>>
+    +Sum(name string) ([32]byte, error)
+  }
+  class summedFS {
+    <<engine>>
+    +Open(name string) (fs.File, error)
+    +Sum(name string) ([32]byte, error)
+  }
   Analyzer <|-- PairAnalyzer
   adapterAnalyzer ..|> PairAnalyzer
   adapterAnalyzer ..|> Reuser
@@ -357,10 +371,13 @@ classDiagram
   Pure --> Scope
   Reading --> Scope
   Session ..> Releaser
+  Session ..> summer : Expect asks the version's FS
+  summedFS ..|> summer
 ```
 
 - `internal/adapter/reuse` is the package of sessions and stages. The language packages (`golang`, `treesitter`, `sql`, `terraform`, `ansible`) and `internal/adapter` import it
 - The only hadome package `reuse` imports is `config` (`config.Analysis`). It receives versions as `fs.FS`. `internal/adapter` hands head's list of files to `Expect`
+- `summer` is a small interface inside `reuse`. `Expect` asks by type whether the version's `fs.FS` satisfies it, and uses `Sum` when it does. `reuse` does not import the engine's type; `summedFS` satisfies `summer` by having the same method
 - The engine does not know `reuse`. All the engine knows is `PairAnalyzer` and `Reuser`
 - The `Env` of a session is what both versions share (the languages). Reading stages receive it through `Reads.Env()`
 - `Session.Stats` counts three things for each stage: how often its remembered result was returned, how often it ran, and how often a call waited for the same key to finish running elsewhere. Tests and measurements use it
