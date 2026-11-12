@@ -77,7 +77,7 @@ func TestErrorsAroundViewQueriesStillMakeTheFileUnread(t *testing.T) {
 // viewpoint: behaviour
 // target: sql.Adapter.Analyze
 // A view whose query is not parsed keeps the lines of its own statement, ending on the query's last
-// line, and the statements after it keep theirs. A ; inside a string of the query does not end it,
+// line, and the statements after it keep theirs, also past blank lines between the query and its ;. A ; inside a string of the query does not end it,
 // and an AS inside parentheses or a string of the head does not start it: the head is read whole,
 // with the doc its OPTIONS give.
 func TestViewQueriesKeepPositionsAndTheirHead(t *testing.T) {
@@ -89,6 +89,12 @@ func TestViewQueriesKeepPositionsAndTheirHead(t *testing.T) {
 	}
 	if want := []string{".sql/sales.daily 1-4", ".sql/sales.t 5-5"}; !slices.Equal(got, want) {
 		t.Errorf("symbols %v, want %v", got, want)
+	}
+
+	an = analyze(t, sql.Adapter{}, version("db/c.sql",
+		"CREATE VIEW sales.daily AS SELECT FROM FROM sales.orders\n\n;\nCREATE TABLE sales.t (id int);\n"), postgres())
+	if got := symbolLines(an); !slices.Equal(got, []string{".sql/sales.daily line=1 params=0", ".sql/sales.t line=4 params=0"}) {
+		t.Errorf("symbols %v, want the table on line 4", got)
 	}
 
 	an = analyze(t, sql.Adapter{}, version("db/b.sql",
