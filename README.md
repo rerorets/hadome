@@ -20,6 +20,10 @@
   English · <a href="README.ja.md">日本語</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Deleting only a test stops with tests/scope-shrunk and exit code 1; deleting the code along with it passes as cleanup with exit code 0">
+</p>
+
 ## Overview
 
 hadome (歯止め) compares a change with main and reports the violations the change adds and the tests it weakens. Violations already on main are not reported.

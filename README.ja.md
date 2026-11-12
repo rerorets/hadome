@@ -20,6 +20,10 @@
   <a href="README.md">English</a> · 日本語
 </p>
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="テストだけを消すとtests/scope-shrunkで終了コード1になり、コードごと消すと整理として終了コード0で通る様子">
+</p>
+
 ## 概要
 
 hadome（歯止め）は変更をmainと比べ、その変更で増えた違反と、弱くなったテストを報告します。mainにすでにある違反は報告しません。
