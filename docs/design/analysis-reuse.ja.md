@@ -172,7 +172,7 @@ sequenceDiagram
 | `ScopeLanguage` | その言語の head の解析が終わったとき | 構文木、ファイルごとの事実 |
 | `ScopePair` | 2つの版の解析が終わったとき | `Link` が使う SQL のカタログ |
 
-- Go の外のメモリを持つ結果は `Release` を持ちます。例: tree-sitter の構文木
+- Go の外のメモリを持つ結果は `Release` を持ちます。例: cgo で C の側に割り当てたメモリを持つ結果
 - セッションは結果を手放すときに `Release` を1回だけ呼びます
 - 再利用しないときも、同じ時期に手放します
 
