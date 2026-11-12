@@ -25,6 +25,8 @@ type comment struct {
 type scanned struct {
 	Masked   string
 	Comments []comment
+	// Unclosed is true when a string, a quoted name or a block comment runs to the end unclosed.
+	Unclosed bool
 }
 
 // scan blanks the strings and comments of src. Quote characters and dollar tags stay, so that a
@@ -34,7 +36,7 @@ func scan(src string, lx lexical) scanned {
 	for i := 0; i < len(src); {
 		i = s.next(i)
 	}
-	return scanned{Masked: string(s.b), Comments: s.comments}
+	return scanned{Masked: string(s.b), Comments: s.comments, Unclosed: s.unclosed}
 }
 
 type scanner struct {
@@ -42,6 +44,7 @@ type scanner struct {
 	b        []byte // src with what has been found blanked
 	lx       lexical
 	comments []comment
+	unclosed bool
 	// line is the line at offset at; the scan only moves forward, so lines are counted once.
 	line, at int
 }
@@ -77,6 +80,7 @@ func (s *scanner) comment(i int) (int, bool) {
 		return s.lineComment(i, 1), true
 	case strings.HasPrefix(rest, "/*"):
 		end := blockEnd(s.src, i, s.lx.nestedBlocks)
+		s.closed(end-i >= len("/**/") && strings.HasSuffix(s.src[:end], "*/"))
 		s.comments = append(s.comments, comment{Line: s.lineOf(i), Text: strings.TrimSuffix(s.src[i+2:end], "*/")})
 		s.blank(i, end)
 		return end, true
@@ -95,6 +99,7 @@ func (s *scanner) literal(i int) (int, bool) {
 		return s.enclosed(i, 3, string(qClosing(rest[2]))+"'"), true
 	case c == '\'' || s.lx.doubleStrings && c == '"':
 		end, closed := quotedEnd(s.src, i, c, s.escapes(i))
+		s.closed(closed)
 		if closed {
 			s.blank(i+1, end-1)
 		} else {
@@ -102,7 +107,8 @@ func (s *scanner) literal(i int) (int, bool) {
 		}
 		return end, true
 	case c == '"' || c == '`':
-		end, _ := quotedEnd(s.src, i, c, false)
+		end, closed := quotedEnd(s.src, i, c, false)
+		s.closed(closed)
 		return end, true
 	case s.lx.dollarQuotes && c == '$':
 		if tag, ok := dollarTag(rest); ok {
@@ -145,12 +151,20 @@ func (s *scanner) lineComment(i, width int) int {
 func (s *scanner) enclosed(i, width int, closer string) int {
 	end := strings.Index(s.src[i+width:], closer)
 	if end < 0 {
+		s.closed(false)
 		s.blank(i+width, len(s.src))
 		return len(s.src)
 	}
 	body := i + width + end
 	s.blank(i+width, body)
 	return body + len(closer)
+}
+
+// closed notes whether the string, quoted name or comment just found closes.
+func (s *scanner) closed(ok bool) {
+	if !ok {
+		s.unclosed = true
+	}
 }
 
 func (s *scanner) blank(from, to int) {

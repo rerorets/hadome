@@ -45,6 +45,13 @@ func (unread) Cases() []engine.Case {
 		{Name: "a new SQL file with a statement that does not parse needs review", Base: mod(),
 			Head:       mod("db/a.sql", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\nCREATE TABLE t (id int;\n"),
 			WantReview: []string{"unknown/unread"}},
+		{Name: "a new SQL file whose only syntax error is in the query of a product view is read", Base: mod(),
+			Head: mod("db/a.sql", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n"+
+				"CREATE VIEW sales.daily AS SELECT FROM FROM sales.orders;\n")},
+		{Name: "a new SQL file with an error before the AS of a view needs review", Base: mod(),
+			Head: mod("db/a.sql", "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n"+
+				"CREATE VIEW sales.daily daily AS SELECT 1;\n"),
+			WantReview: []string{"unknown/unread"}},
 	}
 }
 

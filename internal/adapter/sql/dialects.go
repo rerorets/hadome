@@ -40,8 +40,9 @@ var pgCast = re(`(?i)::\s*(text|int|int2|int4|int8|integer|bigint|smallint|numer
 	`tsquery|xml|citext|ltree|hstore)\b`)
 
 var postgresqlDialect = tableDialect{
-	name: "postgresql",
-	lex:  lexical{nestedBlocks: true, dollarQuotes: true},
+	viewHead: re(`^CREATE (OR REPLACE )?(RECURSIVE )?VIEW$|^CREATE MATERIALIZED VIEW$`),
+	name:     "postgresql",
+	lex:      lexical{nestedBlocks: true, dollarQuotes: true},
 	splitter: splitter{
 		commands: re(`^\s*\\`),
 		copyData: true,
@@ -73,6 +74,7 @@ var postgresqlDialect = tableDialect{
 }
 
 var mysqlDialect = tableDialect{
+	viewHead:        re(`^CREATE (OR REPLACE )?(ALGORITHM = \S+ )?(DEFINER = .+? )?(SQL SECURITY \S+ )?VIEW$`),
 	name:            "mysql",
 	renameWithoutTo: true,
 	lex:             lexical{hashComments: true, doubleStrings: true, backslash: true},
@@ -107,8 +109,9 @@ var mysqlDialect = tableDialect{
 }
 
 var sqliteDialect = tableDialect{
-	name: "sqlite",
-	lex:  lexical{},
+	viewHead: re(`^CREATE VIEW$`),
+	name:     "sqlite",
+	lex:      lexical{},
 	splitter: splitter{
 		commands: re(`^\s*\.[a-z]`),
 	},
@@ -243,8 +246,9 @@ func oracleCall(n *Node) (*Node, []string, bool) {
 }
 
 var bigqueryDialect = tableDialect{
-	name: "bigquery",
-	lex:  lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
+	viewHead: re(`^CREATE (OR REPLACE )?(MATERIALIZED VIEW|VIEW|TABLE FUNCTION)$`),
+	name:     "bigquery",
+	lex:      lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
 	markers: []*regexp.Regexp{
 		re("`[^`.\n]+\\.[^`\n]+`"), re(`(?i)\bCREATE\s+(OR\s+REPLACE\s+)?(TEMP(ORARY)?\s+)?TABLE\s+FUNCTION\b`),
 		re(`(?i)\bLANGUAGE\s+js\b`), re(`(?i)\bOPTIONS\s*\(`),
@@ -269,8 +273,9 @@ var bigqueryDialect = tableDialect{
 }
 
 var snowflakeDialect = tableDialect{
-	name: "snowflake",
-	lex:  lexical{dollarQuotes: true},
+	viewHead: re(`^CREATE (OR REPLACE )?(SECURE )?(MATERIALIZED )?VIEW$`),
+	name:     "snowflake",
+	lex:      lexical{dollarQuotes: true},
 	splitter: splitter{
 		commands: re(`^\s*!\w`),
 	},
