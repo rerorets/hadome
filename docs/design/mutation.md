@@ -423,6 +423,127 @@ A regression is reported as `mutation/survived`.
 
 A replacement may not change behaviour at all (an **equivalent mutant**), such as a loop where `i < n` and `i != n` give the same result. Such a mutant gets a reasoned exception marker (`gate:allow mutation/survived reason: <reason>`).
 
+## Builds of all mutants at once
+
+Applying mutants one at a time rebuilds, in a compiled language, once per mutant. Building and linking take as many times as there are mutants, and the build cache grows by as much.
+
+A build of all mutants at once puts the mutants a version tries into one tree, each behind a switch, the environment variable `HADOME_MUTANT`. The tree is built once, and the test command runs once per mutant with the switch changed.
+
+**Responsibility**
+
+- The language's adapter makes the files with the mutants put behind switches
+- `internal/mutation` puts that tree into the copy and runs the stages, changing the switch
+- A mutant that survived in that tree is tried again by applying it on its own
+
+**Does not**
+
+- Change the test command. The configured command runs as it is, with one environment variable added
+- Type-check. Only forms that syntax alone decides are used ([adapters.md](adapters.md), "How each language is read")
+- Change verdicts. A survivor is reported only when it survived being applied on its own
+
+### Shape
+
+```mermaid
+classDiagram
+  class Mutator {
+    <<interface>>
+    +Mutants(v engine.Version, funcs []facts.Symbol) ([]facts.Mutant, error)
+  }
+  class Mutant {
+    <<facts>>
+  }
+  class Schematizer {
+    <<interface>>
+    +Schemata(v engine.Version, mutants []facts.Mutant, left []int) (Schemata, error)
+  }
+  class Schemata {
+    +Files map~string,[]byte~
+    +Switched []int
+    +Lines map~string,map~int,[]int~~
+  }
+  class Runner {
+    +try(m facts.Mutant, sel picked) Outcome
+    +trySwitched(n int, sel picked) Outcome
+  }
+  Mutator ..> Mutant : makes
+  Schematizer ..> Mutant : puts in
+  Schematizer ..> Schemata : makes
+  Runner ..> Schemata : puts into the copy
+```
+
+- **`Schematizer`** is an optional interface an adapter implements next to `Mutator`. The mutants of a language without it are tried one at a time
+- **`Schemata.Files`** holds the files' contents with the mutants put in, including a small file that reads the switch
+- **`Schemata.Switched`** holds the numbers of the mutants put in; a mutant that could not be put in is not there. A number is the mutant's position, from 1, in what `Mutants` returned. With `HADOME_MUTANT` empty or `0`, no mutant is active
+- **`Schemata.Lines`** holds, for each line of the files written, the numbers of the mutants on that line. It ties a build error to mutants
+- **`left`** holds the numbers of the mutants that broke the build in an earlier attempt. The adapter makes the files again without them
+
+### Languages
+
+| Language | Builds of all mutants at once |
+|---|---|
+| Go | yes |
+| TypeScript, Python, Rust, Java, Kotlin, Terraform, Ansible, SQL | no (one at a time) |
+
+- Go looks up its build cache by file contents. The tree's contents do not change, so from the second mutant on, building and linking hit the cache
+- Go's test result cache keys on the environment variables a test reads while it runs. The switch is read when first used, so the tests run again for each value of `HADOME_MUTANT`
+- A mutant active inside a package's initialization may have the switch read before the tests, outside the key. Even then, Go caches only results that passed, so the cache never makes a mutant look caught. One that looks like a survivor is tried again (see "Verdicts" below)
+
+### How Go puts mutants in
+
+Each kind of mutant has a form that syntax alone can write.
+
+| Kind | Form put in |
+|---|---|
+| Flipping a comparison | The comparison becomes `hadomeBool(n, func() bool { return the broken expression }, func() bool { return the original })`. A comparison is a boolean, so this needs no type |
+| Negating a boolean | `hadomeBool(n, …)` as well |
+| Returning the zero value | `if hadomeOn(n) { return the zero value }` is added before the `return` statement |
+| Removing a call statement | The statement becomes `if !hadomeOn(n) { the original statement }` |
+| Swapping arithmetic | Not put in (syntax alone cannot write the expression's type) |
+
+- The function literals make the switch evaluate only the expression it chose. Evaluating both would run the calls inside the expression twice
+- When an expression holds two mutants, the inner one's form goes into the outer one's original. Of two that overlap without nesting, the later is not put in
+- These expressions are not put in, because wrapping them in a function literal would change what they do even when inactive:
+  - expressions that call `recover()` (it does nothing unless a deferred function calls it directly)
+  - expressions that call `runtime.Caller` or `runtime.Callers` (the call depth changes)
+- A small file, `hadome_mutants.go`, is added to the directory of each package holding mutants. It uses only `os`, `strconv` and `sync`, and reads `HADOME_MUTANT` once, when first used. It uses no generics, so it builds whatever `go` version `go.mod` names. It has no build tag
+
+### When the build fails
+
+Putting one mutant in can make the build fail. For example: a function literal around an expression where a constant is required.
+
+1. When the tree's run before breaking (stage 3) fails, `path:line` is picked from its output, and `Lines` finds the mutants on that line
+2. Those mutants go into `left`, the adapter makes the files again, and the run before breaking runs again
+3. When the build still fails after three attempts, or no mutant is found from the failing output, building all at once is dropped: every mutant of that version is tried one at a time
+- A mutant in `left` is tried one at a time. A mutant whose form breaks the build often fails to build when applied on its own too, and is then caught
+- The tree is to blame only when the original tree's stage 3 run before breaking passes and this tree's fails. When the original tree's fails, the result is exit code `2` with nothing broken (invariant 1)
+
+### Verdicts
+
+A result in the tree is used like this:
+
+| Result in the tree | Verdict |
+|---|---|
+| Caught by a failing test | caught |
+| Caught by a timeout | tried again one at a time, and that result is the verdict |
+| Survived | tried again one at a time, and that result is the verdict |
+
+- **Why survivors are tried again.** A mutant may survive only in the tree. For example: the test command does not pass environment variables to its children, so the switch never takes effect. A survivor is reported only when it survived being applied on its own
+- **Why timeouts are tried again.** The function literals can make the tree slower. Counting a timeout as caught would miss mutants that survive
+- **Why failing tests are not tried again.** The tree's run before breaking passed, so the inactive switches change nothing. The tests failed because of the one active mutant
+- Trying again runs stages 1, 2 and 3 of applying one at a time, unchanged
+
+### With the stages and placeholders
+
+- **Stages.** In the tree, each mutant runs stages 1, 2 and 3 in the same order. The only difference is that `HADOME_MUTANT` changes instead of a file. A survivor is checked again in stage 3 of applying one at a time, so stage 3 still decides (invariant 7)
+- **Runs before breaking.** Each stage command's run before breaking runs in the tree with `HADOME_MUTANT` empty, and the time limit comes from it. Trying again one at a time uses the runs before breaking of the original tree
+- **`{packages}`, `{tests}`, `{module}`.** The stage commands are made the same way
+- **`builds`.** The tree serves every command of `test` and `builds`. A mutant in a file only a `builds` command compiles takes effect with the same switch
+- **Base.** Base tries only the counterparts of head's survivors. They are few, so they are tried one at a time
+
+### Configuration
+
+Building all at once has no setting. Whatever cannot be put in, fails the build, or meets a test command that does not pass the switch on goes back to one at a time, so the result is the same whatever is configured.
+
 ## Configuration
 
 ```yaml
@@ -540,13 +661,18 @@ So hadome ends the tree as a whole.
 17. A command whose GOOS or GOARCH differs from the environment hadome runs in is never run
 18. In a version with two or more Go modules, a mutant is never reported as a survivor without the tests of its file's module having run
 19. With `{module}`, stage 3 runs the tests in every module holding a `_test.go` file
+20. A mutant that survived a build of all mutants is reported only when it also survived being applied on its own
+21. A mutant counts as caught in the tree only when the tree's run before breaking passed and a test failed with that mutant active. A timeout is checked again one at a time
+22. In the tree, with `HADOME_MUTANT` empty, no mutant is active
 
 ## Deliberately left out
 
 - Running mutants in parallel. One at a time keeps tests from flaking over what the test command shares (ports, temporary files)
 - Caching results. A different pair of versions gives different results, so results can rarely be reused
 - A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
-- Reusing each language's builds (why existing tools are fast). Making six languages behave the same comes first
+- Builds of all mutants at once in languages other than Go. Rust, Java and Kotlin take long to build too, but the form to put mutants in has to be decided per language. TypeScript and Python have no build cache, so putting mutants together saves nothing
+- Putting arithmetic swaps in. It needs the expression's type, which the rule against type-checking forbids. They are tried one at a time
+- Building base's mutants all at once. Base tries only the counterparts of head's survivors, which are few
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
 - Finding the reaching tests by calls between functions. Calls from product functions to product functions are not facts of the same shape in every language. The reaching tests are found by following units' imports backwards
 - Following the imports of test files. Test files' imports are not in the facts. What a test reaches is found from its `Calls` and from the unit of its file
