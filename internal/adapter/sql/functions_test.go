@@ -48,6 +48,7 @@ func TestErrorsAroundFunctionExpressionsStillMakeTheFileUnread(t *testing.T) {
 		{"an unclosed comment in the expression", "bq/a.sql", "CREATE FUNCTION ds.f(x INT64) AS (x /* open);"},
 		{"a ; before the closing parenthesis", "bq/a.sql", "CREATE FUNCTION ds.f(x INT64) AS ((x + * 1);\nSELECT (1));"},
 		{"no closing parenthesis before the end", "bq/a.sql", "CREATE FUNCTION ds.f(x INT64) AS (x + * 1"},
+		{"AS at the end of the file", "bq/a.sql", "CREATE FUNCTION ds.f(x INT64) AS"},
 		{"parentheses with no token", "bq/a.sql", "CREATE FUNCTION ds.f(x INT64) AS ( /* nothing */ );"},
 		{"a broken expression in a test file", "test/f.sql", "CREATE FUNCTION ds.f(x INT64) AS (x + * 1);"},
 		{"a broken procedure, which is no function", "bq/a.sql", "CREATE PROCEDURE ds.p(x INT64) AS (x + * 1);"},

@@ -47,15 +47,15 @@ func (d tableDialect) withoutBodies(s Statement) Statement {
 // outside parentheses that follows the kind word, up to the next ; or the end of the text. Both are
 // 0 when the statement is not a view or table function of the dialect, or has no such AS.
 func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) {
-	as, ok := firstAS(toks, d.kindWord(toks, start, d.viewHead))
-	if !ok {
+	rest := fromAS(toks, d.kindWord(toks, start, d.viewHead))
+	if rest == nil {
 		return 0, 0
 	}
 	to = end
-	if next := nextStatement(toks, as); toks[next-1].text == ";" {
-		to = toks[next-1].start
+	if next := nextStatement(rest, 0); rest[next-1].text == ";" {
+		to = rest[next-1].start
 	}
-	return toks[as].end, to
+	return rest[0].end, to
 }
 
 // functionExpr finds the expression of the statement starting at token start: the text inside the
@@ -63,30 +63,33 @@ func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) 
 // closes them. Both are 0 when the statement is not a SQL function of the dialect, its AS is not
 // followed by (, or no ) closes it before a ; or the end of the text.
 func (d tableDialect) functionExpr(toks []sqlToken, start int) (from, to int) {
-	as, ok := firstAS(toks, d.kindWord(toks, start, d.functionHead))
-	if !ok || as+1 == len(toks) || toks[as+1].text != "(" {
+	rest := fromAS(toks, d.kindWord(toks, start, d.functionHead))
+	if len(rest) < 2 || rest[1].text != "(" {
 		return 0, 0
 	}
 	depth := 0
-	for i := as + 1; i < len(toks) && toks[i].text != ";"; i++ {
-		switch toks[i].text {
+	for _, t := range rest[1:] {
+		if t.text == ";" {
+			break
+		}
+		switch t.text {
 		case "(":
 			depth++
 		case ")":
 			depth--
 			if depth == 0 {
-				return toks[as+1].end, toks[i].start
+				return rest[1].end, t.start
 			}
 		}
 	}
 	return 0, 0
 }
 
-// firstAS is the index of the first AS outside parentheses after token kind and before the next ;.
-// ok is false when there is none, or kind is -1.
-func firstAS(toks []sqlToken, kind int) (as int, ok bool) {
+// fromAS is the tokens from the first AS outside parentheses after token kind and before the next
+// ;, that AS first, or nil when there is none or kind is -1.
+func fromAS(toks []sqlToken, kind int) []sqlToken {
 	if kind < 0 {
-		return 0, false
+		return nil
 	}
 	depth := 0
 	for i := kind + 1; i < len(toks) && toks[i].text != ";"; i++ {
@@ -96,10 +99,10 @@ func firstAS(toks []sqlToken, kind int) (as int, ok bool) {
 		case t == ")":
 			depth--
 		case depth == 0 && strings.EqualFold(t, "AS"):
-			return i, true
+			return toks[i:]
 		}
 	}
-	return 0, false
+	return nil
 }
 
 // kindWord is the index of the kind word (VIEW or FUNCTION) of the statement starting at token
