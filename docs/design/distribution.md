@@ -12,7 +12,7 @@ hadome supports six widely used languages, Terraform and Ansible, and is distrib
 
 | Ecosystem | Declared in | Run with | What is installed |
 |---|---|---|---|
-| npm / pnpm / yarn | `package.json` devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | Only the binary for the current platform, through per-platform optional packages |
+| npm / pnpm / yarn | `package.json` devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | Only the binary for the current platform, through per-platform optional packages. On Windows on ARM64, the x86-64 binary (see "npm platform packages" below) |
 | Python (pip / uv / Poetry) | `pyproject.toml` dev dependencies: `hadome==1.2.0` | `hadome check` | A platform-specific wheel containing the binary |
 | Go | `go.mod` tool directive: `go get -tool github.com/rerorets/hadome/cmd/hadome` | `go tool hadome check` | Built from source (see below) |
 | Gradle (Java, Kotlin) | `plugins { id("io.github.rerorets.hadome") version "1.2.0" }` | `./gradlew hadomeCheck` | The plugin downloads and verifies the binary for the current platform |
@@ -45,7 +45,7 @@ A Go project that also has TypeScript or Python files gets all eight where a C c
 flowchart LR
   T["tag vX.Y.Z"] --> B["build: 6 platforms<br/>native runners, cgo"]
   B --> R["GitHub release<br/>archives + SHA256SUMS"]
-  R --> N["npm<br/>hadome + hadome-&lt;os&gt;-&lt;arch&gt;"]
+  R --> N["npm<br/>hadome + five hadome-&lt;os&gt;-&lt;arch&gt;"]
   R --> P["PyPI<br/>one wheel per platform"]
   R --> C["crates.io<br/>binstall metadata"]
   R --> J["Gradle Plugin Portal<br/>Maven Central"]
@@ -58,13 +58,31 @@ Everything that turns a release into a package lives under `packaging/`, one dir
 
 | Directory | Builds | How the binary arrives |
 |---|---|---|
-| `packaging/npm` | `hadome` and one `hadome-<os>-<arch>` package per platform | The platform packages are optional dependencies limited by `os` and `cpu`; npm installs only the matching one. `hadome`'s launcher runs it |
+| `packaging/npm` | `hadome` and five platform packages `hadome-<os>-<arch>` | The platform packages are optional dependencies limited by `os` and `cpu`; npm installs only the matching one. `hadome`'s launcher runs it |
 | `packaging/python` | One wheel per platform (`py3-none-<platform>`) | The binary is a script of the wheel, installed onto `PATH` |
 | `packaging/cargo` | The `hadome` crate | `cargo binstall` reads the crate's metadata, downloads the release archive, and checks its signature with the public key in the metadata. Building the crate from source only explains how to install |
 | `packaging/jvm` | The Gradle plugin and the Maven plugin, sharing one installer | On first use, downloads the archive for the platform from the release, checks it against the checksums built into the plugin, and keeps it in the build tool's cache |
 | `packaging/homebrew` | The formula for the `rerorets/homebrew-tap` repository | Homebrew downloads the archive and checks its SHA-256 |
 
 The npm and Python packages carry the binary itself, so installing them never touches the network beyond the registry. The JVM plugins download, because the registries for build plugins do not select files by platform. The JVM plugins and Homebrew check each download against checksums fixed at release time. `cargo binstall` checks the signature with the public key fixed in the crate.
+
+### npm platform packages
+
+npm has these five platform packages:
+
+| Package | `os` | `cpu` | Binary inside |
+|---|---|---|---|
+| `hadome-linux-x64` | `["linux"]` | `["x64"]` | Linux x86-64 |
+| `hadome-linux-arm64` | `["linux"]` | `["arm64"]` | Linux ARM64 |
+| `hadome-darwin-x64` | `["darwin"]` | `["x64"]` | macOS x86-64 |
+| `hadome-darwin-arm64` | `["darwin"]` | `["arm64"]` | macOS ARM64 |
+| `hadome-win32-x64` | `["win32"]` | `["x64", "arm64"]` | Windows x86-64 |
+
+- **Windows on ARM64.** There is no package of its own; `hadome-win32-x64` is installed. Windows 11 on ARM64 can run x86-64 binaries through emulation
+- **The launcher.** On Windows it runs the binary of `hadome-win32-x64`, whether the CPU is x64 or arm64
+- **Windows 10 on ARM64.** It cannot run x86-64 binaries through emulation, so hadome installed from npm does not run there
+- **Running without emulation.** The Windows ARM64 binary comes through the ways other than npm. For example: the release archive (`hadome_<version>_windows_arm64.zip`), the PyPI wheel (`win_arm64`), `cargo binstall`
+- The ways other than npm give Windows on ARM64 a binary of that architecture
 
 ## Licenses of the dependencies
 

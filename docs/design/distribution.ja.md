@@ -19,7 +19,7 @@ hadome は広く使われている6言語と、Terraform、Ansible に対応し�
 
 | エコシステム | 宣言する場所 | 動かし方 | 入るもの |
 |---|---|---|---|
-| npm / pnpm / yarn | `package.json` の devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | 今のプラットフォームのバイナリだけ。プラットフォームごとの optional なパッケージを通して入ります |
+| npm / pnpm / yarn | `package.json` の devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | 今のプラットフォームのバイナリだけ。プラットフォームごとの optional なパッケージを通して入ります。Windows の ARM64 では x86-64 のバイナリが入ります（下の「npm のプラットフォームのパッケージ」） |
 | Python（pip / uv / Poetry） | `pyproject.toml` の開発用の依存: `hadome==1.2.0` | `hadome check` | バイナリを含む、プラットフォームごとの wheel |
 | Go | `go.mod` の tool ディレクティブ: `go get -tool github.com/rerorets/hadome/cmd/hadome` | `go tool hadome check` | ソースからビルドします（下の節を参照） |
 | Gradle（Java、Kotlin） | `plugins { id("io.github.rerorets.hadome") version "1.2.0" }` | `./gradlew hadomeCheck` | プラグインが、今のプラットフォームのバイナリをダウンロードして検証します |
@@ -59,7 +59,7 @@ TypeScript や Python のファイルも持つ Go のプロジェクトは、C �
 flowchart LR
   T["タグ vX.Y.Z"] --> B["ビルド: 6プラットフォーム<br/>ネイティブの runner、cgo"]
   B --> R["GitHub のリリース<br/>アーカイブ + SHA256SUMS"]
-  R --> N["npm<br/>hadome + hadome-&lt;os&gt;-&lt;arch&gt;"]
+  R --> N["npm<br/>hadome + hadome-&lt;os&gt;-&lt;arch&gt; の5つ"]
   R --> P["PyPI<br/>プラットフォームごとに wheel 1つ"]
   R --> C["crates.io<br/>binstall のメタデータ"]
   R --> J["Gradle Plugin Portal<br/>Maven Central"]
@@ -72,7 +72,7 @@ flowchart LR
 
 | ディレクトリ | 作るもの | バイナリの届け方 |
 |---|---|---|
-| `packaging/npm` | `hadome` と、プラットフォームごとに1つの `hadome-<os>-<arch>` パッケージ | プラットフォームのパッケージは、`os` と `cpu` で絞った optional な依存です。npm は合うものだけを入れ、`hadome` の起動スクリプトがそれを動かします |
+| `packaging/npm` | `hadome` と、5つのプラットフォームのパッケージ `hadome-<os>-<arch>` | プラットフォームのパッケージは、`os` と `cpu` で絞った optional な依存です。npm は合うものだけを入れ、`hadome` の起動スクリプトがそれを動かします |
 | `packaging/python` | プラットフォームごとに1つの wheel（`py3-none-<platform>`） | バイナリは、wheel のスクリプトとして `PATH` に入ります |
 | `packaging/cargo` | `hadome` クレート | `cargo binstall` がクレートのメタデータを読み、リリースのアーカイブをダウンロードし、メタデータにある公開鍵で署名を確かめます。クレートをソースからビルドしても、入れ方を説明するだけです |
 | `packaging/jvm` | Gradle のプラグインと Maven のプラグイン。インストーラを1つ共有します | 初めて使うときに、プラットフォームのアーカイブをリリースからダウンロードします。プラグインに組み込んだチェックサムと照らし合わせ、ビルドツールのキャッシュに置きます |
@@ -84,6 +84,24 @@ flowchart LR
 - **JVM のプラグイン**: バイナリをダウンロードします。ビルドプラグインのレジストリが、プラットフォームでファイルを選ばないからです。
 - **JVM のプラグインと Homebrew**: ダウンロードしたものを、リリースの時点で固定したチェックサムと照らし合わせます。
 - **`cargo binstall`**: クレートに固定した公開鍵で署名を確かめます。
+
+### npm のプラットフォームのパッケージ
+
+npm のプラットフォームのパッケージは、次の5つです。
+
+| パッケージ | `os` | `cpu` | 入るバイナリ |
+|---|---|---|---|
+| `hadome-linux-x64` | `["linux"]` | `["x64"]` | Linux の x86-64 |
+| `hadome-linux-arm64` | `["linux"]` | `["arm64"]` | Linux の ARM64 |
+| `hadome-darwin-x64` | `["darwin"]` | `["x64"]` | macOS の x86-64 |
+| `hadome-darwin-arm64` | `["darwin"]` | `["arm64"]` | macOS の ARM64 |
+| `hadome-win32-x64` | `["win32"]` | `["x64", "arm64"]` | Windows の x86-64 |
+
+- **Windows の ARM64。** 専用のパッケージはありません。`hadome-win32-x64` が入ります。Windows 11 の ARM64 は、x86-64 のバイナリを変換して動かせるからです
+- **起動スクリプト。** Windows では、CPU が x64 でも arm64 でも、`hadome-win32-x64` のバイナリを動かします
+- **Windows 10 の ARM64。** x86-64 のバイナリを変換して動かせないので、npm から入れた hadome は動きません
+- **変換を通さずに動かすとき。** Windows の ARM64 のバイナリは、npm のほかの配り方で入れます。例: リリースのアーカイブ（`hadome_<版>_windows_arm64.zip`）、PyPI の wheel（`win_arm64`）、`cargo binstall`
+- npm のほかの配り方は、Windows の ARM64 にもそのアーキテクチャのバイナリを配ります
 
 ## 依存のライセンス
 
