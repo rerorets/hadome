@@ -93,9 +93,7 @@ Open the one for your language. Each pins the version. Every way installs the sa
 From here on, commands are written as `hadome …`. Use the form for how you installed it, such as `npx hadome …` or `go tool hadome …`.
 
 <details>
-<summary>TypeScript / JavaScript (npm publishing pending)</summary>
-
-Publishing to npm is delayed while npm reviews the package names. Until then, use one of the ways under "Anything else" below.
+<summary>TypeScript / JavaScript</summary>
 
 ```sh
 npm install --save-dev --save-exact hadome   # pnpm, yarn and bun work too (bun add -d -E hadome, then bunx hadome check)
@@ -108,7 +106,7 @@ npx hadome check
 <summary>Python (uv, pip)</summary>
 
 ```sh
-uv add --dev hadome==0.5.0                   # or pip install hadome==0.5.0
+uv add --dev hadome==0.5.1                   # or pip install hadome==0.5.1
 uv run hadome check
 ```
 
@@ -119,7 +117,7 @@ uv run hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.5.0" }
+plugins { id("io.github.rerorets.hadome") version "0.5.1" }
 ```
 
 Run it with `./gradlew hadomeCheck`.
@@ -134,7 +132,7 @@ Run it with `./gradlew hadomeCheck`.
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.5.0</version>
+  <version>0.5.1</version>
 </plugin>
 ```
 
@@ -166,7 +164,7 @@ go tool -modfile=tools.mod hadome check
 <summary>Rust (cargo binstall)</summary>
 
 ```sh
-cargo binstall hadome@0.5.0
+cargo binstall hadome@0.5.1
 hadome check
 ```
 
@@ -184,7 +182,7 @@ You can also install from an archive on the [releases](https://github.com/rerore
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
-Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.5.0_windows_amd64.zip -OutFile hadome.zip
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.5.1_windows_amd64.zip -OutFile hadome.zip
 Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$HOME\hadome", "User")
 # open a new terminal, then:
@@ -193,8 +191,8 @@ hadome version
 
 ```sh
 # macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
-curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.5.0_linux_amd64.tar.gz
-tar -xzf hadome_0.5.0_linux_amd64.tar.gz
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.5.1_linux_amd64.tar.gz
+tar -xzf hadome_0.5.1_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```

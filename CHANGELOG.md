@@ -15,6 +15,21 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.5.1 - 2026-11-14
+
+### Fewer false findings and misses
+
+- The query of a view or table function in a product `.sql` is read as tokens, without parsing its syntax. Syntax hadome cannot read in the query leaves the file read and the view a symbol. (#151)
+- The expression of a BigQuery SQL function in a product `.sql` is read as tokens too. Syntax hadome cannot read in it leaves the file read and the function a symbol. (#154)
+- `hadome mutate` matches functions sharing an ID with base by their body as well, so an unchanged function is never taken for a touched one and tried. (#149)
+
+### Other
+
+- npm has five platform packages. Windows on ARM64 installs `hadome-win32-x64`, which Windows 11 runs by translating the x86-64 binary. On Windows 10 on ARM64, hadome installed from npm does not run. The release archives, PyPI and `cargo binstall` ship a Windows ARM64 binary. (#156)
+- `hadome mutate` runs, between the tests that call a broken function and all the tests, the tests that reach it through the units importing its unit. Verdicts do not change. (#144)
+- `hadome check` analyses faster: it hashes a version's files once, copies each tree-sitter tree into Go nodes right after reading it, and reads each node kind of a test body once, among others. Results do not change. (#143, #145, #150)
+- The README opens with a demo GIF and the table of regression versus cleanup, folds the per-language installs, and compares hadome with similar tools. (#146, #148)
+
 ## 0.5.0 - 2026-11-11
 
 ### Finds more
