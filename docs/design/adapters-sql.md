@@ -210,9 +210,10 @@ These are the rules of reading.
 
 - **Two passes.** It reads with ANTLR's fast prediction (SLL) first, and reads again with the full prediction (LL) only when that finds an error. No input reads with SLL and fails with LL, so the result is the same as reading with LL alone
   - Reading again with LL reads the statement once more from its start. So the grammars are changed for common forms to read with SLL (see "Changes so that SLL reads" in [sql-grammars.md](../maintaining/sql-grammars.md)). The changes leave the tree of every statement that reads the same
-- **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong. A syntax error inside the query of a product view is not one of these (see "View queries" below)
+- **Statements it cannot read.** A file with even one statement the grammar cannot read is unread (`Unread`) as a whole. The unreadable statement may be a `DROP` or a rename, so symbols built from the other statements could be wrong. A syntax error inside the query of a product view or the expression of a product BigQuery SQL function is not one of these (see "View queries" and "Function expressions" below)
 - **Bodies.** Function bodies (inside PostgreSQL's `$$`, the JavaScript or Python bodies of BigQuery and Snowflake) are not read, because calls from a body to other objects are not facts. T-SQL and PL/SQL bodies are part of the statement, so they are parsed to find where the statement ends
 - **Product view queries.** In product `.sql` files, the query after `AS` of views and table functions is not read with the grammar. See "View queries" below
+- **Product function expressions.** In product `.sql` files, the expression in parentheses after `AS` of BigQuery SQL functions is not read with the grammar. See "Function expressions" below
 - **Output.** The error reports the ANTLR runtime writes to standard output are stopped, so that they never mix with hadome's output
 
 ### View queries
@@ -259,6 +260,52 @@ SELECT day, SUM(amount) AS total FROM sales.orders GROUP BY day;
 
 - A syntax error in the query does not make the file unread because the effect of a view statement is decided before `AS`. A statement it cannot read makes the file unread because that statement may be a `DROP` or a rename. A view statement creates or recreates the view even when its query has an error. The symbols built from the other statements never become wrong
 - The tokens decide only where the query ends. A query holds no `;`, so where it ends does not depend on how complete the grammar is. The start of the statement and the part before `AS` are read with the dialect's grammar. Functions and procedures, whose bodies hold `;`, are not covered. So the reason "a purpose-built hand-written reader" was rejected ("What is deliberately left out") does not apply here
+
+### Function expressions
+
+In product `.sql` files, the expression of BigQuery SQL functions (in parentheses after `AS`) is read as tokens only, not with the grammar. The kind, name, parameters and doc the catalog uses all lie outside the expression. Parsing the expressions, like parsing view queries, takes much of the time spent reading SQL.
+
+Example: in the statement below, the kind, name and parameters of `billing.is_active` are read from before `AS`, and its doc from the `OPTIONS` after the expression. From the expression's `(` to its `)` only the tokens are read.
+
+```sql
+CREATE OR REPLACE FUNCTION billing.is_active(account_id INT64, ttl INT64) RETURNS BOOL
+AS (ttl > 0 AND account_id IS NOT NULL)
+OPTIONS(description = "Whether the account is active");
+```
+
+**Statements it applies to**
+
+| Dialect | Statements |
+|---|---|
+| BigQuery | `CREATE [OR REPLACE] [TEMP / TEMPORARY] [AGGREGATE] FUNCTION … AS ( … )` |
+
+- It does not apply to a function whose `AS` is not followed by `(`. The body of a JavaScript or Python function is a string after `AS`, which the token reader reads as a string and the grammar never looks inside
+- Table functions are covered by "View queries"
+- It does not apply to procedures (`CREATE PROCEDURE … BEGIN … END`), whose bodies hold statements separated by `;`
+- It does not apply to functions of other dialects. The bodies of PostgreSQL and Snowflake functions are strings (`$$` or `'…'`), which the grammar already never looks inside. The bodies of MySQL, SQL Server and Oracle functions hold statements separated by `;`
+- It does not apply to test `.sql` files. Test files are read whole with the grammar, which builds their trees
+
+**How it reads**
+
+1. When the tokens at the start of a statement (the start of a piece, or after `;`) have the form in the table above, it looks for the first `AS` outside parentheses after the kind word (`FUNCTION`)
+2. When the token after that `AS` is `(`, the expression runs from that `(` to its matching `)`. The match is found by counting nested parentheses. Parentheses inside strings, comments and names quoted with `` ` `` are told apart by the tokens and not counted
+3. The grammar is given the statement with the inside of the expression's parentheses replaced by `1` (`AS (1)`). Clauses that follow the expression (`OPTIONS(…)`) are not replaced and are read with the grammar
+4. The line breaks inside the expression stay, and the `1` stands on the line of the expression's last token. The positions and lines of the other statements, and the symbol's `Line` and `EndLine`, are those of the original file
+
+- A statement with no `AS` outside parentheses, or whose `AS` is not followed by `(`, is read whole with the grammar
+- A statement whose parentheses hold no token (`AS ()`) is a statement it cannot read
+
+**Errors**
+
+| Where the error is | How it is treated |
+|---|---|
+| Outside the expression (kind, name, parameters, `RETURNS`, `OPTIONS`) | A statement it cannot read. The grammar finds it, and the file is unread |
+| In the expression's tokens (an unclosed string or comment) | A statement it cannot read, because where the expression ends is not known |
+| In the expression's parentheses (a missing `)`, a `;` before the matching `)`) | A statement it cannot read, because where the expression ends is not known |
+| In the expression's syntax | Not found. The file is not unread, and the function's definition is read |
+
+- A syntax error in the expression does not make the file unread because the effect of a function statement is decided outside the expression. A function statement creates or recreates the function even when its expression has an error. The symbols built from the other statements never become wrong
+- The tokens decide only where the expression ends. Outside strings and comments, an expression's parentheses match and it holds no `;`. So counting parentheses finds its end, which does not depend on how complete the grammar is. What lies outside the expression is read with the dialect's grammar. So the reason "a purpose-built hand-written reader" was rejected ("What is deliberately left out") does not apply here
 
 ### Splitting statements
 
@@ -567,7 +614,7 @@ Exception markers (`gate:allow`) are written in comments, as in other languages.
 The following files are marked `Unread`, and nothing is read from them.
 
 - Files whose dialect is not decided
-- Files with even one statement the dialect's grammar cannot read. A syntax error in the query of a product view is not one of these ("View queries")
+- Files with even one statement the dialect's grammar cannot read. A syntax error in the query of a product view or the expression of a product BigQuery SQL function is not one of these ("View queries", "Function expressions")
 - Files whose markers point to a dialect that is not enabled
 
 `unknown/unread` returns `3` when such a file newly appears at head.
@@ -631,7 +678,7 @@ The self-test cases pass SQL from Go tests, which every build reads. Name resolu
 | `tests/scope-shrunk` | Deleting the only Go test guarding an SQL function fails · deleting the function and its test passes · redefining the function in a new migration file passes · renaming the function passes · deleting the only test writing to a table with a trigger fails · deleting the only pgTAP test fails |
 | `tests/guards-nothing` | A test passing a string that calls an SQL function passes · a test passing SQL held in a constant passes · a test passing SQL inside a helper passes · a new test passing SQL that calls only built-ins fails · in a repository without `.sql` files it fails |
 | `tests/target-unknown` | A new test naming only names absent from the database returns `3` · a new test passing only non-literal values to a call that takes SQL returns `3` · SQL with a driver's parameter in a value position resolves and passes |
-| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` · a file whose only syntax error is in the query of a product view is read · a file with an error before a view's `AS` returns `3` |
+| `unknown/unread` | A file whose markers point to two dialects returns `3` · setting the dialect in the configuration makes it read · a file with an unreadable statement returns `3` · a file whose only syntax error is in the query of a product view is read · a file with an error before a view's `AS` returns `3` · a file whose only syntax error is in the expression of a product BigQuery SQL function is read · a file whose function expression's parentheses do not match returns `3` |
 | `tests/no-clock`, `tests/no-sleep` | `now()` in test SQL is `clock` · `pg_sleep` is `sleep` · `now()` in a string that is not SQL does not count |
 | `tests/no-assertion`, `tests/skip-without-reason` | A pgTAP file without asserts fails · a pgTAP `skip` without a reason fails |
 
@@ -650,7 +697,7 @@ The self-test cases pass SQL from Go tests, which every build reads. Name resolu
 
 - **dbt and Jinja-templated SQL.** Models named by `{{ ref('x') }}` are a different mechanism, where the file name is the object name. A separate design
 - **Names inside function bodies.** Calls between product objects are not facts in other languages either
-- **Checking the syntax of product view queries.** No fact is made from a query. A syntax error shows when the database applies the migration
+- **Checking the syntax of product view queries and function expressions.** No fact is made from a query or an expression. A syntax error shows when the database applies the migration
 - **Telling overloads apart by parameter type.** It needs type inference over call arguments
 - **Making row-level security policies, check constraints, defaults and generated columns symbols.** They are logic, but tests have no way of naming them. Triggers are the only thing a write to a table can be said to run
 - **Guessing SQL from ORM models or query builders.** Things like `knex('accounts').where(…)` are not read. ORM models are product code, which the other language adapters handle
