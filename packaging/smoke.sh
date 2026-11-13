@@ -33,6 +33,26 @@ npm install --silent --no-audit --no-fund "$work/npm/hadome-linux-x64/hadome-lin
 expect_legal node_modules/hadome && expect_legal node_modules/hadome-linux-x64
 expect_version npx --no-install hadome
 expect_exit 2 npx --no-install hadome
+# Windows on ARM64 runs the x86-64 package; here it is not installed, so the launcher names it.
+out=$(node -e 'Object.defineProperty(process, "platform", { value: "win32" }); Object.defineProperty(process, "arch", { value: "arm64" }); require(process.argv[1])' \
+  "$work/npmproj/node_modules/hadome/bin/hadome.js" 2>&1) && { echo "FAIL: the launcher ran without hadome-win32-x64" >&2; exit 1; }
+case "$out" in *"package hadome-win32-x64 is not installed"*) ;; *) echo "FAIL: on win32 arm64 the launcher said: $out" >&2; exit 1 ;; esac
+# Every platform but Windows on ARM64 has a package, and the x86-64 one for Windows installs on both CPUs.
+for p in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64 windows_arm64; do
+  mkdir -p "$work/allbins/$p" && touch "$work/allbins/$p/hadome" "$work/allbins/$p/hadome.exe"
+done
+node "$root/packaging/npm/build.mjs" "$v" "$work/allbins" "$work/allnpm" >/dev/null
+node -e '
+  const fs = require("fs"), path = require("path"), dir = process.argv[1];
+  const want = ["hadome-darwin-arm64", "hadome-darwin-x64", "hadome-linux-arm64", "hadome-linux-x64", "hadome-win32-x64"];
+  const got = fs.readdirSync(dir).filter((d) => d !== "hadome").sort();
+  const opt = Object.keys(require(path.join(dir, "hadome", "package.json")).optionalDependencies).sort();
+  const cpu = require(path.join(dir, "hadome-win32-x64", "package.json")).cpu;
+  const fail = (m) => { console.error("FAIL: " + m); process.exit(1); };
+  if (got.join() !== want.join()) fail("platform packages " + got);
+  if (opt.join() !== want.join()) fail("optional dependencies " + opt);
+  if (cpu.join() !== "x64,arm64") fail("hadome-win32-x64 installs on " + cpu);
+' "$work/allnpm"
 
 echo "== python"
 python3 -I "$root/packaging/python/build_wheels.py" "$v" "$work/bins" "$work/wheels" >/dev/null
