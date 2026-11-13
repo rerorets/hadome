@@ -1,20 +1,19 @@
 package sql
 
 import (
+	"regexp"
 	"strings"
 )
 
-// withoutViewQueries returns s with the query of every view and table function in it replaced by
-// SELECT 1, for a product file: the catalog uses only what comes before AS, and parsing the query
-// is most of the time spent reading SQL (docs/design/adapters-sql.md, "View queries").
+// withoutBodies returns s, for a product file, with the query of every view and table function in
+// it replaced by SELECT 1, and the expression of every BigQuery SQL function by 1: the catalog uses
+// none of them, and parsing them is most of the time spent reading SQL (docs/design/adapters-sql.md,
+// "View queries" and "Function expressions").
 //
-// The replacement keeps the query's line breaks, the 1 on the line of its last token, so the
+// The replacement keeps the line breaks it replaces, the 1 on the line of the last token, so the
 // lines the grammar counts are the piece's. The offset of every rune is kept in the statement, so
 // the offsets are the piece's too.
-func (d tableDialect) withoutViewQueries(s Statement) Statement {
-	if d.viewHead == nil {
-		return s
-	}
+func (d tableDialect) withoutBodies(s Statement) Statement {
 	sc := scan(s.Text, d.lex)
 	if sc.Unclosed {
 		return s // where the statement ends is not known; the grammar reports the error
@@ -23,13 +22,18 @@ func (d tableDialect) withoutViewQueries(s Statement) Statement {
 	w := rewrite{text: s.Text}
 	done := 0 // the bytes of s.Text written so far
 	for start := 0; start < len(toks); start = nextStatement(toks, start) {
+		prefix := " SELECT "
 		from, to := d.viewQuery(toks, start, len(s.Text))
+		if to <= from {
+			prefix = "" // the expression keeps its parentheses, and 1 goes between them
+			from, to = d.functionExpr(toks, start)
+		}
 		last := lastToken(sc.Masked, from, to)
 		if last < 0 {
-			continue // no query, or one with no token: the grammar reads the statement whole
+			continue // no body, or one with no token: the grammar reads the statement whole
 		}
 		w.keep(done, from)
-		w.stub(from, last, to)
+		w.stub(prefix, from, last, to)
 		done = to
 	}
 	if w.offsets == nil {
@@ -43,9 +47,49 @@ func (d tableDialect) withoutViewQueries(s Statement) Statement {
 // outside parentheses that follows the kind word, up to the next ; or the end of the text. Both are
 // 0 when the statement is not a view or table function of the dialect, or has no such AS.
 func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) {
-	kind := d.viewKind(toks, start)
-	if kind < 0 {
+	rest := fromAS(toks, d.kindWord(toks, start, d.viewHead))
+	if rest == nil {
 		return 0, 0
+	}
+	to = end
+	if next := nextStatement(rest, 0); rest[next-1].text == ";" {
+		to = rest[next-1].start
+	}
+	return rest[0].end, to
+}
+
+// functionExpr finds the expression of the statement starting at token start: the text inside the
+// parentheses that follow the first AS outside parentheses after the kind word, up to the one that
+// closes them. Both are 0 when the statement is not a SQL function of the dialect, its AS is not
+// followed by (, or no ) closes it before a ; or the end of the text.
+func (d tableDialect) functionExpr(toks []sqlToken, start int) (from, to int) {
+	rest := fromAS(toks, d.kindWord(toks, start, d.functionHead))
+	if len(rest) < 2 || rest[1].text != "(" {
+		return 0, 0
+	}
+	depth := 0
+	for _, t := range rest[1:] {
+		if t.text == ";" {
+			break
+		}
+		switch t.text {
+		case "(":
+			depth++
+		case ")":
+			depth--
+			if depth == 0 {
+				return rest[1].end, t.start
+			}
+		}
+	}
+	return 0, 0
+}
+
+// fromAS is the tokens from the first AS outside parentheses after token kind and before the next
+// ;, that AS first, or nil when there is none or kind is -1.
+func fromAS(toks []sqlToken, kind int) []sqlToken {
+	if kind < 0 {
+		return nil
 	}
 	depth := 0
 	for i := kind + 1; i < len(toks) && toks[i].text != ";"; i++ {
@@ -55,25 +99,24 @@ func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) 
 		case t == ")":
 			depth--
 		case depth == 0 && strings.EqualFold(t, "AS"):
-			to = end
-			if next := nextStatement(toks, i); toks[next-1].text == ";" {
-				to = toks[next-1].start
-			}
-			return toks[i].end, to
+			return toks[i:]
 		}
 	}
-	return 0, 0
+	return nil
 }
 
-// viewKind is the index of the kind word (VIEW or FUNCTION) of the statement starting at token
-// start when its head is one of the dialect's views or table functions, and -1 otherwise.
-func (d tableDialect) viewKind(toks []sqlToken, start int) int {
-	var head []string
+// kindWord is the index of the kind word (VIEW or FUNCTION) of the statement starting at token
+// start when head matches its head, and -1 otherwise or when head is nil.
+func (d tableDialect) kindWord(toks []sqlToken, start int, head *regexp.Regexp) int {
+	if head == nil {
+		return -1
+	}
+	var words []string
 	for i := start; i < len(toks) && toks[i].text != ";"; i++ {
 		w := strings.ToUpper(toks[i].text)
-		head = append(head, w)
+		words = append(words, w)
 		if w == "VIEW" || w == "FUNCTION" {
-			if d.viewHead.MatchString(strings.Join(head, " ")) {
+			if head.MatchString(strings.Join(words, " ")) {
 				return i
 			}
 			return -1
@@ -93,8 +136,8 @@ func lastToken(masked string, from, to int) int {
 	return -1
 }
 
-// rewrite builds the text of a statement whose view queries are replaced, with the offset in the
-// original text of each of its runes.
+// rewrite builds the text of a statement whose bodies are replaced, with the offset in the original
+// text of each of its runes.
 type rewrite struct {
 	text    string
 	b       strings.Builder
@@ -109,12 +152,12 @@ func (w *rewrite) keep(from, to int) {
 	w.b.WriteString(w.text[from:to])
 }
 
-// stub writes, for the query text[from:to] whose last token ends at last, a space, the line breaks
-// before its last token, SELECT 1, and the line breaks after it. 1 stands at the query's last token,
-// so the statement ends where the query did.
-func (w *rewrite) stub(from, last, to int) {
-	w.b.WriteString(" SELECT ")
-	for range " SELECT " {
+// stub writes, for the body text[from:to] whose last token ends at last, prefix, the line breaks
+// before its last token, 1, and the line breaks after it. 1 stands at the body's last token, so the
+// statement ends where the body did.
+func (w *rewrite) stub(prefix string, from, last, to int) {
+	w.b.WriteString(prefix)
+	for range prefix {
 		w.offsets = append(w.offsets, from)
 	}
 	w.lineBreaks(from, last)
