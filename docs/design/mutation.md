@@ -474,8 +474,8 @@ classDiagram
 - **`Schematizer`** is an optional interface an adapter implements next to `Mutator`. The mutants of a language without it are tried one at a time
 - **`Schemata.Files`** holds the files' contents with the mutants put in, including a small file that reads the switch
 - **`Schemata.Switched`** holds the numbers of the mutants put in; a mutant that could not be put in is not there. A number is the mutant's position, from 1, in what `Mutants` returned. With `HADOME_MUTANT` empty or `0`, no mutant is active
-- **`Schemata.Lines`** holds, for each line of the files written, the numbers of the mutants on that line. It ties a build error to mutants
-- **`left`** holds the numbers of the mutants that broke the build in an earlier attempt. The adapter makes the files again without them
+- **`Schemata.Lines`** holds, for each line of the files written, the numbers of the mutants on that line. It ties the `path:line` in a failing output to mutants
+- **`left`** holds the numbers of the mutants that made the run before breaking fail in an earlier attempt. The adapter makes the files again without them
 
 ### Languages
 
@@ -502,20 +502,22 @@ Each kind of mutant has a form that syntax alone can write.
 
 - The function literals make the switch evaluate only the expression it chose. Evaluating both would run the calls inside the expression twice
 - When an expression holds two mutants, the inner one's form goes into the outer one's original. Of two that overlap without nesting, the later is not put in
-- These expressions are not put in, because wrapping them in a function literal would change what they do even when inactive:
-  - expressions that call `recover()` (it does nothing unless a deferred function calls it directly)
-  - expressions that call `runtime.Caller` or `runtime.Callers` (the call depth changes)
 - A small file, `hadome_mutants.go`, is added to the directory of each package holding mutants. It uses only `os`, `strconv` and `sync`, and reads `HADOME_MUTANT` once, when first used. It uses no generics, so it builds whatever `go` version `go.mod` names. It has no build tag
 
-### When the build fails
+### When the run before breaking fails
 
-Putting one mutant in can make the build fail. For example: a function literal around an expression where a constant is required.
+In the tree, the run before breaking can fail. For example: a function literal around an expression where a constant is required makes the build fail; a function literal around a call to `recover()` changes behaviour a test looks at.
+
+The mutant to blame is taken out and the tree made again, until the run passes.
 
 1. When the tree's run before breaking (stage 3) fails, `path:line` is picked from its output, and `Lines` finds the mutants on that line
-2. Those mutants go into `left`, the adapter makes the files again, and the run before breaking runs again
-3. When the build still fails after three attempts, or no mutant is found from the failing output, building all at once is dropped: every mutant of that version is tried one at a time
+2. When none is found, it is searched for by halves: the tree is made with only half of the mutants and the run before breaking runs. If it fails, the search goes on in that half; if it passes, that half stays in and the search goes on in the other half. This repeats until one mutant is left
+3. The mutant found goes into `left`, the adapter makes the files again, and the run before breaking runs again
+
+- Each time the tree is made again, it holds at least one mutant fewer, so this ends without a limit on attempts. When no mutant is left in, every mutant of that version is tried one at a time
 - A mutant in `left` is tried one at a time. A mutant whose form breaks the build often fails to build when applied on its own too, and is then caught
 - The tree is to blame only when the original tree's stage 3 run before breaking passes and this tree's fails. When the original tree's fails, the result is exit code `2` with nothing broken (invariant 1)
+- **Why there is no list of expressions not to put in.** Syntax cannot find every expression whose behaviour changes inside a function literal. For example, the call depth is read not only by `runtime.Caller` but also by `log` output with line numbers. A comparison is put in with both the original and the broken expression wrapped, so it behaves the same with the switch on or off. If a test looks at what the wrapping changed, the run before breaking fails and the steps above take the mutant out. If none does, verdicts are not affected
 
 ### Verdicts
 
@@ -542,7 +544,7 @@ A result in the tree is used like this:
 
 ### Configuration
 
-Building all at once has no setting. Whatever cannot be put in, fails the build, or meets a test command that does not pass the switch on goes back to one at a time, so the result is the same whatever is configured.
+Building all at once has no setting. Whatever cannot be put in, makes the run before breaking fail, or meets a test command that does not pass the switch on goes back to one at a time, so the result is the same whatever is configured.
 
 ## Configuration
 
@@ -664,6 +666,7 @@ So hadome ends the tree as a whole.
 20. A mutant that survived a build of all mutants is reported only when it also survived being applied on its own
 21. A mutant counts as caught in the tree only when the tree's run before breaking passed and a test failed with that mutant active. A timeout is checked again one at a time
 22. In the tree, with `HADOME_MUTANT` empty, no mutant is active
+23. Each time the tree is made again, it holds at least one mutant fewer
 
 ## Deliberately left out
 
@@ -672,6 +675,7 @@ So hadome ends the tree as a whole.
 - A mode that breaks the whole repository. Its time would depend on the repository's size, not the change's
 - Builds of all mutants at once in languages other than Go. Rust, Java and Kotlin take long to build too, but the form to put mutants in has to be decided per language. TypeScript and Python have no build cache, so putting mutants together saves nothing
 - Putting arithmetic swaps in. It needs the expression's type, which the rule against type-checking forbids. They are tried one at a time
+- A check that the switch reached the tests. When the test command does not pass `HADOME_MUTANT` on to its children, survivors are still tried again one at a time, so verdicts do not change; only the time grows
 - Building base's mutants all at once. Base tries only the counterparts of head's survivors, which are few
 - Running the tests with instrumentation to measure which lines each test passes through (how PIT and Stryker narrow). It needs to get inside each language's test runner, which goes against not calling outside tools. `Test.Calls`, read without running code, narrows instead
 - Finding the reaching tests by calls between functions. Calls from product functions to product functions are not facts of the same shape in every language. The reaching tests are found by following units' imports backwards
