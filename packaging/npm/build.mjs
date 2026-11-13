@@ -4,6 +4,8 @@
 //
 // <binaries dir> holds <os>_<arch>/hadome[.exe] (os: linux, darwin, windows; arch: amd64, arm64).
 // Platforms whose binary is missing are left out, so a package can be tried on one machine.
+// Windows on ARM64 has no package of its own: hadome-win32-x64 declares both CPUs, and Windows 11
+// runs its x86-64 binary through emulation (docs/design/distribution.md, "npm platform packages").
 import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,10 +21,11 @@ const root = join(here, "..", "..");
 // module linked into it.
 const legal = ["LICENSE", "THIRD_PARTY_NOTICES"];
 const copyLegal = (dir) => legal.forEach((f) => copyFileSync(join(root, f), join(dir, f)));
+// [Go os, Go arch, npm os, npm cpu in the name, npm cpus the package installs on]
 const targets = [
-  ["linux", "amd64", "linux", "x64"], ["linux", "arm64", "linux", "arm64"],
-  ["darwin", "amd64", "darwin", "x64"], ["darwin", "arm64", "darwin", "arm64"],
-  ["windows", "amd64", "win32", "x64"], ["windows", "arm64", "win32", "arm64"],
+  ["linux", "amd64", "linux", "x64", ["x64"]], ["linux", "arm64", "linux", "arm64", ["arm64"]],
+  ["darwin", "amd64", "darwin", "x64", ["x64"]], ["darwin", "arm64", "darwin", "arm64", ["arm64"]],
+  ["windows", "amd64", "win32", "x64", ["x64", "arm64"]],
 ];
 const common = {
   version,
@@ -32,7 +35,7 @@ const common = {
 };
 
 const optional = {};
-for (const [goos, goarch, os, cpu] of targets) {
+for (const [goos, goarch, os, cpu, cpus] of targets) {
   const exe = goos === "windows" ? "hadome.exe" : "hadome";
   const src = join(binaries, `${goos}_${goarch}`, exe);
   if (!existsSync(src)) continue;
@@ -44,7 +47,7 @@ for (const [goos, goarch, os, cpu] of targets) {
   copyLegal(dir);
   writeFileSync(join(dir, "package.json"), JSON.stringify({
     name, ...common, description: `The hadome binary for ${os} ${cpu}.`,
-    os: [os], cpu: [cpu], files: ["bin", ...legal], preferUnplugged: true,
+    os: [os], cpu: cpus, files: ["bin", ...legal], preferUnplugged: true,
   }, null, 2) + "\n");
   optional[name] = version;
 }
