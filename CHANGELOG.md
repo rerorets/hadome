@@ -27,7 +27,7 @@ https://github.com/rerorets/hadome/releases
 
 - npm has five platform packages. Windows on ARM64 installs `hadome-win32-x64`, which Windows 11 runs by translating the x86-64 binary. On Windows 10 on ARM64, hadome installed from npm does not run. The release archives, PyPI and `cargo binstall` ship a Windows ARM64 binary. (#156)
 - `hadome mutate` runs, between the tests that call a broken function and all the tests, the tests that reach it through the units importing its unit. Verdicts do not change. (#144)
-- `hadome check` analyses faster: it hashes a version's files once, copies each tree-sitter tree into Go nodes right after reading it, and reads each node kind of a test body once, among others. Results do not change. (#143, #145, #150)
+- `hadome check` analyses faster: it hashes a version's files once, copies each tree-sitter tree into Go nodes right after reading it, and reads each node kind of a test body once, among others. Results do not change. Copying the tree into Go nodes raises the maximum memory by up to about 20% on some files. (#143, #145, #150)
 - The README opens with a demo GIF and the table of regression versus cleanup, folds the per-language installs, and compares hadome with similar tools. (#146, #148)
 
 ## 0.5.0 - 2026-11-11
