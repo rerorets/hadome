@@ -160,7 +160,7 @@ func (f *sqlFile) read() {
 	product = product && f.role != facts.RoleTest
 	for _, s := range f.dialect.Split(f.src) {
 		if product {
-			s = td.withoutViewQueries(s)
+			s = td.withoutBodies(s)
 		}
 		t, err := f.dialect.Parse(s)
 		if err != nil {

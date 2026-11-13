@@ -3,7 +3,7 @@ package sql
 import "testing"
 
 // viewpoint: behaviour
-// target: sql.tableDialect.withoutViewQueries
+// target: sql.tableDialect.withoutBodies
 // The dialects whose grammars only a build with -tags sqlgrammars has: SQLite and Snowflake replace
 // a view's query by SELECT 1, keeping its line breaks before the 1; SQL Server and Oracle, where
 // the tokens cannot tell where a query ends, give the statement unchanged.
@@ -21,7 +21,7 @@ func TestViewQueriesOfEveryDialect(t *testing.T) {
 		{"oracle", oracleDialect, "CREATE VIEW daily AS SELECT x FROM t;", "CREATE VIEW daily AS SELECT x FROM t;"},
 	}
 	for _, c := range cases {
-		got := c.d.withoutViewQueries(Statement{Text: c.src, Start: 7, Line: 3})
+		got := c.d.withoutBodies(Statement{Text: c.src, Start: 7, Line: 3})
 		if got.Text != c.want || got.Start != 7 || got.Line != 3 {
 			t.Errorf("%s: %q at %d line %d, want %q at 7 line 3", c.name, got.Text, got.Start, got.Line, c.want)
 		}

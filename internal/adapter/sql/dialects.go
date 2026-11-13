@@ -246,9 +246,10 @@ func oracleCall(n *Node) (*Node, []string, bool) {
 }
 
 var bigqueryDialect = tableDialect{
-	viewHead: re(`^CREATE (OR REPLACE )?(MATERIALIZED VIEW|VIEW|TABLE FUNCTION)$`),
-	name:     "bigquery",
-	lex:      lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
+	viewHead:     re(`^CREATE (OR REPLACE )?(MATERIALIZED VIEW|VIEW|TABLE FUNCTION)$`),
+	functionHead: re(`^CREATE (OR REPLACE )?((TEMP|TEMPORARY) )?(AGGREGATE )?FUNCTION$`),
+	name:         "bigquery",
+	lex:          lexical{hashComments: true, doubleStrings: true, backslash: true, tripleQuotes: true},
 	markers: []*regexp.Regexp{
 		re("`[^`.\n]+\\.[^`\n]+`"), re(`(?i)\bCREATE\s+(OR\s+REPLACE\s+)?(TEMP(ORARY)?\s+)?TABLE\s+FUNCTION\b`),
 		re(`(?i)\bLANGUAGE\s+js\b`), re(`(?i)\bOPTIONS\s*\(`),

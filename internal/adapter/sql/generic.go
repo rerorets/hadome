@@ -28,6 +28,9 @@ type tableDialect struct {
 	// parse: its tokens from CREATE to the kind word, upper-cased and joined by one space. Nil where
 	// the query's end cannot be told from its tokens (SQL Server, Oracle).
 	viewHead *regexp.Regexp
+	// functionHead matches, in the same form, the head of a SQL function whose expression a product
+	// file does not parse. Nil where no function's body is an expression in parentheses.
+	functionHead *regexp.Regexp
 }
 
 // rules name the parts of a dialect's grammar that definitions and names are found in.
