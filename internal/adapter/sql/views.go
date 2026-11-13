@@ -14,9 +14,6 @@ import (
 // lines the grammar counts are the piece's. The offset of every rune is kept in the statement, so
 // the offsets are the piece's too.
 func (d tableDialect) withoutBodies(s Statement) Statement {
-	if d.viewHead == nil && d.functionHead == nil {
-		return s
-	}
 	sc := scan(s.Text, d.lex)
 	if sc.Unclosed {
 		return s // where the statement ends is not known; the grammar reports the error
@@ -50,8 +47,8 @@ func (d tableDialect) withoutBodies(s Statement) Statement {
 // outside parentheses that follows the kind word, up to the next ; or the end of the text. Both are
 // 0 when the statement is not a view or table function of the dialect, or has no such AS.
 func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) {
-	as := firstAS(toks, d.kindWord(toks, start, d.viewHead))
-	if as < 0 {
+	as, ok := firstAS(toks, d.kindWord(toks, start, d.viewHead))
+	if !ok {
 		return 0, 0
 	}
 	to = end
@@ -66,8 +63,8 @@ func (d tableDialect) viewQuery(toks []sqlToken, start, end int) (from, to int) 
 // closes them. Both are 0 when the statement is not a SQL function of the dialect, its AS is not
 // followed by (, or no ) closes it before a ; or the end of the text.
 func (d tableDialect) functionExpr(toks []sqlToken, start int) (from, to int) {
-	as := firstAS(toks, d.kindWord(toks, start, d.functionHead))
-	if as < 0 || as+1 == len(toks) || toks[as+1].text != "(" {
+	as, ok := firstAS(toks, d.kindWord(toks, start, d.functionHead))
+	if !ok || as+1 == len(toks) || toks[as+1].text != "(" {
 		return 0, 0
 	}
 	depth := 0
@@ -85,11 +82,11 @@ func (d tableDialect) functionExpr(toks []sqlToken, start int) (from, to int) {
 	return 0, 0
 }
 
-// firstAS is the index of the first AS outside parentheses after token kind and before the next ;,
-// or -1 when there is none or kind is -1.
-func firstAS(toks []sqlToken, kind int) int {
+// firstAS is the index of the first AS outside parentheses after token kind and before the next ;.
+// ok is false when there is none, or kind is -1.
+func firstAS(toks []sqlToken, kind int) (as int, ok bool) {
 	if kind < 0 {
-		return -1
+		return 0, false
 	}
 	depth := 0
 	for i := kind + 1; i < len(toks) && toks[i].text != ";"; i++ {
@@ -99,10 +96,10 @@ func firstAS(toks []sqlToken, kind int) int {
 		case t == ")":
 			depth--
 		case depth == 0 && strings.EqualFold(t, "AS"):
-			return i
+			return i, true
 		}
 	}
-	return -1
+	return 0, false
 }
 
 // kindWord is the index of the kind word (VIEW or FUNCTION) of the statement starting at token
