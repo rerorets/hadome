@@ -171,6 +171,7 @@ var Japanese = map[string]string{
 	"a node of the dependency diagram whose label names no unit of the version, or a planned node whose directory already holds one":                           "依存の図のノードのうち、ラベルがその版のどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
 	"a box that names nothing makes the diagram look complete when it is not":                                                                                  "何も指さない箱があると、図が完全でないのに完全に見える",
 	"correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned":                                         "ラベルをユニットのディレクトリに直すか、ノードを消す。まだ作っていない箱なら、クラス planned を付ける",
+	"correct the label to the unit's directory, or to %s to take in the units under it; remove the node; or mark a box not created yet as planned":             "ラベルをユニットのディレクトリに直すか、ノードを消す。配下のユニットをまとめて1つの箱にするなら %s と書く。まだ作っていない箱なら、クラス planned を付ける",
 	"Invariant candidates this change adds (information only; propose them to a person, `hadome suggest` prints them as configuration):":                       "この変更で増えた不変条件の候補（知らせるだけ。人に提案する。`hadome suggest` が設定の形で出す）:",
 	"Settings this change introduces with .hadome.yml (information only; base has no configuration, so nothing counts as loosening):":                          "この変更が .hadome.yml で入れる設定（知らせるだけ。base に設定が無いので、緩めることには数えない）:",
 	"the diagram's node %s is planned, but %s already holds a unit":                                                                                            "図のノード %s は予定の箱だが、%s にはもうユニットがある",

@@ -58,7 +58,7 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 
 - **Finds**: a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted), planned boxes aside. Conversely, a planned box that now names a unit (the package exists, but the diagram still says it is planned)
 - **Why**: when a box names nothing, the diagram looks complete when it is not
-- **Fix**: correct the label, or remove the node. If the directory is not created yet, mark the box `planned`. If a planned box names a unit, remove `planned`
+- **Fix**: correct the label, or remove the node. When units lie under the label's directory, the fix also says that adding `/...`, as in `tools/...`, takes them in as one box. If the directory is not created yet, mark the box `planned`. If a planned box names a unit, remove `planned`
 - The anchor is the label
 
 ## Facts

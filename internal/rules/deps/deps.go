@@ -136,11 +136,15 @@ func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
 				Fix:     engine.T("remove the class planned from node %s", n.ID),
 			})
 		case !n.Planned && !names:
+			fix := r.About().Fix
+			if unitsBelow(n.Label, unitDir) {
+				fix = engine.T("correct the label to the unit's directory, or to %s to take in the units under it; remove the node; or mark a box not created yet as planned", n.Label+"/...")
+			}
 			out = append(out, engine.Finding{
 				Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: n.Label,
 				Message: engine.T("the diagram's node %s names %s, which holds no unit", n.ID, n.Label),
 				Why:     r.About().Why,
-				Fix:     r.About().Fix,
+				Fix:     fix,
 			})
 		}
 	}
@@ -150,6 +154,17 @@ func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
 func namesAUnit(label string, unitDir map[string]string) bool {
 	for _, dir := range unitDir {
 		if covers(label, dir) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// unitsBelow reports whether units lie in subdirectories of the directory a label names, which the
+// same label ending in "/..." would take in.
+func unitsBelow(label string, unitDir map[string]string) bool {
+	for _, dir := range unitDir {
+		if strings.HasPrefix(dir, label+"/") {
 			return true
 		}
 	}
