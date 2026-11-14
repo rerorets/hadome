@@ -41,10 +41,32 @@ sequenceDiagram
 ```
 
 - The working directory is the root of the version being checked: usually a copy of that version that hadome prepares and removes afterwards. Never write to it
-- A command in `run` that contains a `/` is found from the directory hadome runs in (your repository's working tree), so a gate added in a change runs on base as well; other commands are looked up on `PATH`
+- A command in `run` that contains a `/` is found from the directory hadome runs in (your repository's working tree), so a gate added in a change runs on base as well; other commands are looked up on `PATH`. Arguments are not looked up ([Passing the gate's location as an argument](#passing-the-gates-location-as-an-argument))
 - The request arrives as JSON on standard input
 - Your command writes its response as JSON on standard output
 - Anything on standard error is shown to the user as diagnostics
+
+### Passing the gate's location as an argument
+
+The second and later entries of `run` (the arguments) are not looked up; they are passed as they are. A relative path in an argument is therefore relative to the working directory, the copy of the version being checked.
+
+Example: `run: [go, run, ./tools/gates/mygate]` tries to run `./tools/gates/mygate` in the copy of base. A gate added in the change is not in base yet, so the gate cannot run and hadome exits `2`.
+
+Put a launcher script next to the gate and make it the first entry of `run`, and a gate added in a change runs on base as well.
+
+```sh
+#!/bin/sh
+# tools/gates/mygate/run
+exec go -C "$(dirname "$0")" run . "$@"
+```
+
+```yaml
+run: [tools/gates/mygate/run]
+```
+
+- **`$0`**: a first entry that contains a `/` is called by its absolute path, so this points into the working tree.
+- **`"$@"`**: passes the arguments hadome adds (such as `--self-test`) on to the gate.
+- **`go -C`**: the working directory becomes the gate's directory. The gate reads the version being checked from the request's `version.root`, not from the working directory. `go -C` needs Go 1.20 or later.
 
 ### Request
 
