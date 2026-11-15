@@ -66,9 +66,13 @@ func (g Git) Head() (engine.Version, error) {
 	}
 	fsys := fstest.MapFS{}
 	for _, n := range names {
-		b, err := os.ReadFile(filepath.Join(g.Root, filepath.FromSlash(n)))
+		p := filepath.Join(g.Root, filepath.FromSlash(n))
+		b, err := os.ReadFile(p)
 		if os.IsNotExist(err) {
 			continue // tracked but deleted in the working tree
+		}
+		if info, statErr := os.Stat(p); err != nil && statErr == nil && info.IsDir() {
+			continue // a submodule is listed as one path, but is not a file of this repository
 		}
 		if err != nil {
 			return engine.Version{}, err

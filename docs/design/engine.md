@@ -102,6 +102,8 @@ The engine never assumes git. A **source** provides the two versions.
 
 Giving both revisions and directories leaves it undecided which to compare, so the check stops with exit code `2`.
 
+The `git` source does not read a submodule as files of this repository, in a revision or in the working tree alike: its content belongs to another repository.
+
 Each version is exposed as a read-only file system. Other version-control systems, or systems that are not git at all, plug in as further sources.
 
 ### Renames
