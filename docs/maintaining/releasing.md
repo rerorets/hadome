@@ -237,6 +237,23 @@ go test ./cmd/hadome -run TestThirdPartyNoticesListEveryModule -update-notices
 - For each module it gives the version, where the source can be downloaded (the Go module proxy), and the license text the module ships
 - A module with no license file at its top fails the test. Find out its license before adding it as a dependency as a dependency
 
+## Go and dependency versions
+
+hadome keeps Go and its dependencies at their latest versions, and holds no version past its end of support.
+
+| What | Version | Raised by |
+|---|---|---|
+| The `go` line of `go.mod` | Go's latest major version (for example `go 1.27`). No `toolchain` line | A person, when Go releases a new version (twice a year, in February and August) |
+| The Go that CI and releases build with | The latest patch of the `go` line's version. The release workflow fetches it anew each time with `check-latest` | Automatically |
+| Module dependencies | Their latest versions | Dependabot, once a week, in one PR |
+
+- The `go` line can be the latest because no module imports hadome: all its code is under `internal/`, and only built binaries are distributed. The `go` line only asks something of whoever builds hadome.
+- Since Go 1.21, an older local Go fetches the `go` line's version by itself (`GOTOOLCHAIN=auto`).
+- Dependabot's PR does not regenerate `THIRD_PARTY_NOTICES`, so its CI fails as it is: `THIRD_PARTY_NOTICES` lists each module's version. Check out the PR's branch, regenerate it ([Licenses of the dependencies](#licenses-of-the-dependencies)) and push.
+- Then merge it when its CI passes and the raised versions' changes look fine.
+- Raising a tree-sitter grammar can change how the same code is read. Read the grammar's changes in that PR as well.
+- Dependency updates are not written in the changelog. Only a rise in the Go version needed to build from source goes under "Other".
+
 ## Actions the workflows use
 
 A workflow's `uses:` names a commit SHA, not a tag. A comment after it gives the version of that SHA.

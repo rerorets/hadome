@@ -514,8 +514,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ================================================================================
-github.com/agext/levenshtein v1.2.1
-Source: https://proxy.golang.org/github.com/agext/levenshtein/@v/v1.2.1.zip
+github.com/agext/levenshtein v1.2.3
+Source: https://proxy.golang.org/github.com/agext/levenshtein/@v/v1.2.3.zip
 ================================================================================
 
 --- LICENSE
@@ -767,8 +767,8 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ================================================================================
-github.com/apparentlymart/go-textseg/v15 v15.0.0
-Source: https://proxy.golang.org/github.com/apparentlymart/go-textseg/v15/@v/v15.0.0.zip
+github.com/apparentlymart/go-textseg/v17 v17.0.1
+Source: https://proxy.golang.org/github.com/apparentlymart/go-textseg/v17/@v/v17.0.1.zip
 ================================================================================
 
 --- LICENSE
@@ -793,85 +793,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
----------
-
-Unicode table generation programs are under a separate copyright and license:
-
-Copyright (c) 2014 Couchbase, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-except in compliance with the License. You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the
-License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-either express or implied. See the License for the specific language governing permissions
-and limitations under the License.
-
----------
-
-Grapheme break data is provided as part of the Unicode character database,
-copright 2016 Unicode, Inc, which is provided with the following license:
-
-Unicode Data Files include all data files under the directories
-http://www.unicode.org/Public/, http://www.unicode.org/reports/,
-http://www.unicode.org/cldr/data/, http://source.icu-project.org/repos/icu/, and
-http://www.unicode.org/utility/trac/browser/.
-
-Unicode Data Files do not include PDF online code charts under the
-directory http://www.unicode.org/Public/.
-
-Software includes any source code published in the Unicode Standard
-or under the directories
-http://www.unicode.org/Public/, http://www.unicode.org/reports/,
-http://www.unicode.org/cldr/data/, http://source.icu-project.org/repos/icu/, and
-http://www.unicode.org/utility/trac/browser/.
-
-NOTICE TO USER: Carefully read the following legal agreement.
-BY DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING UNICODE INC.'S
-DATA FILES ("DATA FILES"), AND/OR SOFTWARE ("SOFTWARE"),
-YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
-TERMS AND CONDITIONS OF THIS AGREEMENT.
-IF YOU DO NOT AGREE, DO NOT DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE
-THE DATA FILES OR SOFTWARE.
-
-COPYRIGHT AND PERMISSION NOTICE
-
-Copyright © 1991-2017 Unicode, Inc. All rights reserved.
-Distributed under the Terms of Use in http://www.unicode.org/copyright.html.
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of the Unicode data files and any associated documentation
-(the "Data Files") or Unicode software and any associated documentation
-(the "Software") to deal in the Data Files or Software
-without restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, and/or sell copies of
-the Data Files or Software, and to permit persons to whom the Data Files
-or Software are furnished to do so, provided that either
-(a) this copyright and permission notice appear with all copies
-of the Data Files or Software, or
-(b) this copyright and permission notice appear in associated
-Documentation.
-
-THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT OF THIRD PARTY RIGHTS.
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS
-NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
-DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
-DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
-TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THE DATA FILES OR SOFTWARE.
-
-Except as contained in this notice, the name of a copyright holder
-shall not be used in advertising or otherwise to promote the sale,
-use or other dealings in these Data Files or Software without prior
-written authorization of the copyright holder.
-
 ================================================================================
-github.com/goccy/go-yaml v1.17.1
-Source: https://proxy.golang.org/github.com/goccy/go-yaml/@v/v1.17.1.zip
+github.com/goccy/go-yaml v1.19.2
+Source: https://proxy.golang.org/github.com/goccy/go-yaml/@v/v1.19.2.zip
 ================================================================================
 
 --- LICENSE
@@ -899,13 +823,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-github.com/hashicorp/hcl/v2 v2.24.0
-Source: https://proxy.golang.org/github.com/hashicorp/hcl/v2/@v/v2.24.0.zip
+github.com/hashicorp/hcl/v2 v2.25.0
+Source: https://proxy.golang.org/github.com/hashicorp/hcl/v2/@v/v2.25.0.zip
 ================================================================================
 
 --- LICENSE
 
-Copyright (c) 2014 HashiCorp, Inc.
+Copyright IBM Corp. 2014, 2026
 
 Mozilla Public License, version 2.0
 
@@ -1349,8 +1273,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-github.com/tree-sitter/go-tree-sitter v0.24.0
-Source: https://proxy.golang.org/github.com/tree-sitter/go-tree-sitter/@v/v0.24.0.zip
+github.com/tree-sitter/go-tree-sitter v0.25.0
+Source: https://proxy.golang.org/github.com/tree-sitter/go-tree-sitter/@v/v0.25.0.zip
 ================================================================================
 
 --- LICENSE
@@ -1407,8 +1331,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-github.com/tree-sitter/tree-sitter-python v0.23.6
-Source: https://proxy.golang.org/github.com/tree-sitter/tree-sitter-python/@v/v0.23.6.zip
+github.com/tree-sitter/tree-sitter-python v0.25.0
+Source: https://proxy.golang.org/github.com/tree-sitter/tree-sitter-python/@v/v0.25.0.zip
 ================================================================================
 
 --- LICENSE
@@ -1436,8 +1360,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-github.com/tree-sitter/tree-sitter-rust v0.23.2
-Source: https://proxy.golang.org/github.com/tree-sitter/tree-sitter-rust/@v/v0.23.2.zip
+github.com/tree-sitter/tree-sitter-rust v0.24.2
+Source: https://proxy.golang.org/github.com/tree-sitter/tree-sitter-rust/@v/v0.24.2.zip
 ================================================================================
 
 --- LICENSE
@@ -1494,15 +1418,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-github.com/zclconf/go-cty v1.16.3
-Source: https://proxy.golang.org/github.com/zclconf/go-cty/@v/v1.16.3.zip
+github.com/zclconf/go-cty v1.20.0
+Source: https://proxy.golang.org/github.com/zclconf/go-cty/@v/v1.20.0.zip
 ================================================================================
 
 --- LICENSE
 
 MIT License
 
-Copyright (c) 2017-2018 Martin Atkins
+Copyright (c) 2017-2026 Martin Atkins and various other contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -1558,8 +1482,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ================================================================================
-golang.org/x/text v0.25.0
-Source: https://proxy.golang.org/golang.org/x/text/@v/v0.25.0.zip
+golang.org/x/text v0.44.0
+Source: https://proxy.golang.org/golang.org/x/text/@v/v0.44.0.zip
 ================================================================================
 
 --- LICENSE
