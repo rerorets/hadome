@@ -1,6 +1,7 @@
 # Workflow actions are pinned to commit SHAs so a moved tag cannot change
 # what runs with the release secrets. Dependabot raises the pins in one
-# weekly PR, which runs CI like any other.
+# weekly PR, which runs CI like any other. Go modules are kept at their
+# latest versions the same way, in a PR of their own.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -9,4 +10,11 @@ updates:
       interval: weekly
     groups:
       actions:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      modules:
         patterns: ["*"]
