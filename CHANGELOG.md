@@ -15,6 +15,18 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.5.2 - 2026-11-16
+
+### Fewer false findings and misses
+
+- In a repository with a submodule, `hadome check` against the working tree no longer stops with exit code `2`. A submodule is not read as files of this repository, as when reading a revision. (#168)
+
+### Other
+
+- When units lie under the directory a node's label names, `deps/diagram-stale` adds to its fix that writing `<label>/...` takes them in as one box. (#164)
+- The external gate docs say that a relative path in a `run` argument is relative to the copy of the version being checked, and show a launcher that runs a gate added in the change on base as well. (#163)
+- Building hadome from source needs Go 1.27. The distributed binaries are built with Go 1.27 too. (#166)
+
 ## 0.5.1 - 2026-11-14
 
 ### Fewer false findings and misses
