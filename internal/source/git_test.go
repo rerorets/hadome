@@ -116,3 +116,37 @@ func TestGitSourceComparesTwoRevisions(t *testing.T) {
 		t.Fatalf("want rename a/old.go -> a/new.go between the revisions, got %v", renames)
 	}
 }
+
+// viewpoint: input and output
+// target: source.Git
+// A submodule is neither a file of base nor of the working tree, whether or not it is checked out,
+// and reading either version does not fail on it.
+func TestGitSourceLeavesSubmodulesOut(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	write(t, dir, "keep.txt", "keep\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "update-index", "--add", "--cacheinfo", "160000,1111111111111111111111111111111111111111,vendor/lib")
+	git(t, dir, "commit", "-q", "-m", "base")
+	if err := os.MkdirAll(filepath.Join(dir, "vendor", "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	src := source.Git{Root: dir, BaseRev: "main"}
+	base, err := src.Base()
+	if err != nil {
+		t.Fatalf("base: %v", err)
+	}
+	head, err := src.Head()
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	for label, fsys := range map[string]fs.FS{"base": base.FS, "head": head.FS} {
+		if _, err := fs.Stat(fsys, "keep.txt"); err != nil {
+			t.Errorf("%s must contain keep.txt: %v", label, err)
+		}
+		if _, err := fs.Stat(fsys, "vendor/lib"); err == nil {
+			t.Errorf("%s must not contain the submodule vendor/lib", label)
+		}
+	}
+}
