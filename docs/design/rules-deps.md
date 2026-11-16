@@ -127,7 +127,7 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
   - A or B is in no node of the call diagram
 - **Why**: the call diagram tells which layers a request goes through, in which order. An undrawn call does not show in the diagram even when it skips a layer or goes backwards — a controller calling the repository past the service, for one
 - **Fix**: call through the layers the diagram allows, or, if the design really changed, draw the arrow — a change a person reviews
-- **Where it is reported**: the call of that pair with the earliest path and line. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
+- **Where it is reported**: the declaration of the function making a call of that pair with the earliest path and line, or the entry-point code that makes it, since the facts hold no line for a call. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
 - The anchor is the pair of directories, as for `deps/not-in-diagram`, so moving the call keeps it the same finding
 - Only calls hadome can follow are checked ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
 
@@ -197,7 +197,7 @@ classDiagram
 
 ### Call facts
 
-`Symbol.Calls` holds only calls whose callee the syntax settles on one function ([suggest.md](suggest.md), "Calls hadome can follow"); calls on an interface value are deliberately left out of it. The call diagram needs them, so three facts are added to `Symbol`, leaving `Calls` as it is:
+`Symbol.Calls` holds only calls whose callee the syntax settles on one function ([suggest.md](suggest.md), "Calls hadome can follow"); whether calls on an interface value are in it differs by language: Java and Kotlin put in calls on values of a declared type, Go only calls through a field, and TypeScript and Python none. The call diagram needs them in every language, so three facts are added to `Symbol`, leaving `Calls` as it is:
 
 | Fact | On | Content |
 |---|---|---|
@@ -214,9 +214,11 @@ From the facts of a symbol of unit A, the units A reaches are:
 
 | Call | Units reached |
 |---|---|
-| An ID in `Calls` | the unit that declares the function or method |
-| An ID in `Entry.Calls` (entry-point code that is no symbol) | the same, counted as a call from the unit holding the entry-point code |
-| An ID in `Through` (method M of type T) | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is concrete, T's unit as well |
+| The ID of a function | the unit that declares the function |
+| The ID of method M of type T | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is no interface, T's unit as well |
+
+- An ID in `Calls`, `Through` or `Entry.Calls` is decided by this table alike. An ID in `Entry.Calls` (entry-point code that is no symbol) counts as a call from the unit holding the entry-point code
+- An interface's method has no body, so a call does not reach the unit declaring the interface
 
 - A call into the same unit does not count
 - When implementations lie in several units, the call reaches all of them. With implementations of `Repository` in `repository/pg` and `repository/memory`, arrows to both are needed, since a call can reach either

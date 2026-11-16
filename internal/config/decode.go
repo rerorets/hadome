@@ -124,6 +124,7 @@ func Diff(base, head Config) []Change {
 		out[i].File, out[i].Line = FileName, head.lineOf(out[i])
 	}
 	out = append(out, diffArrows(base.Diagram, head.Diagram)...)
+	out = append(out, diffArrows(base.Calls, head.Calls)...)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Key != out[j].Key {
 			return out[i].Key < out[j].Key
@@ -278,7 +279,7 @@ func diffArrows(base, head *Diagram) []Change {
 	case base == nil:
 		return nil
 	case head == nil:
-		return []Change{{Key: "rules.deps.diagram", File: FileName, Removed: base.Path, Looser: true}}
+		return []Change{{Key: base.Key, File: FileName, Removed: base.Path, Looser: true}}
 	}
 	arrows := func(d *Diagram) map[string]int {
 		m := map[string]int{}
@@ -293,30 +294,36 @@ func diffArrows(base, head *Diagram) []Change {
 	var out []Change
 	for a, line := range h {
 		if _, ok := b[a]; !ok {
-			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Line: line, Added: a, Looser: true})
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: line, Added: a, Looser: true})
 		}
 	}
 	for a := range b {
 		if _, ok := h[a]; !ok {
-			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Removed: a})
+			out = append(out, Change{Key: head.Key, File: head.Path, Removed: a})
 		}
 	}
-	return append(out, diffPlanned(base, head)...)
+	return append(out, diffClasses(base, head)...)
 }
 
-// diffPlanned lists boxes base draws unplanned and head marks planned. That is looser: one mark
-// would take a box that stopped naming anything out of deps/diagram-stale. A new box drawn planned
-// is the intended use, and removing the mark tightens, so neither is listed.
-func diffPlanned(base, head *Diagram) []Change {
-	was := map[string]bool{}
+// diffClasses lists the classes head gives that loosen the rules. Marking planned a box base draws
+// unplanned would take a box that stopped naming anything out of deps/diagram-stale; a new box drawn
+// planned is the intended use, so it is not listed. Marking wiring, on any box, takes its calls out
+// of deps/call-not-in-diagram. Removing either mark tightens.
+func diffClasses(base, head *Diagram) []Change {
+	was := map[string]Node{}
 	for _, n := range base.Nodes {
-		was[n.ID] = n.Planned
+		was[n.ID] = n
 	}
 	var out []Change
 	for _, n := range head.Nodes {
-		if planned, ok := was[n.ID]; ok && !planned && n.Planned {
-			out = append(out, Change{Key: "rules.deps.diagram", File: head.Path, Line: n.PlannedLine,
+		b, ok := was[n.ID]
+		if ok && !b.Planned && n.Planned {
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: n.PlannedLine,
 				Added: n.ID + " " + PlannedClass, Looser: true})
+		}
+		if n.Wiring && !b.Wiring {
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: n.WiringLine,
+				Added: n.ID + " " + WiringClass, Looser: true})
 		}
 	}
 	return out

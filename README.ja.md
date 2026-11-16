@@ -250,7 +250,7 @@ This repository uses hadome to stop regressions in code and tests.
 | 分類 | ルール |
 |---|---|
 | `tests/` | `scope-shrunk`（テストが守る範囲の縮小）・`invariant-unguarded`・`no-clock`・`no-sleep`・`always-true`・`skip-without-reason`・`no-mock`（純粋なコードのテストのモック）・`guards-nothing`（製品のコードを呼ばないテスト）・`no-assertion`（assert の無いテスト）・`duplicate`（本体が同じテスト）・`purity-lost`と`target-unknown`（確認待ち） |
-| `deps/` | `not-in-diagram`（依存の図に無いimport）・`diagram-stale`（何も指さない箱） |
+| `deps/` | `not-in-diagram`（依存の図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
 | `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル・`import`（確認待ち）: 行き先が実行するまで決まらないimport |

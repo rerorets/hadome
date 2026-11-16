@@ -158,6 +158,16 @@ var Japanese = map[string]string{
 	"a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere": "文書を指すことは、理由が書き残してあるという約束である。指す先が無ければ、読み手はどこにもたどり着けない",
 	"point at the document's current path, or remove the reference":                                              "文書の今のパスを指すか、参照を消す",
 
+	// deps/call-not-in-diagram.
+	"call not in the call diagram: %s → %s (%s): %s calls %s":                       "呼び出しの図に無い呼び出し: %s → %s（%s）。%s が %s を呼ぶ",
+	"no node covers the calling unit":                                               "呼ぶ側のユニットを覆うノードが無い",
+	"no node covers the called unit":                                                "呼ばれる側のユニットを覆うノードが無い",
+	"the entry point":                                                               "入口のコード",
+	"a call between the repository's own units that the call diagram does not draw": "リポジトリ自身のユニットの間の、呼び出しの図に描かれていない呼び出し",
+	"the call diagram tells which layers a request goes through; a call it does not draw can skip a layer or go backwards unseen":      "呼び出しの図は、リクエストがどの層を通るかを示す。図に描かれていない呼び出しは、層を飛ばしても逆向きでも、図に表れない",
+	"the call diagram (%s) tells which layers a request goes through; a call it does not draw can skip a layer or go backwards unseen": "呼び出しの図（%s）は、リクエストがどの層を通るかを示す。図に描かれていない呼び出しは、層を飛ばしても逆向きでも、図に表れない",
+	"call through the layers the call diagram allows; if the design changed, draw the arrow, which a person reviews":                   "呼び出しの図が許す層を通して呼ぶ。設計が変わったなら矢印を描く。矢印は人が確かめる",
+
 	// deps/.
 	"import not in the diagram: %s → %s (%s)": "図に無い import: %s → %s（%s）",
 	"no node covers the importing unit":       "import する側のユニットを覆うノードが無い",
@@ -168,7 +178,7 @@ var Japanese = map[string]string{
 	"the diagram (%s) is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                        "人とエージェントは、何が何に依存してよいかを図（%s）で知る。図に描かれていない import は、図を誤りにする",
 	"depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews": "図が許すものに依存する。import する側のユニットが宣言するインターフェースを通すことが多い。設計が変わったなら矢印を描く。矢印は人が確かめる",
 	"the diagram's node %s names %s, which holds no unit":                                                                                                      "図のノード %s が指す %s に、ユニットが無い",
-	"a node of the dependency diagram whose label names no unit of the version, or a planned node whose directory already holds one":                           "依存の図のノードのうち、ラベルがその版のどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
+	"a node of either diagram whose label names no unit of the version, or a planned node whose directory already holds one":                                   "依存の図か呼び出しの図のノードのうち、ラベルがその版のどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
 	"a box that names nothing makes the diagram look complete when it is not":                                                                                  "何も指さない箱があると、図が完全でないのに完全に見える",
 	"correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned":                                         "ラベルをユニットのディレクトリに直すか、ノードを消す。まだ作っていない箱なら、クラス planned を付ける",
 	"correct the label to the unit's directory, or to %s to take in the units under it; remove the node; or mark a box not created yet as planned":             "ラベルをユニットのディレクトリに直すか、ノードを消す。配下のユニットをまとめて1つの箱にするなら %s と書く。まだ作っていない箱なら、クラス planned を付ける",

@@ -132,6 +132,8 @@ Proved by: `hadome check` reports no `comments/` regression.
 
 When `.hadome.yml` names a diagram (`rules.deps.diagram`), an import between the repository's units must follow an arrow of it. On `deps/not-in-diagram`, change the code to depend on what the diagram allows, usually through an interface the importing unit declares. Do not draw a new arrow to make the check pass: that returns `3`, because it changes the design.
 
+When it also names a call diagram (`rules.deps.calls`), a call between the repository's units must follow an arrow of that diagram. On `deps/call-not-in-diagram`, change the code to call through the layers the diagram allows. Do not mark a box `wiring` to make the check pass either: that returns `3` too.
+
 Proved by: `hadome check` reports no `deps/` regression.
 
 ## Invariant candidates
