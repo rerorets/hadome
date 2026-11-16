@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing.
+A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)).
 
 ## The diagram
 
@@ -36,6 +36,64 @@ flowchart LR
 
 The diagram is configuration: it is read when configuration is loaded, an unreadable diagram or a label that is not a path is a configuration error (exit code `2`), and head's arrows judge both versions, like every other setting, so removing an arrow reports only imports the change adds. Whether a box names something is the exception: each version's boxes are checked against that version's tree, so a box added in the change that names nothing is a regression, unless it is planned. Marking `planned`, in head, a box base's diagram draws counts as loosening (review, exit code `3`): one mark would take a box that stopped naming anything out of the regressions. Adding a new box already `planned`, or removing `planned`, is not loosening. Adding an arrow — or changing a label, which changes what an arrow allows — needs a person's review (exit code `3`). Removing an arrow never does. Removing `rules.deps.diagram` itself does, because every import then passes.
 
+## The call diagram
+
+The call diagram draws which units' code may call which units' code. It is drawn in a file of its own, apart from the dependency diagram.
+
+The dependency diagram alone can hide the flow of calls, because wiring with dependency injection splits the direction of imports from the direction of calls:
+
+```go
+// controller: declares its own interface and calls it
+type Finder interface{ Find(id string) (User, error) }
+
+// service: implements Finder, without importing controller
+
+// container: imports everything and wires it
+c := controller.New(service.New(repository.New(db)))
+```
+
+The dependency diagram of this shape has arrows from the container to everything, with controller, service and repository side by side. The call diagram draws the actual flow:
+
+````markdown
+```mermaid
+flowchart LR
+  container["cmd/server"]:::wiring
+  controller["internal/controller"] --> service["internal/service"]
+  service --> repository["internal/repository/..."]
+```
+````
+
+```yaml
+rules:
+  deps:
+    diagram: docs/conventions/dependencies.md
+    calls: docs/conventions/calls.md
+```
+
+- **Syntax**: the same as the dependency diagram. Node labels, `dir/...`, label descriptions, the ways to write an arrow, planned boxes (`planned`), which node a unit belongs to, and what is ignored are all read the same way
+- **What an arrow means**: `a --> b` lets the code of `a` call the code of `b`. How a call reaches a unit is defined in [Where a call reaches](#where-a-call-reaches)
+- **Wiring boxes**: calls from the units of a node with the class `wiring` are not checked. They are for the place that makes and wires everything (a DI container, `main`): it calls everything, so checking it would turn the call diagram back into a star
+  - Calls *to* a `wiring` node are checked like any other
+  - It is written like `planned`: `container["cmd/server"]:::wiring`, or `class container wiring`
+- **Why a file of its own**: every flowchart in the dependency diagram's file is read as the dependency diagram, and every way of writing an arrow today (`-.->`, `|label|`) is read as an import arrow. Mixing call arrows into that file would change the meaning of diagrams already drawn
+- `calls` and `diagram` cannot name the same file; doing so is a configuration error (exit code `2`)
+- `calls` can be set alone; it is read independently of the dependency diagram
+
+**The call diagram is configuration too.** It is read, and reviewed, like the dependency diagram:
+
+- An unreadable diagram or a label that is not a path is a configuration error (exit code `2`)
+- Head's arrows judge both versions. Only whether a box names something is checked against each version's own tree
+- `wiring` takes calls out of the check, so it counts as loosening
+
+| Change | A person's review (exit code `3`) | Why |
+|---|---|---|
+| Adding an arrow | Needed | |
+| Changing a label | Needed | It changes what an arrow allows |
+| Marking `wiring` (a new box or one base's diagram draws) | Needed; counts as loosening | One mark would take every call of a unit out of the check |
+| Marking `planned` a box base's diagram draws | Needed; counts as loosening | As in the dependency diagram |
+| Removing an arrow, removing `wiring` or `planned`, adding a new box already `planned` | Not needed | |
+| Removing `rules.deps.calls` itself | Needed | Every call then passes |
+
 ## The rules
 
 The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-of-rules).
@@ -43,9 +101,10 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 | Rule | Kind | Regression when |
 |---|---|---|
 | `deps/not-in-diagram` | finding | An import between two of the repository's units is not drawn: no arrow between their nodes, or a unit no node covers |
-| `deps/diagram-stale` | finding | A node of the diagram names a directory that holds no unit |
+| `deps/diagram-stale` | finding | A node of the dependency diagram or the call diagram names a directory that holds no unit |
+| `deps/call-not-in-diagram` | finding | A call between two of the repository's units is not drawn in the call diagram |
 
-Both are off until `rules.deps.diagram` is set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
+`deps/not-in-diagram` is off until `rules.deps.diagram` is set, and `deps/call-not-in-diagram` until `rules.deps.calls` is; `deps/diagram-stale` looks only at the diagrams that are set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
 
 ### `deps/not-in-diagram`
 
@@ -56,10 +115,75 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 
 ### `deps/diagram-stale`
 
-- **Finds**: a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted), planned boxes aside. Conversely, a planned box that now names a unit (the package exists, but the diagram still says it is planned)
+- **Finds**: in the dependency diagram and the call diagram, a node whose label names a directory with no unit (a typo, or a unit that was moved or deleted), planned boxes aside. Conversely, a planned box that now names a unit (the package exists, but the diagram still says it is planned)
 - **Why**: when a box names nothing, the diagram looks complete when it is not
 - **Fix**: correct the label, or remove the node. When units lie under the label's directory, the fix also says that adding `/...`, as in `tools/...`, takes them in as one box. If the directory is not created yet, mark the box `planned`. If a planned box names a unit, remove `planned`
-- The anchor is the label
+- The anchor is the label. For a node of the call diagram it is prefixed with the diagram's file, so the same label in both diagrams makes two findings
+
+### `deps/call-not-in-diagram`
+
+- **Finds**: a call from the code of unit A to the code of unit B, unless A belongs to a `wiring` node, where
+  - the call diagram has no arrow from the node of A to the node of B, or
+  - A or B is in no node of the call diagram
+- **Why**: the call diagram tells which layers a request goes through, in which order. An undrawn call does not show in the diagram even when it skips a layer or goes backwards — a controller calling the repository past the service, for one
+- **Fix**: call through the layers the diagram allows, or, if the design really changed, draw the arrow — a change a person reviews
+- **Where it is reported**: the call of that pair with the earliest path and line. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
+- The anchor is the pair of directories, as for `deps/not-in-diagram`, so moving the call keeps it the same finding
+- Only calls hadome can follow are checked ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
+
+## Types
+
+```mermaid
+classDiagram
+  class Config {
+    +OwnDiagram *Diagram
+    +OwnCalls *Diagram
+  }
+  class Diagram {
+    +Path string
+    +Nodes []Node
+    +Edges []Edge
+  }
+  class Node {
+    +ID string
+    +Label string
+    +Line int
+    +Planned bool
+    +PlannedLine int
+    +Wiring bool
+    +WiringLine int
+  }
+  class Symbol {
+    +ID string
+    +Kind SymbolKind
+    +Calls []string
+    +Through []string
+    +Supertypes []string
+    +Unfollowed int
+  }
+  class CallEdge {
+    +FromUnit string
+    +ToUnit string
+    +Path string
+    +Line int
+    +Caller string
+    +Callee string
+    +Via string
+  }
+  class callNotInDiagram {
+    +Find(in Input) []Finding
+  }
+  Config --> Diagram : dependency and call diagrams
+  Diagram --> Node
+  callNotInDiagram ..> CallEdge : made by callEdges(facts)
+  CallEdge ..> Symbol : from Calls, Through, Supertypes
+  callNotInDiagram ..> Config : head's OwnCalls arrows
+```
+
+- **`Config.OwnCalls`**: the diagram of `rules.deps.calls`. Like `OwnDiagram`, each version holds its own, and head's arrows are used
+- **`Node.Wiring`**: a node with the class `wiring`; `WiringLine` is the line that gives the class
+- **`CallEdge`**: one call between units, made from the facts by `callEdges`. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
+- **The three facts added to `Symbol`** are defined in [Call facts](#call-facts)
 
 ## Facts
 
@@ -67,18 +191,91 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 |---|---|
 | `Import` (from unit, to unit, internal) | which units depend on which |
 | `File.Unit`, `File.Path`, `File.Role` | the directory of each unit, and which files are product code |
+| `Symbol.Calls`, `Entry.Calls` | direct calls (call diagram) |
+| `Symbol.Through`, `Symbol.Supertypes` | calls through an interface, and where they reach (call diagram) |
+| `Symbol.Unfollowed` | the number of calls hadome cannot follow (call diagram) |
+
+### Call facts
+
+`Symbol.Calls` holds only calls whose callee the syntax settles on one function ([suggest.md](suggest.md), "Calls hadome can follow"); calls on an interface value are deliberately left out of it. The call diagram needs them, so three facts are added to `Symbol`, leaving `Calls` as it is:
+
+| Fact | On | Content |
+|---|---|---|
+| `Through` | functions and methods | IDs of the repository's methods called through a value's declared type that are not in `Calls`: methods of interfaces, abstract types and traits. In TypeScript and Python, methods of concrete classes too (see the table below) |
+| `Supertypes` | types | IDs of the repository's types the type implements or extends; direct ones only, not the transitive closure |
+| `Unfollowed` | functions and methods | the number of method calls on a value whose type is unknown and that may reach the repository's code |
+
+- `Calls` is left as it is so that what else reads it (the `idempotent` candidates) gives the same results
+- The IDs have the form of `Calls`, for example `<unit>.<Type>.<Method>`
+
+### Where a call reaches
+
+From the facts of a symbol of unit A, the units A reaches are:
+
+| Call | Units reached |
+|---|---|
+| An ID in `Calls` | the unit that declares the function or method |
+| An ID in `Entry.Calls` (entry-point code that is no symbol) | the same, counted as a call from the unit holding the entry-point code |
+| An ID in `Through` (method M of type T) | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is concrete, T's unit as well |
+
+- A call into the same unit does not count
+- When implementations lie in several units, the call reaches all of them. With implementations of `Repository` in `repository/pg` and `repository/memory`, arrows to both are needed, since a call can reach either
+- Types in test files are not counted as implementations, so the diagram is never asked for arrows to test fakes (mocks)
+- A fake placed in product code counts. Which files are test files is decided in [adapters.md](adapters.md), "Files and roles"
+
+### Reading each language
+
+The difficulty splits in two: whether the type of the value called is known (`Through`), and whether the types implementing it are known (`Supertypes`).
+
+| Language | Calls that go into `Through` | How `Supertypes` is decided |
+|---|---|---|
+| Java | methods of interfaces and abstract classes, on fields, parameters and local variables with a declared type | `implements`, `extends` |
+| Kotlin | the same, constructor-parameter properties included | the types after `:` in the class declaration |
+| TypeScript | methods on fields, parameters (constructor-parameter properties included) and local variables with a type annotation, whether the type is an interface or a concrete class | `implements`, `extends` |
+| Go | methods on fields, parameters and local variables declared with an interface type | matching methods (below) |
+| Rust | methods on parameters and fields typed `dyn Trait`, `impl Trait`, or with a trait bound | `impl Trait for Type` |
+| Python | methods on attributes and parameters with a type annotation, concrete classes included | base classes (subclasses of `ABC` included); `Protocol` by matching methods |
+
+- **Why concrete classes count in TypeScript and Python**: in these two languages `Calls` holds only imported names and names declared at the top of the file. A call on an injected class value (`this.service.find()`) is not in `Calls`, even for a concrete class
+- **Matching methods in Go**: for each of the repository's types, gather its method set; a type that has every method of one of the repository's interfaces implements it
+  - Methods are compared by name and by their parameter and result types as written, with type names resolved to their packages
+  - Methods of embedded repository types count as methods of the embedding type
+  - Methods with a pointer receiver count for the pointer type; when only `*T` satisfies the interface, `T` is still taken as the implementation
+  - A type embedding a type of another module is not an implementation unless its methods match without that type, since the embedded type's methods are unknown
+- **Python's `Protocol`**: matched like Go, by method names and parameter counts. Annotations are not compared, since parameters may have none
+
+### Calls hadome cannot follow
+
+A method call on a value whose type is unknown is only counted in `Unfollowed`. It is not checked, does not fail the check, and is not sent to review.
+
+| Counted | Example |
+|---|---|
+| Methods on Python attributes and parameters without a type annotation | `self.repo.save(…)`, with `repo` unannotated |
+| Methods on TypeScript values without a type annotation, or typed `any` | `constructor(private repo)` |
+| Methods on local variables whose type cannot be settled | Java's `var r = factory.make()`, when the result type of `make` cannot be followed |
+
+- When `Unfollowed` grows in a unit of the call diagram, `hadome check` reports the number. The exit code does not change: it is information only, like invariant candidates
+- The report adds that a type annotation makes the calls followable
+- **Why not review**: `unknown/import` sends an import whose destination is unknown to review, because such imports are rare and written on purpose. A call on an unannotated value is almost every method call in a Python repository that writes no annotations; sending those to review would make the call diagram unusable there
+- Methods on values of another module's interface (Go's `w.Write(…)` with `w` an `io.Writer`) are not counted in `Unfollowed` either: the implementation they reach is usually in another module ([Deliberately left out](#deliberately-left-out))
 
 ## Self-test cases
 
 | Rule | Cases |
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
-| `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review |
+| `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
+| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
 
-1. Without `rules.deps.diagram`, the rules find nothing
+1. Without `rules.deps.diagram`, `deps/not-in-diagram` finds nothing; without `rules.deps.calls`, `deps/call-not-in-diagram` finds nothing
 2. The arrows that judge a change are head's, for both versions; drawing an arrow is never silent
+3. Marking `wiring` is never silent
+4. The call diagram does not change how the dependency diagram judges, nor the other way round
+5. Adding `Through`, `Supertypes` and `Unfollowed` changes no other fact, nor the results of rules and candidates that read `Calls`
+6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
+7. A call within one unit always passes
 
 ## Deliberately left out
 
@@ -87,3 +284,12 @@ Both are off until `rules.deps.diagram` is set. Only imports of product code cou
 - External libraries in the diagram
 - Diagram formats other than Mermaid flowcharts
 - A deadline for planned boxes. A box left planned for long is not a regression. When the plan is dropped, remove the box
+- Call arrows in the dependency diagram's file. Every way of writing an arrow is read as an import arrow today; telling call arrows apart by a label (`|calls|`) or a line style would change the meaning of diagrams already drawn
+- Inferring calls from the wiring. `controller.New(service.New(…))` shows that a service value is handed to the controller, but handing a value over is not calling it; failing on inferred calls would fail by mistake
+- Calls through another module's interface: methods on an `io.Writer` or `http.Handler` value. Their implementations are usually in another module, which hadome does not read
+- Calls of functions received as arguments. Which function arrives depends on the caller
+- Reflection and calls a framework makes by itself: Spring's `@EventListener` or proxies, calls through `getattr`. The syntax holds no callee
+- The order and number of calls. The diagram only decides which units may reach which
+- Transitive arrows. `a --> b --> c` does not allow `a` to call `c` directly, as in the dependency diagram
+- Arrows drawn but never called. As in the dependency diagram, they are not a regression
+- Generated implementations. `Symbol` holds no generated code, so a type in generated code (sqlc's `Queries`, for one) is not counted as an implementation and calls to it are not asked for. Nothing fails by mistake; fewer calls are seen

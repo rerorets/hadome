@@ -84,6 +84,7 @@ rules:                         # optional; only what differs from the defaults
         paths: ["**/+page*.ts"]
   deps:
     diagram: docs/conventions/dependencies.md  # a Mermaid flowchart; adding an arrow needs review
+    calls: docs/conventions/calls.md         # the call diagram; adding an arrow or wiring needs review
 
 files:                         # optional; for layouts against the languages' conventions
   tests: ["checks/**"]         # read as test files (not applied to Go, Terraform or Ansible files); changing it needs review
@@ -140,8 +141,8 @@ A check compares two versions, and each version has its own `.hadome.yml`. Using
 | What | Read from | Why |
 |---|---|---|
 | Invariants | Each version's own | A new invariant without a guarding test must be a regression, so base keeps the invariants it had |
-| The dependency diagram's boxes, for `deps/diagram-stale` | Each version's own | A box added in the change that names nothing must be a regression |
-| Rule settings, added table entries, gates, the dependency diagram's arrows | Head's, applied to both versions | Head is what is being judged. Applying them to base too means tightening a setting reports only new code, never what was already there |
+| The dependency and call diagrams' boxes, for `deps/diagram-stale` | Each version's own | A box added in the change that names nothing must be a regression |
+| Rule settings, added table entries, gates, the dependency and call diagrams' arrows | Head's, applied to both versions | Head is what is being judged. Applying them to base too means tightening a setting reports only new code, never what was already there |
 | Shared layers (`extends`) | The working tree, the same file for both sides | They live outside the repository, so base has no copy of its own |
 
 Both versions' files are still read and validated in full, so that the two can be compared.
