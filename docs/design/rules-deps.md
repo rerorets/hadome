@@ -239,11 +239,13 @@ def show(id):
 | Written | What goes into `Through` | Languages |
 |---|---|---|
 | Making one of the repository's classes (`UserRepo(db)`, `new Service()`) | the class's ID | Java, Kotlin, TypeScript, Python |
-| Calling a method on a local variable holding what was made (`repo.find()` after `repo = UserRepo(db)`, `var s = new Service()`, `const s = new Service()`) | the ID of the class's method | Java, Kotlin, TypeScript, Python |
+| Calling a method on what was just made, or on a local variable holding it (`repo.find()` after `repo = UserRepo(db)`, `var s = new Service()`, `const s = new Service()`, `new repo.Repo().find()`) | the ID of the class's method | Java, Kotlin, TypeScript, Python |
+| Calling a method on an attribute or field set to what was made (`self.repo = UserRepo(db)` in `__init__`, `private repo = new Repo()`) | the ID of the class's method | TypeScript, Python |
 
 - Making one counts as a call because it runs the constructor
 - Go's and Rust's struct literals (`store.Repo{}`, `Store { … }`) run no code, so they are not counted. In both languages a call of the function that makes one (`store.New()`, `Store::new()`) is already in `Calls`, and local variables already have a type
 - A local variable without a type annotation is followed only when its value is an expression making one of the repository's classes. Other local variables are not counted ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
+- An attribute or field set to what was made has a type plain from its value, so it is not counted among calls hadome cannot follow, though it has no annotation
 - Go has no constructors, so these cannot be self-test cases, which are written in Go so that every build runs them; each language's adapter tests check them
 
 ### Reading each language
