@@ -167,3 +167,4 @@ exit "$code"
 - `3` is handled the opposite way from CI. A pull request has a page where the person who merges decides, so CI lets `3` pass and shows it there. A pre-push hook has no such page, so it stops, and the person pushing checks
 - Pass `--head HEAD`. Head defaults to the working tree, so without it uncommitted changes are checked too, and what is checked differs from what is pushed
 - The example assumes you push the current branch (`HEAD`). When you push another branch by name, what is checked and what is pushed differ
+
