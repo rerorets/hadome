@@ -27,6 +27,18 @@ packaging/smoke.sh 0.0.0-local          # build, install and run every package
 
 CI runs on every pull request and every push to main: the first two and the self-tests on Linux, macOS and Windows, and the tests and vet with the tag `sqlgrammars`, `hadome check` and `packaging/smoke.sh` on Linux.
 
+Main runs everything. A pull request runs only what the files it changes can break.
+
+| What runs | When a pull request runs it |
+|---|---|
+| The tests on Linux and Windows | When it changes a file other than Markdown. With Markdown alone, only `go test ./cmd/hadome` (which checks the documents) runs on Linux |
+| The tests on macOS | When it changes `go.mod`, `go.sum`, `.github/workflows/`, `internal/mutation/`, `internal/adapter/walk/` or `internal/source/` |
+| `packaging/smoke.sh` | When it changes `go.mod`, `go.sum`, `.github/workflows/`, `packaging/`, `cmd/hadome/`, `LICENSE` or `THIRD_PARTY_NOTICES` |
+| The tests and vet with the tag `sqlgrammars` | When it changes `go.mod`, `go.sum`, `.github/workflows/` or `internal/adapter/sql/` |
+
+- macOS is narrowed because its runners are often too busy to start, which holds merges up
+- A newer push to the same pull request cancels the older run
+
 ### Hooks
 
 Enable them once.
@@ -48,7 +60,7 @@ git config core.hooksPath .githooks
 ## Review
 
 - The maintainer reviews and merges pull requests.
-- Only a pull request whose four CI checks pass (the tests on three operating systems and the packaging check) can be merged.
+- Only a pull request whose four CI checks pass (the tests on three operating systems and the packaging check) can be merged. A check that did not run counts as passed.
 - There is one maintainer, so an answer may take a few days.
 
 ## Writing
