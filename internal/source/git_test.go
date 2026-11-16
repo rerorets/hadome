@@ -150,3 +150,41 @@ func TestGitSourceLeavesSubmodulesOut(t *testing.T) {
 		}
 	}
 }
+
+// viewpoint: input and output
+// target: source.Dirs
+// A directory's symbolic links to a directory, and broken ones, are not files of the version, so
+// reading every file it lists does not fail; a link to a file is read as that file.
+func TestDirsLeaveOutLinksThatLeadToNoFile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "a.txt", "a\n")
+	write(t, dir, "real/b.txt", "b\n")
+	links := map[string]string{"to-dir": "real", "broken": "missing", "to-file": "a.txt"}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+			t.Skipf("this system cannot make symbolic links: %v", err)
+		}
+	}
+
+	head, err := source.Dirs{BaseDir: t.TempDir(), HeadDir: dir}.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	err = fs.WalkDir(head.FS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if _, err := fs.ReadFile(head.FS, p); err != nil {
+			return err
+		}
+		got = append(got, p)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reading every file: %v", err)
+	}
+	if got, want := strings.Join(got, " "), "a.txt real/b.txt to-file"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}

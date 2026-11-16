@@ -8,8 +8,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,12 +25,37 @@ type Dirs struct{ BaseDir, HeadDir string }
 
 // Base returns the base directory.
 func (d Dirs) Base() (engine.Version, error) {
-	return engine.Version{Label: "base", FS: os.DirFS(d.BaseDir), Root: d.BaseDir}, nil
+	return engine.Version{Label: "base", FS: dirFS{os.DirFS(d.BaseDir), d.BaseDir}, Root: d.BaseDir}, nil
 }
 
 // Head returns the head directory.
 func (d Dirs) Head() (engine.Version, error) {
-	return engine.Version{Label: "head", FS: os.DirFS(d.HeadDir), Root: d.HeadDir}, nil
+	return engine.Version{Label: "head", FS: dirFS{os.DirFS(d.HeadDir), d.HeadDir}, Root: d.HeadDir}, nil
+}
+
+// dirFS is a directory without the symbolic links that lead to no file: one to a directory, or a
+// broken one. Read as files, they fail the whole check; Git's working tree leaves them out too.
+type dirFS struct {
+	fs.FS
+	root string
+}
+
+func (d dirFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(d.FS, name)
+	if err != nil {
+		return nil, err
+	}
+	out := entries[:0]
+	for _, e := range entries {
+		if e.Type()&fs.ModeSymlink != 0 {
+			info, err := os.Stat(filepath.Join(d.root, filepath.FromSlash(path.Join(name, e.Name()))))
+			if err != nil || !info.Mode().IsRegular() {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out, nil
 }
 
 // Renames is always empty for directories.
