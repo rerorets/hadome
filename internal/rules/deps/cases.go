@@ -112,7 +112,7 @@ func callCases() []engine.Case {
 		t["docs/deps.md"] = &fstest.MapFile{Data: []byte("```mermaid\nflowchart LR\n" + callsDrawn + "\n  api --> domain\n```\n")}
 		return t
 	}
-	return []engine.Case{
+	out := []engine.Case{
 		{Name: "a direct call along an arrow passes", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", toStore)},
 		{Name: "a direct call with no arrow fails", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", apiCallDom),
 			WantFail: []string{"deps/call-not-in-diagram"}},
@@ -128,5 +128,50 @@ func callCases() []engine.Case {
 			Head: callApp(callsDrawn+"\n  api --> domain", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
 		{Name: "marking wiring needs review", Base: callApp(callsDrawn),
 			Head: callApp(callsDrawn+"\n  class api wiring", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
+	}
+	return append(out, interfaceCases()...)
+}
+
+// javaCalls is a Java project with a call diagram: the controller declares Finder and holds one,
+// and the service implements it. Extra files are keyed by path.
+func javaCalls(diagram string, extra ...string) fstest.MapFS {
+	const src = "src/main/java/com/ex/"
+	t := fstest.MapFS{
+		".hadome.yml":                  {Data: []byte("schema: 1\nrules:\n  deps:\n    calls: docs/calls.md\n")},
+		"docs/calls.md":                {Data: []byte("```mermaid\nflowchart LR\n  c[\"" + src + "controller\"]\n  s[\"" + src + "service\"]\n  r[\"" + src + "repo\"]\n" + diagram + "\n```\n")},
+		src + "controller/Finder.java": {Data: []byte("package com.ex.controller;\n\npublic interface Finder {\n    String find(String id);\n}\n")},
+		src + "controller/UserController.java": {Data: []byte("package com.ex.controller;\n\npublic class UserController {\n" +
+			"    private final Finder finder;\n    public UserController(Finder finder) { this.finder = finder; }\n}\n")},
+		src + "service/UserService.java": {Data: []byte("package com.ex.service;\n\nimport com.ex.controller.Finder;\n\n" +
+			"public class UserService implements Finder {\n    public String find(String id) { return id; }\n}\n")},
+	}
+	for i := 0; i+1 < len(extra); i += 2 {
+		t[extra[i]] = &fstest.MapFile{Data: []byte(extra[i+1])}
+	}
+	return t
+}
+
+func interfaceCases() []engine.Case {
+	const (
+		controller = "src/main/java/com/ex/controller/UserController.java"
+		calling    = "package com.ex.controller;\n\npublic class UserController {\n    private final Finder finder;\n" +
+			"    public UserController(Finder finder) { this.finder = finder; }\n    public String show(String id) { return finder.find(id); }\n}\n"
+		memory = "package com.ex.repo;\n\nimport com.ex.controller.Finder;\n\n" +
+			"public class MemoryFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
+		fake = "package com.ex.controller;\n\npublic class FakeFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
+	)
+	toService := "  c --> s"
+	return []engine.Case{
+		{Name: "a call through an interface needs an arrow to the implementation's unit", Base: javaCalls(""),
+			Head: javaCalls("", controller, calling), WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "a call through an interface along an arrow to the implementation passes", Base: javaCalls(toService),
+			Head: javaCalls(toService, controller, calling)},
+		{Name: "with implementations in two units, an arrow to one alone fails", Base: javaCalls(toService),
+			Head:     javaCalls(toService, controller, calling, "src/main/java/com/ex/repo/MemoryFinder.java", memory),
+			WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "an implementation in a test file does not count", Base: javaCalls(toService),
+			Head: javaCalls(toService, controller, calling, "src/test/java/com/ex/repo/MemoryFinder.java", memory)},
+		{Name: "an implementation in the caller's own unit passes", Base: javaCalls(toService),
+			Head: javaCalls(toService, controller, calling, "src/main/java/com/ex/controller/FakeFinder.java", fake)},
 	}
 }

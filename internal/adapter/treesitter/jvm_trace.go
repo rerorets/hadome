@@ -87,12 +87,15 @@ var javaSyntax = tsyntax{
 }
 
 func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
+	sup := supers{}
+	defer sup.fill(a)
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, javaSyntax, j.traceBinds(f, t, func(v func(string, bool, *node)) { javaImports(f, v) }), funcs)
 		var fns []tfunc
 		var collect func(n *node, prefix string)
 		collect = func(n *node, prefix string) {
 			class := prefix + "." + f.field(n, "name")
+			sup.add(class, javaSupertypes(f, n), tr.types)
 			body := n.ChildByFieldName("body")
 			for _, m := range named(body) {
 				switch {
@@ -174,12 +177,15 @@ var kotlinSyntax = tsyntax{
 var ktorRoutes = set("get", "post", "put", "patch", "delete", "head", "options")
 
 func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
+	sup := supers{}
+	defer sup.fill(a)
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, kotlinSyntax, k.traceBinds(f, t, func(v func(string, bool, *node)) { ktImports(f, v) }), funcs)
 		var fns []tfunc
 		var collect func(n *node, prefix string)
 		collect = func(n *node, prefix string) {
 			class := prefix + "." + f.field(n, "name")
+			sup.add(class, ktSupertypes(f, n), tr.types)
 			for _, m := range ktMembers(n) {
 				switch {
 				case ktTypes[m.Kind()]:
