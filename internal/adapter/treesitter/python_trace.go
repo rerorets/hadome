@@ -29,6 +29,11 @@ var pySyntax = tsyntax{
 }
 
 func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
+	repo, classes, through := pyRepoTypes(a), pyClasses{}, map[string][]string{}
+	defer func() {
+		classes.supertypes().fill(a)
+		setThrough(a, through)
+	}()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t), values: map[string]*node{}, funcs: funcs,
 			types: func(string) tbind { return tbind{} }}
@@ -38,13 +43,18 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 			def := definition(n)
 			switch def.Kind() {
 			case "function_definition":
-				fns = append(fns, tfunc{id: mod + "." + f.field(def, "name"), own: mod, decl: n, body: def.ChildByFieldName("body")})
+				fn := tfunc{id: mod + "." + f.field(def, "name"), own: mod, decl: n, body: def.ChildByFieldName("body")}
+				fns = append(fns, fn)
+				through[fn.id] = pyThrough(tr, fn, nil, mod, repo)
 			case "class_definition":
 				class := mod + "." + f.field(def, "name")
+				classes.read(tr, mod, def, repo)
 				for _, m := range named(def.ChildByFieldName("body")) {
 					if md := definition(m); md.Kind() == "function_definition" {
-						fns = append(fns, tfunc{id: class + "." + f.field(md, "name"), class: class, own: mod, decl: m,
-							body: md.ChildByFieldName("body")})
+						fn := tfunc{id: class + "." + f.field(md, "name"), class: class, own: mod, decl: m,
+							body: md.ChildByFieldName("body")}
+						fns = append(fns, fn)
+						through[fn.id] = pyThrough(tr, fn, def, mod, repo)
 					}
 				}
 			case "expression_statement":

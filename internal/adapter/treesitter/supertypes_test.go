@@ -69,8 +69,8 @@ func TestTypeScriptThroughAndSupertypes(t *testing.T) {
 	a := analyze(t, "typescript", fstest.MapFS{
 		"package.json":  {Data: []byte(`{"name":"app"}`)},
 		"src/port/p.ts": {Data: []byte("export interface Finder { find(id: string): string }\nexport interface Store extends Finder {}\n")},
-		"src/svc/s.ts": {Data: []byte("import type { Store } from '../port/p'\n\nexport class Base {}\n" +
-			"export class Svc extends Base implements Store { find(id: string): string { return id } }\n")},
+		"src/svc/s.ts": {Data: []byte("import type * as port from '../port/p'\n\nexport class Base {}\n" +
+			"export class Svc extends Base implements port.Store { find(id: string): string { return id } }\n")},
 		"src/api/c.ts": {Data: []byte("import type { Finder, Store } from '../port/p'\nimport { Svc } from '../svc/s'\nimport { Logger } from 'pino'\n\n" +
 			"export class Api {\n  private cache: Finder | null = null\n  constructor(private finder: Finder, svc: Svc, private log: Logger, private any, readonly owned: Svc) {}\n" +
 			"  show(other: Store, plain): string {\n    const local: Svc = new Svc()\n    this.log.info('x')\n    plain.find('x')\n" +
@@ -84,5 +84,75 @@ func TestTypeScriptThroughAndSupertypes(t *testing.T) {
 	}
 	if got := callFacts(t, a, "src/port.Store"); got != "through=[] supertypes=[src/port.Finder]" {
 		t.Errorf("Store: %s", got)
+	}
+}
+
+// viewpoint: behaviour
+// target: rust.trace
+// A Rust type's supertypes are the traits it has an impl of, and a trait's are the traits it
+// requires. Calls through a trait are the methods called on fields of Box, Arc or Rc of dyn Trait
+// and on parameters bound by a trait, in the type parameters or a where clause; those on &dyn and
+// impl parameters are already among the calls.
+func TestRustThroughAndSupertypes(t *testing.T) {
+	a := analyze(t, "rust", tree(
+		"Cargo.toml", "[package]\nname = \"app\"\n",
+		"src/lib.rs", "pub mod port;\npub mod svc;\n",
+		"src/port/mod.rs", "pub trait Named { fn name(&self) -> String; }\n"+
+			"pub trait Finder: Named + Send { fn find(&self, id: &str) -> String; }\n"+
+			"pub struct Api { finder: Box<dyn Finder>, shared: std::sync::Arc<dyn Finder + Sync> }\n\n"+
+			"impl Api {\n    pub fn show(&self) -> String { self.finder.find(\"a\") + &self.shared.name() }\n}\n\n"+
+			"pub fn bound<T: Finder>(f: &T) -> String { f.find(\"b\") }\n"+
+			"pub fn clause<T>(f: &mut T) -> String where T: Named { f.name() }\n"+
+			"pub fn plain(f: &dyn Finder) -> String { f.find(\"c\") }\n",
+		"src/svc/mod.rs", "use crate::port::{Finder, Named};\n\npub struct Svc;\n\n"+
+			"impl Finder for Svc { fn find(&self, id: &str) -> String { id.into() } }\n"+
+			"impl Named for Svc { fn name(&self) -> String { String::new() } }\n"+
+			"impl Svc { pub fn new() -> Self { Svc } }\n",
+	))
+	cases := map[string]string{
+		"src/port.Api.show": "through=[src/port.Finder.find src/port.Finder.name] supertypes=[]",
+		"src/port.bound":    "through=[src/port.Finder.find] supertypes=[]",
+		"src/port.clause":   "through=[src/port.Named.name] supertypes=[]",
+		"src/port.plain":    "through=[] supertypes=[]",
+		"src/port.Finder":   "through=[] supertypes=[src/port.Named]",
+		"src/svc.Svc":       "through=[] supertypes=[src/port.Finder src/port.Named]",
+	}
+	for id, want := range cases {
+		if got := callFacts(t, a, id); got != want {
+			t.Errorf("%s:\n got  %s\n want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: python.trace
+// A Python class's supertypes are the repository's classes it names as bases, and the Protocols
+// whose methods it has by name and number of parameters, inherited ones included. Calls through a
+// class are the methods called on annotated parameters, on attributes the class annotates, and on
+// attributes __init__ sets from an annotated parameter; an unannotated one gives none.
+func TestPythonThroughAndSupertypes(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/port.py", "from typing import Protocol, Optional\n\n\nclass Finder(Protocol):\n    def find(self, id: str) -> str: ...\n\n\n"+
+			"class Saver:\n    def save(self, x) -> None: ...\n\n\n"+
+			"class Api:\n    cache: \"Finder\"\n\n    def __init__(self, finder: Finder, saver: Optional[Saver], repo) -> None:\n"+
+			"        self.finder = finder\n        self.saver = saver\n        self.repo = repo\n\n"+
+			"    def show(self, other: Saver | None) -> str:\n        self.repo.load()\n        self.saver.save(1)\n"+
+			"        other.save(2)\n        self.cache.find('c')\n        return self.finder.find('a')\n",
+		"app/svc.py", "from app import port\nfrom app.port import Saver\n\n\nclass Base:\n    def find(self, id):\n        return id\n\n\n"+
+			"class Svc(Base):\n    pass\n\n\nclass Store(port.Saver):\n    def save(self, x) -> None:\n        pass\n\n\n"+
+			"class Wrong:\n    def find(self, id, extra):\n        return id\n",
+	))
+	cases := map[string]string{
+		"app/port.Api.show": "through=[app/port.Finder.find app/port.Saver.save] supertypes=[]",
+		"app/svc.Svc":       "through=[] supertypes=[app/port.Finder app/svc.Base]",
+		"app/svc.Base":      "through=[] supertypes=[app/port.Finder]",
+		"app/svc.Store":     "through=[] supertypes=[app/port.Saver]",
+		"app/svc.Wrong":     "through=[] supertypes=[]",
+	}
+	for id, want := range cases {
+		if got := callFacts(t, a, id); got != want {
+			t.Errorf("%s:\n got  %s\n want %s", id, got, want)
+		}
 	}
 }
