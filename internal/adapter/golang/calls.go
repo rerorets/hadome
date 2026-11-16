@@ -117,6 +117,9 @@ func (w *walker) bindParams(ft *ast.FuncType, passed map[string]*vtype) {
 			if declared == nil || declared.isInterface() {
 				t = passed[n.Name]
 			}
+			if t == nil {
+				w.trace.interfaceParam(n.Name, declared)
+			}
 			w.local.vars[n.Name] = t
 		}
 	}
@@ -180,13 +183,23 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 		w.record(t.id+"."+name, c)
 		return
 	}
-	if t != nil && t.ext != "" { // a call into another module, like one of its functions
+	if !w.otherCall(sel.X, t, name) {
+		w.test.Unresolved++
+	}
+}
+
+// otherCall reads a method call on a value whose type is not one of the repository's: a value of
+// another module, called like one of its functions, or a parameter declared with one of the
+// repository's interfaces, whose method is a call through it. It reports whether it was one.
+func (w *walker) otherCall(x ast.Expr, t *vtype, name string) bool {
+	if t != nil && t.ext != "" {
 		if w.tables.io.has(t.ext[:strings.LastIndex(t.ext, ".")]) {
 			w.trace.doesIO()
 		}
-		return
+		return true
 	}
-	w.test.Unresolved++
+	param, ok := x.(*ast.Ident)
+	return ok && t == nil && w.trace.callThrough(param.Name, name)
 }
 
 // methodValueCall counts a call of a variable holding a method value as a call of the method,

@@ -129,5 +129,32 @@ func callCases() []engine.Case {
 		{Name: "marking wiring needs review", Base: callApp(callsDrawn),
 			Head: callApp(callsDrawn+"\n  class api wiring", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
 	}
-	return out
+	return append(out, goInterfaceCases()...)
+}
+
+// goInterfaceCases are the cases of calls through an interface: api declares Finder and calls it on
+// a parameter, and other units implement it.
+func goInterfaceCases() []engine.Case {
+	const (
+		port    = "package api\n\ntype Finder interface{ Find(id string) string }\n"
+		calling = port + "\nfunc Show(f Finder) string { return f.Find(\"x\") }\n"
+		impl    = "type Repo struct{}\n\nfunc (Repo) Find(id string) string { return id }\n"
+	)
+	inDomain, inStore := "package domain\n\n"+impl, "package store\n\n"+impl
+	return []engine.Case{
+		{Name: "a call through an interface needs an arrow to the implementation's unit",
+			Base:     callApp(callsDrawn, "api/api.go", port, "domain/repo.go", inDomain),
+			Head:     callApp(callsDrawn, "api/api.go", calling, "domain/repo.go", inDomain),
+			WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "a call through an interface along an arrow to the implementation passes",
+			Base: callApp(callsDrawn, "api/api.go", port, "store/repo.go", inStore),
+			Head: callApp(callsDrawn, "api/api.go", calling, "store/repo.go", inStore)},
+		{Name: "with implementations in two units, an arrow to one alone fails",
+			Base:     callApp(callsDrawn, "api/api.go", port, "store/repo.go", inStore, "domain/repo.go", inDomain),
+			Head:     callApp(callsDrawn, "api/api.go", calling, "store/repo.go", inStore, "domain/repo.go", inDomain),
+			WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "an implementation in a test file does not count",
+			Base: callApp(callsDrawn, "api/api.go", port, "domain/repo_test.go", inDomain),
+			Head: callApp(callsDrawn, "api/api.go", calling, "domain/repo_test.go", inDomain)},
+	}
 }

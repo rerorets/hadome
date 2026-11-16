@@ -123,6 +123,7 @@ func analyze(v engine.Version, c config.Analysis, paths []string, texts bool) (*
 			a.Entries = append(a.Entries, entries...)
 		}
 	}
+	supertypes(files, a)
 	return a, nil
 }
 
