@@ -201,7 +201,7 @@ classDiagram
 
 | Fact | On | Content |
 |---|---|---|
-| `Through` | functions and methods | IDs of the repository's methods called through a value's declared type that are not in `Calls`: methods of interfaces, abstract types and traits. In TypeScript and Python, methods of concrete classes too (see the table below) |
+| `Through` | functions and methods | IDs of the repository's methods called through a value's declared type that are not in `Calls`: methods of interfaces, abstract types and traits. In TypeScript and Python, methods of concrete classes too (see the table below). Also the IDs of classes made in place, and their methods ([Objects made in place](#objects-made-in-place)) |
 | `Supertypes` | types | IDs of the repository's types the type implements or extends; direct ones only, not the transitive closure |
 | `Unfollowed` | functions and methods | the number of method calls on parameters and attributes whose type is not written ([Calls hadome cannot follow](#calls-hadome-cannot-follow)) |
 
@@ -215,6 +215,7 @@ From the facts of a symbol of unit A, the units A reaches are:
 | Call | Units reached |
 |---|---|
 | The ID of a function | the unit that declares the function |
+| The ID of type T (a call making a T) | the unit that declares T |
 | The ID of method M of type T | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is no interface, T's unit as well |
 
 - An ID in `Calls`, `Through` or `Entry.Calls` is decided by this table alike. An ID in `Entry.Calls` (entry-point code that is no symbol) counts as a call from the unit holding the entry-point code
@@ -224,6 +225,26 @@ From the facts of a symbol of unit A, the units A reaches are:
 - When implementations lie in several units, the call reaches all of them. With implementations of `Repository` in `repository/pg` and `repository/memory`, arrows to both are needed, since a call can reach either
 - Types in test files are not counted as implementations, so the diagram is never asked for arrows to test fakes (mocks)
 - A fake placed in product code counts. Which files are test files is decided in [adapters.md](adapters.md), "Files and roles"
+
+### Objects made in place
+
+Making another unit's class in place and using it is followed too: a controller making a repository is the most common way to skip a layer.
+
+```python
+def show(id):
+    repo = UserRepo(db)   # making one: a call to UserRepo's unit
+    return repo.find(id)  # calling what was made: a call to UserRepo.find
+```
+
+| Written | What goes into `Through` | Languages |
+|---|---|---|
+| Making one of the repository's classes (`UserRepo(db)`, `new Service()`) | the class's ID | Java, Kotlin, TypeScript, Python |
+| Calling a method on a local variable holding what was made (`repo.find()` after `repo = UserRepo(db)`, `var s = new Service()`, `const s = new Service()`) | the ID of the class's method | Java, Kotlin, TypeScript, Python |
+
+- Making one counts as a call because it runs the constructor
+- Go's and Rust's struct literals (`store.Repo{}`, `Store { … }`) run no code, so they are not counted. In both languages a call of the function that makes one (`store.New()`, `Store::new()`) is already in `Calls`, and local variables already have a type
+- A local variable without a type annotation is followed only when its value is an expression making one of the repository's classes. Other local variables are not counted ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
+- Go has no constructors, so these cannot be self-test cases, which are written in Go so that every build runs them; each language's adapter tests check them
 
 ### Reading each language
 
@@ -251,16 +272,18 @@ The difficulty splits in two: whether the type of the value called is known (`Th
 
 A method call on a value whose type is unknown is only counted in `Unfollowed`. It is not checked, does not fail the check, and is not sent to review.
 
-Only the places that take a value from outside are counted: parameters and attributes. A value injected with dependency injection lands there.
+Only the places that take a value from outside are counted: parameters, attributes and variables at the top of a module. A value injected with dependency injection, or one made once at the top of a module and shared, lands there.
 
 | Counted | Example |
 |---|---|
 | Methods on Python parameters and attributes without a type annotation | `self.repo.save(…)` with `repo` unannotated, `def run(repo): repo.save(…)` |
 | Methods on TypeScript parameters and fields without a type annotation, or typed `any` | `this.repo.save(…)` after `constructor(private repo)` |
+| Methods on variables at the top of a module whose type is unknown (Python, TypeScript; imported ones included) | `repo.find(…)` after `repo = make_repo()` at the top |
 
 | Not counted | Why |
 |---|---|
-| Methods on local variables (Java's `var` and Kotlin's `val` without a type too) | Most are values made in place (`list.append(…)`) that reach no code of the repository; counting them would bury the report in calls that reach nothing |
+| Methods on local variables (Java's `var` and Kotlin's `val` without a type too); one holding a class of the repository made in place is followed | Most are values made in place (`list.append(…)`) that reach no code of the repository; counting them would bury the report in calls that reach nothing |
+| Methods on what a call returns (`make_repo().find(…)`) | As above. The call of `make_repo()` itself is in `Calls`, so the pair of units is seen |
 | Methods on values of a declared type (parameters and fields in Java, Kotlin, Go and Rust) | The type is known, so the call is followed, or known to be another module's |
 | Methods on imported names, `self` and `this` | `Calls` follows them |
 
