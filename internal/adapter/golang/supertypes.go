@@ -227,7 +227,7 @@ func (m matching) canon(e ast.Expr, pkg string, imports map[string]string) strin
 	return types.ExprString(e)
 }
 
-// composite writes a type made of other types, each written by c.
+// composite writes a type made of other types, each written by c: one of the kinds canon hands it.
 func (m matching) composite(e ast.Expr, c func(ast.Expr) string) string {
 	switch x := e.(type) {
 	case *ast.ArrayType:
@@ -243,12 +243,11 @@ func (m matching) composite(e ast.Expr, c func(ast.Expr) string) string {
 		return "func" + methodSignature(x, c)
 	case *ast.IndexExpr:
 		return c(x.X) + "[" + c(x.Index) + "]"
-	case *ast.IndexListExpr:
-		parts := make([]string, len(x.Indices))
-		for i, ix := range x.Indices {
-			parts[i] = c(ix)
-		}
-		return c(x.X) + "[" + strings.Join(parts, ",") + "]"
 	}
-	return types.ExprString(e)
+	x := e.(*ast.IndexListExpr)
+	parts := make([]string, len(x.Indices))
+	for i, ix := range x.Indices {
+		parts[i] = c(ix)
+	}
+	return c(x.X) + "[" + strings.Join(parts, ",") + "]"
 }

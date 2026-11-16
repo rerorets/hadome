@@ -188,9 +188,10 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 	}
 }
 
-// otherCall reads a method call on a value whose type is not one of the repository's: a value of
-// another module, called like one of its functions, or a parameter declared with one of the
-// repository's interfaces, whose method is a call through it. It reports whether it was one.
+// otherCall reads a method call on a value whose type is not one of the repository's, and reports
+// whether it named one: a value of another module, called like one of its functions. A parameter
+// declared with one of the repository's interfaces names none, but its method is recorded as a call
+// through the interface.
 func (w *walker) otherCall(x ast.Expr, t *vtype, name string) bool {
 	if t != nil && t.ext != "" {
 		if w.tables.io.has(t.ext[:strings.LastIndex(t.ext, ".")]) {
@@ -198,8 +199,10 @@ func (w *walker) otherCall(x ast.Expr, t *vtype, name string) bool {
 		}
 		return true
 	}
-	param, ok := x.(*ast.Ident)
-	return ok && t == nil && w.trace.callThrough(param.Name, name)
+	if param, ok := x.(*ast.Ident); ok && t == nil {
+		w.trace.callThrough(param.Name, name)
+	}
+	return false
 }
 
 // methodValueCall counts a call of a variable holding a method value as a call of the method,

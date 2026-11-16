@@ -44,13 +44,11 @@ func (t *trace) interfaceParam(name string, declared *vtype) {
 }
 
 // callThrough records a method called on a parameter declared with one of the repository's
-// interfaces, and reports whether it was one.
-func (t *trace) callThrough(param, method string) bool {
-	if t == nil || t.ifaces[param] == "" {
-		return false
+// interfaces.
+func (t *trace) callThrough(param, method string) {
+	if t != nil && t.ifaces[param] != "" {
+		t.through[t.ifaces[param]+"."+method] = true
 	}
-	t.through[t.ifaces[param]+"."+method] = true
-	return true
 }
 
 func (t *trace) doesIO() {
