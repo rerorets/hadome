@@ -71,12 +71,12 @@ func TestTypeScriptThroughAndSupertypes(t *testing.T) {
 		"src/port/p.ts": {Data: []byte("export interface Finder { find(id: string): string }\nexport interface Store extends Finder {}\n")},
 		"src/svc/s.ts": {Data: []byte("import type { Store } from '../port/p'\n\nexport class Base {}\n" +
 			"export class Svc extends Base implements Store { find(id: string): string { return id } }\n")},
-		"src/api/c.ts": {Data: []byte("import type { Finder } from '../port/p'\nimport { Svc } from '../svc/s'\nimport { Logger } from 'pino'\n\n" +
-			"export class Api {\n  private cache: Finder | null = null\n  constructor(private readonly finder: Finder, svc: Svc, private log: Logger, private any) {}\n" +
-			"  show(other: Finder, plain): string {\n    const local: Svc = new Svc()\n    this.log.info('x')\n    plain.find('x')\n" +
-			"    return this.finder.find('a') + this.cache!.find('b') + other.find('c') + local.find('d') + this.any.find('e')\n  }\n}\n")},
+		"src/api/c.ts": {Data: []byte("import type { Finder, Store } from '../port/p'\nimport { Svc } from '../svc/s'\nimport { Logger } from 'pino'\n\n" +
+			"export class Api {\n  private cache: Finder | null = null\n  constructor(private finder: Finder, svc: Svc, private log: Logger, private any, readonly owned: Svc) {}\n" +
+			"  show(other: Store, plain): string {\n    const local: Svc = new Svc()\n    this.log.info('x')\n    plain.find('x')\n" +
+			"    return this.finder.find('a') + this.cache!.find('b') + other.find('c') + local.find('d') + this.any.find('e') + this.owned.save()\n  }\n}\n")},
 	})
-	if got := callFacts(t, a, "src/api.Api.show"); got != "through=[src/port.Finder.find src/svc.Svc.find] supertypes=[]" {
+	if got := callFacts(t, a, "src/api.Api.show"); got != "through=[src/port.Finder.find src/port.Store.find src/svc.Svc.find src/svc.Svc.save] supertypes=[]" {
 		t.Errorf("Api.show: %s", got)
 	}
 	if got := callFacts(t, a, "src/svc.Svc"); got != "through=[] supertypes=[src/port.Store src/svc.Base]" {
