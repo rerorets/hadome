@@ -34,6 +34,9 @@ func newTSTypes(tr *tsTrace, t *tables, repo map[string]bool) *tsTypes {
 // Repo<User>, ns.Store), or "": an array of the type, or one of its members' types, is not the type.
 func (ty *tsTypes) resolve(written string) string {
 	written = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(written), ":"))
+	if ty.repo[written] { // the class of a value made in another file (made)
+		return written
+	}
 	for _, part := range strings.Split(written, "|") {
 		part = strings.TrimSpace(part)
 		if part == "" || part == "null" || part == "undefined" {
@@ -62,6 +65,25 @@ func (ty *tsTypes) resolve(written string) string {
 		return ""
 	}
 	return ""
+}
+
+// made records, by the value's ID, the class of each value at the top of the file whose written
+// type is one of the repository's classes or that is made from one (export const api = new Api()),
+// for the files importing it.
+func (ty *tsTypes) made(into map[string]string) {
+	tr, f := ty.tr, ty.tr.f
+	for name, d := range tr.top {
+		if d.Kind() != "variable_declarator" {
+			continue
+		}
+		written := f.field(d, "type")
+		if written == "" {
+			written = tsMade.made(f, d.ChildByFieldName("value"))
+		}
+		if class := ty.resolve(written); class != "" {
+			into[tr.r.symbolID(f.path, name)] = class
+		}
+	}
 }
 
 // supertypes records what each class and interface the file declares at the top extends or
@@ -150,9 +172,9 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) ([]strin
 
 // throughs maps the IDs of the file's functions and methods to their calls through a value's
 // declared type, and to the number of calls on values whose type is unknown, as bodies lists them.
-func (ty *tsTypes) throughs() (map[string][]string, map[string]int) {
+func (ty *tsTypes) throughs(made map[string]string) (map[string][]string, map[string]int) {
 	f, r := ty.tr.f, ty.tr.r
-	module := ty.moduleValues()
+	module := ty.moduleValues(made)
 	out, unfollowed := map[string][]string{}, map[string]int{}
 	add := func(id string, decl, class *node) { out[id], unfollowed[id] = ty.through(decl, class, module) }
 	for name, d := range ty.tr.top {
@@ -175,15 +197,19 @@ func (ty *tsTypes) throughs() (map[string][]string, map[string]int) {
 }
 
 // moduleValues returns, by name, the written types of the values at the top of the file that come
-// from the repository's code: one of its classes made there (const repo = new Repo()), or
+// from the repository's code: one of its classes made there (const repo = new Repo()) or in the
+// file it is imported from (made), or
 // unknownType for the result of one of its functions (const repo = makeRepo()), for one typed any,
 // and for a value imported from one of its files that is neither a function nor a class.
-func (ty *tsTypes) moduleValues() map[string]string {
+func (ty *tsTypes) moduleValues(made map[string]string) map[string]string {
 	tr, f := ty.tr, ty.tr.f
 	out := map[string]string{}
 	for name, b := range tr.bindings {
 		if id := tr.r.target(b.file, b.name); b.file != "" && b.name != "*" && !tr.funcs[id] && !ty.repo[id] {
 			out[name] = unknownType
+			if class := made[id]; class != "" {
+				out[name] = class
+			}
 		}
 	}
 	for name, d := range tr.top {

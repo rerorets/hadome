@@ -84,10 +84,13 @@ type tracing struct {
 	values map[string]*node        // values declared at the top of the file, by name: their initial values
 	funcs  map[string]bool         // the IDs of the version's functions and methods
 	types  func(name string) tbind // what a type name stands for in the file
-	io     func(path string) bool  // whether a whole path names something that does input or output
-	locals map[string]string       // the variables of the function being read, and their types
-	fields map[string]string       // the fields of its class, and their types
-	seen   map[string]bool         // the values at the top of the file already read for it
+	// member returns the ID a member of the repository's module stands for, when it is not
+	// <module>.<name> (a name a Python package imports); nil when it always is.
+	member func(mod, name string) string
+	io     func(path string) bool // whether a whole path names something that does input or output
+	locals map[string]string      // the variables of the function being read, and their types
+	fields map[string]string      // the fields of its class, and their types
+	seen   map[string]bool        // the values at the top of the file already read for it
 	// classFields are the fields of each class read so far, by the class's node: a class's methods
 	// share them, so the class is walked once for all of them.
 	classFields map[uintptr]map[string]string
@@ -263,12 +266,20 @@ func (tr *tracing) memberOf(fn tfunc, obj *node, name string, got *reached) bool
 	switch {
 	case b.io:
 		got.io = true
-	case b.id != "" && tr.funcs[b.id+"."+name]:
-		got.calls[b.id+"."+name] = true
+	case b.id != "" && tr.funcs[tr.memberID(b.id, name)]:
+		got.calls[tr.memberID(b.id, name)] = true
 	case b.unit != "":
 		got.units[b.unit] = true
 	}
 	return known
+}
+
+// memberID returns the ID of member name of the repository's function, class or module id.
+func (tr *tracing) memberID(id, name string) string {
+	if tr.member != nil {
+		return tr.member(id, name)
+	}
+	return id + "." + name
 }
 
 // self reports whether a node is the object itself: self, this.

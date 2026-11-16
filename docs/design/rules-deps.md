@@ -242,6 +242,7 @@ def show(id):
 | Making one of the repository's classes (`UserRepo(db)`, `new Service()`) | the class's ID | Java, Kotlin, TypeScript, Python |
 | Calling a method on what was just made, or on a local variable holding it (`repo.find()` after `repo = UserRepo(db)`, `var s = new Service()`, `const s = new Service()`, `new repo.Repo().find()`) | the ID of the class's method | Java, Kotlin, TypeScript, Python |
 | Calling a method on an attribute or field set to what was made (`self.repo = UserRepo(db)` in `__init__`, `private repo = new Repo()`) | the ID of the class's method | TypeScript, Python |
+| Importing a value made, or written with its type, at the top of another module and calling its method (`manager.switch()` after `from app.state import manager`, with `manager = Manager()` in `app/state.py`; `api.get()` after importing `export const api = new Api()`) | the ID of the class's method | TypeScript, Python |
 
 - Making one counts as a call because it runs the constructor
 - Go's and Rust's struct literals (`store.Repo{}`, `Store { … }`) run no code, so they are not counted. In both languages a call of the function that makes one (`store.New()`, `Store::new()`) is already in `Calls`, and local variables already have a type
@@ -270,6 +271,7 @@ The difficulty splits in two: whether the type of the value called is known (`Th
   - A type embedding a type of another module is not an implementation unless its methods match without that type, since the embedded type's methods are unknown
 - **Python's `Protocol`**: matched like Go, by method names and parameter counts. Annotations are not compared, since parameters may have none
 - **Python's `Protocol` and `ABC`**: their symbols stay classes, not interfaces, so a call reaches the unit declaring the `Protocol` or `ABC` as well as the implementations. It usually lies in the caller's own unit, so no arrow is added
+- **Names a Python package imports**: a name a package's `__init__.py` imports from another module is read as the name it imports. With `from app.models.account import Account` in `app/models/__init__.py`, both `Account()` after `from app.models import Account` and `models.Account()` after `from app import models` make the `Account` of `app/models/account.py`
 
 ### Calls hadome cannot follow
 
@@ -281,7 +283,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | Methods on Python parameters without a type annotation, and on attributes `__init__` sets from one | `def run(repo): repo.save(…)`, `self.repo.save(…)` after `self.repo = repo` in `__init__(self, repo)` |
 | Methods on TypeScript parameters and constructor parameter properties without a type annotation, and on parameters and fields typed `any` | `this.repo.save(…)` after `constructor(private repo)` |
-| Methods on variables at the top of a module holding the result of one of the repository's functions or typed `any`, and on values imported from the repository that are no function, class or module (Python, TypeScript) | `repo.find(…)` after `repo = make_repo()` at the top |
+| Methods on variables at the top of a module holding the result of one of the repository's functions or typed `any`, and on values imported from the repository that are no function, class or module and were neither made from a class nor written with a type where they come from (Python, TypeScript) | `repo.find(…)` after `repo = make_repo()` at the top |
 
 | Not counted | Why |
 |---|---|
