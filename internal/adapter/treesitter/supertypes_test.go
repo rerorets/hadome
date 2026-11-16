@@ -138,17 +138,19 @@ func TestPythonThroughAndSupertypes(t *testing.T) {
 			"class Api:\n    cache: \"Finder\"\n\n    def __init__(self, finder: Finder, saver: Optional[Saver], repo) -> None:\n"+
 			"        self.finder = finder\n        self.saver = saver\n        self.repo = repo\n\n"+
 			"    def show(self, other: Saver | None) -> str:\n        self.repo.load()\n        self.saver.save(1)\n"+
-			"        other.save(2)\n        self.cache.find('c')\n        return self.finder.find('a')\n",
+			"        other.save(2)\n        return self.finder.find('a')\n\n"+
+			"    def cached(self):\n        return self.cache.find('c')\n",
 		"app/svc.py", "from app import port\nfrom app.port import Saver\n\n\nclass Base:\n    def find(self, id):\n        return id\n\n\n"+
 			"class Svc(Base):\n    pass\n\n\nclass Store(port.Saver):\n    def save(self, x) -> None:\n        pass\n\n\n"+
 			"class Wrong:\n    def find(self, id, extra):\n        return id\n",
 	))
 	cases := map[string]string{
-		"app/port.Api.show": "through=[app/port.Finder.find app/port.Saver.save] supertypes=[]",
-		"app/svc.Svc":       "through=[] supertypes=[app/port.Finder app/svc.Base]",
-		"app/svc.Base":      "through=[] supertypes=[app/port.Finder]",
-		"app/svc.Store":     "through=[] supertypes=[app/port.Saver]",
-		"app/svc.Wrong":     "through=[] supertypes=[]",
+		"app/port.Api.show":   "through=[app/port.Finder.find app/port.Saver.save] supertypes=[]",
+		"app/port.Api.cached": "through=[app/port.Finder.find] supertypes=[]",
+		"app/svc.Svc":         "through=[] supertypes=[app/port.Finder app/svc.Base]",
+		"app/svc.Base":        "through=[] supertypes=[app/port.Finder]",
+		"app/svc.Store":       "through=[] supertypes=[app/port.Saver]",
+		"app/svc.Wrong":       "through=[] supertypes=[]",
 	}
 	for id, want := range cases {
 		if got := callFacts(t, a, id); got != want {
