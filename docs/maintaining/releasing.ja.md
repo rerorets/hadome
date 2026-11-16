@@ -223,7 +223,7 @@ packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 で Gradle と Maven を外
 - バージョンを表示すること
 - 終了コードをそのまま返すこと
 
-CI はこれを、プルリクエストのたびと、main への push のたびに動かします。
+CI はこれを、main への push のたびと、パッケージに関わるファイルを変えるプルリクエストのたびに動かします（[CONTRIBUTING.ja.md](../../CONTRIBUTING.ja.md)）。
 
 ## 依存のライセンス
 

@@ -35,11 +35,13 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 		setThrough(a, through)
 		setUnfollowed(a, unfollowed)
 	}()
+	made := r.madeValues(files, t, repo)
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t), values: map[string]*node{}, funcs: funcs,
-			types: func(string) tbind { return tbind{} }}
+			types:  func(string) tbind { return tbind{} },
+			member: func(mod, name string) string { return r.packageMember(mod, name, t) }}
 		mod := module(f.path)
-		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo)}
+		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo, made)}
 		var fns []tfunc
 		for _, n := range named(f.root) {
 			def := definition(n)
@@ -92,15 +94,57 @@ func (r *python) importBind(im pyImport, name string, t *tables, depth int) tbin
 		return tbind{id: im.mod, unit: im.unit}
 	case r.exists[im.mod+"/"+name+".py"]: // from app import store, a module
 		return tbind{id: im.mod + "/" + name, unit: im.mod}
+	case r.exists[im.mod+"/"+name+"/__init__.py"]: // from app import models, a package
+		return tbind{id: im.mod + "/" + name, unit: im.mod + "/" + name}
 	}
-	if init := r.files[im.mod+"/__init__.py"]; init != nil && depth < 8 {
-		for _, again := range r.parseImports(init) {
-			if inner, ok := again.names[name]; ok && again.internal {
-				return r.importBind(again, inner, t, depth+1)
+	if b, ok := r.reexported(im.mod, name, t, depth); ok {
+		return b
+	}
+	return tbind{id: im.mod + "." + name, unit: im.unit}
+}
+
+// reexported returns what a name of a package stands for when its __init__.py imports it from
+// another module of the repository, and whether it does.
+func (r *python) reexported(mod, name string, t *tables, depth int) (tbind, bool) {
+	init := r.files[mod+"/__init__.py"]
+	if init == nil || depth >= 8 {
+		return tbind{}, false
+	}
+	for _, again := range r.parseImports(init) {
+		if inner, ok := again.names[name]; ok && again.internal {
+			return r.importBind(again, inner, t, depth+1), true
+		}
+	}
+	return tbind{}, false
+}
+
+// packageMember returns the ID a member of a module stands for: what the module's __init__.py
+// imports under that name when it is a package (models.Account), else <mod>.<name>.
+func (r *python) packageMember(mod, name string, t *tables) string {
+	if b, ok := r.reexported(mod, name, t, 0); ok && b.id != "" {
+		return b.id
+	}
+	return mod + "." + name
+}
+
+// madeValues returns, by the value's ID, the class of each value at the top of a module of product
+// code made from one of the repository's classes (manager = Manager()), for the modules importing
+// it.
+func (r *python) madeValues(files []*file, t *tables, repo map[string]bool) map[string]string {
+	out := map[string]string{}
+	for _, f := range files {
+		if f.test || f.generatedGlob {
+			continue
+		}
+		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t)}
+		mod := module(f.path)
+		for _, n := range named(f.root) {
+			if name, written := pyModuleValue(tr, mod, repo, n); name != "" && written != unknownType {
+				out[mod+"."+name] = resolveClass(tr, mod, written, repo)
 			}
 		}
 	}
-	return tbind{id: im.mod + "." + name, unit: im.unit}
+	return out
 }
 
 // pyRouteDecorators are the decorators that serve a function for a path (Flask, FastAPI and the

@@ -40,6 +40,8 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			at[s.ID] = i
 		}
 	}
+	var types []*tsTypes
+	made := map[string]string{}
 	for _, f := range files {
 		if f.test || f.generatedGlob || declarationFile(f.path) {
 			continue
@@ -47,8 +49,13 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		tr := &tsTrace{r: r, f: f, bindings: map[string]tsImported{}, top: map[string]*node{}, funcs: funcs}
 		tr.bind(t)
 		ty := newTSTypes(tr, t, repo)
+		ty.made(made)
+		types = append(types, ty)
+	}
+	for _, ty := range types {
+		tr := ty.tr
 		ty.supertypes(sup)
-		through, unfollowed := ty.throughs()
+		through, unfollowed := ty.throughs(made)
 		for id, body := range tr.bodies() {
 			i, ok := at[id]
 			if !ok {

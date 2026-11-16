@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/rerorets/hadome/internal/facts"
 )
 
 // viewpoint: behaviour
@@ -142,6 +144,74 @@ func TestUnfollowedCallsAreCountedOnValuesFromOutside(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("%s: unfollowed %d, want %d", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: python.trace, typescript.trace
+// A value imported from another module, made there from one of the repository's classes or written
+// with one as its type, is a value of that class: its method calls are calls of the class's
+// methods, not calls hadome cannot follow. Through a package that imports it, it is the same value.
+func TestValuesMadeInAnotherModuleAreFollowed(t *testing.T) {
+	py := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/mgr.py", "class Manager:\n    def switch(self):\n        pass\n",
+		"app/state/__init__.py", "from app.state.values import manager\n",
+		"app/state/values.py", "from app.mgr import Manager\n\nmanager = Manager()\n",
+		"app/api.py", "from app.state.values import manager\nfrom app.state import manager as again\n\n\n"+
+			"def direct():\n    manager.switch()\n\n\ndef through():\n    again.switch()\n",
+	))
+	ts := analyze(t, "typescript", fstest.MapFS{
+		"package.json":       {Data: []byte(`{"name":"app"}`)},
+		"src/svc/api.ts":     {Data: []byte("export class Api { get(): void {} post(): void {} }\n")},
+		"src/state/index.ts": {Data: []byte("import { Api } from '../svc/api'\n\nexport const api = new Api()\nexport const typed: Api = make()\n\nfunction make(): Api { return new Api() }\n")},
+		"src/routes/r.ts":    {Data: []byte("import { api, typed } from '../state'\n\nexport function one(): void {\n  api.get()\n}\n\nexport function two(): void {\n  typed.post()\n}\n")},
+	})
+	for _, c := range []struct {
+		a     *facts.Analysis
+		id    string
+		facts string
+	}{
+		{py, "app/api.direct", "through=[app/mgr.Manager.switch] supertypes=[]"},
+		{py, "app/api.through", "through=[app/mgr.Manager.switch] supertypes=[]"},
+		{ts, "src/routes.one", "through=[src/svc.Api.get] supertypes=[]"},
+		{ts, "src/routes.two", "through=[src/svc.Api.post] supertypes=[]"},
+	} {
+		if got := callFacts(t, c.a, c.id); got != c.facts {
+			t.Errorf("%s: %s, want %s", c.id, got, c.facts)
+		}
+		for _, s := range c.a.Symbols {
+			if s.ID == c.id && s.Unfollowed != 0 {
+				t.Errorf("%s: unfollowed %d, want 0", c.id, s.Unfollowed)
+			}
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: python.trace
+// A package imported as a module reaches the names its __init__.py imports: models.Account() makes
+// the Account the package imports and tasks.run() calls the run it imports, and a call on the
+// package is not a call hadome cannot follow.
+func TestPythonPackageMembersAreWhatThePackageImports(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/models/__init__.py", "from app.models.account import Account\n",
+		"app/models/account.py", "class Account:\n    pass\n",
+		"app/tasks/__init__.py", "from app.tasks.impl import run\n",
+		"app/tasks/impl.py", "def run():\n    pass\n",
+		"app/api.py", "from app import models, tasks\n\n\ndef create():\n    models.Account()\n\n\ndef start():\n    tasks.run()\n",
+	))
+	if got := callFacts(t, a, "app/api.create"); got != "through=[app/models/account.Account] supertypes=[]" {
+		t.Errorf("create: %s", got)
+	}
+	if got := reachOf(t, a, "app/api.start"); got != "io=false calls=[app/tasks/impl.run] units=[]" {
+		t.Errorf("start: %s", got)
+	}
+	for _, s := range a.Symbols {
+		if (s.ID == "app/api.create" || s.ID == "app/api.start") && s.Unfollowed != 0 {
+			t.Errorf("%s: unfollowed %d, want 0", s.ID, s.Unfollowed)
 		}
 	}
 }

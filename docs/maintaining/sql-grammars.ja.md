@@ -70,6 +70,6 @@ SQL のアダプタは、まず SLL で読み、読めなかった文だけを L
 
 - 方言ごとの文法は `internal/adapter/sql/grammar_<方言>.go` がビルドに入れます。有効でない方言のファイルには `//go:build sqlgrammars` があり、ふつうのビルドには入りません
 - 有効でない方言の読み手を試すときと、その単体テスト（`dialects_test.go`）を流すときは、タグを付けます: `go test -tags sqlgrammars ./internal/adapter/sql/`
-- CI は、タグを付けたテストと vet を別のジョブで流します。有効でない方言の読み手も、プルリクエストのたびに確かめられます
+- CI は、タグを付けたテストと vet を別のジョブで流します。有効でない方言の読み手も、main への push と、SQL のアダプタか依存を変えるプルリクエストのたびに確かめられます
 - 方言を有効にするときは、次の2か所を変えます。`grammar_<方言>.go` の `//go:build` の行を消すことと、`internal/config` の `SQLDialects` に方言を足すことです。`SQLDialects` に載った方言が有効な方言です
 - 2か所が食い違うと、`TestTheBuildLinksTheGrammarsOfEnabledDialects` が落ちます

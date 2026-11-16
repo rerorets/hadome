@@ -29,6 +29,18 @@ packaging/smoke.sh 0.0.0-local          # 全パッケージを作り、入れ�
 
 CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の2つと自己テストはLinux・macOS・Windowsで動かします。タグ `sqlgrammars` を付けたテストと vet、`hadome check`、`packaging/smoke.sh` はLinuxで動かします。
 
+mainではすべてを動かします。プルリクエストでは、変えたファイルが壊しうるものだけを動かします。
+
+| 動かすもの | プルリクエストで動かすとき |
+|---|---|
+| LinuxとWindowsのテスト | Markdown以外のファイルを変えたとき。Markdownだけなら、Linuxで `go test ./cmd/hadome`（文書の突き合わせを含む）だけを動かす |
+| macOSのテスト | `go.mod`・`go.sum`・`.github/workflows/`・`internal/mutation/`・`internal/adapter/walk/`・`internal/source/` を変えたとき |
+| `packaging/smoke.sh` | `go.mod`・`go.sum`・`.github/workflows/`・`packaging/`・`cmd/hadome/`・`LICENSE`・`THIRD_PARTY_NOTICES` を変えたとき |
+| タグ `sqlgrammars` のテストと vet | `go.mod`・`go.sum`・`.github/workflows/`・`internal/adapter/sql/` を変えたとき |
+
+- macOSを絞るのは、実行環境が空かずにマージが止まることが多いからです
+- 同じプルリクエストに新しくpushすると、前の回は取り消します
+
 ### フック
 
 一度だけ有効にします。
@@ -50,7 +62,7 @@ git config core.hooksPath .githooks
 ## レビュー
 
 - プルリクエストは、メンテナが確かめてマージします。
-- マージできるのは、CIの4つのチェックが通ったものだけです。4つのチェックは3つのOSでのテストと、パッケージの確認です。
+- マージできるのは、CIの4つのチェックが通ったものだけです。4つのチェックは3つのOSでのテストと、パッケージの確認です。動かさなかったチェックは、通ったものとして扱います。
 - メンテナは1人なので、返事に数日かかることがあります。
 
 ## 書き方
