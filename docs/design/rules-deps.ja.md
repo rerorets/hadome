@@ -272,11 +272,13 @@ def show(id):
 | 書き方 | `Through` に入るもの | 言語 |
 |---|---|---|
 | リポジトリのクラスを作る（`UserRepo(db)`、`new Service()`） | そのクラスの ID | Java・Kotlin・TypeScript・Python |
-| 作ったものを入れたローカル変数のメソッドを呼ぶ（`repo = UserRepo(db)` のあとの `repo.find()`、`var s = new Service()`、`const s = new Service()`） | そのクラスのメソッドの ID | Java・Kotlin・TypeScript・Python |
+| 作ってすぐ、または作ったものを入れたローカル変数のメソッドを呼ぶ（`repo = UserRepo(db)` のあとの `repo.find()`、`var s = new Service()`、`const s = new Service()`、`new repo.Repo().find()`） | そのクラスのメソッドの ID | Java・Kotlin・TypeScript・Python |
+| 作ったものを入れた属性・フィールドのメソッドを呼ぶ（`__init__` の `self.repo = UserRepo(db)`、`private repo = new Repo()`） | そのクラスのメソッドの ID | TypeScript・Python |
 
 - 作ることを呼び出しに数えるのは、コンストラクタを動かすからです
 - Go と Rust の構造体のリテラル（`store.Repo{}`、`Store { … }`）は、コードを動かさないので数えません。どちらの言語も、作る関数（`store.New()`、`Store::new()`）の呼び出しは `Calls` に入っています。ローカル変数も、もう型が付きます
 - 型の注釈の無いローカル変数で追うのは、右辺がリポジトリのクラスを作る式のときだけです。それ以外のローカル変数は数えません（「[たどれない呼び出し](#たどれない呼び出し)」）
+- 作ったものを入れた属性とフィールドは、値から型が明らかなので、型の注釈が無くても「たどれない呼び出し」には数えません
 - Go にはコンストラクタが無いので、この書き方は自己テストの事例にできません。言語ごとのアダプタのテストで確かめます
 
 ### 言語ごとの読み方

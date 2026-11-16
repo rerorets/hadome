@@ -98,36 +98,11 @@ func (ty *tsTypes) supertypes(sup supers) {
 // and the function's parameters and locals (store.save()).
 func (ty *tsTypes) through(decl, class *node) []string {
 	f := ty.tr.f
-	fields, vars := map[string]string{}, map[string]string{}
-	typed := func(n *node, into map[string]string) {
-		if t := n.ChildByFieldName("type"); t != nil {
-			name := n.ChildByFieldName("name")
-			if name == nil {
-				name = n.ChildByFieldName("pattern")
-			}
-			if name != nil && name.Kind() != "object_pattern" && name.Kind() != "array_pattern" {
-				into[f.text(name)] = f.text(t)
-			}
-		}
-	}
-	if class != nil {
-		for _, m := range named(class.ChildByFieldName("body")) {
-			switch {
-			case m.Kind() == "public_field_definition":
-				typed(m, fields)
-			case m.Kind() == "method_definition" && f.field(m, "name") == "constructor":
-				for _, p := range named(m.ChildByFieldName("parameters")) {
-					if tsParameterProperty(p) {
-						typed(p, fields)
-					}
-				}
-			}
-		}
-	}
+	fields, vars := tsFields(f, class), map[string]string{}
 	walk(decl, func(x *node) bool {
 		switch x.Kind() {
 		case "required_parameter", "optional_parameter", "variable_declarator":
-			typed(x, vars)
+			tsTyped(f, x, vars)
 		}
 		return true
 	})
@@ -153,6 +128,9 @@ func (ty *tsTypes) through(decl, class *node) []string {
 		}
 		return true
 	})
+	for _, id := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
+		out[id] = true
+	}
 	return keys(out)
 }
 
@@ -178,6 +156,46 @@ func (ty *tsTypes) throughs() map[string][]string {
 		}
 	}
 	return out
+}
+
+// tsTyped records the written type of a declaration that has one, by its name.
+func tsTyped(f *file, n *node, into map[string]string) {
+	t := n.ChildByFieldName("type")
+	if t == nil {
+		return
+	}
+	name := n.ChildByFieldName("name")
+	if name == nil {
+		name = n.ChildByFieldName("pattern")
+	}
+	if name != nil && name.Kind() != "object_pattern" && name.Kind() != "array_pattern" {
+		into[f.text(name)] = f.text(t)
+	}
+}
+
+// tsFields returns the written types of a class's fields and constructor parameter properties, by
+// name. A field without one set to an object made in place (private repo = new Repo()) takes the
+// class it makes.
+func tsFields(f *file, class *node) map[string]string {
+	fields := map[string]string{}
+	if class == nil {
+		return fields
+	}
+	for _, m := range named(class.ChildByFieldName("body")) {
+		switch {
+		case m.Kind() == "public_field_definition" && m.ChildByFieldName("type") == nil:
+			fields[f.field(m, "name")] = tsMade.made(f, m.ChildByFieldName("value"))
+		case m.Kind() == "public_field_definition":
+			tsTyped(f, m, fields)
+		case m.Kind() == "method_definition" && f.field(m, "name") == "constructor":
+			for _, p := range named(m.ChildByFieldName("parameters")) {
+				if tsParameterProperty(p) {
+					tsTyped(f, p, fields)
+				}
+			}
+		}
+	}
+	return fields
 }
 
 // tsParameterProperty reports whether a constructor parameter is also a property of the class:

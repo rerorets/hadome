@@ -10,8 +10,8 @@ import (
 	"github.com/rerorets/hadome/internal/engine"
 )
 
-// interfaceRule is deps/call-not-in-diagram with the cases of calls through an interface written in
-// Java, whose calls and supertypes are read apart from Go's. Only a build with cgo reads Java, so
+// interfaceRule is deps/call-not-in-diagram with the cases of calls through an interface, and of
+// objects made in place, written in Java, whose calls and supertypes are read apart from Go's. Only a build with cgo reads Java, so
 // they are not among the rule's self-test cases, which every build runs.
 type interfaceRule struct{ callNotInDiagram }
 
@@ -20,7 +20,7 @@ func (interfaceRule) Cases() []engine.Case { return interfaceCases() }
 // viewpoint: behaviour
 // target: deps/call-not-in-diagram
 // In Java too, a call through an interface needs arrows to the units of its implementations in
-// product code, and to no others.
+// product code, and to no others; making another unit's class needs an arrow to it.
 func TestJavaCallsThroughAnInterfaceNeedArrowsToTheImplementations(t *testing.T) {
 	e := &engine.Engine{Analyzer: adapter.New(), Rules: []engine.Rule{interfaceRule{}}, Workdir: "."}
 	for _, f := range e.SelfTest() {
@@ -54,6 +54,8 @@ func interfaceCases() []engine.Case {
 			"    public UserController(Finder finder) { this.finder = finder; }\n    public String show(String id) { return finder.find(id); }\n}\n"
 		memory = "package com.ex.repo;\n\nimport com.ex.controller.Finder;\n\n" +
 			"public class MemoryFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
+		making = "package com.ex.controller;\n\nimport com.ex.service.UserService;\n\npublic class UserController {\n" +
+			"    public String show(String id) { var s = new UserService(); return s.find(id); }\n}\n"
 		fake = "package com.ex.controller;\n\npublic class FakeFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
 	)
 	toService := "  c --> s"
@@ -67,6 +69,9 @@ func interfaceCases() []engine.Case {
 			WantFail: []string{"deps/call-not-in-diagram"}},
 		{Name: "an implementation in a test file does not count", Base: javaCalls(toService),
 			Head: javaCalls(toService, controller, calling, "src/test/java/com/ex/repo/MemoryFinder.java", memory)},
+		{Name: "making another unit's class with no arrow fails", Base: javaCalls(""), Head: javaCalls("", controller, making),
+			WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "making another unit's class along an arrow passes", Base: javaCalls(toService), Head: javaCalls(toService, controller, making)},
 		{Name: "an implementation in the caller's own unit passes", Base: javaCalls(toService),
 			Head: javaCalls(toService, controller, calling, "src/main/java/com/ex/controller/FakeFinder.java", fake)},
 	}

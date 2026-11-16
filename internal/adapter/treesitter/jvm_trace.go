@@ -43,6 +43,28 @@ func (j *jvm) traceBinds(f *file, t *tables, imports func(visit func(name string
 	return out
 }
 
+// jvmClass returns how a written class name resolves in a file to one of the repository's classes.
+func jvmClass(tr *tracing, classes map[string]bool) func(string) string {
+	return func(w string) string {
+		if id := tr.types(w).id; w != "" && classes[id] {
+			return id
+		}
+		return ""
+	}
+}
+
+// jvmClasses returns the IDs of the version's classes, interfaces aside: new Finder() { … } makes an
+// anonymous class, and calls no code of the interface's unit.
+func jvmClasses(a *facts.Analysis) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range a.Symbols {
+		if s.Kind == facts.SymbolType {
+			out[s.ID] = true
+		}
+	}
+	return out
+}
+
 func newJVMTracing(f *file, syn tsyntax, binds map[string]tbind, funcs map[string]bool) *tracing {
 	return &tracing{f: f, syn: syn, binds: binds, values: map[string]*node{}, funcs: funcs,
 		types: func(name string) tbind { return binds[simpleType(name)] }}
@@ -87,8 +109,11 @@ var javaSyntax = tsyntax{
 }
 
 func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
-	sup := supers{}
-	defer sup.fill(a)
+	classes, sup, through := jvmClasses(a), supers{}, map[string][]string{}
+	defer func() {
+		sup.fill(a)
+		setThrough(a, through)
+	}()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, javaSyntax, j.traceBinds(f, t, func(v func(string, bool, *node)) { javaImports(f, v) }), funcs)
 		var fns []tfunc
@@ -111,6 +136,9 @@ func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
 			if javaTypes[n.Kind()] {
 				collect(n, f.unit)
 			}
+		}
+		for _, fn := range fns {
+			through[fn.id] = madeInPlace(f, fn.body, javaMade, jvmClass(tr, classes))
 		}
 		return fns, tr, func() []facts.Entry {
 			var out []facts.Entry
@@ -177,8 +205,11 @@ var kotlinSyntax = tsyntax{
 var ktorRoutes = set("get", "post", "put", "patch", "delete", "head", "options")
 
 func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
-	sup := supers{}
-	defer sup.fill(a)
+	classes, sup, through := jvmClasses(a), supers{}, map[string][]string{}
+	defer func() {
+		sup.fill(a)
+		setThrough(a, through)
+	}()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, kotlinSyntax, k.traceBinds(f, t, func(v func(string, bool, *node)) { ktImports(f, v) }), funcs)
 		var fns []tfunc
@@ -211,6 +242,9 @@ func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
 					}
 				}
 			}
+		}
+		for _, fn := range fns {
+			through[fn.id] = madeInPlace(f, fn.body, kotlinMade, jvmClass(tr, classes))
 		}
 		return fns, tr, func() []facts.Entry { return k.entries(tr, fns) }
 	})
