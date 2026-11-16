@@ -203,7 +203,7 @@ classDiagram
 |---|---|---|
 | `Through` | functions and methods | IDs of the repository's methods called through a value's declared type that are not in `Calls`: methods of interfaces, abstract types and traits. In TypeScript and Python, methods of concrete classes too (see the table below) |
 | `Supertypes` | types | IDs of the repository's types the type implements or extends; direct ones only, not the transitive closure |
-| `Unfollowed` | functions and methods | the number of method calls on a value whose type is unknown and that may reach the repository's code |
+| `Unfollowed` | functions and methods | the number of method calls on parameters and attributes whose type is not written ([Calls hadome cannot follow](#calls-hadome-cannot-follow)) |
 
 - `Calls` is left as it is so that what else reads it (the `idempotent` candidates) gives the same results
 - The IDs have the form of `Calls`, for example `<unit>.<Type>.<Method>`
@@ -251,16 +251,33 @@ The difficulty splits in two: whether the type of the value called is known (`Th
 
 A method call on a value whose type is unknown is only counted in `Unfollowed`. It is not checked, does not fail the check, and is not sent to review.
 
+Only the places that take a value from outside are counted: parameters and attributes. A value injected with dependency injection lands there.
+
 | Counted | Example |
 |---|---|
-| Methods on Python attributes and parameters without a type annotation | `self.repo.save(…)`, with `repo` unannotated |
-| Methods on TypeScript values without a type annotation, or typed `any` | `constructor(private repo)` |
-| Methods on local variables whose type cannot be settled | Java's `var r = factory.make()`, when the result type of `make` cannot be followed |
+| Methods on Python parameters and attributes without a type annotation | `self.repo.save(…)` with `repo` unannotated, `def run(repo): repo.save(…)` |
+| Methods on TypeScript parameters and fields without a type annotation, or typed `any` | `this.repo.save(…)` after `constructor(private repo)` |
 
-- When `Unfollowed` grows in a unit of the call diagram, `hadome check` reports the number. The exit code does not change: it is information only, like invariant candidates
+| Not counted | Why |
+|---|---|
+| Methods on local variables (Java's `var` and Kotlin's `val` without a type too) | Most are values made in place (`list.append(…)`) that reach no code of the repository; counting them would bury the report in calls that reach nothing |
+| Methods on values of a declared type (parameters and fields in Java, Kotlin, Go and Rust) | The type is known, so the call is followed, or known to be another module's |
+| Methods on imported names, `self` and `this` | `Calls` follows them |
+
+- It is reported only when `rules.deps.calls` is set and the sum of `Unfollowed` grows in a unit of the call diagram. The exit code does not change: it is information only, like invariant candidates
 - The report adds that a type annotation makes the calls followable
 - **Why not review**: `unknown/import` sends an import whose destination is unknown to review, because such imports are rare and written on purpose. A call on an unannotated value is almost every method call in a Python repository that writes no annotations; sending those to review would make the call diagram unusable there
 - Methods on values of another module's interface (Go's `w.Write(…)` with `w` an `io.Writer`) are not counted in `Unfollowed` either: the implementation they reach is usually in another module ([Deliberately left out](#deliberately-left-out))
+
+### How it is reported
+
+| Output | Content |
+|---|---|
+| `json` | `unfollowed` lists each unit where it grew, with `unit` (the directory, as the call diagram's labels name it), `base` and `head` (the sum in each version). An empty array when none grew |
+| `text` | After the invariant candidates, "Calls on values of unknown type grew (information only; a type annotation makes them followable):", then one line per unit, as `app/controller: 3 → 5` |
+
+- Only the difference of the sums is reported, not which calls were added, since a call holds no line
+- The engine is given a function that makes the list from both versions' input, as for invariant candidates; the `deps` package holds it
 
 ## Self-test cases
 
