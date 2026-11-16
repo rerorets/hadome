@@ -145,7 +145,7 @@ classDiagram
 
 `Symbol.Calls`・`Units`・`IO` と `Analysis.Entries` は、関数が入出力に届くかと、やり直されうる入口から届くかを決めるための事実です。関数を持つ言語のアダプタはすべて、関数とメソッドについてこれを埋めます。`Calls` は本体から呼ぶリポジトリの関数の ID、`Units` は本体が値を使うリポジトリのユニット、`IO` は本体が入出力をするものを直接使うことです。読み方は [suggest.ja.md](suggest.ja.md) の「`idempotent` の条件」にあります。
 
-`Symbol.Through`・`Supertypes`・`Unfollowed` は、呼び出しの図（`deps/call-not-in-diagram`）のための事実です。`Through` はインターフェースなど値の宣言した型を通した呼び出し、`Supertypes` は型が実装・継承するリポジトリの型、`Unfollowed` は型が分からない値の呼び出しの数です。`Calls` には入れず、`Calls` を読む仕組みの結果は変えません。言語ごとの読み方と対応する順は、[rules-deps.ja.md](rules-deps.ja.md) の「呼び出しの事実」にあります。
+`Symbol.Through`・`Supertypes`・`Unfollowed` は、呼び出しの図（`deps/call-not-in-diagram`）のための事実です。`Through` はインターフェースなど値の宣言した型を通した呼び出し、`Supertypes` は型が実装・継承するリポジトリの型、`Unfollowed` は型が分からない値の呼び出しの数です。`Calls` には入れず、`Calls` を読む仕組みの結果は変えません。言語ごとの読み方は、[rules-deps.ja.md](rules-deps.ja.md) の「呼び出しの事実」にあります。
 
 ### ファイルと役割
 

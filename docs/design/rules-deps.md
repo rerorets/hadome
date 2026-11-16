@@ -259,20 +259,6 @@ A method call on a value whose type is unknown is only counted in `Unfollowed`. 
 - **Why not review**: `unknown/import` sends an import whose destination is unknown to review, because such imports are rare and written on purpose. A call on an unannotated value is almost every method call in a Python repository that writes no annotations; sending those to review would make the call diagram unusable there
 - Methods on values of another module's interface (Go's `w.Write(…)` with `w` an `io.Writer`) are not counted in `Unfollowed` either: the implementation they reach is usually in another module ([Deliberately left out](#deliberately-left-out))
 
-### Order of languages
-
-Languages are added in the order their facts are easiest to get:
-
-| Stage | Languages | Why |
-|---|---|---|
-| 1 | Java, Kotlin, TypeScript | Types and implementations are written in the syntax |
-| 2 | Go, Rust | Go needs method matching. Rust writes `impl Trait for Type`, but reading trait bounds is new |
-| 3 | Python | What can be read depends on whether annotations are written |
-
-- Units of a language not yet supported are checked with `Calls` and `Entry.Calls` only; calls through interfaces are not looked at yet
-- `hadome check` reports when a unit of the call diagram is in a language not yet supported. The exit code does not change
-- Direct calls are still checked in those languages. Fewer calls are seen; none is failed by mistake
-
 ## Self-test cases
 
 | Rule | Cases |
