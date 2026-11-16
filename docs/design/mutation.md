@@ -145,6 +145,7 @@ Only functions that are one of these:
   - A version may hold several functions with the same ID. For example: functions of the same name in files split by build tags (`*_unix.go` and `*_windows.go`), or the several `init` functions of one Go package
   - So functions are matched with base by their body as well as their ID. A function is unchanged when base still has a function with the same ID and the same body. Each base function pairs with one head function only. For example, changing only `run` in `run_unix.go` does not select `run` in `run_windows.go`
 - A function called (`Test.Calls`) by a test the change rewrote. This catches a change that weakens only a test and leaves the code alone
+  - When files split by build conditions hold several functions with the ID, only those in files that can be built together with the test's file are picked ([adapters.md](adapters.md), "Build conditions"). For example: a test with `//go:build cgo` calling `Languages()` does not pick `Languages` in `unread.go`, which has `//go:build !cgo`. That test is never built with `unread.go`, so it cannot guard it
 
 ## How to break
 

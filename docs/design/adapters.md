@@ -38,6 +38,7 @@ classDiagram
     +Unit string
     +UnitPath string
     +Unread bool
+    +Build string
   }
   class Comment {
     +Path string
@@ -338,6 +339,19 @@ These change how the test runs rather than its name, so they are part of the fin
 
 In Python and TypeScript, the setup that runs before a test is part of the fingerprint too. Tests with the same body under different setup check different things. For example, `TestA` and `TestB` in one file hold tests with the same body and build different things in `setUp`. Or tests with the same body in different `describe` blocks each use their own block's `const KEYS = …`.
 
+### Build conditions
+
+`File.Build` is the condition under which a Go file is built: the expression of its `//go:build` line joined with `&&` to its file name suffixes (GOOS and GOARCH such as `_linux` and `_windows_amd64`; `_test` aside). It is empty for a file without one and for files of other languages.
+
+Two files can be built together when some set of tags satisfies both conditions.
+
+- Two GOOS values (`linux` and `windows`), and two GOARCH values, are never true at once
+- Every other tag (`cgo`, `unix`, any tag of the repository's own) may be true or false
+- When the conditions name too many tags to try every set (more than 12), the files are taken as able to be built together, since being wrong then reads names as before
+- A condition that cannot be parsed is taken the same way
+
+Readers look at the conditions only to narrow the declarations a name may stand for, and when mutate picks the functions to break ([mutation.md](mutation.md), "Where to break"). Which environment the code is built in is never guessed.
+
 ### What a test guards
 
 People never classify tests. What a test guards is mostly worked out by machine, and the little that is declared is written by whoever writes the test (usually an agent).
@@ -385,6 +399,12 @@ A Go test reads the type of a value it calls a method on from declarations. It r
 - variables made by `var c Config` or `:=`
 - parameters of helpers and function literals, read by their declared types (`func check(t *testing.T, s *store.Store)`)
 - helper parameters declared with an interface or with a type that cannot be read (another module's type, such as `http.Handler`), read by the type of the value the caller passed. For example, when `func add(t *testing.T, a Appender)` is called as `add(t, &store.Store{})`, `a.Append()` is a call of `Store.Append`. When the passed value's type is not known either, the call is `unknown`. It is never a call of the interface's method, because an interface's method has no code of its own
+
+Files split by build conditions (the `//go:build` line, and file name suffixes such as `_linux.go` and `_amd64.go`) may declare the same name. For example: `languages.go` with `//go:build cgo` and `unread.go` with `//go:build !cgo` both declare `Languages()`. A name is read only among the declarations of files that can be built together with the calling file.
+
+- For example: `Languages()` called from a test with `//go:build cgo` is the one in `languages.go`, so with its result `[]*lang`, `l.Claims()` is a call of `lang.Claims`, never `unread.Claims`
+- Whether two files can be built together is whether some set of tags satisfies both conditions (`File.Build`; "Build conditions" below)
+- When more than one declaration is left, the one in the first file in path order is read, so that the same files always give the same facts
 
 Calling a variable that holds a method value (`f := s.Append`) counts as a call of that method.
 
