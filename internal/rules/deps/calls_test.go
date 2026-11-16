@@ -36,10 +36,12 @@ func TestUndrawnCallsAreReportedOncePerPairAtTheEarliestCaller(t *testing.T) {
 			Edges: []config.Edge{{From: "api", To: "store"}}}},
 		Facts: &facts.Analysis{
 			Files: []facts.File{src("api/a.go", "api"), src("api/b.go", "api"), src("store/s.go", "store"),
-				src("domain/d.go", "domain"), src("jobs/j.go", "jobs"), src("port/p.go", "port")},
+				src("domain/d.go", "domain"), src("jobs/j.go", "jobs"), src("port/p.go", "port"), src("lib/l.go", "lib")},
 			Symbols: []facts.Symbol{
 				{ID: "api.Late", Path: "api/b.go", Line: 3, Calls: []string{"domain.Get"}},
 				{ID: "api.Early", Path: "api/a.go", Line: 9, Calls: []string{"domain.Get", "store.Save", "domain.Fake"}},
+				{ID: "api.Later", Path: "api/b.go", Line: 12, Calls: []string{"lib.Do"}},
+				{ID: "lib.Do", Path: "lib/l.go", Line: 1},
 				{ID: "store.Save", Path: "store/s.go", Line: 1},
 				{ID: "domain.Get", Path: "domain/d.go", Line: 1},
 				{ID: "api.Late2", Path: "api/b.go", Line: 7, Calls: []string{"port.Finder.Find"}},
@@ -51,19 +53,28 @@ func TestUndrawnCallsAreReportedOncePerPairAtTheEarliestCaller(t *testing.T) {
 		},
 	}
 	got, err := findingRule(t, "deps/call-not-in-diagram").Find(in)
-	if err != nil || len(got) != 2 {
-		t.Fatalf("want api -> domain and jobs -> store, got %+v, error %v", got, err)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("want api -> domain, api -> lib and jobs -> store, got %+v, error %v", got, err)
 	}
-	first := got[0]
-	if first.File != "api/a.go" || first.Line != 9 || first.Anchor != "api -> domain" {
-		t.Errorf("want api -> domain at api/a.go:9, got %s:%d %s", first.File, first.Line, first.Anchor)
+	byAnchor := map[string]engine.Finding{}
+	for _, f := range got {
+		byAnchor[f.Anchor] = f
+	}
+	first := byAnchor["api -> domain"]
+	if first.File != "api/a.go" || first.Line != 9 {
+		t.Errorf("want api -> domain at api/a.go:9, got %s:%d", first.File, first.Line)
 	}
 	if msg := first.Message.In("en"); !strings.Contains(msg, "api.Early calls domain.Get") || !strings.Contains(msg, "no arrow api --> domain") {
 		t.Errorf("message %q does not name the caller, the callee and the missing arrow", msg)
 	}
-	entry := got[1]
-	if entry.File != "jobs/j.go" || entry.Line != 5 || !strings.Contains(entry.Message.In("en"), "no node covers the calling unit") {
-		t.Errorf("want the entry-point code at jobs/j.go:5 with no node, got %s:%d %q", entry.File, entry.Line, entry.Message.In("en"))
+	if msg := byAnchor["api -> lib"].Message.In("en"); !strings.Contains(msg, "no node covers the called unit") {
+		t.Errorf("api -> lib: message %q does not say no node covers lib", msg)
+	}
+	entry := byAnchor["jobs -> store"]
+	msg := entry.Message.In("en")
+	if entry.File != "jobs/j.go" || entry.Line != 5 || !strings.Contains(msg, "no node covers the calling unit") ||
+		!strings.Contains(msg, "the entry point calls store.Save") {
+		t.Errorf("want the entry-point code at jobs/j.go:5 with no node, got %s:%d %q", entry.File, entry.Line, msg)
 	}
 }
 
@@ -82,6 +93,9 @@ func TestTheSameStaleLabelInBothDiagramsMakesTwoFindings(t *testing.T) {
 	got, err := findingRule(t, "deps/diagram-stale").Find(in)
 	if err != nil || len(got) != 2 || got[0].Anchor == got[1].Anchor {
 		t.Fatalf("want two findings with different anchors, got %+v, error %v", got, err)
+	}
+	if got[0].Anchor != "utils" {
+		t.Errorf("the dependency diagram's node keeps its label as the anchor, got %q", got[0].Anchor)
 	}
 	if got[1].File != "docs/calls.md" {
 		t.Errorf("want the second in docs/calls.md, got %s", got[1].File)
