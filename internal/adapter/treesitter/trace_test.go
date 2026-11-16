@@ -136,3 +136,27 @@ func TestRustTraceReadsPathsAndActixTo(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: rust.trace
+// A name a module re-exports with pub use stands for the item where it is declared: by name, by
+// a glob, through a re-export of a re-export, under an alias, and when a function's own use brings
+// it in. A use without pub re-exports nothing.
+func TestRustTraceFollowsReexports(t *testing.T) {
+	a := analyze(t, "rust", fstest.MapFS{
+		"Cargo.toml":       {Data: []byte("[package]\nname = \"app\"\n")},
+		"src/lib.rs":       {Data: []byte("pub mod doc;\npub mod web;\n")},
+		"src/doc/mod.rs":   {Data: []byte("mod model;\nmod yaml;\npub use yaml::quote;\npub use model::*;\npub(crate) use crate::doc::yaml::unquote as plain;\nuse yaml::hidden;\n")},
+		"src/doc/yaml.rs":  {Data: []byte("pub fn quote() {}\npub fn unquote() {}\npub fn hidden() {}\n")},
+		"src/doc/model.rs": {Data: []byte("pub use super::yaml::quote as escape;\npub fn parse() {}\n")},
+		"src/web.rs": {Data: []byte("use crate::doc::{quote, parse};\nuse crate::doc;\n\n" +
+			"pub fn show() { quote(); parse(); doc::escape(); doc::plain(); doc::hidden(); }\n" +
+			"pub fn local() { use crate::doc::plain as strip; strip(); }\n")},
+	})
+	if got, want := reachOf(t, a, "src/web.show"), "io=false calls=[src/doc/model.parse src/doc/yaml.quote src/doc/yaml.unquote] units=[\"src/doc\"]"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	if got, want := reachOf(t, a, "src/web.local"), "io=false calls=[src/doc/yaml.unquote] units=[]"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}

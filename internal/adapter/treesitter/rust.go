@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -25,6 +26,7 @@ type rust struct {
 	// benches/, examples/, a binary) calls it by, as in use acme::Store.
 	names  map[string]string
 	defs   map[string][]string // module location -> names of its top-level items, for use ...::*
+	files  map[string]*file    // module location -> the file defining it, for its pub use declarations
 	scopes map[string]int
 	// automocks are the types mockall's #[automock] generates (MockStore for trait Store). The
 	// attribute sits on product code, so a test that uses one imports nothing that says mock.
@@ -59,7 +61,7 @@ var rustTestDir = regexp.MustCompile(`(^|/)(tests|benches)/`)
 
 func (r *rust) index(v engine.Version, files []*file) {
 	r.modules, r.crates, r.defs, r.scopes = map[string]bool{}, map[string]bool{}, map[string][]string{}, map[string]int{}
-	r.automocks, r.names = map[string]bool{}, map[string]string{}
+	r.automocks, r.names, r.files = map[string]bool{}, map[string]string{}, map[string]*file{}
 	paths, _ := fsFiles(v)
 	for _, p := range paths {
 		if path.Base(p) == "Cargo.toml" {
@@ -74,6 +76,7 @@ func (r *rust) index(v engine.Version, files []*file) {
 		f.unit = rustModule(f.path)
 		f.unitPath = f.unit
 		r.modules[f.unit] = true
+		r.files[f.unit] = f
 		walk(f.root, func(n *node) bool {
 			if (n.Kind() == "trait_item" || n.Kind() == "impl_item" || rustTypes[n.Kind()]) && automocked(f, n) {
 				name := f.field(n, "name")
@@ -135,6 +138,9 @@ func (r *rust) resolve(from string, segs []string) (string, bool) {
 	case r.crateName(from):
 		loc = r.crateSrc(from)
 	default:
+		if here := rustModule(from); len(segs) > 1 && r.modules[here+"/"+segs[0]] { // use yaml::quote, a child module
+			return r.resolve(from, append([]string{"self"}, segs...))
+		}
 		last := segs[len(segs)-1]
 		if len(segs) > 1 && (unicode.IsUpper(rune(last[0])) || last == "*") {
 			segs = segs[:len(segs)-1]
@@ -148,6 +154,58 @@ func (r *rust) resolve(from string, segs []string) (string, bool) {
 		loc += "/" + s
 	}
 	return loc, true
+}
+
+// itemID returns the ID a name of the module at mod stands for, and the module holding it: an item
+// the module declares, or one it re-exports with a use declaration that has a visibility (pub use
+// yaml::quote, pub use model::*), followed through re-exports of re-exports. Any other name is
+// <mod>.<name>, of mod.
+func (r *rust) itemID(mod, name string) (string, string) {
+	if id, unit, ok := r.reexport(mod, name, 0); ok {
+		return id, unit
+	}
+	return mod + "." + name, mod
+}
+
+// item is the ID of itemID.
+func (r *rust) item(mod, name string) string {
+	id, _ := r.itemID(mod, name)
+	return id
+}
+
+func (r *rust) reexport(mod, name string, depth int) (string, string, bool) {
+	if slices.Contains(r.defs[mod], name) {
+		return mod + "." + name, mod, true
+	}
+	f := r.files[mod]
+	if f == nil || depth >= 8 {
+		return "", "", false
+	}
+	for _, u := range uses(f, f.root) {
+		loc, internal := r.resolve(f.path, u.segs)
+		last := u.segs[len(u.segs)-1]
+		if !internal || !visible(u.at) || u.local != name && last != "*" {
+			continue
+		}
+		target := name
+		if last != "*" {
+			target = last
+		}
+		if id, unit, ok := r.reexport(loc, target, depth+1); ok {
+			return id, unit, true
+		}
+	}
+	return "", "", false
+}
+
+// visible reports whether a declaration has a visibility: pub, pub(crate) and the like.
+func visible(n *node) bool {
+	for _, c := range named(n) {
+		if c.Kind() == "visibility_modifier" {
+			return true
+		}
+	}
+	return false
 }
 
 // useLeaf is one path a use declaration brings in, with the name it binds ("" for a wildcard).
