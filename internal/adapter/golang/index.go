@@ -18,12 +18,13 @@ type index struct {
 	// funcs holds "<import path>.<Func>" for every function. Unexported functions are included
 	// because tests in the same package call them.
 	funcs map[string]bool
-	// results maps a function or method ID to the declarations of its results, in order.
-	results map[string][]declRef
+	// results maps a function or method ID to the declarations of its results, in order: one list
+	// for each file declaring it, since files split by build conditions may declare one name twice.
+	results map[string][][]declRef
 	// types holds "<import path>.<Type>" for every type, and typeDecls their declarations.
 	// Unexported types are included because tests in the same package call their methods.
 	types     map[string]bool
-	typeDecls map[string]declRef
+	typeDecls map[string][]declRef
 	// testTypes maps "<helperKey>.<Type>" to the declaration of a type in a test file. Its methods
 	// are not targets, but its fields lead to them.
 	testTypes map[string]declRef
@@ -35,7 +36,7 @@ type index struct {
 	values map[string]bool
 	// varDecls maps each package-level variable to its declaration, so that Default.Validate() is a
 	// call of a method of Default's type.
-	varDecls map[string]declRef
+	varDecls map[string][]declRef
 	// consts holds "<import path>.<Name>" for every package-level constant.
 	consts map[string]bool
 	// support maps the import path of a test support package to its functions by name. They are
@@ -50,15 +51,15 @@ type index struct {
 }
 
 func buildIndex(files []parsedFile, modules map[string]string, helpers map[string]map[string]helper) *index {
-	idx := &index{funcs: map[string]bool{}, methods: map[string]bool{}, results: map[string][]declRef{}, types: map[string]bool{},
-		typeDecls: map[string]declRef{}, testTypes: map[string]declRef{}, testVars: map[string]declRef{},
-		values: map[string]bool{}, varDecls: map[string]declRef{}, consts: map[string]bool{},
+	idx := &index{funcs: map[string]bool{}, methods: map[string]bool{}, results: map[string][][]declRef{}, types: map[string]bool{},
+		typeDecls: map[string][]declRef{}, testTypes: map[string]declRef{}, testVars: map[string]declRef{},
+		values: map[string]bool{}, varDecls: map[string][]declRef{}, consts: map[string]bool{},
 		scopes: map[string]int{}, support: map[string]map[string]helper{}, strs: map[string]strDecl{}}
 	for _, m := range modules {
 		idx.modules = append(idx.modules, m)
 	}
 	for _, pf := range files {
-		in := scope{idx: idx, pkgPath: pf.pkgPath, imports: fileImports(pf.file), samePkg: true}
+		in := scope{idx: idx, pkgPath: pf.pkgPath, imports: fileImports(pf.file), samePkg: true, build: pf.build}
 		if pf.test {
 			in.samePkg = !strings.HasSuffix(pf.file.Name.Name, "_test")
 			in.testKey = helperKey(pf)
@@ -82,7 +83,7 @@ func buildIndex(files []parsedFile, modules map[string]string, helpers map[strin
 					case *ast.TypeSpec:
 						id := pf.pkgPath + "." + s.Name.Name
 						idx.types[id] = true
-						idx.typeDecls[id] = declRef{typ: s.Type, in: in}
+						idx.typeDecls[id] = append(idx.typeDecls[id], declRef{typ: s.Type, in: in})
 					case *ast.ValueSpec:
 						idx.addValues(pf.pkgPath, d.Tok, s, in)
 					}
@@ -100,7 +101,7 @@ func (idx *index) addFunc(pkgPath string, d *ast.FuncDecl, in scope) {
 	}
 	idx.scopes[id] = scopeParam(d.Type)
 	if refs := resultRefs(d.Type, in); len(refs) > 0 {
-		idx.results[id] = refs
+		idx.results[id] = append(idx.results[id], refs)
 	}
 	if d.Recv == nil {
 		idx.funcs[id] = true
@@ -117,7 +118,7 @@ func (idx *index) addValues(pkgPath string, tok token.Token, s *ast.ValueSpec, i
 			continue
 		}
 		idx.values[id] = true
-		idx.varDecls[id] = specRef(s, i, in)
+		idx.varDecls[id] = append(idx.varDecls[id], specRef(s, i, in))
 	}
 }
 
@@ -171,17 +172,42 @@ func specRef(s *ast.ValueSpec, i int, in scope) declRef {
 	return ref
 }
 
-// result returns the type of a function's or method's n-th result.
-func (idx *index) result(id string, n int) *vtype {
-	refs := idx.results[id]
+// result returns the type of a function's or method's n-th result, as declared in a file that can
+// be built with a file of the condition build.
+func (idx *index) result(id string, n int, build string) *vtype {
+	alts := idx.results[id]
+	refs := pick(alts, func(refs []declRef) string { return refs[0].in.build }, build)
 	if n >= len(refs) {
 		return nil
 	}
 	return refs[n].in.resolve(refs[n].typ)
 }
 
-// varType returns the type of a package-level variable of the code.
-func (idx *index) varType(id string, depth int) *vtype { return idx.varDecls[id].typeAt(depth) }
+// varType returns the type of a package-level variable of the code, as declared in a file that can
+// be built with a file of the condition build.
+func (idx *index) varType(id string, depth int, build string) *vtype {
+	return pickDecl(idx.varDecls[id], build).typeAt(depth)
+}
+
+// pick returns the first of a name's declarations, in path order, whose file can be built with a
+// file of the condition build, or else the first one (docs/design/adapters.md, "Build
+// conditions").
+func pick[T any](alts []T, buildOf func(T) string, build string) T {
+	var zero T
+	for _, a := range alts {
+		if facts.BuildTogether(buildOf(a), build) {
+			return a
+		}
+	}
+	if len(alts) > 0 {
+		return alts[0]
+	}
+	return zero
+}
+
+func pickDecl(alts []declRef, build string) declRef {
+	return pick(alts, func(d declRef) string { return d.in.build }, build)
+}
 
 // typeAt returns the type of a declared variable: the one it is declared with, or else the type of
 // its initial value.

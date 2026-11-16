@@ -46,6 +46,9 @@ type File struct {
 	// Unread is true for a file of a supported language that could not be read: it does not parse,
 	// or this build of hadome has no reader for its language.
 	Unread bool
+	// Build is the condition a Go file is built under: its //go:build expression and its _GOOS and
+	// _GOARCH name, joined by &&. Empty for a file without one and for other languages.
+	Build string
 }
 
 // ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
