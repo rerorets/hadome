@@ -20,7 +20,7 @@ type reading struct {
 func newWalker(rd reading, pf parsedFile, helpers map[string]helper) *walker {
 	return &walker{
 		scope: scope{idx: rd.idx, pkgPath: pf.pkgPath, imports: fileImports(pf.file), samePkg: !strings.HasSuffix(pf.file.Name.Name, "_test"),
-			testKey: helperKey(pf), helpers: helpers, local: newBlock(nil)},
+			testKey: helperKey(pf), helpers: helpers, local: newBlock(nil), build: pf.build},
 		fset: rd.fset, tables: rd.tb, tParams: map[string]bool{}, calls: map[string]*callCount{},
 		walking: map[string]bool{}, curPath: pf.path,
 		callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: pf.file,

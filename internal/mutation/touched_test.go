@@ -114,3 +114,38 @@ func TestFunctionsCalledByRewrittenTestsAreSelected(t *testing.T) {
 		})
 	}
 }
+
+// viewpoint: behaviour
+// target: mutation.touched
+// Design "Where to break": of the functions sharing an ID in files split by build conditions, a
+// rewritten test selects those in files a build can compile with the test's file, never one it is
+// never built with.
+func TestATestSelectsOnlyFunctionsItIsBuiltWith(t *testing.T) {
+	t.Parallel()
+	files := map[string]string{"fast.go": "package app\nfunc Open() {}\n", "slow.go": "package app\nfunc Open() {}\n",
+		"plain.go": "package app\nfunc Open() {}\n"}
+	for _, tc := range []struct {
+		name, testBuild string
+		want            []string
+	}{
+		{"a cgo test", "(cgo)", []string{"fast.go:2", "plain.go:2"}},
+		{"a test without a condition", "", []string{"fast.go:2", "plain.go:2", "slow.go:2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ba, bv := version("app.Open", files)
+			ha, hv := version("app.Open", files)
+			for _, a := range []*facts.Analysis{ba, ha} {
+				for i, f := range a.Files {
+					a.Files[i].Build = map[string]string{"fast.go": "(cgo)", "slow.go": "(!cgo)"}[f.Path]
+				}
+				a.Files = append(a.Files, facts.File{Path: "app_test.go", Role: facts.RoleTest, Build: tc.testBuild})
+			}
+			ba.Tests = []facts.Test{{Name: "TestOpen", Path: "app_test.go", Body: "check", Calls: []facts.Call{{Target: "app.Open"}}}}
+			ha.Tests = []facts.Test{{Name: "TestOpen", Path: "app_test.go", Body: "check less", Calls: []facts.Call{{Target: "app.Open"}}}}
+			if got := places(touched(ba, ha, bv, hv)); !slices.Equal(got, tc.want) {
+				t.Errorf("selected %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ package golang
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -36,6 +37,8 @@ type parsedFile struct {
 	// generated is true for a file with the standard header, or one matching files.generated.
 	// files.tests never applies to Go: the compiler decides what a test is.
 	generated bool
+	// build is the file's build condition (facts.File.Build).
+	build string
 }
 
 // Name is the language's name in configuration.
@@ -94,9 +97,11 @@ func analyze(v engine.Version, c config.Analysis, paths []string, texts bool) (*
 		}
 		pf.file = f
 		pf.generated = pf.generated || ast.IsGenerated(f)
+		pf.build = facts.GoBuild(path.Base(p), buildLine(f))
 		files = append(files, pf)
 		at[p] = len(a.Files)
-		a.Files = append(a.Files, facts.File{Path: p, Language: "go", Lines: lines, Unit: pf.pkgPath, UnitPath: path.Dir(p)})
+		a.Files = append(a.Files, facts.File{Path: p, Language: "go", Lines: lines, Unit: pf.pkgPath, UnitPath: path.Dir(p),
+			Build: pf.build})
 		a.Comments = append(a.Comments, comments(fset, p, f)...)
 	}
 	markSupport(files, c.ProductFiles)
@@ -125,6 +130,21 @@ func analyze(v engine.Version, c config.Analysis, paths []string, texts bool) (*
 	}
 	supertypes(files, a)
 	return a, nil
+}
+
+// buildLine returns the expression of a file's //go:build line, or "".
+func buildLine(f *ast.File) string {
+	for _, g := range f.Comments {
+		if g.Pos() >= f.Package {
+			break
+		}
+		for _, c := range g.List {
+			if constraint.IsGoBuild(c.Text) {
+				return strings.TrimSpace(strings.TrimPrefix(c.Text, "//go:build"))
+			}
+		}
+	}
+	return ""
 }
 
 func role(pf parsedFile) facts.Role {

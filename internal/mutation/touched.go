@@ -10,8 +10,8 @@ import (
 )
 
 // touched returns the functions of head to break, sorted by ID: those whose code the change changed
-// (new ones included), and those that a test the change wrote or rewrote calls. The second catches
-// a change that weakens only a test.
+// (new ones included), and those that a test the change wrote or rewrote calls, in a file that can
+// be built with the test's. The second catches a change that weakens only a test.
 //
 // A version may hold several functions with one ID (the same name in files split by build tags,
 // a package's init functions), so a function is matched by its ID and its body: it is unchanged
@@ -28,14 +28,27 @@ func touched(base, head *facts.Analysis, bv, hv engine.Version) []facts.Symbol {
 	for _, t := range base.Tests {
 		baseBody[t.Path+"\x00"+t.Name] = t.Body
 	}
-	called := map[string]bool{}
+	build := map[string]string{}
+	for _, f := range head.Files {
+		build[f.Path] = f.Build
+	}
+	callers := map[string][]string{} // function ID -> the files of the rewritten tests calling it
 	for _, t := range head.Tests {
 		if b, ok := baseBody[t.Path+"\x00"+t.Name]; ok && b == t.Body && t.Body != "" {
 			continue
 		}
 		for _, c := range t.Calls {
-			called[c.Target] = true
+			callers[c.Target] = append(callers[c.Target], t.Path)
 		}
+	}
+	// A function of a file no calling test is ever built with is not one the test can guard.
+	called := func(s facts.Symbol) bool {
+		for _, p := range callers[s.ID] {
+			if facts.BuildTogether(build[p], build[s.Path]) {
+				return true
+			}
+		}
+		return false
 	}
 	var out []facts.Symbol
 	for _, s := range functions(head) {
@@ -44,7 +57,7 @@ func touched(base, head *facts.Analysis, bv, hv engine.Version) []facts.Symbol {
 		if unchanged {
 			baseText[s.ID][body]--
 		}
-		if !unchanged || called[s.ID] {
+		if !unchanged || called(s) {
 			out = append(out, s)
 		}
 	}

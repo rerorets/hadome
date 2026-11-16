@@ -23,6 +23,9 @@ type scope struct {
 	// names may refer to; it is empty in non-test code.
 	testKey string
 	helpers map[string]helper
+	// build is the build condition of the file (facts.File.Build), which picks among declarations
+	// of one name in files split by build conditions.
+	build string
 	// local is the innermost function whose names are in scope. It is nil outside a function.
 	local *block
 }
@@ -146,7 +149,7 @@ func (s scope) resolve(e ast.Expr) *vtype {
 			}
 		}
 		if id := s.qualify(e, func(id string) bool { return s.idx.types[id] }); id != "" {
-			d := s.idx.typeDecls[id]
+			d := pickDecl(s.idx.typeDecls[id], s.build)
 			return &vtype{id: id, expr: d.typ, in: d.in}
 		}
 		if id, ok := e.(*ast.Ident); ok && s.testKey != "" {
@@ -223,7 +226,7 @@ func (s scope) nameType(e ast.Expr, depth int) *vtype {
 		}
 	}
 	if id := s.qualify(e, func(id string) bool { _, ok := s.idx.varDecls[id]; return ok }); id != "" {
-		return s.idx.varType(id, depth+1)
+		return s.idx.varType(id, depth+1, s.build)
 	}
 	sel, ok := e.(*ast.SelectorExpr)
 	if !ok || s.isPackage(sel.X) {
@@ -266,7 +269,7 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 		return h.resultType(s, n)
 	}
 	if id := s.qualify(fun, func(id string) bool { return s.idx.funcs[id] }); id != "" {
-		return s.idx.result(id, n)
+		return s.idx.result(id, n, s.build)
 	}
 	if t := s.qualify(fun, func(id string) bool { return s.idx.types[id] }); t != "" {
 		return s.first(n, s.resolve(fun)) // a conversion
@@ -285,7 +288,7 @@ func (s scope) resultType(c *ast.CallExpr, n, depth int) *vtype {
 		switch {
 		case t == nil:
 		case t.id != "":
-			return s.idx.result(t.id+"."+f.Sel.Name, n)
+			return s.idx.result(t.id+"."+f.Sel.Name, n, s.build)
 		case t.ext != "":
 			return s.first(n, externalResult(t.ext, f.Sel.Name, true))
 		}
@@ -311,7 +314,7 @@ func (s scope) localResult(fun ast.Expr, c *ast.CallExpr, n int) (*vtype, bool) 
 	}
 	if t, local := s.lookup(id.Name); local {
 		if t != nil && t.method != "" {
-			return s.idx.result(t.method, n), true
+			return s.idx.result(t.method, n, s.build), true
 		}
 		return nil, true
 	}
