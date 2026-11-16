@@ -19,6 +19,9 @@ type Engine struct {
 	// Candidates, when set, finds invariant candidates in one version. The report lists those
 	// new in head.
 	Candidates func(in Input) []Candidate
+	// Unfollowed, when set, counts the calls hadome cannot follow in one version, by unit. The
+	// report lists the units where head has more than base.
+	Unfollowed func(in Input) map[string]int
 	// ConfigRules, when set, builds more rules from head's configuration (product-specific gates).
 	// They run on both versions next to Rules.
 	ConfigRules func(c config.Config) ([]Rule, error)
@@ -80,6 +83,9 @@ func (e *Engine) Check(src Source) (Report, error) {
 	}
 	if e.Candidates != nil {
 		r.Candidates = newCandidates(e.Candidates(base.input), e.Candidates(head.input))
+	}
+	if e.Unfollowed != nil {
+		r.Unfollowed = grown(e.Unfollowed(base.input), e.Unfollowed(head.input))
 	}
 	sortFindings(r.Regressions)
 	sortFindings(r.Reviews)
@@ -298,6 +304,18 @@ func shrunk(rule MeasureRule, base []Item, head side) ([]Finding, error) {
 		})
 	}
 	return out, nil
+}
+
+// grown returns the units where head counts more than base, sorted by unit.
+func grown(base, head map[string]int) []Unfollowed {
+	var out []Unfollowed
+	for unit, n := range head {
+		if n > base[unit] {
+			out = append(out, Unfollowed{Unit: unit, Base: base[unit], Head: n})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Unit < out[j].Unit })
+	return out
 }
 
 // newCandidates returns the head candidates that were not candidates in base.

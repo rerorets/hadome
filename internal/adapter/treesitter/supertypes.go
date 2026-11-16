@@ -55,6 +55,13 @@ func setThrough(a *facts.Analysis, through map[string][]string) {
 	}
 }
 
+// setUnfollowed sets Symbol.Unfollowed of the functions and methods.
+func setUnfollowed(a *facts.Analysis, unfollowed map[string]int) {
+	for i := range a.Symbols {
+		a.Symbols[i].Unfollowed = unfollowed[a.Symbols[i].ID]
+	}
+}
+
 // javaSupertypes returns the types a Java class, interface, enum or record names after extends and
 // implements.
 func javaSupertypes(f *file, n *node) []string {

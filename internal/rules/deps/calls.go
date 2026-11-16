@@ -209,3 +209,24 @@ func diagrams(c config.Config) []*config.Diagram {
 	}
 	return out
 }
+
+// Unfollowed sums the calls hadome cannot follow (Symbol.Unfollowed) by unit, over the units the
+// call diagram draws, as the units' directories. Without a call diagram it counts nothing.
+func Unfollowed(in engine.Input) map[string]int {
+	d := in.Config.Calls
+	if d == nil {
+		return nil
+	}
+	unitOf := map[string]string{}
+	for _, f := range in.Facts.Files {
+		unitOf[f.Path] = f.Unit
+	}
+	unitDir := dirs(in.Facts)
+	out := map[string]int{}
+	for _, s := range in.Facts.Symbols {
+		if dir := unitDir[unitOf[s.Path]]; s.Unfollowed > 0 && dir != "" && nodeOf(d, dir) != "" {
+			out[dir] += s.Unfollowed
+		}
+	}
+	return out
+}

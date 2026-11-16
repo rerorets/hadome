@@ -181,3 +181,26 @@ func TestALoopOfSupertypesEndsTheWalk(t *testing.T) {
 		t.Fatalf("want no finding, got %+v, error %v", got, err)
 	}
 }
+
+// viewpoint: external contract
+// target: deps.Unfollowed
+// Calls hadome cannot follow are summed by the directory of each unit the call diagram draws; a unit
+// in no node, and every unit without a call diagram, counts nothing.
+func TestUnfollowedCallsAreSummedOverTheCallDiagramsUnits(t *testing.T) {
+	src := func(path, unit string) facts.File {
+		return facts.File{Path: path, Unit: unit, UnitPath: unit, Role: facts.RoleSource}
+	}
+	a := &facts.Analysis{
+		Files: []facts.File{src("api/a.py", "api"), src("api/b.py", "api"), src("jobs/j.py", "jobs")},
+		Symbols: []facts.Symbol{{ID: "api/a.show", Path: "api/a.py", Unfollowed: 2}, {ID: "api/b.list", Path: "api/b.py", Unfollowed: 3},
+			{ID: "jobs/j.run", Path: "jobs/j.py", Unfollowed: 4}},
+	}
+	diagram := &config.Diagram{Path: "docs/calls.md", Nodes: []config.Node{{ID: "api", Label: "api"}}}
+	got := deps.Unfollowed(engine.Input{Facts: a, Config: config.Config{Calls: diagram}})
+	if len(got) != 1 || got["api"] != 5 {
+		t.Errorf("want api 5 alone, got %v", got)
+	}
+	if got := deps.Unfollowed(engine.Input{Facts: a}); len(got) != 0 {
+		t.Errorf("without a call diagram, want nothing, got %v", got)
+	}
+}

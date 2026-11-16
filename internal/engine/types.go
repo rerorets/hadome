@@ -174,6 +174,13 @@ type Candidate struct {
 	Why     string   `json:"why"`
 }
 
+// Unfollowed is a unit where calls hadome cannot follow grew: the sums in base and head.
+type Unfollowed struct {
+	Unit string `json:"unit"`
+	Base int    `json:"base"`
+	Head int    `json:"head"`
+}
+
 // Key identifies the candidate across versions.
 func (c Candidate) Key() string { return c.Type + " " + strings.Join(c.Targets, ",") }
 
@@ -184,6 +191,9 @@ type Report struct {
 	NewExceptions []Marker
 	// Candidates are the invariant candidates this change adds.
 	Candidates []Candidate
+	// Unfollowed lists the units of the call diagram where calls hadome cannot follow grew. It is
+	// information only and never changes the exit code.
+	Unfollowed []Unfollowed
 	// Introduced lists the settings that differ from the built-in ones, when the change introduces
 	// hadome by adding .hadome.yml. It is information only and never changes the exit code.
 	Introduced []config.Change

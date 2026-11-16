@@ -95,18 +95,25 @@ func (ty *tsTypes) supertypes(sup supers) {
 
 // through returns the methods a function's body calls on values whose written type is one of the
 // repository's types: the class's fields and constructor parameter properties (this.store.save()),
-// and the function's parameters and locals (store.save()).
-func (ty *tsTypes) through(decl, class *node) []string {
+// the function's parameters and locals (store.save()), and the values at the top of the file
+// (tsModuleValues). It also counts the calls on such values whose type is not written, or any.
+func (ty *tsTypes) through(decl, class *node, module map[string]string) ([]string, int) {
 	f := ty.tr.f
-	fields, vars := tsFields(f, class), map[string]string{}
+	fields, vars, locals := tsFields(f, class), map[string]string{}, map[string]bool{}
 	walk(decl, func(x *node) bool {
 		switch x.Kind() {
-		case "required_parameter", "optional_parameter", "variable_declarator":
+		case "required_parameter", "optional_parameter":
+			if x.ChildByFieldName("type") == nil {
+				vars[f.field(x, "pattern")] = unknownType
+			}
+			tsTyped(f, x, vars)
+		case "variable_declarator":
+			locals[f.field(x, "name")] = true
 			tsTyped(f, x, vars)
 		}
 		return true
 	})
-	out := map[string]bool{}
+	out, unfollowed := map[string]bool{}, 0
 	walk(decl.ChildByFieldName("body"), func(x *node) bool {
 		if x.Kind() != "call_expression" {
 			return true
@@ -118,12 +125,16 @@ func (ty *tsTypes) through(decl, class *node) []string {
 		obj, method := callee.ChildByFieldName("object"), f.field(callee, "property")
 		written := ""
 		switch {
-		case obj.Kind() == "identifier":
+		case obj.Kind() == "identifier" && vars[f.text(obj)] != "":
 			written = vars[f.text(obj)]
+		case obj.Kind() == "identifier" && !locals[f.text(obj)]:
+			written = module[f.text(obj)]
 		case obj.Kind() == "member_expression" && f.field(obj, "object") == "this":
 			written = fields[f.field(obj, "property")]
 		}
-		if id := ty.resolve(written); id != "" && method != "" {
+		if written == unknownType {
+			unfollowed++
+		} else if id := ty.resolve(written); id != "" && method != "" {
 			out[id+"."+method] = true
 		}
 		return true
@@ -131,34 +142,85 @@ func (ty *tsTypes) through(decl, class *node) []string {
 	for _, id := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
 		out[id] = true
 	}
-	return keys(out)
+	return keys(out), unfollowed
 }
 
 // throughs maps the IDs of the file's functions and methods to their calls through a value's
-// declared type, as bodies lists them.
-func (ty *tsTypes) throughs() map[string][]string {
+// declared type, and to the number of calls on values whose type is unknown, as bodies lists them.
+func (ty *tsTypes) throughs() (map[string][]string, map[string]int) {
 	f, r := ty.tr.f, ty.tr.r
-	out := map[string][]string{}
+	module := ty.moduleValues()
+	out, unfollowed := map[string][]string{}, map[string]int{}
+	add := func(id string, decl, class *node) { out[id], unfollowed[id] = ty.through(decl, class, module) }
 	for name, d := range ty.tr.top {
 		switch d.Kind() {
 		case "function_declaration", "generator_function_declaration":
-			out[r.symbolID(f.path, name)] = ty.through(d, nil)
+			add(r.symbolID(f.path, name), d, nil)
 		case "class_declaration", "abstract_class_declaration":
 			for _, m := range named(d.ChildByFieldName("body")) {
 				if m.Kind() == "method_definition" {
-					out[r.symbolID(f.path, name)+"."+f.field(m, "name")] = ty.through(m, d)
+					add(r.symbolID(f.path, name)+"."+f.field(m, "name"), m, d)
 				}
 			}
 		case "variable_declarator":
 			if v := d.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
-				out[r.symbolID(f.path, name)] = ty.through(v, nil)
+				add(r.symbolID(f.path, name), v, nil)
 			}
+		}
+	}
+	return out, unfollowed
+}
+
+// moduleValues returns, by name, the written types of the values at the top of the file that come
+// from the repository's code: one of its classes made there (const repo = new Repo()), or
+// unknownType for the result of one of its functions (const repo = makeRepo()), for one typed any,
+// and for a value imported from one of its files that is neither a function nor a class.
+func (ty *tsTypes) moduleValues() map[string]string {
+	tr, f := ty.tr, ty.tr.f
+	out := map[string]string{}
+	for name, b := range tr.bindings {
+		if id := tr.r.target(b.file, b.name); b.file != "" && b.name != "*" && !tr.funcs[id] && !ty.repo[id] {
+			out[name] = unknownType
+		}
+	}
+	for name, d := range tr.top {
+		if d.Kind() != "variable_declarator" {
+			continue
+		}
+		v := d.ChildByFieldName("value")
+		switch {
+		case d.ChildByFieldName("type") != nil:
+			tsTyped(f, d, out)
+		case v == nil:
+		case ty.resolve(tsMade.made(f, v)) != "":
+			out[name] = tsMade.made(f, v)
+		case v.Kind() == "call_expression" && ty.repoCallee(v.ChildByFieldName("function")):
+			out[name] = unknownType
 		}
 	}
 	return out
 }
 
-// tsTyped records the written type of a declaration that has one, by its name.
+// repoCallee reports whether a callee names one of the repository's functions: one the file
+// declares or imports, or a function of a module it imports whole (repo.make()).
+func (ty *tsTypes) repoCallee(callee *node) bool {
+	tr, f := ty.tr, ty.tr.f
+	switch {
+	case callee == nil:
+		return false
+	case callee.Kind() == "identifier":
+		if b, ok := tr.bindings[f.text(callee)]; ok {
+			return b.file != "" && tr.funcs[tr.r.target(b.file, b.name)]
+		}
+		return tr.funcs[tr.r.symbolID(f.path, f.text(callee))]
+	case callee.Kind() == "member_expression":
+		b, ok := tr.bindings[f.field(callee, "object")]
+		return ok && b.file != "" && b.name == "*" && tr.funcs[tr.r.target(b.file, f.field(callee, "property"))]
+	}
+	return false
+}
+
+// tsTyped records the written type of a declaration that has one, by its name: unknownType for any.
 func tsTyped(f *file, n *node, into map[string]string) {
 	t := n.ChildByFieldName("type")
 	if t == nil {
@@ -168,8 +230,12 @@ func tsTyped(f *file, n *node, into map[string]string) {
 	if name == nil {
 		name = n.ChildByFieldName("pattern")
 	}
-	if name != nil && name.Kind() != "object_pattern" && name.Kind() != "array_pattern" {
-		into[f.text(name)] = f.text(t)
+	if name == nil || name.Kind() == "object_pattern" || name.Kind() == "array_pattern" {
+		return
+	}
+	into[f.text(name)] = f.text(t)
+	if strings.TrimSpace(strings.TrimPrefix(f.text(t), ":")) == "any" {
+		into[f.text(name)] = unknownType
 	}
 }
 
@@ -189,7 +255,9 @@ func tsFields(f *file, class *node) map[string]string {
 			tsTyped(f, m, fields)
 		case m.Kind() == "method_definition" && f.field(m, "name") == "constructor":
 			for _, p := range named(m.ChildByFieldName("parameters")) {
-				if tsParameterProperty(p) {
+				if tsParameterProperty(p) && p.ChildByFieldName("type") == nil {
+					fields[f.field(p, "pattern")] = unknownType // constructor(private repo)
+				} else if tsParameterProperty(p) {
 					tsTyped(f, p, fields)
 				}
 			}

@@ -29,15 +29,17 @@ var pySyntax = tsyntax{
 }
 
 func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
-	repo, classes, through := pyRepoTypes(a), pyClasses{}, map[string][]string{}
+	repo, classes, through, unfollowed := pyRepoTypes(a), pyClasses{}, map[string][]string{}, map[string]int{}
 	defer func() {
 		classes.supertypes().fill(a)
 		setThrough(a, through)
+		setUnfollowed(a, unfollowed)
 	}()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := &tracing{f: f, syn: pySyntax, binds: r.traceBinds(f, t), values: map[string]*node{}, funcs: funcs,
 			types: func(string) tbind { return tbind{} }}
 		mod := module(f.path)
+		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo)}
 		var fns []tfunc
 		for _, n := range named(f.root) {
 			def := definition(n)
@@ -45,7 +47,7 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 			case "function_definition":
 				fn := tfunc{id: mod + "." + f.field(def, "name"), own: mod, decl: n, body: def.ChildByFieldName("body")}
 				fns = append(fns, fn)
-				through[fn.id] = pyThrough(tr, fn, nil, mod, repo)
+				through[fn.id], unfollowed[fn.id] = pyThrough(pm, fn, nil)
 			case "class_definition":
 				class := mod + "." + f.field(def, "name")
 				classes.read(tr, mod, def, repo)
@@ -54,7 +56,7 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 						fn := tfunc{id: class + "." + f.field(md, "name"), class: class, own: mod, decl: m,
 							body: md.ChildByFieldName("body")}
 						fns = append(fns, fn)
-						through[fn.id] = pyThrough(tr, fn, def, mod, repo)
+						through[fn.id], unfollowed[fn.id] = pyThrough(pm, fn, def)
 					}
 				}
 			case "expression_statement":
