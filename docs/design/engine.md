@@ -104,6 +104,8 @@ Giving both revisions and directories leaves it undecided which to compare, so t
 
 The `git` source does not read a submodule as files of this repository, in a revision or in the working tree alike: its content belongs to another repository.
 
+The `dir` source does not read a symbolic link that leads to no file as a file of the version. Read as a file, it would stop the whole check. The links left out are those to a directory and broken ones. The working tree of the `git` source leaves the same links out. A link to a file is read as that file.
+
 Each version is exposed as a read-only file system. Other version-control systems, or systems that are not git at all, plug in as further sources.
 
 ### Renames
