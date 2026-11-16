@@ -161,6 +161,9 @@ func pyThrough(tr *tracing, fn tfunc, classDef *node, mod string, repo map[strin
 		}
 		return true
 	})
+	for _, id := range madeInPlace(f, fn.body, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) }) {
+		out[id] = true
+	}
 	return keys(out)
 }
 
@@ -178,8 +181,9 @@ func pyAnnotated(f *file, def *node, into map[string]string) {
 }
 
 // pyAttributes returns the annotations of a class's attributes, by name: those the class body
-// annotates (finder: Finder), and those __init__ annotates or sets from an annotated parameter
-// (self.finder = finder).
+// annotates (finder: Finder), and those __init__ annotates, sets from an annotated parameter
+// (self.finder = finder) or sets to an object made in place (self.repo = Repo()), whose callee
+// stands for its class.
 func pyAttributes(f *file, classDef *node) map[string]string {
 	attrs := map[string]string{}
 	if classDef == nil {
@@ -207,6 +211,8 @@ func pyAttributes(f *file, classDef *node) map[string]string {
 					attrs[f.field(left, "attribute")] = t
 				} else if t, ok := params[f.field(n, "right")]; ok {
 					attrs[f.field(left, "attribute")] = t
+				} else if made := pyMade.made(f, n.ChildByFieldName("right")); made != "" { // self.repo = Repo()
+					attrs[f.field(left, "attribute")] = made
 				}
 				return true
 			})

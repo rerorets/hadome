@@ -76,7 +76,7 @@ func TestTypeScriptThroughAndSupertypes(t *testing.T) {
 			"  show(other: Store, plain): string {\n    const local: Svc = new Svc()\n    this.log.info('x')\n    plain.find('x')\n" +
 			"    return this.finder.find('a') + this.cache!.find('b') + other.find('c') + local.find('d') + this.any.find('e') + this.owned.save()\n  }\n}\n")},
 	})
-	if got := callFacts(t, a, "src/api.Api.show"); got != "through=[src/port.Finder.find src/port.Store.find src/svc.Svc.find src/svc.Svc.save] supertypes=[]" {
+	if got := callFacts(t, a, "src/api.Api.show"); got != "through=[src/port.Finder.find src/port.Store.find src/svc.Svc src/svc.Svc.find src/svc.Svc.save] supertypes=[]" {
 		t.Errorf("Api.show: %s", got)
 	}
 	if got := callFacts(t, a, "src/svc.Svc"); got != "through=[] supertypes=[src/port.Store src/svc.Base]" {
