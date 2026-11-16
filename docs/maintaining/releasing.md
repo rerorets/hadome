@@ -212,7 +212,7 @@ The secrets go in the `release` environment, not at the repository level (Settin
 packaging/smoke.sh 0.0.0-local    # SMOKE_SKIP_JVM=1 to leave out Gradle and Maven
 ```
 
-It builds every package from a pretend release of this machine's Linux binary, installs each one, and checks that it prints the version and passes exit codes through. CI runs it on every push.
+It builds every package from a pretend release of this machine's Linux binary, installs each one, and checks that it prints the version and passes exit codes through. CI runs it on every push to main, and on every pull request changing the files the packages depend on ([CONTRIBUTING.md](../../CONTRIBUTING.md)).
 
 ## Licenses of the dependencies
 

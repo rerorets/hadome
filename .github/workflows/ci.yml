@@ -1,5 +1,6 @@
-# Every push and pull request: tests in both builds on three operating systems, the rules' own
-# self-tests, the readers of every SQL dialect, and hadome checking itself against the base branch.
+# Every push and pull request: tests in both builds, the rules' own self-tests, the readers of every
+# SQL dialect, the packages, and hadome checking itself against the base branch. A pull request runs
+# only what the files it changes can break; main runs everything.
 name: ci
 
 on:
@@ -10,13 +11,98 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request makes its older run worthless, so that run is cancelled. Runs on
+# main each finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # What the pull request's files can break. Every output is true on main. A job reading an output
+  # runs unless it is false, so a failure here runs everything rather than skipping a required check.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+      macos: ${{ steps.files.outputs.macos }}
+      packaging: ${{ steps.files.outputs.packaging }}
+      sql: ${{ steps.files.outputs.sql }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            printf '%s\n' code=true macos=true packaging=true sql=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$RUNNER_TEMP/files"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate -q '.[].filename' > "$files"
+          cat "$files"
+          any() { if grep -Eq "$1" "$files"; then echo true; else echo false; fi; }
+          shared='^(go\.mod|go\.sum|\.github/workflows/)'
+          {
+            # Anything but Markdown is code; documents alone need only the test of the documents.
+            if grep -Evq '\.md$' "$files"; then echo code=true; else echo code=false; fi
+            # What macOS can break that Linux cannot: the C of the grammars (in the modules), processes
+            # and locks, and walking a file system that ignores case.
+            echo "macos=$(any "$shared|^internal/(mutation|adapter/walk|source)/")"
+            echo "packaging=$(any "$shared|^(packaging|cmd/hadome)/|^(LICENSE|THIRD_PARTY_NOTICES)$")"
+            echo "sql=$(any "$shared|^internal/adapter/sql/")"
+          } >> "$GITHUB_OUTPUT"
+
+  # Linux and Windows test every pull request with code: a path written for one system can break the
+  # other anywhere. A pull request of documents alone runs the test of the documents on Linux.
   test:
+    needs: changes
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
+    env:
+      CODE: ${{ needs.changes.outputs.code != 'false' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # The workflow in the cache key keeps this cache apart from the packaging job's, which would
+      # otherwise save first, without the grammars' C built for the tests.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: env.CODE == 'true' || runner.os == 'Linux'
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/ci.yml
+      - name: Test with cgo (all eight languages)
+        if: env.CODE == 'true'
+        run: go test ./...
+      - name: Test without cgo (Go, Terraform and Ansible)
+        if: env.CODE == 'true'
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./...
+      - name: Self-test every rule
+        if: env.CODE == 'true'
+        run: go run ./cmd/hadome self-test
+      - name: Test the documents
+        if: env.CODE != 'true' && runner.os == 'Linux'
+        run: go test ./cmd/hadome
+
+  # macOS runs on main and for the files only it can break, since its runners are the scarcest. Its
+  # name is the matrix's, so that skipping it passes the required check of that name.
+  test-macos:
+    name: test (macos-15)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.macos != 'false' }}
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,6 +110,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/ci.yml
       - name: Test with cgo (all eight languages)
         run: go test ./...
       - name: Test without cgo (Go, Terraform and Ansible)
@@ -38,6 +127,8 @@ jobs:
   # The grammars in the cache key give the job a build cache of its own: the cache the other jobs
   # save holds none of the grammars of dialects that are not enabled.
   sql-grammars:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.sql != 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,6 +159,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/ci.yml
       - name: Check hadome with hadome
         id: check
         env:
@@ -131,12 +225,17 @@ jobs:
         run: exit ${{ steps.check.outputs.code }}
 
   packaging:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.packaging != 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            packaging/smoke.sh
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
