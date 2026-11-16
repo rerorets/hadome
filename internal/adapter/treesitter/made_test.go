@@ -55,7 +55,8 @@ func TestScriptObjectsMadeInPlace(t *testing.T) {
 		"package.json":  {Data: []byte(`{"name":"app"}`)},
 		"src/repo/r.ts": {Data: []byte("export class Repo { find(id: string): string { return id } }\nexport function makeRepo(): Repo { return new Repo() }\n")},
 		"src/api/a.ts": {Data: []byte("import { Repo, makeRepo } from '../repo/r'\nimport * as repo from '../repo/r'\n\n" +
-			"export class Api {\n  private made = new Repo()\n" +
+			"export class Api {\n  private made = new Repo()\n  private kept: Repo\n" +
+			"  keptField(id: string): string { return this.kept.find(id) }\n" +
 			"  field(id: string): string { return this.made.find(id) }\n" +
 			"  local(id: string): string { const r = new Repo(); return r.find(id) }\n" +
 			"  inline(id: string): string { return new repo.Repo().find(id) }\n" +
@@ -71,14 +72,15 @@ func TestScriptObjectsMadeInPlace(t *testing.T) {
 			"    def factory(self, id):\n        return make_repo().find(id)\n",
 	))
 	cases := map[string]string{
-		"src/api.Api.field":   "through=[src/repo.Repo.find] supertypes=[]",
-		"src/api.Api.local":   "through=[src/repo.Repo src/repo.Repo.find] supertypes=[]",
-		"src/api.Api.inline":  "through=[src/repo.Repo src/repo.Repo.find] supertypes=[]",
-		"src/api.Api.factory": "through=[] supertypes=[]",
-		"app/api.Api.field":   "through=[app/repo.Repo.find] supertypes=[]",
-		"app/api.Api.local":   "through=[app/repo.Repo app/repo.Repo.find] supertypes=[]",
-		"app/api.Api.inline":  "through=[app/repo.Repo app/repo.Repo.find] supertypes=[]",
-		"app/api.Api.factory": "through=[] supertypes=[]",
+		"src/api.Api.field":     "through=[src/repo.Repo.find] supertypes=[]",
+		"src/api.Api.keptField": "through=[src/repo.Repo.find] supertypes=[]",
+		"src/api.Api.local":     "through=[src/repo.Repo src/repo.Repo.find] supertypes=[]",
+		"src/api.Api.inline":    "through=[src/repo.Repo src/repo.Repo.find] supertypes=[]",
+		"src/api.Api.factory":   "through=[] supertypes=[]",
+		"app/api.Api.field":     "through=[app/repo.Repo.find] supertypes=[]",
+		"app/api.Api.local":     "through=[app/repo.Repo app/repo.Repo.find] supertypes=[]",
+		"app/api.Api.inline":    "through=[app/repo.Repo app/repo.Repo.find] supertypes=[]",
+		"app/api.Api.factory":   "through=[] supertypes=[]",
 	}
 	for id, want := range cases {
 		a := ts
