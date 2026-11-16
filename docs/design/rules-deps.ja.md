@@ -275,6 +275,7 @@ def show(id):
 | リポジトリのクラスを作る（`UserRepo(db)`、`new Service()`） | そのクラスの ID | Java・Kotlin・TypeScript・Python |
 | 作ってすぐ、または作ったものを入れたローカル変数のメソッドを呼ぶ（`repo = UserRepo(db)` のあとの `repo.find()`、`var s = new Service()`、`const s = new Service()`、`new repo.Repo().find()`） | そのクラスのメソッドの ID | Java・Kotlin・TypeScript・Python |
 | 作ったものを入れた属性・フィールドのメソッドを呼ぶ（`__init__` の `self.repo = UserRepo(db)`、`private repo = new Repo()`） | そのクラスのメソッドの ID | TypeScript・Python |
+| 別のモジュールの直下で作った値、または型を書いた値を import して、そのメソッドを呼ぶ（`app/state.py` の `manager = Manager()` を `from app.state import manager` で取り込んだあとの `manager.switch()`、`export const api = new Api()` を取り込んだあとの `api.get()`） | そのクラスのメソッドの ID | TypeScript・Python |
 
 - 作ることを呼び出しに数えるのは、コンストラクタを動かすからです
 - Go と Rust の構造体のリテラル（`store.Repo{}`、`Store { … }`）は、コードを動かさないので数えません。どちらの言語も、作る関数（`store.New()`、`Store::new()`）の呼び出しは `Calls` に入っています。ローカル変数も、もう型が付きます
@@ -303,6 +304,7 @@ def show(id):
   - ほかのモジュールの型を埋め込んだ型は、そのメソッドが分からないので、そろわない限り実装としません
 - **Python の `Protocol`**: Go と同じく、メソッドの名前と引数の数で突き合わせます。型の注釈は比べません。注釈の無い引数があるためです
 - **Python の `Protocol` と `ABC`**: シンボルの種類はクラスのままで、インターフェースとしては扱いません。そのため呼び出しは、実装に加えて、`Protocol` や `ABC` を宣言したユニットにも届きます。ふつうは呼ぶ側と同じユニットに置くので、矢印は増えません
+- **Python のパッケージが取り込んだ名前**: パッケージの `__init__.py` がほかのモジュールから取り込んだ名前は、取り込み元の名前として読みます。例: `app/models/__init__.py` が `from app.models.account import Account` としていれば、`from app.models import Account` の `Account()` も、`from app import models` の `models.Account()` も、`app/models/account.py` の `Account` を作る呼び出しです
 
 ### たどれない呼び出し
 
@@ -314,7 +316,7 @@ def show(id):
 |---|---|
 | 型の注釈の無い Python の引数と、`__init__` がそれを代入した属性のメソッド | `def run(repo): repo.save(…)`、`__init__(self, repo)` で `self.repo = repo` としたあとの `self.repo.save(…)` |
 | 型の注釈の無い TypeScript の引数とコンストラクタの引数のプロパティ、`any` の引数・フィールドのメソッド | `constructor(private repo)` のあとの `this.repo.save(…)` |
-| モジュールの直下の変数のうち、リポジトリの関数の戻り値を入れたもの、`any` のもの、リポジトリから import した値（関数・クラス・モジュールでないもの）のメソッド（Python・TypeScript） | `repo = make_repo()` を直下に置いたあとの `repo.find(…)` |
+| モジュールの直下の変数のうち、リポジトリの関数の戻り値を入れたもの、`any` のもの、リポジトリから import した値（関数・クラス・モジュールでないもの）のうち、取り込み元でクラスから作ったのでも型を書いたのでもないもののメソッド（Python・TypeScript） | `repo = make_repo()` を直下に置いたあとの `repo.find(…)` |
 
 | 数えないもの | 理由 |
 |---|---|

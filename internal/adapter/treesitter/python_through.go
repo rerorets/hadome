@@ -44,10 +44,13 @@ func pyTypeName(annotation string) string {
 // resolveClass returns the ID of the repository's class a name stands for in a file: one it
 // imports, by name or through its module (pkg.Finder), or one its module declares.
 func resolveClass(tr *tracing, mod, name string, repo map[string]bool) string {
+	if repo[name] { // the class of a value made in another module (madeValues)
+		return name
+	}
 	id := mod + "." + name
 	if dot := strings.LastIndex(name, "."); dot >= 0 {
 		if b, ok := tr.binds[name[:dot]]; ok && b.id != "" {
-			id = b.id + "." + name[dot+1:]
+			id = tr.memberID(b.id, name[dot+1:])
 		}
 	} else if b, ok := tr.binds[name]; ok && b.id != "" {
 		id = b.id
@@ -199,11 +202,12 @@ func pyLocals(f *file, body *node) map[string]bool {
 }
 
 // pyModuleValues returns, by name, the written types of the values at the top of a module that come
-// from the repository's code: one of its classes made there (repo = Repo()), or unknownType for
-// the result of one of its functions (repo = make_repo()) and for a value imported from one of its
-// modules that is neither a function, a class nor a module.
-func pyModuleValues(tr *tracing, mod string, repo map[string]bool) map[string]string {
-	out := pyImportedValues(tr, repo)
+// from the repository's code: one of its classes made there (repo = Repo()) or in the module it is
+// imported from, or unknownType for the result of one of its functions (repo = make_repo()) and
+// for another value imported from one of its modules that is neither a function, a class nor a
+// module.
+func pyModuleValues(tr *tracing, mod string, repo map[string]bool, made map[string]string) map[string]string {
+	out := pyImportedValues(tr, repo, made)
 	for _, n := range named(tr.f.root) {
 		if name, written := pyModuleValue(tr, mod, repo, n); name != "" {
 			out[name] = written
@@ -212,13 +216,17 @@ func pyModuleValues(tr *tracing, mod string, repo map[string]bool) map[string]st
 	return out
 }
 
-// pyImportedValues returns unknownType for each name imported from one of the repository's modules
-// that is neither a function, a class nor a module.
-func pyImportedValues(tr *tracing, repo map[string]bool) map[string]string {
+// pyImportedValues returns, for each name imported from one of the repository's modules that is
+// neither a function, a class nor a module, the class it was made from there (madeValues), or
+// unknownType.
+func pyImportedValues(tr *tracing, repo map[string]bool, made map[string]string) map[string]string {
 	out := map[string]string{}
 	for name, b := range tr.binds {
 		if b.id != "" && strings.Contains(b.id[strings.LastIndex(b.id, "/")+1:], ".") && !tr.funcs[b.id] && !repo[b.id] {
 			out[name] = unknownType
+			if class := made[b.id]; class != "" {
+				out[name] = class
+			}
 		}
 	}
 	return out
@@ -258,7 +266,7 @@ func pyRepoCallee(tr *tracing, mod, callee string) bool {
 		return false
 	}
 	if dotted {
-		return tr.funcs[b.id+"."+rest]
+		return tr.funcs[tr.memberID(b.id, rest)]
 	}
 	return tr.funcs[b.id]
 }
