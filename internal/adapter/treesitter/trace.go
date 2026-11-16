@@ -57,6 +57,7 @@ type tfunc struct {
 	// outer are the classes around its class, innermost first, whose fields it also sees by name
 	// where its own class has none of that name (Java and Kotlin's nested and inner classes).
 	outer []*node
+	binds map[string]tbind // the names it binds itself (a use declaration in a Rust function) over its file's; nil for none
 }
 
 // tsyntax is how a language writes what tracing reads.
@@ -129,6 +130,11 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 func (tr *tracing) reach(fn tfunc, code *node) reached {
 	got := newReached()
 	tr.locals, tr.fields = map[string]string{}, map[string]string{}
+	if fn.binds != nil {
+		file := tr.binds
+		tr.binds = fn.binds
+		defer func() { tr.binds = file }()
+	}
 	if tr.syn.vars != nil {
 		if fn.scope != nil { // the class's fields, not the parameters of its other functions
 			if cached, ok := tr.classFields[fn.scope.Id()]; ok {

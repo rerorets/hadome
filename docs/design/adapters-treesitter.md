@@ -186,7 +186,7 @@ TypeScript alone uses the file's path in the ID of a name that collides.
 |---|---|---|
 | TypeScript | The specifier starts with `.` or `/`; or an alias or the `baseUrl` of the `tsconfig.json` nearest the file resolves it to a file of the repository; or it starts with the name of a package of the repository | See "Resolving TypeScript" below. Anything else is an external package, named by its first path element (two for `@scope/name`) |
 | Python | The module exists in the repository (as a directory or a `.py` file, from a package root) | The package roots are the root, `src/`, each directory holding a `pyproject.toml`, `setup.cfg` or `setup.py`, and that directory's `src/`. The roots of the directories holding the importing file (with their `src/`) are searched first, deepest directory first, then the others in path order. Relative imports from the file's package. The unit is the module's package. `from a import b` where `b` is a module binds the module |
-| Rust | A path starting with `crate`, `self`, `super`, or the name of the file's crate (`[lib] name` in `Cargo.toml`, else `[package] name` with `-` read as `_`). The crate's name is how integration tests under `tests/` and binaries call the library | To the longest prefix that is a module file; the rest names an item |
+| Rust | A path starting with `crate`, `self`, `super`, or the name of the file's crate (`[lib] name` in `Cargo.toml`, else `[package] name` with `-` read as `_`). The crate's name is how integration tests under `tests/` and binaries call the library | To the longest prefix that is a module file; the rest names an item. See "Resolving Rust" below |
 | Java, Kotlin | Some file of the repository declares the package | `import a.b.C` is the package `a.b`; `a.b.*` too |
 
 External imports keep their name as `ToUnit` and are checked against the `io` table.
@@ -229,6 +229,15 @@ An import of a repository package by its name alone (`@acme/shared`) resolves to
 3. The file `exports["."]`, `module`, `main` or `types` names. When it is under `dist/`, `lib/`, `build/` or `out/`, the source of the same name under `src/` is tried too
 
 When a path follows the name, as in `@acme/shared/sub`, the path is resolved in the package's directory and in its `src/`.
+
+### Resolving Rust
+
+- **Child modules**: a path whose first element is a child module of the file's module resolves as a path starting with `self`. Example: `use yaml::quote` in `src/doc/mod.rs` is `quote` of `src/doc/yaml`
+- **Re-exported names**: a name the module does not declare is looked up in the module's `use` declarations that have a visibility (`pub use`, `pub(crate) use` and the like). By name, by `*` or under an `as` alias, it is followed to the item where it is declared. A re-export of a re-export is followed up to 8 levels
+  - Example: with `pub use yaml::quote;` in `src/doc/mod.rs`, `crate::doc::quote` is `src/doc/yaml.quote`
+  - A `use` without a visibility only lets the file use the name, so it is not taken as a re-export
+  - A name that cannot be followed stays `<module>.<name>`
+- **`use` inside a function**: a `use` at the top level of a function's body binds names for that function only. Where it binds the same name as a `use` of the file, the function's own one is used. A `use` in a block inside the body (inside an `if`, say) is not read
 
 ### Imports that cannot be resolved
 

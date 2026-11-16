@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -70,7 +71,7 @@ func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 		return true
 	}
 	if b, ok := tr.binds[segs[0]]; ok {
-		id := b.id + "." + strings.Join(segs[1:], ".")
+		id := r.bound(b, segs)
 		switch {
 		case b.io:
 			got.io = true
@@ -89,16 +90,26 @@ func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 	switch {
 	case !internal:
 		got.io = got.io || tr.ioPath(strings.Join(segs, "::"))
-	case tr.funcs[loc+"."+last]:
-		got.calls[loc+"."+last] = true
+	case tr.funcs[r.item(loc, last)]:
+		got.calls[r.item(loc, last)] = true
 	default:
-		if t := loc + "." + strings.Join(segs[len(segs)-2:], "."); tr.funcs[t] { // module::Type::f
+		if t := r.item(loc, segs[len(segs)-2]) + "." + last; tr.funcs[t] { // module::Type::f
 			got.calls[t] = true
 		} else {
 			got.units[loc] = true
 		}
 	}
 	return true
+}
+
+// bound is the ID a path that starts with a name a use declaration binds stands for: through a
+// module, what that module declares or re-exports.
+func (r *rust) bound(b tbind, segs []string) string {
+	if b.id == b.unit && r.modules[b.id] {
+		item, _ := r.itemID(b.id, segs[1])
+		return strings.Join(append([]string{item}, segs[2:]...), ".")
+	}
+	return b.id + "." + strings.Join(segs[1:], ".")
 }
 
 // ioPath reports whether a path names something of a crate that does input or output.
@@ -127,7 +138,8 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 			for _, c := range named(body) {
 				switch {
 				case c.Kind() == "function_item":
-					fns = append(fns, tfunc{id: prefix + "." + f.field(c, "name"), own: prefix, decl: c, body: c.ChildByFieldName("body")})
+					fns = append(fns, tfunc{id: prefix + "." + f.field(c, "name"), own: prefix, decl: c, body: c.ChildByFieldName("body"),
+						binds: r.localBinds(f, t, binds, c.ChildByFieldName("body"))})
 				case rustTypes[c.Kind()]:
 					structs[prefix+"."+f.field(c, "name")] = c
 				case c.Kind() == "impl_item" || c.Kind() == "trait_item":
@@ -140,7 +152,7 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 					for _, m := range named(c.ChildByFieldName("body")) {
 						if m.Kind() == "function_item" {
 							fns = append(fns, tfunc{id: class + "." + f.field(m, "name"), class: class, own: prefix, decl: m,
-								body: m.ChildByFieldName("body")})
+								body: m.ChildByFieldName("body"), binds: r.localBinds(f, t, binds, m.ChildByFieldName("body"))})
 						}
 					}
 				case c.Kind() == "mod_item" && c.ChildByFieldName("body") != nil && !testModule(f, c):
@@ -166,8 +178,21 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 // traceBinds binds the names the file's use declarations bring in: a module or item of the
 // repository, or something of a crate that does input or output.
 func (r *rust) traceBinds(f *file, t *tables) map[string]tbind {
-	out := map[string]tbind{}
-	for _, u := range uses(f, f.root) {
+	return r.bindUses(f, t, f.root, map[string]tbind{})
+}
+
+// localBinds binds, over the file's names, those the use declarations at the top of a function's
+// body bring in (fn f() { use crate::doc::{quote, unquote}; … }); nil when it has none.
+func (r *rust) localBinds(f *file, t *tables, file map[string]tbind, body *node) map[string]tbind {
+	if body == nil || len(uses(f, body)) == 0 {
+		return nil
+	}
+	return r.bindUses(f, t, body, maps.Clone(file))
+}
+
+// bindUses adds to out the names the use declarations directly in n bring in.
+func (r *rust) bindUses(f *file, t *tables, n *node, out map[string]tbind) map[string]tbind {
+	for _, u := range uses(f, n) {
 		if u.local == "" || u.local == "self" {
 			continue
 		}
@@ -179,7 +204,8 @@ func (r *rust) traceBinds(f *file, t *tables) map[string]tbind {
 		case strings.HasSuffix(loc, "/"+last) || last == "crate" || last == "super":
 			out[u.local] = tbind{id: loc, unit: loc}
 		default:
-			out[u.local] = tbind{id: loc + "." + last, unit: loc}
+			id, unit := r.itemID(loc, last)
+			out[u.local] = tbind{id: id, unit: unit}
 		}
 	}
 	return out
