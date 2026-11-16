@@ -96,7 +96,7 @@ func TestScriptObjectsMadeInPlace(t *testing.T) {
 // Calls hadome cannot follow are the method calls on values from outside whose type is not written:
 // parameters without an annotation (or typed any), attributes and fields set from one, values at the
 // top of the module made by the repository's functions, and values imported from its modules. Locals,
-// a library's values, values of a written type and objects made in place are not counted.
+// self, a library's values, values of a written type and objects made in place are not counted.
 func TestUnfollowedCallsAreCountedOnValuesFromOutside(t *testing.T) {
 	py := analyze(t, "python", tree(
 		"app/__init__.py", "",
@@ -107,7 +107,7 @@ func TestUnfollowedCallsAreCountedOnValuesFromOutside(t *testing.T) {
 			"    def param(self, id, other=None):\n        return other.find(id)\n\n"+
 			"    def imported(self, id):\n        return shared.find(id)\n\n"+
 			"    def module(self, id):\n        return built.find(id)\n\n"+
-			"    def known(self, id):\n        log.info(id)\n        self.items.append(id)\n        self.typed.find(id)\n        made.find(id)\n"+
+			"    def known(self, id):\n        self.injected(id)\n        log.info(id)\n        self.items.append(id)\n        self.typed.find(id)\n        made.find(id)\n"+
 			"        local = make_repo()\n        local.find(id)\n        built = 1\n        return built.find(id)\n",
 	))
 	ts := analyze(t, "typescript", fstest.MapFS{
