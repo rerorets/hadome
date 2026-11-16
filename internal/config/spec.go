@@ -232,13 +232,20 @@ var rulesKey = Key{
 
 var depsKey = Key{
 	Name: "deps", Kind: KindObject, Doc: "Settings of the deps/ rules.",
-	Example: "deps:\n  diagram: docs/conventions/dependencies.md",
+	Example: "deps:\n  diagram: docs/conventions/dependencies.md\n  calls: docs/conventions/calls.md",
 	Fields: []Key{{
 		Name: "diagram", Kind: KindString, Pattern: `^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\.md$`,
 		Doc: "The Markdown file, from the repository root, whose Mermaid flowchart is the dependency diagram. " +
 			"Node labels name directories (dir, or dir/... for everything under it); an arrow a --> b lets a import b. " +
 			"Without it, the deps/ rules find nothing. Adding an arrow needs a person's review.",
 		Example: "diagram: docs/conventions/dependencies.md",
+	}, {
+		Name: "calls", Kind: KindString, Pattern: `^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\.md$`,
+		Doc: "The Markdown file, from the repository root, whose Mermaid flowchart is the call diagram, apart from the dependency diagram. " +
+			"Written like the dependency diagram; an arrow a --> b lets the code of a call the code of b. " +
+			"Calls from a box with the class wiring (a DI container, main) are not checked. " +
+			"Without it, deps/call-not-in-diagram finds nothing. Adding an arrow or marking wiring needs a person's review.",
+		Example: "calls: docs/conventions/calls.md",
 	}},
 }
 

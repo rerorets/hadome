@@ -1,5 +1,5 @@
 // Package deps holds the deps/ rules: the dependency diagram is the source of truth for which of the
-// repository's units may import which.
+// repository's units may import which, and the call diagram for which may call which.
 //
 // Design: docs/design/rules-deps.md
 package deps
@@ -111,26 +111,36 @@ type diagramStale struct{}
 func (diagramStale) ID() string           { return "deps/diagram-stale" }
 func (diagramStale) Cases() []engine.Case { return staleCases() }
 func (diagramStale) About() engine.About {
-	return engine.About{Finds: engine.T("a node of the dependency diagram whose label names no unit of the version, or a planned node whose directory already holds one"),
+	return engine.About{Finds: engine.T("a node of either diagram whose label names no unit of the version, or a planned node whose directory already holds one"),
 		Why:  engine.T("a box that names nothing makes the diagram look complete when it is not"),
 		Fix:  engine.T("correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned"),
-		Keys: []string{"rules.deps.diagram"}}
+		Keys: []string{"rules.deps.diagram", "rules.deps.calls"}}
 }
 
-// Find reports nodes of the version's own diagram whose label names no unit of the version.
+// Find reports nodes of the version's own diagrams whose label names no unit of the version.
 func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
-	d := in.Config.OwnDiagram
-	if d == nil {
-		return nil, nil
-	}
 	unitDir := dirs(in.Facts)
+	var out []engine.Finding
+	for _, d := range diagrams(in.Config) {
+		out = append(out, r.stale(d, unitDir)...)
+	}
+	return out, nil
+}
+
+// stale reports the nodes of one diagram. A node of the call diagram is anchored with the diagram's
+// file too, so the same label in both diagrams makes two findings.
+func (r diagramStale) stale(d *config.Diagram, unitDir map[string]string) []engine.Finding {
+	prefix := ""
+	if d.Key == config.CallsKey {
+		prefix = d.Path + "\x00"
+	}
 	var out []engine.Finding
 	for _, n := range d.Nodes {
 		names := namesAUnit(n.Label, unitDir)
 		switch {
 		case n.Planned && names:
 			out = append(out, engine.Finding{
-				Rule: r.ID(), File: d.Path, Line: n.PlannedLine, Anchor: n.Label + "\x00" + config.PlannedClass,
+				Rule: r.ID(), File: d.Path, Line: n.PlannedLine, Anchor: prefix + n.Label + "\x00" + config.PlannedClass,
 				Message: engine.T("the diagram's node %s is planned, but %s already holds a unit", n.ID, n.Label),
 				Why:     engine.T("a planned box whose package exists tells readers it is still to be written"),
 				Fix:     engine.T("remove the class planned from node %s", n.ID),
@@ -141,14 +151,14 @@ func (r diagramStale) Find(in engine.Input) ([]engine.Finding, error) {
 				fix = engine.T("correct the label to the unit's directory, or to %s to take in the units under it; remove the node; or mark a box not created yet as planned", n.Label+"/...")
 			}
 			out = append(out, engine.Finding{
-				Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: n.Label,
+				Rule: r.ID(), File: d.Path, Line: n.Line, Anchor: prefix + n.Label,
 				Message: engine.T("the diagram's node %s names %s, which holds no unit", n.ID, n.Label),
 				Why:     r.About().Why,
 				Fix:     fix,
 			})
 		}
 	}
-	return out, nil
+	return out
 }
 
 func namesAUnit(label string, unitDir map[string]string) bool {
@@ -172,4 +182,4 @@ func unitsBelow(label string, unitDir map[string]string) bool {
 }
 
 // All returns the deps/ rules.
-func All() []engine.Rule { return []engine.Rule{notInDiagram{}, diagramStale{}} }
+func All() []engine.Rule { return []engine.Rule{notInDiagram{}, diagramStale{}, callNotInDiagram{}} }

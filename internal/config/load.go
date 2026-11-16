@@ -46,6 +46,10 @@ type Config struct {
 	Diagram *Diagram
 	// OwnDiagram is this version's own diagram, whose boxes must name units of this version's tree.
 	OwnDiagram *Diagram
+	// Calls is the call diagram that judges calls between units: head's, for both versions. Nil when
+	// none is configured. OwnCalls is this version's own, as OwnDiagram is.
+	Calls    *Diagram
+	OwnCalls *Diagram
 	// Layers are the files that were read, earliest layer first. Empty means built-in settings only.
 	Layers []string
 	// Databases are the SQL databases of sql.databases, in order. Empty means every .sql file is one
@@ -158,11 +162,24 @@ func Load(product fs.FS, workdir string) (Config, error) {
 	if errs := checkMutation(c); len(errs) > 0 {
 		return Config{}, errs
 	}
-	if path, ok := object(object(raw["rules"])["deps"])["diagram"].(string); ok {
-		if c.Diagram, err = loadDiagram(product, path); err != nil {
+	deps := object(object(raw["rules"])["deps"])
+	diagram, _ := deps["diagram"].(string)
+	if diagram != "" {
+		if c.Diagram, err = loadDiagram(product, diagram, DiagramKey); err != nil {
 			return Config{}, err
 		}
 		c.OwnDiagram = c.Diagram
+	}
+	if calls, ok := deps["calls"].(string); ok {
+		if calls == diagram {
+			return Config{}, Errors{{File: FileName, Line: max(c.lines[CallsKey], 1), Key: CallsKey,
+				Problem: fmt.Sprintf("names %s, the dependency diagram; every flowchart there is read as imports, so draw the calls in a file of their own", calls),
+				Example: "calls: docs/conventions/calls.md"}}
+		}
+		if c.Calls, err = loadDiagram(product, calls, CallsKey); err != nil {
+			return Config{}, err
+		}
+		c.OwnCalls = c.Calls
 	}
 	return c, nil
 }
@@ -201,22 +218,6 @@ func checkMutation(c Config) Errors {
 
 // PackagesPlaceholder is the element of mutation.test that becomes the packages of the tests run.
 const PackagesPlaceholder = "{packages}"
-
-// loadDiagram reads the dependency diagram from the version's tree: it is part of the repository,
-// like the code it describes.
-func loadDiagram(product fs.FS, path string) (*Diagram, error) {
-	data, err := fs.ReadFile(product, path)
-	if err != nil {
-		return nil, Errors{{File: FileName, Line: 1, Key: "rules.deps.diagram",
-			Problem: fmt.Sprintf("cannot read the diagram %s: %v", path, errors.Unwrap(err)),
-			Example: "diagram: docs/conventions/dependencies.md"}}
-	}
-	d, errs := parseDiagram(path, data)
-	if len(errs) > 0 {
-		return nil, errs
-	}
-	return d, nil
-}
 
 // loader reads one file and the files it extends, depth first, so earlier layers come first.
 type loader struct {
@@ -357,7 +358,7 @@ func identityOf(val any, elem Key, identity []string) string {
 }
 
 // ForBase returns the configuration that judges base: head's settings with base's invariants and
-// base's own diagram.
+// base's own diagrams.
 // Settings, tables and gates come from head and apply to both versions, so tightening them never
 // fails a change on code that was already there. Invariants are compared version by version,
 // so a new invariant without a guarding test is a regression.
@@ -365,6 +366,7 @@ func ForBase(base, head Config) Config {
 	c := head
 	c.Invariants = base.Invariants
 	c.OwnDiagram = base.OwnDiagram
+	c.OwnCalls = base.OwnCalls
 	return c
 }
 

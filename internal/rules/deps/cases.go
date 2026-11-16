@@ -73,5 +73,60 @@ func staleCases() []engine.Case {
 			WantFail: []string{"deps/diagram-stale"}},
 		{Name: "marking an existing box planned needs review", Base: app(drawn + "\n  util[\"utils\"]"),
 			Head: app(drawn + "\n  util[\"utils\"]:::planned"), WantReview: []string{engine.LoosenedID}},
+		{Name: "a node of the call diagram naming a missing directory fails", Base: callApp(callsDrawn),
+			Head: callApp(callsDrawn + "\n  store --> util[\"utils\"]"), WantFail: []string{"deps/diagram-stale"}, WantReview: []string{engine.LoosenedID}},
+	}
+}
+
+// callApp is a module with a call diagram, the units domain, store and api, where store calls
+// domain, and extra files, keyed by path.
+func callApp(diagram string, extra ...string) fstest.MapFS {
+	t := fstest.MapFS{
+		"go.mod":               {Data: []byte("module example.com/app\n")},
+		".hadome.yml":          {Data: []byte("schema: 1\nrules:\n  deps:\n    calls: docs/calls.md\n")},
+		"docs/calls.md":        {Data: []byte("```mermaid\nflowchart LR\n" + diagram + "\n```\n")},
+		"domain/domain.go":     {Data: []byte("package domain\n\nfunc Get() {}\n")},
+		"store/store.go":       {Data: []byte("package store\n\nimport \"example.com/app/domain\"\n\nfunc Save() { domain.Get() }\n")},
+		"api/api.go":           {Data: []byte("package api\n")},
+		"api/v1/handlers/h.go": {Data: []byte("package handlers\n\nfunc List() {}\n")},
+	}
+	for i := 0; i+1 < len(extra); i += 2 {
+		t[extra[i]] = &fstest.MapFile{Data: []byte(extra[i+1])}
+	}
+	return t
+}
+
+const (
+	callsDrawn = "  api[\"api/...\"] --> store\n  store --> domain"
+	apiCallDom = "package api\n\nimport \"example.com/app/domain\"\n\nfunc Show() { domain.Get() }\n"
+)
+
+func callCases() []engine.Case {
+	toStore := "package api\n\nimport \"example.com/app/store\"\n\nfunc Create() { store.Save() }\n"
+	inGroup := "package api\n\nimport \"example.com/app/api/v1/handlers\"\n\nfunc Index() { handlers.List() }\n"
+	wire := "package wire\n\nimport \"example.com/app/domain\"\n\nfunc Build() { domain.Get() }\n"
+	toWire := "package api\n\nimport \"example.com/app/wire\"\n\nfunc Start() { wire.Build() }\n"
+	withWire := callsDrawn + "\n  w[\"wire\"]:::wiring"
+	bothDiagrams := func(t fstest.MapFS) fstest.MapFS {
+		t[".hadome.yml"] = &fstest.MapFile{Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: docs/deps.md\n    calls: docs/calls.md\n")}
+		t["docs/deps.md"] = &fstest.MapFile{Data: []byte("```mermaid\nflowchart LR\n" + callsDrawn + "\n  api --> domain\n```\n")}
+		return t
+	}
+	return []engine.Case{
+		{Name: "a direct call along an arrow passes", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", toStore)},
+		{Name: "a direct call with no arrow fails", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", apiCallDom),
+			WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "an existing undrawn call passes", Base: callApp(callsDrawn, "api/api.go", apiCallDom),
+			Head: callApp(callsDrawn, "api/api.go", "\n"+apiCallDom)},
+		{Name: "a call within one node passes", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", inGroup)},
+		{Name: "a call from a wiring node passes", Base: callApp(withWire), Head: callApp(withWire, "wire/wire.go", wire)},
+		{Name: "an undrawn call to a wiring node fails", Base: callApp(withWire, "wire/wire.go", wire),
+			Head: callApp(withWire, "wire/wire.go", wire, "api/api.go", toWire), WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "a call with an import arrow but no call arrow fails", Base: bothDiagrams(callApp(callsDrawn)),
+			Head: bothDiagrams(callApp(callsDrawn, "api/api.go", apiCallDom)), WantFail: []string{"deps/call-not-in-diagram"}},
+		{Name: "drawing the arrow needs review instead", Base: callApp(callsDrawn),
+			Head: callApp(callsDrawn+"\n  api --> domain", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
+		{Name: "marking wiring needs review", Base: callApp(callsDrawn),
+			Head: callApp(callsDrawn+"\n  class api wiring", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
 	}
 }

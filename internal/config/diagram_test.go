@@ -168,3 +168,84 @@ func TestMarkingAnExistingBoxPlannedIsLooser(t *testing.T) {
 		t.Errorf("a new box drawn planned is not looser, got %+v", got)
 	}
 }
+
+// loadCalls loads a tree whose .hadome.yml names a call diagram drawn as flow.
+func loadCalls(t *testing.T, flow string) Config {
+	t.Helper()
+	return mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    calls: c.md\n")},
+		"c.md": {Data: []byte("```mermaid\nflowchart LR\n" + flow + "\n```\n")}})
+}
+
+// viewpoint: behaviour
+// target: config.Load with rules.deps.calls
+// The call diagram is read on its own, without a dependency diagram, and the class wiring marks a
+// box there; in the dependency diagram the same class is only a style.
+func TestWiringMarksABoxOfTheCallDiagramOnly(t *testing.T) {
+	c := loadCalls(t, "  w[\"cmd/server\"]:::wiring\n  a --> b\n  class b wiring")
+	if c.Calls == nil || c.Diagram != nil {
+		t.Fatalf("want the call diagram alone, got calls %v, diagram %v", c.Calls, c.Diagram)
+	}
+	got := map[string]bool{}
+	for _, n := range c.Calls.Nodes {
+		got[n.ID] = n.Wiring
+	}
+	if !got["w"] || got["a"] || !got["b"] {
+		t.Errorf("want w and b wiring, got %v", got)
+	}
+	deps := mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: d.md\n")},
+		"d.md": {Data: []byte("```mermaid\nflowchart LR\n  a:::wiring --> b\n  class z wiring\n```\n")}})
+	for _, n := range deps.Diagram.Nodes {
+		if n.Wiring {
+			t.Errorf("node %s of the dependency diagram must not be wiring", n.ID)
+		}
+	}
+}
+
+// viewpoint: failure handling
+// target: config.Load with rules.deps.calls
+// The call diagram is configuration like the dependency diagram, and naming the dependency
+// diagram's file as the call diagram is refused, since its arrows are all read as imports.
+func TestABrokenCallDiagramIsAConfigurationError(t *testing.T) {
+	flow := "```mermaid\nflowchart LR\n  a --> b\n```\n"
+	cases := map[string]fstest.MapFS{
+		"missing file": {".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    calls: c.md\n")}},
+		"wiring unknown node": {".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    calls: c.md\n")},
+			"c.md": {Data: []byte("```mermaid\nflowchart LR\n  a --> b\n  class c wiring\n```\n")}},
+		"the dependency diagram's file": {".hadome.yml": {Data: []byte("schema: 1\nrules:\n  deps:\n    diagram: d.md\n    calls: d.md\n")},
+			"d.md": {Data: []byte(flow)}},
+	}
+	for name, tree := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(tree, t.TempDir())
+			if es, ok := err.(Errors); !ok || es[0].Key != "rules.deps.calls" {
+				t.Fatalf("want an error on rules.deps.calls, got %v", err)
+			}
+		})
+	}
+}
+
+// viewpoint: state integrity
+// target: config.Diff with rules.deps.calls
+// The call diagram is reviewed like the dependency diagram: drawing an arrow, marking wiring (on a
+// new box or one base draws) and removing the diagram are looser; erasing an arrow or the mark is not.
+func TestChangingTheCallDiagramNeedsReview(t *testing.T) {
+	one, two := loadCalls(t, "  a --> b"), loadCalls(t, "  a --> b\n  a --> c")
+	wired, newWired := loadCalls(t, "  a --> b\n  class a wiring"), loadCalls(t, "  a --> b\n  w[\"cmd\"]:::wiring")
+	none := mustLoadTree(t, fstest.MapFS{".hadome.yml": {Data: []byte("schema: 1\n")}})
+	for name, tc := range map[string]struct {
+		base, head Config
+		want       int
+	}{"adding an arrow": {one, two, 1}, "removing one": {two, one, 0}, "marking wiring": {one, wired, 1},
+		"a new box marked wiring": {one, newWired, 1}, "removing wiring": {wired, one, 0},
+		"adding the first diagram": {none, two, 0}, "removing the diagram": {two, none, 1}} {
+		got := looser(Diff(tc.base, tc.head))
+		if len(got) != tc.want {
+			t.Errorf("%s: want %d looser changes, got %v", name, tc.want, got)
+		}
+		for _, ch := range got {
+			if !strings.HasPrefix(ch, "rules.deps.calls ") {
+				t.Errorf("%s: want the change on rules.deps.calls, got %+v", name, ch)
+			}
+		}
+	}
+}
