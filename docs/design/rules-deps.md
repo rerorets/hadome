@@ -235,8 +235,8 @@ The difficulty splits in two: whether the type of the value called is known (`Th
 | Kotlin | the same, constructor-parameter properties included | the types after `:` in the class declaration, whether a constructor is called or not, and delegated with `by` or not |
 | TypeScript | methods on fields, parameters (constructor-parameter properties included) and local variables with a type annotation, whether the type is an interface or a concrete class | `implements`, `extends` |
 | Go | methods on parameters declared with an interface type; those on fields and local variables are already in `Calls` | matching methods (below); for an interface, the repository's interfaces it embeds |
-| Rust | methods on parameters and fields typed `dyn Trait`, `impl Trait`, or with a trait bound | `impl Trait for Type` |
-| Python | methods on attributes and parameters with a type annotation, concrete classes included | base classes (subclasses of `ABC` included); `Protocol` by matching methods |
+| Rust | methods on fields of `dyn Trait` in `Box`, `Arc` or `Rc`, and on parameters of a type parameter with a trait bound (`T: Trait`, `where T: Trait`); those on `&dyn Trait` and `impl Trait` parameters are already in `Calls` | `impl Trait for Type`; for a trait, the `B` of `trait A: B` |
+| Python | methods on attributes and parameters with a type annotation, attributes `__init__` sets from an annotated parameter (`self.repo = repo`) included, concrete classes too | base classes (subclasses of `ABC` included); `Protocol` by matching methods |
 
 - **Why concrete classes count in TypeScript and Python**: in these two languages `Calls` holds only imported names and names declared at the top of the file. A call on an injected class value (`this.service.find()`) is not in `Calls`, even for a concrete class
 - **Matching methods in Go**: for each of the repository's types, gather its method set; a type that has every method of one of the repository's interfaces implements it
@@ -245,6 +245,7 @@ The difficulty splits in two: whether the type of the value called is known (`Th
   - Methods with a pointer receiver count for the pointer type; when only `*T` satisfies the interface, `T` is still taken as the implementation
   - A type embedding a type of another module is not an implementation unless its methods match without that type, since the embedded type's methods are unknown
 - **Python's `Protocol`**: matched like Go, by method names and parameter counts. Annotations are not compared, since parameters may have none
+- **Python's `Protocol` and `ABC`**: their symbols stay classes, not interfaces, so a call reaches the unit declaring the `Protocol` or `ABC` as well as the implementations. It usually lies in the caller's own unit, so no arrow is added
 
 ### Calls hadome cannot follow
 

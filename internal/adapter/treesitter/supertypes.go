@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -13,10 +14,10 @@ import (
 type supers map[string][]string
 
 // add records the supertypes type id names, written as types (List<T>, a.b.Store), resolved by what
-// the type names stand for in its file.
-func (s supers) add(id string, written []string, resolve func(name string) tbind) {
+// the written type stands for in its file.
+func (s supers) add(id string, written []string, resolve func(written string) tbind) {
 	for _, w := range written {
-		if b := resolve(simpleType(w)); b.id != "" {
+		if b := resolve(w); b.id != "" {
 			s[id] = append(s[id], b.id)
 		}
 	}
@@ -38,6 +39,19 @@ func (s supers) fill(a *facts.Analysis) {
 			}
 		}
 		sort.Strings(sym.Supertypes)
+	}
+}
+
+// setThrough sets Symbol.Through of the functions and methods to the calls through a value's
+// declared type that are not already among their calls.
+func setThrough(a *facts.Analysis, through map[string][]string) {
+	for i := range a.Symbols {
+		s := &a.Symbols[i]
+		for _, c := range through[s.ID] {
+			if !slices.Contains(s.Calls, c) {
+				s.Through = append(s.Through, c)
+			}
+		}
 	}
 }
 

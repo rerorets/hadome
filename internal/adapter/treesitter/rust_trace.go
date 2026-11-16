@@ -106,6 +106,11 @@ func (tr *tracing) ioPath(p string) bool { return tr.io != nil && tr.io(p) }
 
 func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 	syn := r.traceSyntax()
+	repo, sup, through := rustRepoTypes(a), supers{}, map[string][]string{}
+	defer func() {
+		sup.fill(a)
+		setThrough(a, through)
+	}()
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		binds := r.traceBinds(f, t)
 		tr := &tracing{f: f, syn: syn, binds: binds, values: map[string]*node{}, funcs: funcs, io: t.isIO,
@@ -126,6 +131,7 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 				case rustTypes[c.Kind()]:
 					structs[prefix+"."+f.field(c, "name")] = c
 				case c.Kind() == "impl_item" || c.Kind() == "trait_item":
+					rustSupertypes(f, c, sup, tr.types)
 					self := f.field(c, "name")
 					if c.Kind() == "impl_item" {
 						self = strings.SplitN(f.field(c, "type"), "<", 2)[0]
@@ -148,6 +154,9 @@ func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 		for i := range fns {
 			if fns[i].class != "" {
 				fns[i].scope = structs[fns[i].class]
+			}
+			if fns[i].body != nil {
+				through[fns[i].id] = rustThrough(tr, fns[i], repo)
 			}
 		}
 		return fns, tr, func() []facts.Entry { return r.entries(tr, fns) }
