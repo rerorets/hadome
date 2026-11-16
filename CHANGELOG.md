@@ -15,6 +15,30 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.6.0 - 2026-11-17
+
+### Finds more
+
+- A new rule, `deps/call-not-in-diagram`, checks calls between units against a call diagram. A change adding a call the diagram has no arrow for fails. Adding an arrow, and marking a box `wiring`, count as loosening the configuration and go to review (exit 3). (#172)
+- `deps/diagram-stale` checks the boxes of the call diagram too. (#172)
+- A call through an interface counts as a call to the units of its implementations. Implementations are recognised by `implements` and `extends` in Java, Kotlin and TypeScript, by method sets in Go, by `impl Trait for Type` in Rust, and by base classes and `Protocol` in Python. (#173, #174, #175)
+- Making a class of another unit in place (`new Repo()`), and calling a method on what was made, count as calls too. A value made in another module and imported is followed as its class. This covers Java, Kotlin, TypeScript and Python. (#177, #180)
+- Calls missed in real repositories are now counted: a receiver with an operator in Kotlin (`!repo.ok()`), a call from an inner class to a field of the class around it in Java and Kotlin, names a Python package's `__init__.py` imports, and in Rust, names re-exported with `pub use` and names a `use` inside a function brings in. (#179, #180, #188)
+
+### Fewer false findings and misses
+
+- A Go name is looked up among the declarations that can be built with the caller. Functions of the same name split by build conditions (`//go:build`, or a file name such as `_linux.go`) are no longer mistaken for each other. (#185)
+- `hadome mutate` does not try functions in files that cannot be built with the test. Mutants in files split by cgo no longer go to review (exit 3) as untried. (#185)
+- `hadome check` with `--base-dir` and `--head-dir` no longer stops on a symbolic link to a directory or a broken one. As when reading the working tree, such links are not read as files. (#189)
+
+### Configuration
+
+- Naming a call diagram file in `rules.deps.calls` turns on `deps/call-not-in-diagram`. Calls of a box with the class `wiring` are not checked. (#172)
+
+### Other
+
+- With a call diagram, `hadome check` reports the units where method calls on values of unknown type grew. In JSON, they are in `unfollowed`. The exit code does not change. (#178)
+
 ## 0.5.2 - 2026-11-16
 
 ### Fewer false findings and misses
