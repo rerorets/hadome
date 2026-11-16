@@ -150,6 +150,52 @@ func TestCallsLandInTheImplementations(t *testing.T) {
 	}
 }
 
+// viewpoint: external contract
+// target: deps/call-not-in-diagram
+// A method the type the code names does not declare lands where a value of it gets the method: the
+// nearest class above that declares it, else an interface's default; a method no type of the
+// repository declares (a library's, through an alias of its type) lands nowhere.
+func TestACallLandsWhereTheMethodIsDeclared(t *testing.T) {
+	src := func(path, unit string) facts.File {
+		return facts.File{Path: path, Unit: unit, UnitPath: unit, Role: facts.RoleSource}
+	}
+	var nodes []config.Node
+	for _, n := range []string{"api", "db", "leaf", "mid", "base", "port", "dflt"} {
+		nodes = append(nodes, config.Node{ID: n, Label: n})
+	}
+	in := engine.Input{
+		Config: config.Config{Calls: &config.Diagram{Path: "docs/calls.md", Nodes: nodes}},
+		Facts: &facts.Analysis{
+			Files: []facts.File{src("api/a.go", "api"), src("db/d.go", "db"), src("leaf/l.go", "leaf"), src("mid/m.go", "mid"),
+				src("base/b.go", "base"), src("port/p.go", "port"), src("dflt/d.go", "dflt")},
+			Symbols: []facts.Symbol{
+				{ID: "api.Save", Path: "api/a.go", Line: 3, Calls: []string{"db.Db.Update", "leaf.Leaf.Save"}},
+				{ID: "api.Show", Path: "api/a.go", Line: 8, Calls: []string{"leaf.Leaf.Show"}},
+				{ID: "db.Db", Kind: facts.SymbolType, Path: "db/d.go", Line: 1},
+				{ID: "leaf.Leaf", Kind: facts.SymbolType, Path: "leaf/l.go", Line: 1, Supertypes: []string{"port.Port", "mid.Mid"}},
+				{ID: "mid.Mid", Kind: facts.SymbolType, Path: "mid/m.go", Line: 1, Supertypes: []string{"base.Base", "dflt.Shower"}},
+				{ID: "base.Base", Kind: facts.SymbolType, Path: "base/b.go", Line: 1, Supertypes: []string{"mid.Mid"}},
+				{ID: "base.Base.Save", Kind: facts.SymbolMethod, Path: "base/b.go", Line: 2},
+				{ID: "port.Port", Kind: facts.SymbolInterface, Path: "port/p.go", Line: 1},
+				{ID: "port.Port.Save", Kind: facts.SymbolMethod, Path: "port/p.go", Line: 2},
+				{ID: "dflt.Shower", Kind: facts.SymbolInterface, Path: "dflt/d.go", Line: 1},
+				{ID: "dflt.Shower.Show", Kind: facts.SymbolMethod, Path: "dflt/d.go", Line: 2},
+			},
+		},
+	}
+	got, err := findingRule(t, "deps/call-not-in-diagram").Find(in)
+	var anchors []string
+	for _, f := range got {
+		anchors = append(anchors, f.Anchor)
+	}
+	if err != nil || strings.Join(anchors, ",") != "api -> base,api -> dflt" {
+		t.Fatalf("want api -> base and api -> dflt, got %v, error %v", anchors, err)
+	}
+	if msg := got[0].Message.In("en"); !strings.Contains(msg, "api.Save calls base.Base.Save through leaf.Leaf.Save") {
+		t.Errorf("api -> base: message %q does not name the inherited method", msg)
+	}
+}
+
 // viewpoint: failure handling
 // target: deps/call-not-in-diagram
 // Supertypes that form loops, which code that does not compile can write, end the walk, through the

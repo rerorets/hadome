@@ -31,13 +31,16 @@ func newTSTypes(tr *tsTrace, t *tables, repo map[string]bool) *tsTypes {
 }
 
 // resolve returns the ID of the repository's type a written type names (Finder, Finder | null,
-// Repo<User>, ns.Store), or "".
+// Repo<User>, ns.Store), or "": an array of the type, or one of its members' types, is not the type.
 func (ty *tsTypes) resolve(written string) string {
 	written = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(written), ":"))
 	for _, part := range strings.Split(written, "|") {
 		part = strings.TrimSpace(part)
 		if part == "" || part == "null" || part == "undefined" {
 			continue
+		}
+		if strings.HasSuffix(part, "]") { // Repo[], Repo<T>[], Repo["key"]: not a Repo
+			return ""
 		}
 		name := part
 		if i := strings.IndexAny(name, "<(["); i >= 0 {

@@ -59,16 +59,18 @@ type reaches struct {
 	declared map[string]string // symbol ID -> unit
 	kind     map[string]facts.SymbolKind
 	subtypes map[string][]string // type ID -> the types naming it among their Supertypes
+	supers   map[string][]string // type ID -> its Supertypes
 }
 
 func newReaches(a *facts.Analysis) reaches {
 	r := reaches{unitOf: map[string]string{}, declared: map[string]string{}, kind: map[string]facts.SymbolKind{},
-		subtypes: map[string][]string{}}
+		subtypes: map[string][]string{}, supers: map[string][]string{}}
 	for _, f := range a.Files {
 		r.unitOf[f.Path] = f.Unit
 	}
 	for _, s := range a.Symbols {
 		r.declared[s.ID], r.kind[s.ID] = r.unitOf[s.Path], s.Kind
+		r.supers[s.ID] = s.Supertypes
 		for _, t := range s.Supertypes {
 			r.subtypes[t] = append(r.subtypes[t], s.ID)
 		}
@@ -80,8 +82,10 @@ func newReaches(a *facts.Analysis) reaches {
 type target struct{ unit, callee string }
 
 // targets returns where a call of id lands. A function lands where it is declared. Method M of type
-// T lands in every type implementing or extending T, at any depth, that declares M itself, and in T
-// unless T is an interface, whose method has no body.
+// T lands in every type implementing or extending T, at any depth, that declares M itself, and in
+// the code a value of T itself runs: T's M, or else the nearest types T extends that declare M. A
+// method no type of the repository declares (a library's, or code the compiler writes) lands
+// nowhere, and neither does an interface's own method, which has no body.
 func (r reaches) targets(id string) []target {
 	i := strings.LastIndex(id, ".")
 	owner := ""
@@ -96,11 +100,11 @@ func (r reaches) targets(id string) []target {
 		}
 		return nil
 	}
+	method := id[i+1:]
 	var out []target
 	if k != facts.SymbolInterface {
-		out = append(out, target{r.declared[owner], id})
+		out = r.inherited(owner, method)
 	}
-	method := id[i+1:]
 	seen := map[string]bool{owner: true}
 	queue := append([]string(nil), r.subtypes[owner]...)
 	for len(queue) > 0 {
@@ -116,6 +120,37 @@ func (r reaches) targets(id string) []target {
 		queue = append(queue, r.subtypes[t]...)
 	}
 	return out
+}
+
+// inherited returns where method of class t lands for a value of t itself: t's own method, or
+// else, going up what t extends or implements, the first types on each path that declare it. A
+// class declaring it wins over an interface: an interface's method runs only as a default, when no
+// class above has one.
+func (r reaches) inherited(t, method string) []target {
+	var classes, ifaces []target
+	seen := map[string]bool{}
+	queue := []string{t}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		if u, ok := r.declared[c+"."+method]; ok {
+			if r.kind[c] == facts.SymbolInterface {
+				ifaces = append(ifaces, target{u, c + "." + method})
+			} else {
+				classes = append(classes, target{u, c + "." + method})
+			}
+			continue
+		}
+		queue = append(queue, r.supers[c]...)
+	}
+	if len(classes) > 0 {
+		return classes
+	}
+	return ifaces
 }
 
 // callNotInDiagram is deps/call-not-in-diagram.

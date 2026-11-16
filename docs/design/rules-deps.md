@@ -216,10 +216,11 @@ From the facts of a symbol of unit A, the units A reaches are:
 |---|---|
 | The ID of a function | the unit that declares the function |
 | The ID of type T (a call making a T) | the unit that declares T |
-| The ID of method M of type T | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is no interface, T's unit as well |
+| The ID of method M of type T | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is no interface, the unit of the code a value of T itself runs as well: T's M, or else the first types up T's `Supertypes` that declare M, classes over interfaces (whose method then runs as a default) |
 
 - An ID in `Calls`, `Through` or `Entry.Calls` is decided by this table alike. An ID in `Entry.Calls` (entry-point code that is no symbol) counts as a call from the unit holding the entry-point code
 - An interface's method has no body, so a call does not reach the unit declaring the interface
+- A method no type of the repository declares reaches nowhere. Examples: `db.update()` through an alias of a library's type (`type Db = PostgresJsDatabase`), Kotlin's `.apply {}`, Rust's derived `.clone()`. What runs is the library's code or code the compiler writes, not code of T's unit. That the code uses T shows in the calls making a T and in the import diagram
 
 - A call into the same unit does not count
 - When implementations lie in several units, the call reaches all of them. With implementations of `Repository` in `repository/pg` and `repository/memory`, arrows to both are needed, since a call can reach either

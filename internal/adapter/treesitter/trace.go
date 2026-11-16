@@ -54,6 +54,9 @@ type tfunc struct {
 	decl  *node  // the declaration: its parameters and annotations
 	body  *node
 	scope *node // the class or impl body whose fields it sees, or nil
+	// outer are the classes around its class, innermost first, whose fields it also sees by name
+	// where its own class has none of that name (Java and Kotlin's nested and inner classes).
+	outer []*node
 }
 
 // tsyntax is how a language writes what tracing reads.
@@ -128,15 +131,14 @@ func (tr *tracing) reach(fn tfunc, code *node) reached {
 			if cached, ok := tr.classFields[fn.scope.Id()]; ok {
 				tr.fields = cached
 			} else {
-				walk(fn.scope, func(n *node) bool {
-					if tr.syn.funcs[n.Kind()] {
-						return false
+				tr.fields = tr.fieldsOf(fn.scope)
+				for _, o := range fn.outer {
+					for k, v := range tr.fieldsOf(o) {
+						if _, own := tr.fields[k]; !own {
+							tr.fields[k] = v
+						}
 					}
-					for k, v := range tr.syn.vars(tr.f, n) {
-						tr.fields[k] = v
-					}
-					return true
-				})
+				}
 				if tr.classFields == nil {
 					tr.classFields = map[uintptr]map[string]string{}
 				}
@@ -155,6 +157,26 @@ func (tr *tracing) reach(fn tfunc, code *node) reached {
 	tr.seen = map[string]bool{}
 	tr.reachInto(fn, code, &got)
 	return got
+}
+
+// classDeclarations are the kinds of the declarations of classes whose fields tracing reads.
+var classDeclarations = set("class_declaration", "object_declaration", "interface_declaration", "enum_declaration",
+	"record_declaration")
+
+// fieldsOf returns the variables a class's code declares outside its functions and the classes it
+// declares, by name.
+func (tr *tracing) fieldsOf(class *node) map[string]string {
+	out := map[string]string{}
+	walk(class, func(n *node) bool {
+		if tr.syn.funcs[n.Kind()] || n.Id() != class.Id() && classDeclarations[n.Kind()] {
+			return false
+		}
+		for k, v := range tr.syn.vars(tr.f, n) {
+			out[k] = v
+		}
+		return true
+	})
+	return out
 }
 
 func (tr *tracing) reachInto(fn tfunc, code *node, got *reached) {
