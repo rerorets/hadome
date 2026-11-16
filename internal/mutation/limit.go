@@ -90,3 +90,5 @@ func (r *Runner) confirm(cmd []string, p string, orig, broken []byte) (bool, err
 	}
 	return raised, err
 }
+
+// Try: a change to the mutation package (not to merge).
