@@ -184,3 +184,126 @@ func TestTypeScriptTraceReadsMethodsAndNamespaces(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: kotlin.trace
+// A Kotlin call on a field under !, - or !! calls the field's method: the grammar puts the field
+// under the operator, and the call is still on it.
+func TestKotlinTraceReadsCallsUnderAnOperator(t *testing.T) {
+	a := analyze(t, "kotlin", fstest.MapFS{
+		"src/main/kotlin/com/example/Store.kt": {Data: []byte("package com.example\n\nclass Store {\n    fun ok(): Boolean = true\n" +
+			"    fun count(): Int = 1\n    fun open() {}\n}\n")},
+		"src/main/kotlin/com/example/Svc.kt": {Data: []byte("package com.example\n\nclass Svc(private val store: Store, val maybe: Store?) {\n" +
+			"    fun not() { if (!store.ok()) return }\n    fun minus(): Int = -store.count()\n    fun sure() { maybe!!.open() }\n}\n")},
+	})
+	for id, want := range map[string]string{
+		"com.example.Svc.not":   "io=false calls=[com.example.Store.ok] units=[]",
+		"com.example.Svc.minus": "io=false calls=[com.example.Store.count] units=[]",
+		"com.example.Svc.sure":  "io=false calls=[com.example.Store.open] units=[]",
+	} {
+		if got := reachOf(t, a, id); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: kotlin.trace
+// A Kotlin inner class reads the fields of the classes around it, through other inner classes, and
+// its own field of the same name first; a nested class without inner has no outer object to read.
+func TestKotlinTraceReadsOuterFieldsFromInnerClasses(t *testing.T) {
+	a := analyze(t, "kotlin", fstest.MapFS{
+		"src/main/kotlin/com/example/Store.kt": {Data: []byte("package com.example\n\nclass Store {\n    fun open() {}\n}\n" +
+			"class Ids {\n    fun open() {}\n}\n")},
+		"src/main/kotlin/com/example/Svc.kt": {Data: []byte(`package com.example
+
+class Svc {
+    lateinit var store: Store
+    lateinit var ids: Ids
+
+    private inner class Run {
+        fun one() { store.open() }
+
+        inner class Deeper {
+            fun two() { store.open() }
+        }
+    }
+
+    inner class Own {
+        lateinit var store: Ids
+        fun three() { store.open() }
+    }
+
+    class Nested {
+        inner class Inside {
+            fun four() { ids.open() }
+        }
+    }
+}
+`)},
+	})
+	for id, want := range map[string]string{
+		"com.example.Svc.Run.one":            "io=false calls=[com.example.Store.open] units=[]",
+		"com.example.Svc.Run.Deeper.two":     "io=false calls=[com.example.Store.open] units=[]",
+		"com.example.Svc.Own.three":          "io=false calls=[com.example.Ids.open] units=[]",
+		"com.example.Svc.Nested.Inside.four": "io=false calls=[] units=[]",
+	} {
+		if got := reachOf(t, a, id); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: java.trace
+// A Java inner class reads the fields of the class around it; a static nested class, and a class
+// of an interface, which is static unmarked, have no outer object to read.
+func TestJavaTraceReadsOuterFieldsFromInnerClasses(t *testing.T) {
+	const src = "src/main/java/com/example/"
+	a := analyze(t, "java", fstest.MapFS{
+		src + "Store.java": {Data: []byte("package com.example;\n\npublic class Store {\n    public void open() {}\n}\n")},
+		src + "Svc.java": {Data: []byte("package com.example;\n\npublic class Svc {\n    private Store store;\n\n" +
+			"    class Run {\n        void one() { store.open(); }\n    }\n\n" +
+			"    static class Fixed {\n        void two() { store.open(); }\n    }\n}\n")},
+		src + "Port.java": {Data: []byte("package com.example;\n\npublic interface Port {\n    Store store = new Store();\n\n" +
+			"    class Impl {\n        void three() { store.open(); }\n    }\n}\n")},
+	})
+	for id, want := range map[string]string{
+		"com.example.Svc.Run.one":     "io=false calls=[com.example.Store.open] units=[]",
+		"com.example.Svc.Fixed.two":   "io=false calls=[] units=[]",
+		"com.example.Port.Impl.three": "io=false calls=[] units=[]",
+	} {
+		if got := reachOf(t, a, id); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: python.trace
+// A name imported from a package stands for what the package's __init__.py imports under that name,
+// through more than one package; a name the package declares itself stays the package's.
+func TestPythonTraceFollowsNamesAPackageImports(t *testing.T) {
+	a := analyze(t, "python", fstest.MapFS{
+		"pyproject.toml":          {Data: []byte("[project]\nname = \"app\"\n")},
+		"app/__init__.py":         {Data: []byte("")},
+		"app/models/__init__.py":  {Data: []byte("from app.models.account import Account\nfrom app.models import more\n\n\ndef make():\n    pass\n")},
+		"app/models/account.py":   {Data: []byte("class Account:\n    pass\n")},
+		"app/models/more.py":      {Data: []byte("")},
+		"app/shop/__init__.py":    {Data: []byte("from app.models import Account as Owner\n")},
+		"app/routers/__init__.py": {Data: []byte("")},
+		"app/routers/accounts.py": {Data: []byte("from app.models import Account, make\nfrom app.shop import Owner\n\n\n" +
+			"def create():\n    Account()\n\n\ndef owner():\n    Owner()\n\n\ndef made():\n    make()\n")},
+	})
+	for id, want := range map[string]string{
+		"app/routers/accounts.create": "through=[app/models/account.Account] supertypes=[]",
+		"app/routers/accounts.owner":  "through=[app/models/account.Account] supertypes=[]",
+	} {
+		if got := callFacts(t, a, id); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+	if got, want := reachOf(t, a, "app/routers/accounts.made"), "io=false calls=[app/models.make] units=[]"; got != want {
+		t.Errorf("made: got %s, want %s", got, want)
+	}
+}

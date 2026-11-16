@@ -88,6 +88,23 @@ func TestTypeScriptThroughAndSupertypes(t *testing.T) {
 }
 
 // viewpoint: behaviour
+// target: typescript.trace
+// An array of one of the repository's types, written T[] or T<U>[], and a member's type T["key"]
+// are not the type: their methods are not the type's.
+func TestTypeScriptArraysAreNotTheirElementType(t *testing.T) {
+	a := analyze(t, "typescript", fstest.MapFS{
+		"package.json": {Data: []byte(`{"name":"app"}`)},
+		"src/svc/s.ts": {Data: []byte("export class Svc<T = number> { map(): void {} filter(): void {} call(): void {} find(): void {} }\n")},
+		"src/api/c.ts": {Data: []byte("import { Svc } from '../svc/s'\n\n" +
+			"export function show(all: Svc[], typed: Svc<string>[] | null, key: Svc[\"call\"], one: Svc): void {\n" +
+			"  all.map()\n  typed!.filter()\n  key.call()\n  one.find()\n}\n")},
+	})
+	if got := callFacts(t, a, "src/api.show"); got != "through=[src/svc.Svc.find] supertypes=[]" {
+		t.Errorf("show: %s", got)
+	}
+}
+
+// viewpoint: behaviour
 // target: rust.trace
 // A Rust type's supertypes are the traits it has an impl of, and a trait's are the traits it
 // requires. Calls through a trait are the methods called on fields of Box, Arc or Rc of dyn Trait

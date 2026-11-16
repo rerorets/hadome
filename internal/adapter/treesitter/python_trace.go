@@ -75,19 +75,32 @@ func (r *python) traceBinds(f *file, t *tables) map[string]tbind {
 	out := map[string]tbind{}
 	for _, im := range r.parseImports(f) {
 		for local, name := range im.names {
-			switch {
-			case !im.internal:
-				out[local] = tbind{io: t.isIO(im.dotted)}
-			case name == "":
-				out[local] = tbind{id: im.mod, unit: im.unit}
-			case r.exists[im.mod+"/"+name+".py"]: // from app import store, a module
-				out[local] = tbind{id: im.mod + "/" + name, unit: im.mod}
-			default:
-				out[local] = tbind{id: im.mod + "." + name, unit: im.unit}
-			}
+			out[local] = r.importBind(im, name, t, 0)
 		}
 	}
 	return out
+}
+
+// importBind is what a name an import brings stands for. A name a package's __init__.py imports
+// from another module of the repository stands for what it does there: from app.models import
+// Account, with app/models/__init__.py importing it from app.models.account, is that Account.
+func (r *python) importBind(im pyImport, name string, t *tables, depth int) tbind {
+	switch {
+	case !im.internal:
+		return tbind{io: t.isIO(im.dotted)}
+	case name == "":
+		return tbind{id: im.mod, unit: im.unit}
+	case r.exists[im.mod+"/"+name+".py"]: // from app import store, a module
+		return tbind{id: im.mod + "/" + name, unit: im.mod}
+	}
+	if init := r.files[im.mod+"/__init__.py"]; init != nil && depth < 8 {
+		for _, again := range r.parseImports(init) {
+			if inner, ok := again.names[name]; ok && again.internal {
+				return r.importBind(again, inner, t, depth+1)
+			}
+		}
+	}
+	return tbind{id: im.mod + "." + name, unit: im.unit}
 }
 
 // pyRouteDecorators are the decorators that serve a function for a path (Flask, FastAPI and the

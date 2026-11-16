@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -117,24 +118,26 @@ func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, javaSyntax, j.traceBinds(f, t, func(v func(string, bool, *node)) { javaImports(f, v) }), funcs)
 		var fns []tfunc
-		var collect func(n *node, prefix string)
-		collect = func(n *node, prefix string) {
+		var collect func(n *node, prefix string, outer []*node)
+		collect = func(n *node, prefix string, outer []*node) {
 			class := prefix + "." + f.field(n, "name")
 			sup.add(class, javaSupertypes(f, n), tr.types)
 			body := n.ChildByFieldName("body")
 			for _, m := range named(body) {
 				switch {
 				case javaTypes[m.Kind()]:
-					collect(m, class)
+					// A Java interface's classes are static unmarked.
+					inner := m.Kind() == "class_declaration" && !modified(f, m, "static") && body.Kind() != "interface_body"
+					collect(m, class, outerOf(inner, body, outer))
 				case m.Kind() == "method_declaration" || m.Kind() == "constructor_declaration":
 					fns = append(fns, tfunc{id: class + "." + f.field(m, "name"), class: class, own: class, decl: m,
-						body: m.ChildByFieldName("body"), scope: body})
+						body: m.ChildByFieldName("body"), scope: body, outer: outer})
 				}
 			}
 		}
 		for _, n := range named(f.root) {
 			if javaTypes[n.Kind()] {
-				collect(n, f.unit)
+				collect(n, f.unit, nil)
 			}
 		}
 		for _, fn := range fns {
@@ -155,6 +158,26 @@ func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
 	})
 }
 
+// modified reports whether a declaration has a modifier: static, inner.
+func modified(f *file, decl *node, modifier string) bool {
+	for _, c := range named(decl) {
+		if c.Kind() == "modifiers" && slices.Contains(strings.Fields(f.text(c)), modifier) {
+			return true
+		}
+	}
+	return false
+}
+
+// outerOf returns the outer classes a class declared in another sees the fields of: the class
+// around it and what that one sees when it is an inner class, none when it is a nested class, which
+// has no outer object.
+func outerOf(inner bool, around *node, outer []*node) []*node {
+	if !inner {
+		return nil
+	}
+	return append([]*node{around}, outer...)
+}
+
 var kotlinSyntax = tsyntax{
 	idents: set("identifier"),
 	selves: set("this_expression", "this"),
@@ -167,7 +190,13 @@ var kotlinSyntax = tsyntax{
 		if name.Kind() != "identifier" {
 			return nil, nil
 		}
-		return n.NamedChild(0), name
+		// The grammar reads !repo.ok() and -repo.count() as (!repo).ok() and (-repo).count(), and
+		// repo!!.ok() puts the receiver under !!: the receiver is the operand either way.
+		obj := n.NamedChild(0)
+		for obj.Kind() == "unary_expression" && obj.ChildByFieldName("argument") != nil {
+			obj = obj.ChildByFieldName("argument")
+		}
+		return obj, name
 	},
 	built: func(f *file, n *node) string {
 		if n.Kind() != "call_expression" || n.NamedChildCount() == 0 {
@@ -213,24 +242,24 @@ func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
 	traceFiles(files, a, func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry) {
 		tr := newJVMTracing(f, kotlinSyntax, k.traceBinds(f, t, func(v func(string, bool, *node)) { ktImports(f, v) }), funcs)
 		var fns []tfunc
-		var collect func(n *node, prefix string)
-		collect = func(n *node, prefix string) {
+		var collect func(n *node, prefix string, outer []*node)
+		collect = func(n *node, prefix string, outer []*node) {
 			class := prefix + "." + f.field(n, "name")
 			sup.add(class, ktSupertypes(f, n), tr.types)
 			for _, m := range ktMembers(n) {
 				switch {
 				case ktTypes[m.Kind()]:
-					collect(m, class)
+					collect(m, class, outerOf(modified(f, m, "inner"), n, outer))
 				case m.Kind() == "function_declaration":
 					fns = append(fns, tfunc{id: class + "." + f.field(m, "name"), class: class, own: f.unit, decl: m,
-						body: ktBody(m), scope: n})
+						body: ktBody(m), scope: n, outer: outer})
 				}
 			}
 		}
 		for _, n := range named(f.root) {
 			switch {
 			case ktTypes[n.Kind()]:
-				collect(n, f.unit)
+				collect(n, f.unit, nil)
 			case n.Kind() == "function_declaration":
 				fns = append(fns, tfunc{id: f.unit + "." + f.field(n, "name"), own: f.unit, decl: n, body: ktBody(n)})
 			case n.Kind() == "property_declaration":
