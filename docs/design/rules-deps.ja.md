@@ -311,9 +311,9 @@ def show(id):
 
 | 数えるもの | 例 |
 |---|---|
-| 型の注釈の無い Python の引数・属性のメソッド | `self.repo.save(…)`（`repo` に注釈が無い）、`def run(repo): repo.save(…)` |
-| 型の注釈の無い TypeScript の引数・フィールド、`any` のもののメソッド | `constructor(private repo)` のあとの `this.repo.save(…)` |
-| 型の分からない、モジュールの直下の変数のメソッド（Python・TypeScript。import したものも含む） | `repo = make_repo()` を直下に置いたあとの `repo.find(…)` |
+| 型の注釈の無い Python の引数と、`__init__` がそれを代入した属性のメソッド | `def run(repo): repo.save(…)`、`__init__(self, repo)` で `self.repo = repo` としたあとの `self.repo.save(…)` |
+| 型の注釈の無い TypeScript の引数とコンストラクタの引数のプロパティ、`any` の引数・フィールドのメソッド | `constructor(private repo)` のあとの `this.repo.save(…)` |
+| モジュールの直下の変数のうち、リポジトリの関数の戻り値を入れたもの、`any` のもの、リポジトリから import した値（関数・クラス・モジュールでないもの）のメソッド（Python・TypeScript） | `repo = make_repo()` を直下に置いたあとの `repo.find(…)` |
 
 | 数えないもの | 理由 |
 |---|---|

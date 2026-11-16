@@ -159,7 +159,8 @@ var Japanese = map[string]string{
 	"point at the document's current path, or remove the reference":                                              "文書の今のパスを指すか、参照を消す",
 
 	// deps/call-not-in-diagram.
-	"call not in the call diagram: %s → %s (%s): %s": "呼び出しの図に無い呼び出し: %s → %s（%s）。%s",
+	"Calls on values of unknown type grew (information only; a type annotation makes them followable):": "型の分からない値の呼び出しが増えました（知らせるだけ。型の注釈を書くとたどれます）:",
+	"call not in the call diagram: %s → %s (%s): %s":                                                    "呼び出しの図に無い呼び出し: %s → %s（%s）。%s",
 	"%s calls %s":                     "%s が %s を呼ぶ",
 	"%s calls %s through %s":          "%s が %s を、%s を通して呼ぶ",
 	"no node covers the calling unit": "呼ぶ側のユニットを覆うノードが無い",

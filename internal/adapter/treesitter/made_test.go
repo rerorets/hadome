@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -86,6 +87,59 @@ func TestScriptObjectsMadeInPlace(t *testing.T) {
 		}
 		if got := callFacts(t, a, id); got != want {
 			t.Errorf("%s:\n got  %s\n want %s", id, got, want)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: python.trace, typescript.trace
+// Calls hadome cannot follow are the method calls on values from outside whose type is not written:
+// parameters without an annotation (or typed any), attributes and fields set from one, values at the
+// top of the module made by the repository's functions, and values imported from its modules. Locals,
+// a library's values, values of a written type and objects made in place are not counted.
+func TestUnfollowedCallsAreCountedOnValuesFromOutside(t *testing.T) {
+	py := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/repo.py", "class Repo:\n    def find(self, id):\n        return id\n\n\ndef make_repo():\n    return Repo()\n\n\nshared = make_repo()\n",
+		"app/api.py", "import logging\nfrom app.repo import Repo, make_repo, shared\n\nmade = Repo()\nbuilt = make_repo()\nlog = logging.getLogger()\n\n\n"+
+			"class Api:\n    def __init__(self, repo, typed: Repo):\n        self.repo = repo\n        self.typed = typed\n        self.items = []\n\n"+
+			"    def injected(self, id):\n        return self.repo.find(id)\n\n"+
+			"    def param(self, id, other=None):\n        return other.find(id)\n\n"+
+			"    def imported(self, id):\n        return shared.find(id)\n\n"+
+			"    def module(self, id):\n        return built.find(id)\n\n"+
+			"    def known(self, id):\n        log.info(id)\n        self.items.append(id)\n        self.typed.find(id)\n        made.find(id)\n"+
+			"        local = make_repo()\n        local.find(id)\n        built = 1\n        return built.find(id)\n",
+	))
+	ts := analyze(t, "typescript", fstest.MapFS{
+		"package.json": {Data: []byte(`{"name":"app"}`)},
+		"src/repo.ts":  {Data: []byte("export class Repo { find(id: string): string { return id } }\nexport function makeRepo(): Repo { return new Repo() }\nexport const shared = makeRepo()\n")},
+		"src/api.ts": {Data: []byte("import pino from 'pino'\nimport { Repo, makeRepo, shared } from './repo'\n\n" +
+			"const made = new Repo()\nconst built = makeRepo()\nconst log = pino()\nconst loose: any = null\n\n" +
+			"export class Api {\n  constructor(private repo, private typed: Repo) {}\n" +
+			"  injected(id: string) { return this.repo.find(id) }\n" +
+			"  param(id: string, other, anything: any) { return other.find(id) + anything.find(id) }\n" +
+			"  imported(id: string) { return shared.find(id) }\n" +
+			"  module(id: string) { return built.find(id) + loose.find(id) }\n" +
+			"  known(id: string) {\n    const items: string[] = []\n    items.push(id)\n    log.info(id)\n    this.typed.find(id)\n    made.find(id)\n" +
+			"    const built = new Repo()\n    return built.find(id)\n  }\n}\n")},
+	})
+	cases := map[string]int{
+		"app/api.Api.injected": 1, "app/api.Api.param": 1, "app/api.Api.imported": 1, "app/api.Api.module": 1, "app/api.Api.known": 0,
+		"src.Api.injected": 1, "src.Api.param": 2, "src.Api.imported": 1, "src.Api.module": 2, "src.Api.known": 0,
+	}
+	for id, want := range cases {
+		a := ts
+		if strings.HasPrefix(id, "app/") {
+			a = py
+		}
+		got := -1
+		for _, s := range a.Symbols {
+			if s.ID == id {
+				got = s.Unfollowed
+			}
+		}
+		if got != want {
+			t.Errorf("%s: unfollowed %d, want %d", id, got, want)
 		}
 	}
 }

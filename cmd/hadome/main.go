@@ -51,7 +51,7 @@ func newEngine() *engine.Engine {
 	for _, group := range [][]engine.Rule{tests.All(), size.All(), comments.All(), deps.All(), unknown.All()} {
 		rules = append(rules, group...)
 	}
-	return &engine.Engine{Analyzer: adapter.New(), Rules: rules, Workdir: ".", Candidates: suggest.Candidates,
+	return &engine.Engine{Analyzer: adapter.New(), Rules: rules, Workdir: ".", Candidates: suggest.Candidates, Unfollowed: deps.Unfollowed,
 		Elsewhere: func(rule string) bool { return rule == mutation.RuleID }}
 }
 

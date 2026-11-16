@@ -278,9 +278,9 @@ Only the places that take a value from outside are counted: parameters, attribut
 
 | Counted | Example |
 |---|---|
-| Methods on Python parameters and attributes without a type annotation | `self.repo.save(…)` with `repo` unannotated, `def run(repo): repo.save(…)` |
-| Methods on TypeScript parameters and fields without a type annotation, or typed `any` | `this.repo.save(…)` after `constructor(private repo)` |
-| Methods on variables at the top of a module whose type is unknown (Python, TypeScript; imported ones included) | `repo.find(…)` after `repo = make_repo()` at the top |
+| Methods on Python parameters without a type annotation, and on attributes `__init__` sets from one | `def run(repo): repo.save(…)`, `self.repo.save(…)` after `self.repo = repo` in `__init__(self, repo)` |
+| Methods on TypeScript parameters and constructor parameter properties without a type annotation, and on parameters and fields typed `any` | `this.repo.save(…)` after `constructor(private repo)` |
+| Methods on variables at the top of a module holding the result of one of the repository's functions or typed `any`, and on values imported from the repository that are no function, class or module (Python, TypeScript) | `repo.find(…)` after `repo = make_repo()` at the top |
 
 | Not counted | Why |
 |---|---|

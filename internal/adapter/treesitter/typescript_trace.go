@@ -48,7 +48,7 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		tr.bind(t)
 		ty := newTSTypes(tr, t, repo)
 		ty.supertypes(sup)
-		through := ty.throughs()
+		through, unfollowed := ty.throughs()
 		for id, body := range tr.bodies() {
 			i, ok := at[id]
 			if !ok {
@@ -56,7 +56,7 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			}
 			got := tr.reach(body)
 			s := &a.Symbols[i]
-			s.IO, s.Calls, s.Units = got.io, keys(got.calls), keys(got.units)
+			s.IO, s.Calls, s.Units, s.Unfollowed = got.io, keys(got.calls), keys(got.units), unfollowed[id]
 			for _, c := range through[id] {
 				if !got.calls[c] {
 					s.Through = append(s.Through, c)

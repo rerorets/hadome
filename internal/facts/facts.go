@@ -169,6 +169,9 @@ type Symbol struct {
 	// Supertypes are the IDs of the repository's types a type implements or extends, the direct
 	// ones only.
 	Supertypes []string
+	// Unfollowed counts the method calls on parameters, attributes and variables at the top of a
+	// module whose type is not written, which may reach the repository's code unseen.
+	Unfollowed int
 	// Units are the repository's units whose values (not functions) the body uses: a variable
 	// holding a database handle, for one.
 	Units []string

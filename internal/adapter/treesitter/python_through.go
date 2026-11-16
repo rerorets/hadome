@@ -133,13 +133,31 @@ func matches(have, want map[string]int) bool {
 	return true
 }
 
+// pyModule is what reading the functions of one Python module needs: its tracing, its name, the IDs
+// of the version's classes, and its values at the top (pyModuleValues).
+type pyModule struct {
+	tr     *tracing
+	mod    string
+	repo   map[string]bool
+	values map[string]string
+}
+
+// unknownType stands, in the maps of written types below, for a value from outside whose type is
+// not written: a call on it is one hadome cannot follow (Symbol.Unfollowed).
+const unknownType = "?"
+
 // pyThrough returns the methods a function's body calls on values whose annotation names one of
-// the repository's classes: its parameters, and the attributes of its class (pyAttributes).
-func pyThrough(tr *tracing, fn tfunc, classDef *node, mod string, repo map[string]bool) []string {
+// the repository's classes: its parameters, the attributes of its class (pyAttributes), and the
+// variables at the top of its module (pyModuleValues). It also counts the calls on such values
+// whose type is not written.
+func pyThrough(m pyModule, fn tfunc, classDef *node) ([]string, int) {
+	tr, mod, repo, module := m.tr, m.mod, m.repo, m.values
 	f := tr.f
 	attrs, vars := pyAttributes(f, classDef), map[string]string{}
 	pyAnnotated(f, definition(fn.decl), vars)
-	out := map[string]bool{}
+	pyUntyped(f, definition(fn.decl), vars)
+	locals := pyLocals(f, fn.body)
+	out, unfollowed := map[string]bool{}, 0
 	walk(fn.body, func(n *node) bool {
 		fun := n.ChildByFieldName("function")
 		if n.Kind() != "call" || fun == nil || fun.Kind() != "attribute" {
@@ -148,15 +166,16 @@ func pyThrough(tr *tracing, fn tfunc, classDef *node, mod string, repo map[strin
 		obj, method := fun.ChildByFieldName("object"), f.field(fun, "attribute")
 		written := ""
 		switch {
-		case obj.Kind() == "identifier":
+		case obj.Kind() == "identifier" && vars[f.text(obj)] != "":
 			written = vars[f.text(obj)]
+		case obj.Kind() == "identifier" && !locals[f.text(obj)]:
+			written = module[f.text(obj)]
 		case obj.Kind() == "attribute" && f.field(obj, "object") == "self":
 			written = attrs[f.field(obj, "attribute")]
 		}
-		if written == "" {
-			return true
-		}
-		if id := resolveClass(tr, mod, pyTypeName(written), repo); id != "" {
+		if written == unknownType {
+			unfollowed++
+		} else if id := resolveClass(tr, mod, pyTypeName(written), repo); written != "" && id != "" {
 			out[id+"."+method] = true
 		}
 		return true
@@ -164,7 +183,84 @@ func pyThrough(tr *tracing, fn tfunc, classDef *node, mod string, repo map[strin
 	for _, id := range madeInPlace(f, fn.body, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) }) {
 		out[id] = true
 	}
-	return keys(out)
+	return keys(out), unfollowed
+}
+
+// pyLocals returns the names a function's body assigns, which hide the module's names there.
+func pyLocals(f *file, body *node) map[string]bool {
+	out := map[string]bool{}
+	walk(body, func(n *node) bool {
+		if left := n.ChildByFieldName("left"); n.Kind() == "assignment" && left != nil && left.Kind() == "identifier" {
+			out[f.text(left)] = true
+		}
+		return true
+	})
+	return out
+}
+
+// pyModuleValues returns, by name, the written types of the values at the top of a module that come
+// from the repository's code: one of its classes made there (repo = Repo()), or unknownType for
+// the result of one of its functions (repo = make_repo()) and for a value imported from one of its
+// modules that is neither a function, a class nor a module.
+func pyModuleValues(tr *tracing, mod string, repo map[string]bool) map[string]string {
+	out := pyImportedValues(tr, repo)
+	for _, n := range named(tr.f.root) {
+		if name, written := pyModuleValue(tr, mod, repo, n); name != "" {
+			out[name] = written
+		}
+	}
+	return out
+}
+
+// pyImportedValues returns unknownType for each name imported from one of the repository's modules
+// that is neither a function, a class nor a module.
+func pyImportedValues(tr *tracing, repo map[string]bool) map[string]string {
+	out := map[string]string{}
+	for name, b := range tr.binds {
+		if b.id != "" && strings.Contains(b.id[strings.LastIndex(b.id, "/")+1:], ".") && !tr.funcs[b.id] && !repo[b.id] {
+			out[name] = unknownType
+		}
+	}
+	return out
+}
+
+// pyModuleValue returns the name and written type a statement at the top of a module gives a value
+// of the repository's code, or "".
+func pyModuleValue(tr *tracing, mod string, repo map[string]bool, n *node) (string, string) {
+	f := tr.f
+	as := n.NamedChild(0)
+	if n.Kind() != "expression_statement" || as == nil || as.Kind() != "assignment" || f.field(as, "type") != "" {
+		return "", ""
+	}
+	left, right := as.ChildByFieldName("left"), as.ChildByFieldName("right")
+	if left == nil || left.Kind() != "identifier" || right == nil {
+		return "", ""
+	}
+	made := pyMade.made(f, right)
+	switch {
+	case made != "" && resolveClass(tr, mod, made, repo) != "":
+		return f.text(left), made
+	case made != "" && pyRepoCallee(tr, mod, made):
+		return f.text(left), unknownType
+	}
+	return "", ""
+}
+
+// pyRepoCallee reports whether a callee, as written, names one of the repository's functions: one
+// the module declares or imports, or a function of a module it imports.
+func pyRepoCallee(tr *tracing, mod, callee string) bool {
+	if tr.funcs[mod+"."+callee] {
+		return true
+	}
+	root, rest, dotted := strings.Cut(callee, ".")
+	b, ok := tr.binds[root]
+	if !ok || b.id == "" {
+		return false
+	}
+	if dotted {
+		return tr.funcs[b.id+"."+rest]
+	}
+	return tr.funcs[b.id]
 }
 
 // pyAnnotated records the annotations of a function's annotated parameters, by name.
@@ -180,10 +276,27 @@ func pyAnnotated(f *file, def *node, into map[string]string) {
 	}
 }
 
+// pyUntyped records a function's parameters without an annotation as unknownType, self and cls
+// aside.
+func pyUntyped(f *file, def *node, into map[string]string) {
+	for i, p := range named(def.ChildByFieldName("parameters")) {
+		name := ""
+		switch p.Kind() {
+		case "identifier":
+			name = f.text(p)
+		case "default_parameter":
+			name = f.field(p, "name")
+		}
+		if name != "" && !(i == 0 && (name == "self" || name == "cls")) {
+			into[name] = unknownType
+		}
+	}
+}
+
 // pyAttributes returns the annotations of a class's attributes, by name: those the class body
 // annotates (finder: Finder), and those __init__ annotates, sets from an annotated parameter
 // (self.finder = finder) or sets to an object made in place (self.repo = Repo()), whose callee
-// stands for its class.
+// stands for its class. One set from a parameter without an annotation is unknownType.
 func pyAttributes(f *file, classDef *node) map[string]string {
 	attrs := map[string]string{}
 	if classDef == nil {
@@ -199,6 +312,7 @@ func pyAttributes(f *file, classDef *node) map[string]string {
 		case md.Kind() == "function_definition" && f.field(md, "name") == "__init__":
 			params := map[string]string{}
 			pyAnnotated(f, md, params)
+			pyUntyped(f, md, params)
 			walk(md.ChildByFieldName("body"), func(n *node) bool {
 				if n.Kind() != "assignment" {
 					return true

@@ -17,6 +17,7 @@ type jsonReport struct {
 	Reviews       []jsonFinding   `json:"reviews"`
 	NewExceptions []Marker        `json:"new_exceptions"`
 	Candidates    []Candidate     `json:"candidates"`
+	Unfollowed    []Unfollowed    `json:"unfollowed"`
 	Introduced    []config.Change `json:"introduced"`
 	Untouched     int             `json:"untouched"`
 	ExitCode      int             `json:"exit_code"`
@@ -47,12 +48,16 @@ func jsonFindings(fs []Finding, lang string) []jsonFinding {
 func WriteJSON(w io.Writer, r Report, lang string) error {
 	out := jsonReport{Schema: JSONSchemaVersion,
 		Regressions: jsonFindings(r.Regressions, lang), Reviews: jsonFindings(r.Reviews, lang),
-		NewExceptions: r.NewExceptions, Candidates: r.Candidates, Untouched: r.Untouched, ExitCode: r.ExitCode()}
+		NewExceptions: r.NewExceptions, Candidates: r.Candidates, Unfollowed: r.Unfollowed, Untouched: r.Untouched,
+		ExitCode: r.ExitCode()}
 	if out.NewExceptions == nil {
 		out.NewExceptions = []Marker{}
 	}
 	if out.Candidates == nil {
 		out.Candidates = []Candidate{}
+	}
+	if out.Unfollowed == nil {
+		out.Unfollowed = []Unfollowed{}
 	}
 	if out.Introduced = r.Introduced; out.Introduced == nil {
 		out.Introduced = []config.Change{}
@@ -66,6 +71,7 @@ func WriteJSON(w io.Writer, r Report, lang string) error {
 // labels (why:, fix:), which are spelled like the JSON keys and stay English.
 var (
 	candidatesHeading = T("Invariant candidates this change adds (information only; propose them to a person, `hadome suggest` prints them as configuration):")
+	unfollowedHeading = T("Calls on values of unknown type grew (information only; a type annotation makes them followable):")
 	introducedHeading = T("Settings this change introduces with .hadome.yml (information only; base has no configuration, so nothing counts as loosening):")
 )
 
@@ -85,6 +91,12 @@ func WriteText(w io.Writer, r Report, lang string) {
 		fmt.Fprintln(w, candidatesHeading.In(lang))
 		for _, c := range r.Candidates {
 			fmt.Fprintf(w, "  %s  %s — %s\n", c.Key(), location(c.File, c.Line), c.Why)
+		}
+	}
+	if len(r.Unfollowed) > 0 {
+		fmt.Fprintln(w, unfollowedHeading.In(lang))
+		for _, u := range r.Unfollowed {
+			fmt.Fprintf(w, "  %s: %d → %d\n", u.Unit, u.Base, u.Head)
 		}
 	}
 	if len(r.Introduced) > 0 {
