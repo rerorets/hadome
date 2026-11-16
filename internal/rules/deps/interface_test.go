@@ -10,18 +10,18 @@ import (
 	"github.com/rerorets/hadome/internal/engine"
 )
 
-// interfaceRule is deps/call-not-in-diagram with the cases of calls through an interface. They are
-// written in Java, which only a build with cgo reads, so they are not among the rule's self-test
-// cases, which every build runs.
+// interfaceRule is deps/call-not-in-diagram with the cases of calls through an interface written in
+// Java, whose calls and supertypes are read apart from Go's. Only a build with cgo reads Java, so
+// they are not among the rule's self-test cases, which every build runs.
 type interfaceRule struct{ callNotInDiagram }
 
 func (interfaceRule) Cases() []engine.Case { return interfaceCases() }
 
 // viewpoint: behaviour
 // target: deps/call-not-in-diagram
-// A call through an interface needs arrows to the units of its implementations in product code,
-// and to no others.
-func TestCallsThroughAnInterfaceNeedArrowsToTheImplementations(t *testing.T) {
+// In Java too, a call through an interface needs arrows to the units of its implementations in
+// product code, and to no others.
+func TestJavaCallsThroughAnInterfaceNeedArrowsToTheImplementations(t *testing.T) {
 	e := &engine.Engine{Analyzer: adapter.New(), Rules: []engine.Rule{interfaceRule{}}, Workdir: "."}
 	for _, f := range e.SelfTest() {
 		t.Errorf("%s: %s", f.Name, f.Err)

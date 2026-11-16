@@ -17,6 +17,38 @@ type trace struct {
 	entries []facts.Entry
 	path    string
 	fset    *token.FileSet
+	// ifaces are the parameters declared with one of the repository's interfaces, by name, and
+	// through the methods called on them, <interface>.<method>: where such a call lands depends on
+	// the value passed, so it is not among the calls.
+	ifaces  map[string]string
+	through map[string]bool
+}
+
+// throughIDs returns the calls through an interface that are not among the walker's calls, sorted.
+func (t *trace) throughIDs(w *walker) []string {
+	var out []string
+	for c := range t.through {
+		if w.calls[c] == nil {
+			out = append(out, c)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// interfaceParam records a parameter declared with one of the repository's interfaces.
+func (t *trace) interfaceParam(name string, declared *vtype) {
+	if t != nil && declared != nil && declared.id != "" && declared.isInterface() {
+		t.ifaces[name] = declared.id
+	}
+}
+
+// callThrough records a method called on a parameter declared with one of the repository's
+// interfaces.
+func (t *trace) callThrough(param, method string) {
+	if t != nil && t.ifaces[param] != "" {
+		t.through[t.ifaces[param]+"."+method] = true
+	}
 }
 
 func (t *trace) doesIO() {
@@ -118,7 +150,7 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 			continue
 		}
 		id := funcID(pf.pkgPath, d)
-		t := &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset}
+		t := &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset, ifaces: map[string]string{}, through: map[string]bool{}}
 		w := newWalker(rd, pf, nil)
 		w.testKey, w.trace = "", t
 		if d.Recv != nil && len(d.Recv.List) == 1 && len(d.Recv.List[0].Names) == 1 {
@@ -135,7 +167,7 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 			continue
 		}
 		s := &syms[i]
-		s.IO, s.Calls = t.io, callIDs(w)
+		s.IO, s.Calls, s.Through = t.io, callIDs(w), t.throughIDs(w)
 		for u, used := range t.units {
 			if used && u != pf.pkgPath {
 				s.Units = append(s.Units, u)

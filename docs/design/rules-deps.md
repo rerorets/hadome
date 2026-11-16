@@ -234,7 +234,7 @@ The difficulty splits in two: whether the type of the value called is known (`Th
 | Java | none: calls of methods on fields, parameters and local variables with a declared type are already in `Calls`, interfaces included | `implements`, `extends` |
 | Kotlin | the same, constructor-parameter properties included | the types after `:` in the class declaration, whether a constructor is called or not, and delegated with `by` or not |
 | TypeScript | methods on fields, parameters (constructor-parameter properties included) and local variables with a type annotation, whether the type is an interface or a concrete class | `implements`, `extends` |
-| Go | methods on fields, parameters and local variables declared with an interface type | matching methods (below) |
+| Go | methods on parameters declared with an interface type; those on fields and local variables are already in `Calls` | matching methods (below); for an interface, the repository's interfaces it embeds |
 | Rust | methods on parameters and fields typed `dyn Trait`, `impl Trait`, or with a trait bound | `impl Trait for Type` |
 | Python | methods on attributes and parameters with a type annotation, concrete classes included | base classes (subclasses of `ABC` included); `Protocol` by matching methods |
 
