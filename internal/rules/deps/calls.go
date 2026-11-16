@@ -9,49 +9,111 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// callEdge is one call between two of the repository's units, at the caller.
+// callEdge is one call between two of the repository's units, at the caller. Via is the method
+// the code names when the call lands on another one, an implementation of it; it is empty when the
+// callee is the one named.
 type callEdge struct {
 	fromUnit, toUnit string
 	path             string
 	line             int
 	caller, callee   string
+	via              string
 }
 
 // callEdges lists the calls of product code from one unit to another, as far as hadome can follow
 // them: the calls of symbols, and of entry-point code that is no symbol. A callee that is no symbol
-// of the version (test or generated code) is not counted, nor is an interface's method: it has no
-// body, so the call does not reach the unit declaring the interface.
+// of the version (test or generated code) is not counted.
 func callEdges(a *facts.Analysis) []callEdge {
-	unitOf := map[string]string{}
-	for _, f := range a.Files {
-		unitOf[f.Path] = f.Unit
-	}
-	interfaces := map[string]bool{}
-	for _, s := range a.Symbols {
-		interfaces[s.ID] = s.Kind == facts.SymbolInterface
-	}
-	declared := map[string]string{}
-	for _, s := range a.Symbols {
-		if i := strings.LastIndex(s.ID, "."); i < 0 || !interfaces[s.ID[:i]] {
-			declared[s.ID] = unitOf[s.Path]
-		}
-	}
+	r := newReaches(a)
 	var out []callEdge
 	add := func(path string, line int, caller string, calls []string) {
-		from := unitOf[path]
+		from := r.unitOf[path]
 		for _, c := range calls {
-			if to := declared[c]; from != "" && to != "" && to != from {
-				out = append(out, callEdge{fromUnit: from, toUnit: to, path: path, line: line, caller: caller, callee: c})
+			for _, t := range r.targets(c) {
+				if from != "" && t.unit != from {
+					e := callEdge{fromUnit: from, toUnit: t.unit, path: path, line: line, caller: caller, callee: t.callee}
+					if t.callee != c {
+						e.via = c
+					}
+					out = append(out, e)
+				}
 			}
 		}
 	}
 	for _, s := range a.Symbols {
 		add(s.Path, s.Line, s.ID, s.Calls)
+		add(s.Path, s.Line, s.ID, s.Through)
 	}
 	for _, e := range a.Entries {
 		if e.Symbol == "" {
 			add(e.Path, e.Line, "", e.Calls)
 		}
+	}
+	return out
+}
+
+// reaches knows where a call lands: the version's symbols, their units, and which types implement
+// or extend which.
+type reaches struct {
+	unitOf   map[string]string // file path -> unit
+	declared map[string]string // symbol ID -> unit
+	kind     map[string]facts.SymbolKind
+	subtypes map[string][]string // type ID -> the types naming it among their Supertypes
+}
+
+func newReaches(a *facts.Analysis) reaches {
+	r := reaches{unitOf: map[string]string{}, declared: map[string]string{}, kind: map[string]facts.SymbolKind{},
+		subtypes: map[string][]string{}}
+	for _, f := range a.Files {
+		r.unitOf[f.Path] = f.Unit
+	}
+	for _, s := range a.Symbols {
+		r.declared[s.ID], r.kind[s.ID] = r.unitOf[s.Path], s.Kind
+		for _, t := range s.Supertypes {
+			r.subtypes[t] = append(r.subtypes[t], s.ID)
+		}
+	}
+	return r
+}
+
+// target is a unit a call lands in, and the function or method there.
+type target struct{ unit, callee string }
+
+// targets returns where a call of id lands. A function lands where it is declared. Method M of type
+// T lands in every type implementing or extending T, at any depth, that declares M itself, and in T
+// unless T is an interface, whose method has no body.
+func (r reaches) targets(id string) []target {
+	i := strings.LastIndex(id, ".")
+	owner := ""
+	if i > 0 {
+		owner = id[:i]
+	}
+	k, isType := r.kind[owner]
+	isType = isType && (k == facts.SymbolType || k == facts.SymbolInterface)
+	if !isType {
+		if u, ok := r.declared[id]; ok {
+			return []target{{u, id}}
+		}
+		return nil
+	}
+	var out []target
+	if k != facts.SymbolInterface {
+		out = append(out, target{r.declared[owner], id})
+	}
+	method := id[i+1:]
+	seen := map[string]bool{owner: true}
+	queue := append([]string(nil), r.subtypes[owner]...)
+	for len(queue) > 0 {
+		t := queue[0]
+		queue = queue[1:]
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		if u, ok := r.declared[t+"."+method]; ok {
+			out = append(out, target{u, t + "." + method})
+		}
+		queue = append(queue, r.subtypes[t]...)
 	}
 	return out
 }
@@ -105,7 +167,7 @@ func (r callNotInDiagram) Find(in engine.Input) ([]engine.Finding, error) {
 		seen[[2]string{from, to}] = true
 		out = append(out, engine.Finding{
 			Rule: r.ID(), File: c.path, Line: c.line, Anchor: from + " -> " + to,
-			Message: engine.T("call not in the call diagram: %s → %s (%s): %s calls %s", from, to, describeCall(d, a, b), caller(c), c.callee),
+			Message: engine.T("call not in the call diagram: %s → %s (%s): %s", from, to, describeCall(d, a, b), calling(c)),
 			Why:     engine.T("the call diagram (%s) tells which layers a request goes through; a call it does not draw can skip a layer or go backwards unseen", d.Path),
 			Fix:     r.About().Fix,
 		})
@@ -113,12 +175,17 @@ func (r callNotInDiagram) Find(in engine.Input) ([]engine.Finding, error) {
 	return out, nil
 }
 
-// caller names the calling function, or entry-point code that is no symbol.
-func caller(c callEdge) any {
+// calling says who calls what: the calling function, or entry-point code that is no symbol, and
+// the callee, with the method the code names when the call lands on an implementation of it.
+func calling(c callEdge) engine.Text {
+	var who any = c.caller
 	if c.caller == "" {
-		return engine.T("the entry point")
+		who = engine.T("the entry point")
 	}
-	return c.caller
+	if c.via != "" {
+		return engine.T("%s calls %s through %s", who, c.callee, c.via)
+	}
+	return engine.T("%s calls %s", who, c.callee)
 }
 
 func describeCall(d *config.Diagram, a, b string) engine.Text {

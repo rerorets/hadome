@@ -162,6 +162,13 @@ type Symbol struct {
 	// Calls are the IDs of the repository's functions and methods the body calls, as far as the
 	// adapter can tell which one is called.
 	Calls []string
+	// Through are the IDs of the repository's methods the body calls through a value's declared
+	// type, <type>.<method>, that are not in Calls: where the call lands depends on the value. They
+	// are kept out of Calls so that what reads Calls is not changed.
+	Through []string
+	// Supertypes are the IDs of the repository's types a type implements or extends, the direct
+	// ones only.
+	Supertypes []string
 	// Units are the repository's units whose values (not functions) the body uses: a variable
 	// holding a database handle, for one.
 	Units []string

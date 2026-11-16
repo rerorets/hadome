@@ -159,11 +159,13 @@ var Japanese = map[string]string{
 	"point at the document's current path, or remove the reference":                                              "文書の今のパスを指すか、参照を消す",
 
 	// deps/call-not-in-diagram.
-	"call not in the call diagram: %s → %s (%s): %s calls %s":                       "呼び出しの図に無い呼び出し: %s → %s（%s）。%s が %s を呼ぶ",
-	"no node covers the calling unit":                                               "呼ぶ側のユニットを覆うノードが無い",
-	"no node covers the called unit":                                                "呼ばれる側のユニットを覆うノードが無い",
-	"the entry point":                                                               "入口のコード",
-	"a call between the repository's own units that the call diagram does not draw": "リポジトリ自身のユニットの間の、呼び出しの図に描かれていない呼び出し",
+	"call not in the call diagram: %s → %s (%s): %s": "呼び出しの図に無い呼び出し: %s → %s（%s）。%s",
+	"%s calls %s":                     "%s が %s を呼ぶ",
+	"%s calls %s through %s":          "%s が %s を、%s を通して呼ぶ",
+	"no node covers the calling unit": "呼ぶ側のユニットを覆うノードが無い",
+	"no node covers the called unit":  "呼ばれる側のユニットを覆うノードが無い",
+	"the entry point":                 "入口のコード",
+	"a call between the repository's own units that the call diagram does not draw":                                                    "リポジトリ自身のユニットの間の、呼び出しの図に描かれていない呼び出し",
 	"the call diagram tells which layers a request goes through; a call it does not draw can skip a layer or go backwards unseen":      "呼び出しの図は、リクエストがどの層を通るかを示す。図に描かれていない呼び出しは、層を飛ばしても逆向きでも、図に表れない",
 	"the call diagram (%s) tells which layers a request goes through; a call it does not draw can skip a layer or go backwards unseen": "呼び出しの図（%s）は、リクエストがどの層を通るかを示す。図に描かれていない呼び出しは、層を飛ばしても逆向きでも、図に表れない",
 	"call through the layers the call diagram allows; if the design changed, draw the arrow, which a person reviews":                   "呼び出しの図が許す層を通して呼ぶ。設計が変わったなら矢印を描く。矢印は人が確かめる",

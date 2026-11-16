@@ -112,7 +112,7 @@ func callCases() []engine.Case {
 		t["docs/deps.md"] = &fstest.MapFile{Data: []byte("```mermaid\nflowchart LR\n" + callsDrawn + "\n  api --> domain\n```\n")}
 		return t
 	}
-	return []engine.Case{
+	out := []engine.Case{
 		{Name: "a direct call along an arrow passes", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", toStore)},
 		{Name: "a direct call with no arrow fails", Base: callApp(callsDrawn), Head: callApp(callsDrawn, "api/api.go", apiCallDom),
 			WantFail: []string{"deps/call-not-in-diagram"}},
@@ -129,4 +129,5 @@ func callCases() []engine.Case {
 		{Name: "marking wiring needs review", Base: callApp(callsDrawn),
 			Head: callApp(callsDrawn+"\n  class api wiring", "api/api.go", apiCallDom), WantReview: []string{engine.LoosenedID}},
 	}
+	return out
 }

@@ -30,6 +30,8 @@ type tsTrace struct {
 }
 
 func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
+	repo, sup := tsRepoTypes(a), supers{}
+	defer sup.fill(a)
 	funcs := map[string]bool{}
 	at := map[string]int{}
 	for i, s := range a.Symbols {
@@ -44,6 +46,9 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		}
 		tr := &tsTrace{r: r, f: f, bindings: map[string]tsImported{}, top: map[string]*node{}, funcs: funcs}
 		tr.bind(t)
+		ty := newTSTypes(tr, t, repo)
+		ty.supertypes(sup)
+		through := ty.throughs()
 		for id, body := range tr.bodies() {
 			i, ok := at[id]
 			if !ok {
@@ -52,6 +57,11 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			got := tr.reach(body)
 			s := &a.Symbols[i]
 			s.IO, s.Calls, s.Units = got.io, keys(got.calls), keys(got.units)
+			for _, c := range through[id] {
+				if !got.calls[c] {
+					s.Through = append(s.Through, c)
+				}
+			}
 		}
 		a.Entries = append(a.Entries, tr.entries()...)
 	}
@@ -84,7 +94,10 @@ func (tr *tsTrace) bind(t *tables) {
 	}
 }
 
-func (tr *tsTrace) bindImport(n *node, t *tables) {
+func (tr *tsTrace) bindImport(n *node, t *tables) { tr.bindImportInto(n, t, tr.bindings) }
+
+// bindImportInto records the names an import binds in into.
+func (tr *tsTrace) bindImportInto(n *node, t *tables, into map[string]tsImported) {
 	f := tr.f
 	spec := unquote(f.field(n, "source"))
 	p, kind := tr.r.project.resolve(f.path, spec)
@@ -99,7 +112,7 @@ func (tr *tsTrace) bindImport(n *node, t *tables) {
 	}
 	add := func(local, name string) {
 		b.name = name
-		tr.bindings[local] = b
+		into[local] = b
 	}
 	walk(n, func(x *node) bool {
 		switch x.Kind() {
