@@ -208,9 +208,9 @@ classDiagram
   class Config {
     +OwnDiagram *Diagram
     +OwnCalls *Diagram
-    +Layers []Layer
+    +ArchLayers []ArchLayer
   }
-  class Layer {
+  class ArchLayer {
     +Name string
     +Paths []string
   }
@@ -263,7 +263,7 @@ classDiagram
     +Find(in Input) []Finding
   }
   Config --> Diagram : dependency and call diagrams
-  Config --> Layer : from the inside out
+  Config --> ArchLayer : from the inside out
   Diagram --> Node
   callNotInDiagram ..> CallEdge : made by callEdges(facts)
   CallEdge ..> Symbol : from Calls, Through, Supertypes, CallAt
@@ -273,7 +273,7 @@ classDiagram
 ```
 
 - **`Config.OwnCalls`**: the diagram of `rules.deps.calls`. Like `OwnDiagram`, each version holds its own, and head's arrows are used
-- **`Config.Layers`**: the layers of `rules.deps.layers`, from the inside out. `Paths` are directory globs
+- **`Config.ArchLayers`**: the layers of `rules.deps.layers`, from the inside out. `Paths` are directory globs
 - **`Node.Wiring`**: a node with the class `wiring`; `WiringLine` is the line that gives the class
 - **`CallEdge`**: one call between units, made from the facts by `callEdges`. `Line` is the line of the call, or, when `CallAt` lacks it, of the calling function's declaration or the entry point. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
 - **The three facts added to `Symbol`** are defined in [Call facts](#call-facts), and `CallAt` in [Call lines](#call-lines)

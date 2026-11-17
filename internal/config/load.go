@@ -50,6 +50,8 @@ type Config struct {
 	// none is configured. OwnCalls is this version's own, as OwnDiagram is.
 	Calls    *Diagram
 	OwnCalls *Diagram
+	// ArchLayers are the layers of the architecture, rules.deps.layers, from the inside out.
+	ArchLayers []ArchLayer
 	// CycleAllow are the pairs of directory globs whose imports between each other deps/cycle does
 	// not follow (rules.deps.cycles.allow).
 	CycleAllow [][2]string
@@ -64,6 +66,12 @@ type Config struct {
 	raw map[string]any
 	// lines are the lines of .hadome.yml by key path (rules.size.params, rules.tests.io[0]).
 	lines map[string]int
+}
+
+// ArchLayer is one layer of the architecture: its name and the globs of its units' directories.
+type ArchLayer struct {
+	Name  string
+	Paths []string
 }
 
 // Limits are the size/ rules' limits by key name ("file-lines", "params", …).

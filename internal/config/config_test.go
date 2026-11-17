@@ -633,3 +633,39 @@ func TestAStringKeyGivenAnotherKindIsAnError(t *testing.T) {
 		t.Fatalf("got %v", es)
 	}
 }
+
+func TestWritingLayersNeedsNoReviewAndChangingThemDoes(t *testing.T) {
+	dir := t.TempDir()
+	layers := func(entries string) string { return "schema: 1\nrules:\n  deps:\n    layers:\n" + entries }
+	none := mustLoad(t, "schema: 1\n", dir)
+	two := mustLoad(t, layers("      - name: domain\n        paths: [domain/**]\n      - name: adapters\n        paths: [infra/**, web/**]\n"), dir)
+	swapped := mustLoad(t, layers("      - name: adapters\n        paths: [infra/**, web/**]\n      - name: domain\n        paths: [domain/**]\n"), dir)
+	three := mustLoad(t, layers("      - name: domain\n        paths: [domain/**]\n      - name: usecase\n        paths: [usecase/**]\n"+
+		"      - name: adapters\n        paths: [infra/**, web/**]\n"), dir)
+	if got := Diff(none, two); len(got) == 0 || len(looser(got)) != 0 {
+		t.Errorf("writing layers: want them listed as changes, none looser, got %v", got)
+	}
+	for name, head := range map[string]Config{"reordering": swapped, "adding a layer": three, "removing them": none} {
+		if got := looser(Diff(two, head)); len(got) == 0 {
+			t.Errorf("%s: want a looser change", name)
+		}
+	}
+	want := []ArchLayer{{Name: "domain", Paths: []string{"domain/**"}}, {Name: "adapters", Paths: []string{"infra/**", "web/**"}}}
+	if !reflect.DeepEqual(two.ArchLayers, want) {
+		t.Errorf("want %v, got %v", want, two.ArchLayers)
+	}
+}
+
+func TestMalformedLayersAreAnError(t *testing.T) {
+	for _, entries := range []string{
+		"      - name: \"\"\n        paths: [domain/**]\n",
+		"      - name: domain\n        paths: []\n",
+		"      - name: domain\n",
+		"      - name: domain\n        paths: [\"d/[a\"]\n",
+		"      - name: domain\n        paths: [a/**]\n      - name: domain\n        paths: [b/**]\n",
+	} {
+		if es := loadErrors(t, "schema: 1\nrules:\n  deps:\n    layers:\n"+entries, t.TempDir()); len(es) == 0 {
+			t.Errorf("want an error for\n%s", entries)
+		}
+	}
+}

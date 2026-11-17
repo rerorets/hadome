@@ -243,9 +243,9 @@ classDiagram
   class Config {
     +OwnDiagram *Diagram
     +OwnCalls *Diagram
-    +Layers []Layer
+    +ArchLayers []ArchLayer
   }
-  class Layer {
+  class ArchLayer {
     +Name string
     +Paths []string
   }
@@ -298,7 +298,7 @@ classDiagram
     +Find(in Input) []Finding
   }
   Config --> Diagram : 依存の図と呼び出しの図
-  Config --> Layer : 内側から順に
+  Config --> ArchLayer : 内側から順に
   Diagram --> Node
   callNotInDiagram ..> CallEdge : callEdges(facts) で作る
   CallEdge ..> Symbol : Calls・Through・Supertypes・CallAt から
@@ -308,7 +308,7 @@ classDiagram
 ```
 
 - **`Config.OwnCalls`**: `rules.deps.calls` の図です。`OwnDiagram` と同じく、各版が自分の図を持ち、矢印は head のものを使います
-- **`Config.Layers`**: `rules.deps.layers` の層です。内側から順に並びます。`Paths` はディレクトリのグロブです
+- **`Config.ArchLayers`**: `rules.deps.layers` の層です。内側から順に並びます。`Paths` はディレクトリのグロブです
 - **`Node.Wiring`**: クラス `wiring` を付けたノードです。`WiringLine` は、クラスを付けた行です
 - **`CallEdge`**: ユニットの間の呼び出しの1つです。`callEdges` が事実から作ります。`Line` は呼び出しの行で、`CallAt` に無ければ呼ぶ関数の宣言か入口の行です。`Via` は、インターフェースを通した呼び出しのとき、そのインターフェースのメソッドの ID です。直接の呼び出しでは空です
 - **`Symbol` に足す3つの事実**は「[呼び出しの事実](#呼び出しの事実)」で、`CallAt` は「[呼び出しの行](#呼び出しの行)」で決めています

@@ -54,7 +54,7 @@ func decode(raw map[string]any, layers []string) Config {
 	for _, k := range sizeKey.Fields {
 		c.Size[k.Name] = intOr(size[k.Name], k.Default.(int))
 	}
-	c.CycleAllow = cycleAllow(object(object(object(raw["rules"])["deps"])["cycles"])["allow"])
+	c.ArchLayers, c.CycleAllow = depsRules(object(object(raw["rules"])["deps"]))
 	c.TodoForm = DefaultTodo
 	comments := object(object(raw["rules"])["comments"])
 	if form, ok := comments["todo"].(string); ok {
@@ -144,8 +144,8 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 		p := joinPath(path, f.Name)
 		b, h := base[f.Name], head[f.Name]
 		switch {
-		case f.Kind == KindObject && f.OmittedIsOff && b == nil:
-			diffTurnedOn(out, object(h), f, p)
+		case f.OmittedIsOff && b == nil:
+			diffTurnedOn(out, h, f, p)
 		case f.Kind == KindObject:
 			diffObject(out, object(b), object(h), f, p)
 		case f.Kind == KindList:
@@ -165,11 +165,15 @@ func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
 	}
 }
 
-// diffTurnedOn lists what an OmittedIsOff object holds in head when base has none. Base did not
-// run the feature at all, so nothing in it is looser.
-func diffTurnedOn(out *[]Change, head map[string]any, k Key, path string) {
+// diffTurnedOn lists what an OmittedIsOff object or list holds in head when base has none. Base did
+// not run the feature at all, so nothing in it is looser.
+func diffTurnedOn(out *[]Change, head any, k Key, path string) {
 	var added []Change
-	diffObject(&added, nil, head, k, path)
+	if k.Kind == KindList {
+		diffList(&added, nil, list(head), k, path)
+	} else {
+		diffObject(&added, nil, object(head), k, path)
+	}
 	for _, c := range added {
 		c.Looser = false
 		*out = append(*out, c)
