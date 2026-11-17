@@ -217,22 +217,6 @@ flowchart LR
 
 ## Back-end and whole-system patterns
 
-### Modular monolith and bounded contexts
-
-Each context (orders, members) has its own directory, and other contexts go only through its public front. In the dependency diagram, draw arrows from other contexts only to the front's box.
-
-```mermaid
-flowchart LR
-  members["members/..."] --> ordersAPI["orders/api"]
-  orders["orders/..."] --> membersAPI["members/api"]
-  ordersAPI --> orders
-  membersAPI --> members
-```
-
-- A change it stops: members' code imports a class inside orders directly.
-- The box `orders/...` covers `orders/api` too, but a unit goes to the box that fits it most closely, so the unit `orders/api` is in the box `ordersAPI`.
-- Draw the arrow from the front into its own context (`ordersAPI --> orders`): the front hands work to the implementation inside.
-
 ### CQRS
 
 Writes (commands) and reads (queries) in separate code. In the dependency diagram, draw no arrow from the query box to the command box.
@@ -292,6 +276,101 @@ flowchart LR
 
 - A change it stops: new code adds a dependency on old code.
 - An import the diagram does not draw does not fail when main already has it. So the arrow can stay undrawn even while new code still depends on old code: the dependencies there today pass, and only changes adding more fail. Dependencies do not grow while the replacement goes on.
+
+## DDD (domain-driven design)
+
+DDD is a way of building the domain's model, and a set of patterns for it. It is not hexagonal architecture (ports and adapters), though the two are often used together.
+
+### Bounded contexts (modular monolith)
+
+Each context (orders, members) has its own directory, and other contexts go only through its public front. In the dependency diagram, draw arrows from other contexts only to the front's box.
+
+```mermaid
+flowchart LR
+  members["members/..."] --> ordersAPI["orders/api"]
+  orders["orders/..."] --> membersAPI["members/api"]
+  ordersAPI --> orders
+  membersAPI --> members
+```
+
+- A change it stops: members' code imports a class inside orders directly.
+- The box `orders/...` covers `orders/api` too, but a unit goes to the box that fits it most closely, so the unit `orders/api` is in the box `ordersAPI`.
+- Draw the arrow from the front into its own context (`ordersAPI --> orders`): the front hands work to the implementation inside.
+
+### Context map
+
+The relations between contexts (the context map) can be drawn as arrows of the dependency diagram.
+
+| Relation | How to write it |
+|---|---|
+| Open host service, published language | Draw arrows from other contexts only to the public front's box |
+| Shared kernel | Put a shared box, with arrows to it from both contexts |
+| Customer and supplier | Draw only the one-way arrow from customer to supplier |
+| Separate ways | Draw no arrow at all between the contexts |
+| Partnership | Draw arrows both ways. If that makes a cycle between directories, write them as an allowed pair too |
+| Anti-corruption layer | Only the anti-corruption layer's box (`orders/acl` and the like) may have an arrow to the other context |
+
+- The diagram keeps an anti-corruption layer when the other side is a context in the repository. When it is an external library or service, see "[What cannot be kept](#what-cannot-be-kept)".
+- Conformist (using the other side's model as it is) does not show in the direction of dependencies, so it cannot be kept.
+
+### Aggregates
+
+With each aggregate in a directory of its own, draw no arrows between aggregate boxes in the dependency diagram. The rule that other aggregates are referred to by ID is then kept by the direction of imports.
+
+```mermaid
+flowchart LR
+  order["domain/order"] --> shared["domain/shared"]
+  customer["domain/customer"] --> shared
+```
+
+- A change it stops: the order aggregate imports `domain/customer` to hold a customer object.
+- Keep ID types in a shared place (`domain/shared` and the like). Kept inside each aggregate, using an ID alone would import the other aggregate.
+
+An aggregate's invariants are kept by invariants and tests, not by the direction of imports. Write them in `.hadome.yml` with an ID, and put `guards: <id>` in the doc comment of a test that checks one.
+
+```yaml
+invariants:
+  - id: order-total
+    says: "An order's total is never below zero"
+```
+
+```go
+// guards: order-total
+func TestOrderTotalNeverGoesBelowZero(t *testing.T) {
+```
+
+- An invariant with no test guarding it fails, and so does a change that removes the test guarding it.
+- Changing inner entities only through the aggregate root, and changing only one aggregate per transaction, cannot be kept. The first is inside one unit; the second is a run-time property.
+
+### Repositories and the service layers
+
+The repository interface goes in the domain, its implementation in the infrastructure. Application services go outside the domain.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: domain
+        paths: [domain/**]
+      - name: application
+        paths: [application/**]
+      - name: infrastructure
+        paths: [infrastructure/**]
+```
+
+- A change it stops: domain code imports a repository implementation or an application service.
+- Domain services go in the domain layer.
+
+### Domain events
+
+The unit holding the event types is imported by both the aggregate that publishes and the side that subscribes. It is written as in "[Event-driven (publish and subscribe)](#event-driven-publish-and-subscribe)".
+
+### DDD patterns that cannot be kept
+
+| Pattern | Why |
+|---|---|
+| Entities, value objects, factories | About what is inside one unit. That a value object cannot change is a run-time property |
+| Ubiquitous language | About naming |
 
 ## Infrastructure patterns
 
@@ -367,7 +446,8 @@ A delegate such as iOS's `weak var delegate` has the shape of Observer or Strate
 ## What cannot be kept
 
 - **Reflection and calls a framework makes**: Spring's `@EventListener`, `getattr` calling by a name in a string, and the like. The syntax names no callee, so the call cannot be followed.
-- **Where an external library may be used**: a rule such as "only `infra/` may import the database driver". An anti-corruption layer has this shape too. The diagrams draw only the repository's own units, so this cannot be written there. It can be written as a product-specific gate.
+- **Where an external library may be used**: a rule such as "only `infra/` may import the database driver". An anti-corruption layer facing an external library or service has this shape too. The diagrams draw only the repository's own units, so this cannot be written there. It can be written as a product-specific gate.
+- **Cloud design patterns**: most of them, such as Circuit Breaker, Retry, Bulkhead, Sidecar and Cache-Aside, are about behaviour at run time or about where services are deployed. They do not show in source code dependencies. In Terraform too, hadome looks only at the direction of module calls, not at how resources connect. CQRS and Strangler Fig are about how code is arranged, and are above.
 - **Dependencies through other modules**: hadome does not read libraries outside the repository, so a cycle back through a library is not counted.
 - **The shape inside one unit**: how a class's responsibilities are split, and any shape beyond the size of methods, is not looked at. Size is the `size/` rules' job.
 
