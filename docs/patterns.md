@@ -448,9 +448,10 @@ A delegate such as iOS's `weak var delegate` has the shape of Observer or Strate
 ## What cannot be kept
 
 - **Reflection and calls a framework makes**: Spring's `@EventListener`, `getattr` calling by a name in a string, and the like. The syntax names no callee, so the call cannot be followed.
-- **Where an external library may be used**: a rule such as "only `infra/` may import the database driver". An anti-corruption layer facing an external library or service has this shape too. The diagrams draw only the repository's own units, so this cannot be written there. It can be written as a product-specific gate.
+- **Where an external library may be used**: a rule such as "only `infra/` may import the database driver". An anti-corruption layer facing an external library or service has this shape too. The diagrams draw only the repository's own units, so this cannot be written there. A script of your own that checks it can be added to the check (see below).
+- **Data layers**: the rules of a medallion architecture (bronze, silver, gold) or of ELT stages. Stages meet through the names of tables and storage, and through pipeline definitions, none of which show as imports or calls, so they cannot be followed. A script of your own that checks them can be added to the check too (see below).
 - **Cloud design patterns**: most of them, such as Circuit Breaker, Retry, Bulkhead, Sidecar and Cache-Aside, are about behaviour at run time or about where services are deployed. They do not show in source code dependencies. In Terraform too, hadome looks only at the direction of module calls, not at how resources connect. CQRS and Strangler Fig are about how code is arranged, and are above.
 - **Dependencies through other modules**: hadome does not read libraries outside the repository, so a cycle back through a library is not counted.
 - **The shape inside one unit**: how a class's responsibilities are split, and any shape beyond the size of methods, is not looked at. Size is the `size/` rules' job.
 
-A rule none of these covers can be written as a product-specific gate ([Product-specific gates](external-gates.md)).
+A rule this page cannot keep can still be added to hadome's check, as a small program of your own in your repository. Example: a script that checks `bronze` never appears in the SQL under `models/gold/`. hadome treats it like a built-in rule and fails only when things get worse than main. How to write one is in [Product-specific gates](external-gates.md).
