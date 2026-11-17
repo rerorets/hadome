@@ -168,6 +168,13 @@ classDiagram
     +Calls []string
     +CallAt map[string]int
   }
+  class File {
+    +Path string
+    +Unit string
+    +Calls []string
+    +Through []string
+    +CallAt map[string]int
+  }
   class CallEdge {
     +FromUnit string
     +ToUnit string
@@ -185,6 +192,7 @@ classDiagram
   callNotInDiagram ..> CallEdge : made by callEdges(facts)
   CallEdge ..> Symbol : from Calls, Through, Supertypes, CallAt
   CallEdge ..> Entry : from Calls, CallAt
+  CallEdge ..> File : from Calls, Through, CallAt
   callNotInDiagram ..> Config : head's OwnCalls arrows
 ```
 
@@ -203,6 +211,7 @@ classDiagram
 | `Symbol.Through`, `Symbol.Supertypes` | calls through an interface, and where they reach (call diagram) |
 | `Symbol.Unfollowed` | the number of calls hadome cannot follow (call diagram) |
 | `Symbol.CallAt`, `Entry.CallAt` | the lines of calls (where the call diagram reports) |
+| `File.Calls`, `File.Through`, `File.CallAt` | calls of the code outside functions (call diagram) |
 
 ### Call facts
 
@@ -232,6 +241,41 @@ classDiagram
 - **When a line is missing**: an ID missing from `CallAt` has no known line, and is reported at the declaration of the calling function or at the entry point. An adapter that does not fill the lines only makes the place coarser; the findings stay the same
 - **Adapters that fill it**: every adapter that fills `Calls` or `Through` fills `CallAt` too: the Go adapter and the tree-sitter adapters of five languages
 
+### Code outside functions
+
+Calls can also be written outside the bodies of functions and methods. Example: code that runs when a module is loaded.
+
+```python
+# app/state.py
+queue = Queue(DATA_DIR)  # makes the Queue of app/store/queue
+```
+
+`Calls` and `Through` are held by symbols. Of code that is no symbol, only an entry point (`Entry.Calls`) holds its calls. So in a file not read as an entry point, calls outside functions are not counted by the call diagram. Three facts are added to the file.
+
+| Fact | Content |
+|---|---|
+| `File.Calls` | the IDs of the repository's functions and methods called outside the bodies of functions and methods, by the rules of `Symbol.Calls` |
+| `File.Through` | in the same places, methods called through a value's declared type and objects made in place, by the rules of `Symbol.Through` |
+| `File.CallAt` | for each ID in `File.Calls` and `File.Through`, the line where it is first called |
+
+- **The caller**: the file's unit. The message names the caller as "the code outside functions in `app/state.py`"
+- **What is outside functions**: every place not in the body of a function or method symbol. Inside a type's declaration, a place outside its methods is included. So is the inside of a function expression that is no function symbol (`items.map(i => make(i))`)
+- **Why when it runs is not told apart**: code that runs on loading and code called later are treated the same. The call diagram says which unit's code may call which unit, not when
+- **Overlap with entry-point code**: entry-point code (`Entry.Calls`) is outside functions too, so it is also in `File.Calls`. A finding is made once per pair of units, so the overlap adds none. `Entry.Calls` stays as it is, for the `idempotent` candidates
+- **Files that hold them**: product code files only, not test files or generated files, as with symbols
+- **Why on `File`**: making the code outside functions a symbol would change the results of other rules that read symbols (`size/`, `comments/`)
+
+Calls outside functions are written in these places in each language.
+
+| Language | Places |
+|---|---|
+| Python | statements of the module, a class body outside its methods, decorators, default values of parameters |
+| TypeScript | statements of the module, initial values of class fields, `static` blocks |
+| Java | initial values of fields, initializer blocks |
+| Kotlin | top-level properties, initial values of properties of classes and `object`s, `init` blocks |
+| Go | initial values of package-level `var`s. An `init` function is a function symbol, so `Symbol.Calls` already counts its calls |
+| Rust | initial values of `static` and `const` |
+
 ### Where a call reaches
 
 From the facts of a symbol of unit A, the units A reaches are:
@@ -242,7 +286,7 @@ From the facts of a symbol of unit A, the units A reaches are:
 | The ID of type T (a call making a T) | the unit that declares T |
 | The ID of method M of type T | the units of the types that reach T through `Supertypes`, transitively (T's implementations and descendants), that declare M themselves; when T is no interface, the unit of the code a value of T itself runs as well: T's M, or else the first types up T's `Supertypes` that declare M, classes over interfaces (whose method then runs as a default) |
 
-- An ID in `Calls`, `Through` or `Entry.Calls` is decided by this table alike. An ID in `Entry.Calls` (entry-point code that is no symbol) counts as a call from the unit holding the entry-point code
+- An ID in `Calls`, `Through`, `Entry.Calls`, `File.Calls` or `File.Through` is decided by this table alike. An ID in `Entry.Calls` (entry-point code that is no symbol) counts as a call from the unit holding the entry-point code. An ID in `File.Calls` or `File.Through` counts as a call from the file's unit
 - An interface's method has no body, so a call does not reach the unit declaring the interface
 - A method no type of the repository declares reaches nowhere. Examples: `db.update()` through an alias of a library's type (`type Db = PostgresJsDatabase`), Kotlin's `.apply {}`, Rust's derived `.clone()`. What runs is the library's code or code the compiler writes, not code of T's unit. That the code uses T shows in the calls making a T and in the import diagram
 
@@ -337,7 +381,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
-| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call with no arrow is reported at the line of the call · drawing the arrow needs review instead · marking `wiring` needs review |
+| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call with no arrow is reported at the line of the call · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
 
@@ -345,7 +389,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 2. The arrows that judge a change are head's, for both versions; drawing an arrow is never silent
 3. Marking `wiring` is never silent
 4. The call diagram does not change how the dependency diagram judges, nor the other way round
-5. Adding `Through`, `Supertypes`, `Unfollowed` and `CallAt` changes no other fact, nor the results of rules and candidates that read `Calls`
+5. Adding `Through`, `Supertypes`, `Unfollowed` and `CallAt`, and `Calls`, `Through` and `CallAt` of `File`, changes no other fact, nor the results of rules and candidates that read `Calls`
 6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
 7. A call within one unit always passes
 
@@ -364,4 +408,5 @@ Only the places that take a value from outside are counted: parameters, attribut
 - The order and number of calls. The diagram only decides which units may reach which
 - Transitive arrows. `a --> b --> c` does not allow `a` to call `c` directly, as in the dependency diagram
 - Arrows drawn but never called. As in the dependency diagram, they are not a regression
+- Calls outside functions that cannot be followed. Calls on values of unknown type outside functions are not counted in `Unfollowed`. Of the values `Unfollowed` counts, parameters and attributes are not outside functions
 - Generated implementations. `Symbol` holds no generated code, so a type in generated code (sqlc's `Queries`, for one) is not counted as an implementation and calls to it are not asked for. Nothing fails by mistake; fewer calls are seen
