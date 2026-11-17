@@ -64,5 +64,25 @@ func cycleCases() []engine.Case {
 		{Name: "allowing a pair needs review", Base: goApp(".hadome.yml", "schema: 1\n"), Head: allow(goApp("domain/domain.go", back)),
 			WantReview: []string{engine.LoosenedID}},
 	}
-	return append(out, languageCycleCases...)
+	return append(append(out, iacCycleCases()...), languageCycleCases...)
+}
+
+// iacCycleCases are the cases of Terraform modules and Ansible roles, whose local module calls and
+// role dependencies are imports between units too.
+func iacCycleCases() []engine.Case {
+	callB := "module \"b\" {\n  source = \"../b\"\n}\n"
+	vpc := "resource \"aws_vpc\" \"main\" {\n  cidr_block = \"10.0.0.0/16\"\n}\n"
+	install := "- name: Install\n  ansible.builtin.package:\n    name: nginx\n"
+	return []engine.Case{
+		{Name: "a Terraform module call closing a cycle fails",
+			Base:     tree("modules/a/main.tf", callB, "modules/b/main.tf", vpc),
+			Head:     tree("modules/a/main.tf", callB, "modules/b/main.tf", vpc+"\nmodule \"a\" {\n  source = \"../a\"\n}\n"),
+			WantFail: []string{"deps/cycle"}},
+		{Name: "an Ansible role dependency closing a cycle fails",
+			Base: tree("roles/web/meta/main.yml", "dependencies:\n  - db\n", "roles/web/tasks/main.yml", install,
+				"roles/db/tasks/main.yml", install),
+			Head: tree("roles/web/meta/main.yml", "dependencies:\n  - db\n", "roles/web/tasks/main.yml", install,
+				"roles/db/meta/main.yml", "dependencies:\n  - web\n", "roles/db/tasks/main.yml", install),
+			WantFail: []string{"deps/cycle"}},
+	}
 }
