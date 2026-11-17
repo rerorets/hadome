@@ -140,7 +140,12 @@ When `.hadome.yml` lists layers (`rules.deps.layers`), an import from an inner l
 
 When there is no diagram, draft them with `hadome suggest diagram` and `hadome suggest calls` and propose them to the person. A draft draws the imports and calls as they are, so configuring it fails none of today's code. How boxes are grouped (`--depth`) and which box gets `wiring` are for deciding with the person.
 
-When tidying a diagram, writing layers or allowed pairs, or when the repository looks like a known design pattern (layered, Feature-Sliced Design, modular monolith, MVVM and the like), read [Keeping design patterns](patterns.md). For each pattern it shows whether a diagram, layers or allowed pairs write it and how, and what cannot be kept. Which pattern to apply is the person's decision: propose it with the reason.
+[Keeping design patterns](patterns.md) is a reference for writing down the design the repository already uses, as a diagram, layers or allowed pairs. It does not recommend rearranging code to fit a pattern.
+
+- Read it when the person asks, or when the repository's documents (README, design documents, AGENTS.md) say it is built that way.
+- Only when proposing the first diagram (`.hadome.yml` has neither `rules.deps.diagram` nor `rules.deps.layers`), ask lightly whether the code follows a design, or should. If the draft suggests a shape, say how it looks to you. If the answer is no, or undecided, recommend nothing further.
+- When proposing to write a pattern down, count the arrows in the draft that go against it today. Violations already there do not fail, so that number is the line not to cross.
+- Propose changing directories or imports to fit a pattern only when the person asks.
 
 Proved by: `hadome check` reports no `deps/` regression.
 

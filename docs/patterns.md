@@ -2,6 +2,8 @@
 
 Examples of how hadome's configuration keeps architecture patterns and the GoF design patterns. Not every pattern can be kept, so those that cannot are listed too, with the reason.
 
+This page does not recommend using any pattern. It shows how to keep the shape of a pattern the repository already has.
+
 ## What hadome looks at
 
 hadome looks at the direction of imports and calls between the repository's units (a Go package, a Kotlin package, a TypeScript directory, a Terraform module, an Ansible role, and so on). So it keeps patterns that can be said as "which directory may depend on which". Patterns decided only by the shape inside a class, or by what happens at run time, it cannot keep.
