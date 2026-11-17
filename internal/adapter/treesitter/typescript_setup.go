@@ -190,24 +190,31 @@ func (tf *tsFile) loadedUnit(v *node) string {
 	return unit
 }
 
+// loaderFn is the one function of a module that value, a call of a loader, returns, or "".
+func (tf *tsFile) loaderFn(value *node) string {
+	v := tsUnwrap(value)
+	if v == nil || v.Kind() != "call_expression" {
+		return ""
+	}
+	h, _ := tf.helper(tf.f.field(v, "function"), v)
+	return h.fn
+}
+
 // bindLoad records what pattern takes from value when value loads a module of the repository:
 // the module object, or the names an object pattern takes from it. It reports whether it did.
 func (tf *tsFile) bindLoad(pattern, value *node, modules, loaded map[string]string) bool {
 	f := tf.f
-	if v := tsUnwrap(value); v != nil && v.Kind() == "call_expression" && pattern != nil && pattern.Kind() == "identifier" {
-		if h, ok := tf.helper(f.field(v, "function"), v); ok && h.fn != "" {
-			fn := h.fn
-			loaded[f.text(pattern)] = fn // const fn = await load(), where load returns one function of a module
-			return true
-		}
-	}
 	unit := tf.loadedUnit(value)
 	if unit == "" || pattern == nil {
 		return false
 	}
 	switch pattern.Kind() {
 	case "identifier":
-		modules[f.text(pattern)] = unit
+		if fn := tf.loaderFn(value); fn != "" {
+			loaded[f.text(pattern)] = fn // const fn = await load(), where load returns one function of a module
+		} else {
+			modules[f.text(pattern)] = unit
+		}
 	case "object_pattern":
 		for _, p := range named(pattern) {
 			switch p.Kind() {
