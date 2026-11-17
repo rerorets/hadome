@@ -290,6 +290,8 @@ hadome suggest diagram > docs/dependencies.md
 hadome suggest calls > docs/calls.md
 ```
 
+クリーンアーキテクチャの層や、GoF のパターンを守る書き方の例は、[設計のパターンを守る](docs/patterns.ja.md)にあります。
+
 設定を変えたり、不変条件を提案したりするのはエージェントの役目です。エージェントは`hadome explain <キー>`で仕様を読みます。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。人は提案を採るかどうかと、ルールを緩める変更を認めるかどうかを決めます。緩める変更には、終了コード`3`で人の確認が入ります。
 
 ### 例外の書き方
