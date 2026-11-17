@@ -179,7 +179,7 @@ Test file conventions:
 | TypeScript | `*.test.ts(x)`, `*.spec.ts(x)`, files under `__tests__/`, test support files (under `test/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
 | Python | `test_*.py`, `*_test.py`, test support files (`conftest.py`, under `tests/` and the like; [adapters-treesitter.md](adapters-treesitter.md)) |
 | Rust | `#[cfg(test)]` modules in any file, and files under `tests/` and `benches/` |
-| Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like) |
+| Java | Files under a directory in `src/` whose name contains test (`src/test/` and the like), and under a `test/` or `test@…/` outside `src/` (Kotlin Multiplatform's `jvm/test/` and the like) |
 | Kotlin | Same as Java |
 | Terraform | `*.tftest.hcl` ([adapters-iac.md](adapters-iac.md)) |
 | Ansible | Files under `molecule/<scenario>/` ([adapters-iac.md](adapters-iac.md)) |
