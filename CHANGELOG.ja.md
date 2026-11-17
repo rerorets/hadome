@@ -21,7 +21,7 @@ https://github.com/rerorets/hadome/releases
 
 - `deps/call-not-in-diagram` が、関数とメソッドの外のコードの呼び出しも数えます。モジュールの先頭のコード、フィールドの初期値、デコレータ、引数の既定値、Go のパッケージの `var` の初期値などです。呼ぶ側は、そのファイルのユニットとして数えます。
 - Rust の `use crate::store::{self, Finder}` で取り込んだモジュールを通した呼び出しも数えます。
-- 新しいルール `deps/cycle` が、ユニットの間に新しい循環を作る import を落とします。図が無くても動きます。落とすのは、base に無いディレクトリの組の import が循環を閉じたときだけで、メッセージに戻る道（`store → domain → store`）を書きます。import するファイルが Rust・Java・Kotlin なら、ディレクトリとその祖先の間の import はたどりません。
+- 新しいルール `deps/cycle` が、ユニットの間に新しい循環を作る import を落とします。図が無くても動きます。落とすのは、base に無いディレクトリの組の import が循環を閉じたときだけで、メッセージに戻る道（`store → domain → store`）を書きます。import するファイルが Rust・Java・Kotlin なら、ディレクトリとその祖先の間の import はたどりません。Terraform のローカルのモジュールの呼び出しと、Ansible のロールの依存も import として数えます。
 - 新しいルール `deps/layer` が、`rules.deps.layers` に書いた層を見て、内側の層から外側の層への import を落とします。層を書くまでは何もしません。
 
 ### 誤検知・漏れの修正
@@ -37,6 +37,7 @@ https://github.com/rerorets/hadome/releases
 ### その他
 
 - `hadome suggest diagram` と `hadome suggest calls` が、いまの import と呼び出しから、依存の図と呼び出しの図の叩き台を書きます。設定しても、いまのコードは落ちません。箱は、枝分かれするディレクトリだけを数えて `--depth` 段（既定は 2）でまとめ、言語ごとに数えます。両向きに依存している箱の組は、一覧にして書き出します。
+- [設計のパターンを守る](docs/patterns.ja.md)を足しました。クリーンアーキテクチャや GoF のパターンを、図・層・循環のルールで守る書き方の例です。
 - `hadome init` が書く設定の雛形と、エージェント向けの指示のブロックが、図が無いときに叩き台を作って人に提案するよう勧めます。
 
 - `deps/call-not-in-diagram` は、呼び出しを書いた行で報告します。これまでは、呼ぶ関数の宣言の行で報告していました。
