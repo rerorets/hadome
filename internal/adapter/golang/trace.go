@@ -224,3 +224,23 @@ func handlerShape(ft *ast.FuncType, imports map[string]string) bool {
 	star, ok := types[1].(*ast.StarExpr)
 	return is(types[0], "ResponseWriter") && ok && is(star.X, "Request")
 }
+
+// traceVars sets a file's calls outside functions: those of its package-level variables' initial
+// values. An init function is a symbol, whose calls are its own.
+func traceVars(rd reading, pf parsedFile, file *facts.File) {
+	w := newWalker(rd, pf, nil)
+	w.testKey = ""
+	w.trace = &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset, ifaces: map[string]string{}, through: map[string]int{}}
+	for _, decl := range pf.file.Decls {
+		if g, ok := decl.(*ast.GenDecl); ok && g.Tok == token.VAR {
+			for _, spec := range g.Specs {
+				for _, v := range spec.(*ast.ValueSpec).Values {
+					ast.Inspect(v, w.visit)
+				}
+			}
+		}
+	}
+	if len(w.calls) > 0 {
+		file.Calls, file.CallAt = callIDs(w), callLines(w)
+	}
+}

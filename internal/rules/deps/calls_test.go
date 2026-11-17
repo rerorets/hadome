@@ -134,6 +134,61 @@ func TestUndrawnCallsAreReportedAtTheLineOfTheCall(t *testing.T) {
 }
 
 // viewpoint: external contract
+// target: deps/call-not-in-diagram
+// A file's calls outside functions count from the file's unit, at their own line, through an
+// interface too, and the message names the code outside functions of that file as the caller; a
+// call whose line the facts do not hold counts at the file's first line.
+func TestCallsOutsideFunctionsCountFromTheFilesUnit(t *testing.T) {
+	src := func(path, unit string, calls, through []string, at map[string]int) facts.File {
+		return facts.File{Path: path, Unit: unit, UnitPath: unit, Role: facts.RoleSource, Calls: calls, Through: through, CallAt: at}
+	}
+	in := engine.Input{
+		Config: config.Config{Calls: &config.Diagram{Path: "docs/calls.md", Nodes: []config.Node{
+			{ID: "app", Label: "app"}, {ID: "store", Label: "store"}, {ID: "pg", Label: "pg"}, {ID: "port", Label: "port"},
+			{ID: "jobs", Label: "jobs"}, {ID: "lib", Label: "lib"}}}},
+		Facts: &facts.Analysis{
+			Files: []facts.File{
+				src("app/state.py", "app", []string{"store.Queue"}, []string{"port.Finder.Find"},
+					map[string]int{"store.Queue": 4, "port.Finder.Find": 9}),
+				src("jobs/main.py", "jobs", []string{"lib.run"}, nil, nil),
+				src("store/queue.py", "store", nil, nil, nil), src("port/p.py", "port", nil, nil, nil),
+				src("pg/pg.py", "pg", nil, nil, nil), src("lib/l.py", "lib", nil, nil, nil),
+			},
+			Symbols: []facts.Symbol{
+				{ID: "store.Queue", Kind: facts.SymbolType, Path: "store/queue.py", Line: 1},
+				{ID: "lib.run", Path: "lib/l.py", Line: 1},
+				{ID: "port.Finder", Kind: facts.SymbolInterface, Path: "port/p.py", Line: 3},
+				{ID: "port.Finder.Find", Kind: facts.SymbolMethod, Path: "port/p.py", Line: 4},
+				{ID: "pg.Repo", Kind: facts.SymbolType, Path: "pg/pg.py", Line: 3, Supertypes: []string{"port.Finder"}},
+				{ID: "pg.Repo.Find", Kind: facts.SymbolMethod, Path: "pg/pg.py", Line: 5},
+			},
+		},
+	}
+	got, err := findingRule(t, "deps/call-not-in-diagram").Find(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := map[string]string{}
+	for _, f := range got {
+		at[f.Anchor] = fmt.Sprintf("%s:%d %s", f.File, f.Line, f.Message.In("en"))
+	}
+	for anchor, want := range map[string][]string{
+		"app -> store": {"app/state.py:4 ", "the code outside functions in app/state.py calls store.Queue"},
+		"app -> pg":    {"app/state.py:9 ", "through port.Finder.Find"},
+		"jobs -> lib":  {"jobs/main.py:1 "},
+	} {
+		for _, w := range want {
+			if !strings.Contains(at[anchor], w) {
+				t.Errorf("%s: want %q in %q", anchor, w, at[anchor])
+			}
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("want 3 findings, got %v", at)
+	}
+}
+
+// viewpoint: external contract
 // target: deps/diagram-stale
 // A node of the call diagram is anchored apart from the same label in the dependency diagram, so
 // fixing one diagram never hides the other's finding.

@@ -174,3 +174,26 @@ func TestGoCallsCarryTheLineOfTheirFirstCall(t *testing.T) {
 		t.Errorf("entries: got %s, want %s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// A file's calls outside functions are those of its package-level variables' initial values, a
+// function literal's among them, at the line of the first call; an init function's are its own.
+func TestGoCallsOutsideFunctionsAreThoseOfPackageVariables(t *testing.T) {
+	a := analyzeTree(t, fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"store/store.go": {Data: []byte("package store\n\nfunc Open() int { return 1 }\n\nfunc Close() int { return 1 }\n")},
+		"api/api.go": {Data: []byte("package api\n\nimport \"example.com/app/store\"\n\nvar (\n\tdb = store.Open()\n" +
+			"\th  = func() int { return store.Close() }\n)\n\nfunc init() { store.Open() }\n")},
+	})
+	for _, f := range a.Files {
+		if f.Path == "api/api.go" {
+			want := map[string]int{"example.com/app/store.Close": 7, "example.com/app/store.Open": 6}
+			if fmt.Sprint(f.CallAt) != fmt.Sprint(want) || len(f.Calls) != 2 {
+				t.Errorf("got calls %v at %v, want %v", f.Calls, f.CallAt, want)
+			}
+			return
+		}
+	}
+	t.Fatal("no file api/api.go")
+}

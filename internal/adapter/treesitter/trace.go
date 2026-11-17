@@ -86,12 +86,21 @@ type tracing struct {
 	// classFields are the fields of each class read so far, by the class's node: a class's methods
 	// share them, so the class is walked once for all of them.
 	classFields map[uintptr]map[string]string
+	// skip are the nodes reading leaves out: while the code outside functions is read, the bodies
+	// of the functions and the imports.
+	skip map[uintptr]bool
+	// madeOutside returns the objects the code outside functions makes in place, and the methods
+	// called on them; nil for a language that reads none.
+	madeOutside func(skip map[uintptr]bool) callLines
 }
 
 // traceFiles fills in the facts of the functions each file lists, and appends the entry points
 // each file declares or registers.
 func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[string]bool) ([]tfunc, *tracing, func() []facts.Entry)) {
-	funcs := map[string]bool{}
+	funcs, fileAt := map[string]bool{}, map[string]int{}
+	for i, file := range a.Files {
+		fileAt[file.Path] = i
+	}
 	at := map[string]int{}
 	for i, s := range a.Symbols {
 		if s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod {
@@ -112,6 +121,9 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 			got := tr.reach(fn, fn.body)
 			s := &a.Symbols[i]
 			s.IO, s.Calls, s.CallAt, s.Units = got.io, got.ids(), got.lines(), keys(got.units)
+		}
+		if i, ok := fileAt[f.path]; ok {
+			tr.outside(&a.Files[i], fns)
 		}
 		a.Entries = append(a.Entries, entries()...)
 	}
@@ -182,6 +194,9 @@ func (tr *tracing) fieldsOf(class *node) map[string]string {
 func (tr *tracing) reachInto(fn tfunc, code *node, got *reached) {
 	f := tr.f
 	walk(code, func(n *node) bool {
+		if tr.skip[n.Id()] {
+			return false
+		}
 		got.read(n)
 		if tr.syn.special != nil && tr.syn.special(tr, fn, n, got) {
 			return false

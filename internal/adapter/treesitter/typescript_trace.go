@@ -3,8 +3,10 @@
 package treesitter
 
 import (
+	"maps"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -27,12 +29,16 @@ type tsTrace struct {
 	bindings map[string]tsImported
 	top      map[string]*node // names declared at the top of the file, and their declarations
 	funcs    map[string]bool  // the IDs of the version's functions and methods
+	skip     map[uintptr]bool // the nodes reading leaves out, as tracing.skip
 }
 
 func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 	repo, sup := tsRepoTypes(a), supers{}
 	defer sup.fill(a)
-	funcs := map[string]bool{}
+	funcs, fileAt := map[string]bool{}, map[string]int{}
+	for i, file := range a.Files {
+		fileAt[file.Path] = i
+	}
 	at := map[string]int{}
 	for i, s := range a.Symbols {
 		if s.Kind == facts.SymbolFunction || s.Kind == facts.SymbolMethod {
@@ -56,7 +62,8 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 		tr := ty.tr
 		ty.supertypes(sup)
 		through, unfollowed := ty.throughs(made)
-		for id, body := range tr.bodies() {
+		bodies := tr.bodies()
+		for id, body := range bodies {
 			i, ok := at[id]
 			if !ok {
 				continue
@@ -65,6 +72,9 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			s := &a.Symbols[i]
 			s.IO, s.Calls, s.CallAt, s.Units, s.Unfollowed = got.io, got.ids(), got.lines(), keys(got.units), unfollowed[id]
 			addThrough(s, through[id])
+		}
+		if i, ok := fileAt[tr.f.path]; ok {
+			ty.outside(&a.Files[i], slices.Collect(maps.Values(bodies)))
 		}
 		a.Entries = append(a.Entries, tr.entries()...)
 	}
@@ -138,29 +148,6 @@ func (tr *tsTrace) bindImportInto(n *node, t *tables, into map[string]tsImported
 	})
 }
 
-// bodies maps the IDs of the file's functions and methods to their bodies, as symbols lists them.
-func (tr *tsTrace) bodies() map[string]*node {
-	f, r := tr.f, tr.r
-	out := map[string]*node{}
-	for name, d := range tr.top {
-		switch d.Kind() {
-		case "function_declaration", "generator_function_declaration":
-			out[r.symbolID(f.path, name)] = d.ChildByFieldName("body")
-		case "class_declaration", "abstract_class_declaration":
-			for _, m := range named(d.ChildByFieldName("body")) {
-				if m.Kind() == "method_definition" {
-					out[r.symbolID(f.path, name)+"."+f.field(m, "name")] = m.ChildByFieldName("body")
-				}
-			}
-		case "variable_declarator":
-			if v := d.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
-				out[r.symbolID(f.path, name)] = v.ChildByFieldName("body")
-			}
-		}
-	}
-	return out
-}
-
 // reach reads what code reaches: global input or output APIs, imported names, and names declared
 // at the top of the file. Only the name is read, so a local variable of the same name counts too.
 // A value declared at the top of the file (const db = drizzle(pool)) gives what its initial value
@@ -174,6 +161,9 @@ func (tr *tsTrace) reach(n *node) reached {
 func (tr *tsTrace) reachInto(n *node, got *reached, values bool) {
 	f := tr.f
 	walk(n, func(x *node) bool {
+		if tr.skip[x.Id()] {
+			return false
+		}
 		if values { // the code of a value used here counts where it is used
 			got.read(x)
 		}

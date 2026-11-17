@@ -42,6 +42,9 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 			member: func(mod, name string) string { return r.packageMember(mod, name, t) }}
 		mod := module(f.path)
 		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo, made)}
+		tr.madeOutside = func(skip map[uintptr]bool) callLines {
+			return madeIn(f, f.root, skip, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) })
+		}
 		var fns []tfunc
 		for _, n := range named(f.root) {
 			def := definition(n)

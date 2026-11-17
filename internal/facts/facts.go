@@ -49,6 +49,11 @@ type File struct {
 	// Build is the condition a Go file is built under: its //go:build expression and its _GOOS and
 	// _GOARCH name, joined by &&. Empty for a file without one and for other languages.
 	Build string
+	// Calls, Through and CallAt are those of Symbol for the code of a product file outside the
+	// bodies of its functions and methods: package variables, class bodies, top-level statements.
+	Calls   []string
+	Through []string
+	CallAt  map[string]int
 }
 
 // ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
