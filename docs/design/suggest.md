@@ -174,6 +174,7 @@ rules:
 - **What is counted**: arrows are drawn from what `deps/not-in-diagram` and `deps/call-not-in-diagram` count. Where a call reaches (implementations of an interface, objects made in place, and so on) is read as the rule reads it
 - **Node IDs**: the label with everything but letters and digits made `_`. When two collide, a number is added. The root's box is `root`. An ID Mermaid reads otherwise (`end`, one starting with a digit) gets the prefix `u_`
 - **Output**: a heading, a short note that it is a draft, and a `mermaid` block. The call diagram's note adds that the box making and wiring everything is worth marking `wiring`
+- **Arrows both ways**: when two boxes import each other (call each other, for the call diagram), the pairs are listed after the note. Example: "These boxes depend on each other. Decide which way is right and remove the dependency going the other way: `internal/store` ⇄ `internal/domain`". The draft draws both arrows, as things are; which to remove is for a person to decide
 - **A person tidies it**: too many arrows, too coarse a grouping: a person decides what to change. Adding a diagram tightens the configuration, so it needs no review (exit code `3`). Adding arrows later loosens it and goes to review
 
 ### Where diagrams are recommended

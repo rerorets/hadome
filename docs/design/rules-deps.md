@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)).
+A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)). Even without a diagram, an import that makes a new cycle between units fails ([`deps/cycle`](#depscycle)).
 
 ## The diagram
 
@@ -103,8 +103,9 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 | `deps/not-in-diagram` | finding | An import between two of the repository's units is not drawn: no arrow between their nodes, or a unit no node covers |
 | `deps/diagram-stale` | finding | A node of the dependency diagram or the call diagram names a directory that holds no unit |
 | `deps/call-not-in-diagram` | finding | A call between two of the repository's units is not drawn in the call diagram |
+| `deps/cycle` | finding | An import the change added closes a cycle between units |
 
-`deps/not-in-diagram` is off until `rules.deps.diagram` is set, and `deps/call-not-in-diagram` until `rules.deps.calls` is; `deps/diagram-stale` looks only at the diagrams that are set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
+`deps/not-in-diagram` is off until `rules.deps.diagram` is set, and `deps/call-not-in-diagram` until `rules.deps.calls` is; `deps/diagram-stale` looks only at the diagrams that are set. `deps/cycle` works without a diagram. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
 
 ### `deps/not-in-diagram`
 
@@ -130,6 +131,19 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 - **Where it is reported**: the line of the call of that pair with the earliest path and line. The line comes from `CallAt` (see [Call lines](#call-lines)). A call whose line is unknown counts at the declaration of the calling function, or at the entry point. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
 - The anchor is the pair of directories, as for `deps/not-in-diagram`, so moving the call keeps it the same finding
 - Only calls hadome can follow are checked ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
+
+### `deps/cycle`
+
+- **What it finds**: an import from unit A to unit B that is both
+  - of a pair of directories no import of base has
+  - one from which head's imports lead from B back to A
+- **Why it matters**: units in a cycle can no longer be changed, tested or split out one at a time. It is the plainest form of a broken dependency direction. Example: `domain` imports `infra`, and `infra` imports `domain`
+- **Fix**: decide which way is right and remove the import going the other way. Usually the inner unit declares an interface and the outer one implements it
+- **Where it is reported**: at the added import. With two or more imports of the pair of directories, at the first by path and line. The message gives one way back, such as `store → domain → store`: the one through the fewest units, and among those, the first by directory names
+- The anchor is the pair of directories. As with `deps/not-in-diagram`, moving the import keeps the same violation
+- **Imports counted**: as for `deps/not-in-diagram`: only imports of product code between the repository's own units. Imports bringing in types only and imports of test files do not count
+- **The diagrams**: it looks apart from them. A new cycle between units fails even when the diagram draws arrows both ways, and so does a cycle between units within one box. An intended cycle takes an exception with a reason (`gate:allow deps/cycle reason: …`) on the import's line
+- **Cycles already there**: an import of a pair base has does not fail, even in a cycle. Only changes that make things worse are stopped
 
 ## Types
 
@@ -384,6 +398,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
+| `deps/cycle` | a new import closing a cycle fails · an import closing a cycle through three or more units fails too · an import of a cycle already there passes · a new import making no cycle passes · an import of types only passes even when it closes a cycle · an import of a test file passes even when it closes a cycle · a cycle between units within one box fails too |
 | `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
@@ -395,10 +410,15 @@ Only the places that take a value from outside are counted: parameters, attribut
 5. Adding `Through`, `Supertypes`, `Unfollowed` and `CallAt`, and `Calls`, `Through` and `CallAt` of `File`, changes no other fact, nor the results of rules and candidates that read `Calls`
 6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
 7. A call within one unit always passes
+8. `deps/cycle` fails only imports of pairs of directories base has no import of. An import of a pair base has never fails, even in a cycle
+9. Every import `deps/cycle` fails is on a cycle of head
 
 ## Deliberately left out
 
-- Cycles between nodes. The diagram decides what is allowed; if it draws a cycle, the cycle is allowed
+- Cycles between nodes. A diagram's arrows are allowed when the diagram draws them, even in a cycle. Cycles of imports between units are looked at apart from the diagram, by `deps/cycle`
+- Cycles of calls. Callbacks and calls through interfaces usually go against the imports; a cycle of calls is most often as designed, so it is not looked at
+- Telling of cycles already there. A cycle in base neither fails nor is told of. The drafts ([suggest.md](suggest.md)) list them as arrows both ways
+- Cycles through other modules. hadome does not read other modules, so a way back through an external library is not counted
 - Transitive arrows. `a --> b --> c` does not allow `a` to import `c`
 - External libraries in the diagram
 - Diagram formats other than Mermaid flowcharts
