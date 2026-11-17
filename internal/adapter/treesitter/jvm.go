@@ -12,9 +12,9 @@ import (
 )
 
 // jvm is what Java and Kotlin share: a unit is a package, imports name packages and classes, and
-// test code lives under src/test/.
+// test code lives where jvmTestPath says.
 type jvm struct {
-	packages map[string]string          // package -> its directory
+	packages map[string]bool            // the packages the repository's files declare
 	classes  map[string]map[string]bool // package -> class names of product code
 	scopes   map[string]int
 	// entries are the constants of the product's top-level enum classes: class target -> names.
@@ -32,8 +32,28 @@ type jvmDecl struct {
 
 var jvmTestDir = regexp.MustCompile(`(^|/)src/[A-Za-z]*[tT]est[A-Za-z]*/`)
 
+// jvmTestPath reports whether a file is test code by where it lies: under a directory of src/ whose
+// name has test in it (Gradle's src/test/, src/jvmTest/), or under a directory named test or
+// test@<platform> outside src/, as Kotlin Multiplatform layouts put tests beside their sources
+// (jvm/test/ beside jvm/src/, Amper's test@jvm/). A test directory inside src/ may be a package.
+func jvmTestPath(p string) bool {
+	if jvmTestDir.MatchString(p) {
+		return true
+	}
+	dirs := strings.Split(p, "/")
+	for _, d := range dirs[:len(dirs)-1] {
+		switch {
+		case d == "src":
+			return false
+		case d == "test" || strings.HasPrefix(d, "test@"):
+			return true
+		}
+	}
+	return false
+}
+
 func (j *jvm) reset() {
-	j.packages, j.classes, j.scopes = map[string]string{}, map[string]map[string]bool{}, map[string]int{}
+	j.packages, j.classes, j.scopes = map[string]bool{}, map[string]map[string]bool{}, map[string]int{}
 	j.entries, j.testTypes = map[string]map[string]bool{}, map[string][]jvmDecl{}
 }
 
@@ -82,15 +102,13 @@ var jvmSetupAnnotations = set("BeforeEach", "BeforeAll", "Before", "BeforeClass"
 
 // place sets a file's unit from its package declaration, and records the package and its classes.
 func (j *jvm) place(f *file, pkg string, classes []string) {
-	f.test = jvmTestDir.MatchString(f.path) || f.testGlob
+	f.test = jvmTestPath(f.path) || f.testGlob
 	f.unitPath = path.Dir(f.path)
 	f.unit = pkg
 	if pkg == "" {
 		f.unit = f.unitPath // the default package
 	}
-	if _, ok := j.packages[f.unit]; !ok || !f.test {
-		j.packages[f.unit] = f.unitPath
-	}
+	j.packages[f.unit] = true
 	if f.test {
 		return
 	}
