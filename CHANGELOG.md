@@ -37,7 +37,7 @@ https://github.com/rerorets/hadome/releases
 ### Other
 
 - `hadome suggest diagram` and `hadome suggest calls` draft the dependency and call diagrams from the imports and calls as they are; configuring a draft fails none of today's code. Boxes group units `--depth` levels down (2 by default), counting only directories that branch, per language. Pairs of boxes that depend on each other both ways are listed.
-- [Keeping design patterns](docs/patterns.md) is new: examples of keeping clean architecture and GoF patterns with the diagrams, layers and the cycle rule.
+- [Keeping design patterns](docs/patterns.md) is new: examples of keeping the direction of layers and GoF patterns with the diagrams, layers and the cycle rule.
 - The configuration `hadome init` writes, and the block of instructions for agents, recommend drafting the diagrams and proposing them to the person when there are none.
 
 - `deps/call-not-in-diagram` reports a call at the line where it is written. It used to report at the declaration of the calling function.
