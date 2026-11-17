@@ -4,7 +4,7 @@ Examples of how hadome's configuration keeps architecture patterns and the GoF d
 
 ## What hadome looks at
 
-hadome looks at the direction of imports and calls between the repository's units (a Go package, a Kotlin package, a TypeScript directory, and so on). So it keeps patterns that can be said as "which directory may depend on which". Patterns decided only by the shape inside a class, or by what happens at run time, it cannot keep.
+hadome looks at the direction of imports and calls between the repository's units (a Go package, a Kotlin package, a TypeScript directory, a Terraform module, an Ansible role, and so on). So it keeps patterns that can be said as "which directory may depend on which". Patterns decided only by the shape inside a class, or by what happens at run time, it cannot keep.
 
 | Tool | Configuration | Change it stops |
 |---|---|---|
