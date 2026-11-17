@@ -35,6 +35,20 @@ A missing item is normally reported as the base item. When the measure rule is a
 
 An item marked `Review` that is missing from head goes to the reviews instead of the regressions, like a finding marked `Review`.
 
+### Rules that find against base
+
+Some finding rules decide from base whether something in head is a violation. Example: `deps/cycle` fails only imports of pairs base does not have. Looking at one version alone, it could not tell an import that was already there and has just joined a new cycle from a new violation.
+
+Such a rule is a `BaseFindingRule` and has `FindAgainst(base, head Input)` instead of `Find`.
+
+| Version | What the engine calls |
+|---|---|
+| base | Nothing. It has no findings |
+| head | `FindAgainst(base, head)`. Its findings are suppressed by exception markers like any other, and become regressions or reviews |
+
+- Base has no findings, so no head finding matches base, and each is a regression. Leaving out what was already there, by looking at base, is the rule's job
+- An exception marker that suppressed such a finding suppresses nothing once the change is in base. It shows up as `engine/marker-unused` in both versions, which match, so it is no regression. It can be removed
+
 ## Matching findings across versions
 
 A finding must be recognised as "the same one" in base and head even when lines move. Line numbers alone would make every edit above a finding look like a new violation.
@@ -260,6 +274,10 @@ classDiagram
     <<interface>>
     +Find(in Input) ([]Finding, error)
   }
+  class BaseFindingRule {
+    <<interface>>
+    +FindAgainst(base Input, head Input) ([]Finding, error)
+  }
   class MeasureRule {
     <<interface>>
     +Measure(in Input) ([]Item, error)
@@ -317,11 +335,14 @@ classDiagram
   Engine --> Rule
   Source --> Version
   Rule <|-- FindingRule
+  Rule <|-- BaseFindingRule
   Rule <|-- MeasureRule
   MeasureRule <|-- LossExplainer
   FindingRule ..> Input
+  BaseFindingRule ..> Input
   MeasureRule ..> Input
   FindingRule --> Finding
+  BaseFindingRule --> Finding
   MeasureRule --> Item
   Engine --> Report
   Report --> Finding

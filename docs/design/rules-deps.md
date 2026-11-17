@@ -168,6 +168,7 @@ rules:
   - Adding a pair loosens the configuration, so it goes to review (exit code `3`). Removing one needs none
   - An entry that is no pair (no `<->`, or an empty pattern) is a configuration error (exit code `2`)
 - **Cycles already there**: an import of a pair base has does not fail, even in a cycle. Only changes that make things worse are stopped
+  - Because it looks at base, it is a `BaseFindingRule` of the engine ("[Rules that find against base](engine.md#rules-that-find-against-base)"). An exception marker suppresses nothing once the change is in base. It can stay or be removed
 
 ## Types
 
