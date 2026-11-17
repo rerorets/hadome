@@ -15,6 +15,18 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.7.0 - 2026-11-17
+
+### Finds more
+
+- `deps/call-not-in-diagram` also counts calls made outside functions and methods: code at the top of a module, initial values of fields, decorators, default values of parameters, initial values of a Go package's `var`s, and the like. They count as calls from the file's unit.
+- Calls through a module brought in with Rust's `use crate::store::{self, Finder}` are counted too.
+
+### Other
+
+- `deps/call-not-in-diagram` reports a call at the line where it is written. It used to report at the declaration of the calling function.
+- `hadome mutate` gives the test command a temporary directory of its own, and empties it at every run. Before, every `go test` stopped at its time limit left its work directory behind in the temporary directory.
+
 ## 0.6.0 - 2026-11-17
 
 ### Finds more
