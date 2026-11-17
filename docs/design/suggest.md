@@ -148,7 +148,7 @@ The dependency diagram and the call diagram ([rules-deps.md](rules-deps.md)) tak
 |---|---|
 | `hadome suggest diagram` | Prints a draft of the dependency diagram, as the contents of a Markdown file |
 | `hadome suggest calls` | Prints a draft of the call diagram, in the same form |
-| With `--depth N` | Changes the depth boxes are grouped at. Default `2` |
+| With `--depth N` | Changes the depth (the number of branching levels) boxes are grouped at. Default `2` |
 
 ```sh
 hadome suggest diagram > docs/dependencies.md
@@ -164,7 +164,10 @@ rules:
 
 - **Why as things are**: hadome stops only changes that make things worse. A diagram of things as they are is the first baseline as it is. A change adding the diagram fails nothing
 - **Grouping boxes**: units' directories are grouped at the `N`th level from the root. Example: with `N` at `2`, `internal/store/content` goes in the box `internal/store/...`
-  - A unit shallower than `N` levels gets a box of its directory alone. Example: `cmd`
+  - **Counting levels**: only a step below a directory that branches counts as a level. A directory branches when it has two or more child directories holding units (somewhere below them). Whether the directory itself is a unit does not count
+  - Example: in Kotlin's `modules/server/src/main/kotlin/com/example/shop/order`, `src/main/kotlin/com/example` have one child each and do not count. When the root splits into `modules` and `scripts` and `shop` into `order` and `user`, with `N` at `2` one box takes in `modules/server/src/main/kotlin/com/example/shop/order` and what is under it
+  - Counted by path segments alone, a repository with long unbranched paths, as in Java and Kotlin, would put all its product code in one box. Example: in a local Kotlin repository, 155 packages became the one box `modules/server/...`
+  - A unit that does not branch down to `N` levels gets a box of its directory alone. Example: `cmd`
   - The unit of the files at the root gets a box labelled `.`
   - Every unit is in some box, since an import of a unit in no box fails
 - **Arrows**: one arrow between two boxes when at least one import (a call, for the call diagram) goes between them. Nothing within a box is drawn
