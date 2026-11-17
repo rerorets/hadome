@@ -224,3 +224,17 @@ func TestADirectoryOfTwoLanguagesIsGroupedByTheFirstByName(t *testing.T) {
 		t.Errorf("want src/main/kotlin/a/x in the box src/main/kotlin/a/..., got\n%s", got)
 	}
 }
+
+// viewpoint: external contract
+// target: deps.DraftDiagram
+// A draft stays in the user's repository, so its note points at the examples by design pattern,
+// for whoever tidies it later.
+func TestADraftPointsAtTheExamplesByPattern(t *testing.T) {
+	const guide = "https://github.com/rerorets/hadome/blob/main/docs/patterns.md"
+	a := &facts.Analysis{}
+	for name, got := range map[string]string{"dependencies": deps.DraftDiagram(a, 2), "calls": deps.DraftCalls(a, 2)} {
+		if note, _, _ := strings.Cut(got, "```"); !strings.Contains(note, guide) {
+			t.Errorf("want the %s draft's note to point at %s, got\n%s", name, guide, got)
+		}
+	}
+}

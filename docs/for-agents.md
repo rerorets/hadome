@@ -140,6 +140,8 @@ When `.hadome.yml` lists layers (`rules.deps.layers`), an import from an inner l
 
 When there is no diagram, draft them with `hadome suggest diagram` and `hadome suggest calls` and propose them to the person. A draft draws the imports and calls as they are, so configuring it fails none of today's code. How boxes are grouped (`--depth`) and which box gets `wiring` are for deciding with the person.
 
+When tidying a diagram, writing layers or allowed pairs, or when the repository looks like a known design pattern (layered, Feature-Sliced Design, modular monolith, MVVM and the like), read [Keeping design patterns](patterns.md). For each pattern it shows whether a diagram, layers or allowed pairs write it and how, and what cannot be kept. Which pattern to apply is the person's decision: propose it with the reason.
+
 Proved by: `hadome check` reports no `deps/` regression.
 
 ## Invariant candidates
