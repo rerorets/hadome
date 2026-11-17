@@ -20,6 +20,7 @@ type processTree struct {
 	mu      sync.Mutex
 	pid     int       // the command's, which is also the group's ID; 0 until it started
 	dying   os.Signal // a signal that came to end hadome while the command ran
+	last    func()    // run once the tree has ended, before hadome ends by a signal; may be nil
 }
 
 // ownTree makes the command lead a process group of its own when it starts.
@@ -27,9 +28,9 @@ type processTree struct {
 // Out of the terminal's process group, the command no longer receives the terminal's interrupt
 // (Ctrl-C), hangup or a terminate sent to that group. So while the command runs, hadome takes those
 // signals itself: it kills the group, then ends itself by the same signal, as it would have without
-// a handler. A signal hadome was started ignoring stays ignored.
-func ownTree(cmd *exec.Cmd) (*processTree, error) {
-	t := &processTree{cmd: cmd, sigs: make(chan os.Signal, 1), relayed: make(chan struct{})}
+// a handler. A signal hadome was started ignoring stays ignored. Before it ends itself, it runs last.
+func ownTree(cmd *exec.Cmd, last func()) (*processTree, error) {
+	t := &processTree{cmd: cmd, sigs: make(chan os.Signal, 1), relayed: make(chan struct{}), last: last}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	// exec calls Cancel only after the command started, so cmd.Process is set.
 	cmd.Cancel = func() error {
@@ -101,6 +102,9 @@ func (t *processTree) end() {
 // with a status of its own first. With no channel notified, the runtime ends the process on s,
 // so waiting here ends too. end waits for relay, so the run stops while relay waits.
 func (t *processTree) raise(s os.Signal) {
+	if t.last != nil {
+		t.last()
+	}
 	signal.Stop(t.sigs)
 	syscall.Kill(syscall.Getpid(), s.(syscall.Signal))
 	select {}

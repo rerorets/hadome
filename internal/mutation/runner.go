@@ -57,7 +57,13 @@ type Runner struct {
 	before map[string]baseline // by command
 	// skipped is told once of each narrowed command that fails with nothing broken.
 	skipped func(cmd []string)
-	clock   clock
+	// temp is the temporary directory the test command is given, emptied before and after each run
+	// (TempFor). Empty means the command gets hadome's own.
+	temp string
+	// unemptied is told when temp could not be emptied, once per runner.
+	unemptied func(error)
+	warned    bool
+	clock     clock
 }
 
 // baseline is what a command did with nothing broken.
@@ -222,21 +228,41 @@ func (r *Runner) run(argv []string, limit time.Duration) (string, bool, bool, er
 	if seen != nil {
 		w = io.MultiWriter(&out, seen)
 	}
-	passed, err := runTree(ctx, r.dir, argv, w)
+	r.emptyTemp()
+	passed, err := runTree(ctx, r.dir, r.temp, argv, w)
+	r.emptyTemp()
 	return out.String(), passed, ctx.Err() != nil, err
 }
 
+// emptyTemp empties the test command's temporary directory. A directory that cannot be emptied
+// changes no result, so it is only told of.
+func (r *Runner) emptyTemp() {
+	if r.temp == "" {
+		return
+	}
+	if err := empty(r.temp); err != nil && !r.warned && r.unemptied != nil {
+		r.warned = true
+		r.unemptied(err)
+	}
+}
+
 // runTree runs a command in dir until it ends or ctx is done, writing what it prints to out, and
-// reports whether it passed. The command is the root of a tree of processes, such as go test and
+// reports whether it passed. With temp, the command is given temp as its temporary directory, and
+// an interrupt that ends hadome empties it once the tree has ended. The command is the root of a tree of processes, such as go test and
 // the test binaries it starts, and nothing of the tree outlives the run: ctx being done ends the
 // whole tree, and whatever the command leaves running when it exits is ended without a word.
 // Along with an error, it reports that the command did not pass.
-func runTree(ctx context.Context, dir string, argv []string, out io.Writer) (passed bool, err error) {
+func runTree(ctx context.Context, dir, temp string, argv []string, out io.Writer) (passed bool, err error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.WaitDelay = 5 * time.Second // a child that keeps the output open must not hang the run
-	tree, err := ownTree(cmd)
+	var last func()
+	if temp != "" {
+		cmd.Env = tempEnv(temp)
+		last = func() { empty(temp) }
+	}
+	tree, err := ownTree(cmd, last)
 	if err != nil {
 		return passed, err
 	}

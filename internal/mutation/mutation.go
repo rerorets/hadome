@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -43,6 +42,9 @@ type Mutate struct {
 	Lang string
 	// Trees is the working directory the versions are copied into, kept between runs (TreesFor).
 	Trees string
+	// Temp is the temporary directory the test commands are given (TempFor). Empty means they get
+	// hadome's own.
+	Temp string
 }
 
 // Run tries the mutants of head, then base's counterparts of head's survivors, and compares the two
@@ -233,6 +235,11 @@ func (m *Mutate) runner(role string, v engine.Version, marked map[string]string,
 	if err != nil {
 		return nil, err
 	}
+	r.temp = m.Temp
+	r.unemptied = func(err error) {
+		fmt.Fprintln(m.Progress, engine.T("mutate: %s, the test command's temporary directory, could not be emptied; it is tried again before the next run: %v",
+			m.Temp, err).In(lang))
+	}
 	if err := r.clean(); err != nil {
 		return nil, err
 	}
@@ -250,17 +257,6 @@ func marks(a *facts.Analysis, mutants []facts.Mutant) map[string]string {
 		out[mu.Path] = lineComment(languages[mu.Path])
 	}
 	return out
-}
-
-// hold takes the lock of the working directory, so that no other hadome mutate copies into it.
-func (m *Mutate) hold() (release func(), err error) {
-	if m.Trees == "" {
-		return nil, errors.New("no working directory to copy the versions into")
-	}
-	if err := os.MkdirAll(m.Trees, 0o755); err != nil {
-		return nil, err
-	}
-	return lock(filepath.Join(m.Trees, "lock"))
 }
 
 // callers maps each function to the active tests that call it.

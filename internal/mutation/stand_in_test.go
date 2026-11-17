@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -41,8 +42,9 @@ const (
 	// HOLD` says "ready" and blocks forever (StandInLeafRun says how on each platform).
 	StandInLeaf = "stand-in-leaf"
 	// StandInRunTree makes the binary a hadome mutate running a test command:
-	// `<binary> stand-in-run-tree WATCH` runs StandInTree in mode hang with WATCH, its output going
-	// to standard output, until the binary is ended by a signal. No test starts it on Windows.
+	// `<binary> stand-in-run-tree WATCH TEMP` runs StandInTree in mode hang with WATCH, giving it TEMP
+	// as its temporary directory and its output going to standard output, until the binary is ended
+	// by a signal. No test starts it on Windows.
 	StandInRunTree = "stand-in-run-tree"
 	// StandInHolder makes the binary a test binary that runs a test command: `<binary>
 	// stand-in-holder WATCH` holds a lifeline of its own (HoldLifeline), starts StandInTree in mode
@@ -58,6 +60,11 @@ const (
 	// `<binary> stand-in-after-run` runs a command that passes at once, then interrupts itself, and
 	// says "no signal" if it is still running. No test starts it on Windows.
 	StandInAfterRun = "stand-in-after-run"
+	// StandInTemp makes the binary a test command that uses its temporary directory:
+	// `<binary> stand-in-temp MODE` says "temp DIR N", DIR being its temporary directory and N the
+	// number of entries in it, and writes a directory with a file into it. Then, with MODE hang, it
+	// says "hanging" and never ends; with MODE exit, it exits 0.
+	StandInTemp = "stand-in-temp"
 )
 
 // hanging is what StandInStage says when it starts to hang, so that a test's clock can end the run
@@ -150,7 +157,7 @@ func StandInTreeRoot(mode, watch, hold string) int {
 }
 
 // StandInRunTreeRun is the hadome mutate of StandInRunTree.
-func StandInRunTreeRun(watch string) int {
+func StandInRunTreeRun(watch, temp string) int {
 	exe, err := os.Executable()
 	if err != nil {
 		fmt.Println(err)
@@ -162,7 +169,7 @@ func StandInRunTreeRun(watch string) int {
 		return 2
 	}
 	defer os.RemoveAll(dir)
-	_, err = runTree(context.Background(), dir, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
+	_, err = runTree(context.Background(), dir, temp, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
 	fmt.Println("the run ended without a signal:", err)
 	return 2
 }
@@ -260,4 +267,28 @@ func WatchLifeline() {
 	if v := os.Getenv(lifelineEnv); v != "" {
 		watchLifeline(v)
 	}
+}
+
+// StandInTempRun is the test command of StandInTemp.
+func StandInTempRun(mode string) int {
+	dir := os.TempDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	fmt.Printf("temp %s %d\n", dir, len(entries))
+	if err := os.MkdirAll(filepath.Join(dir, "go-build1", "b001"), 0o755); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go-build1", "b001", "x.a"), []byte("x"), 0o644); err != nil {
+		fmt.Println(err)
+		return 2
+	}
+	if mode == "hang" {
+		fmt.Println(hanging)
+		time.Sleep(time.Hour) // the runner's limit ends it
+	}
+	return 0
 }

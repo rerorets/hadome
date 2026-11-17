@@ -1,8 +1,10 @@
 package mutation
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -27,4 +29,23 @@ func writePid(f *os.File) error {
 	}
 	_, err := f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
 	return err
+}
+
+// hold takes the lock of the working directory, so that no other hadome mutate copies into it.
+func (m *Mutate) hold() (release func(), err error) {
+	if m.Trees == "" {
+		return nil, errors.New("no working directory to copy the versions into")
+	}
+	if err := os.MkdirAll(m.Trees, 0o755); err != nil {
+		return nil, err
+	}
+	release, err = lock(filepath.Join(m.Trees, "lock"))
+	if err != nil || m.Temp == "" {
+		return release, err
+	}
+	if err := ownTemp(m.Temp); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
 }

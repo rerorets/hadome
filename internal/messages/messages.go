@@ -224,7 +224,8 @@ var Japanese = map[string]string{
 
 	// hadome mutate's progress lines.
 	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
-	"mutate: %s fails with nothing broken, so it judges no mutant; they go to the next command": "変異: 何も壊さなくても %s が落ちるので、このコマンドでは変異を判定しない。次のコマンドに回す",
+	"mutate: %s fails with nothing broken, so it judges no mutant; they go to the next command":                           "変異: 何も壊さなくても %s が落ちるので、このコマンドでは変異を判定しない。次のコマンドに回す",
+	"mutate: %s, the test command's temporary directory, could not be emptied; it is tried again before the next run: %v": "変異: テストのコマンドの一時ディレクトリ %s を空にできなかった。次の実行の前にもう一度空にする: %v",
 	"caught":                  "テストが気づいた",
 	"survived":                "どのテストも気づかない",
 	"not built":               "ビルドに入らない",

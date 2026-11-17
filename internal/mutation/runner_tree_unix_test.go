@@ -136,7 +136,8 @@ func StandInLeafRun(watch, hold string) int {
 // target: mutation.runTree
 // Invariant 11: the test command and what it starts run out of hadome's process group, and so out
 // of the terminal's, so an interrupt such as Ctrl-C reaches hadome alone. hadome ends the
-// command's tree, then ends by that same signal.
+// command's tree, then ends by that same signal. Invariant 20: before it ends, it empties the
+// temporary directory it gave the command.
 func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 	t.Parallel()
 	exe, err := os.Executable()
@@ -165,7 +166,7 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 			}
 			cancel()
 		}}
-		if _, err := runTree(ctx, t.TempDir(), []string{exe, StandInTree, "hang", w.arg, "-"}, out); err != nil {
+		if _, err := runTree(ctx, t.TempDir(), "", []string{exe, StandInTree, "hang", w.arg, "-"}, out); err != nil {
 			t.Fatal(err)
 		}
 		if group != nil {
@@ -184,7 +185,8 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 		t.Run(sig.String(), func(t *testing.T) {
 			t.Parallel()
 			w := watchLeaf(t)
-			cmd := exec.Command(exe, StandInRunTree, w.arg)
+			temp := filledTemp(t)
+			cmd := exec.Command(exe, StandInRunTree, w.arg, temp)
 			out, err := cmd.StdoutPipe()
 			if err != nil {
 				t.Fatal(err)
@@ -210,6 +212,9 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 			if !ok || !ws.Signaled() || ws.Signal() != sig {
 				t.Errorf("want hadome ended by %v, got %v", sig, err)
 			}
+			if left := entriesOf(t, temp); len(left) > 0 {
+				t.Errorf("want the temporary directory emptied before hadome ended, got %q in it", left)
+			}
 		})
 	}
 }
@@ -232,7 +237,7 @@ func StandInEarlySignalRun(mode, watch string) int {
 		fmt.Println(err)
 		return 2
 	}
-	tree, err := ownTree(cmd)
+	tree, err := ownTree(cmd, nil)
 	if err != nil {
 		fmt.Println(err)
 		return 2
@@ -266,7 +271,7 @@ func StandInAfterRunRun() int {
 		return 2
 	}
 	defer os.RemoveAll(dir)
-	if passed, err := runTree(context.Background(), dir, []string{exe, "-test.run=^$"}, io.Discard); !passed || err != nil {
+	if passed, err := runTree(context.Background(), dir, "", []string{exe, "-test.run=^$"}, io.Discard); !passed || err != nil {
 		fmt.Println("the command did not pass:", err)
 		return 2
 	}
