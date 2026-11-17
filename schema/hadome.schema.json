@@ -306,6 +306,33 @@
               "description": "The Markdown file, from the repository root, whose Mermaid flowchart is the dependency diagram. Node labels name directories (dir, or dir/... for everything under it); an arrow a --\u003e b lets a import b. Without it, the deps/ rules find nothing. Adding an arrow needs a person's review.",
               "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\\.md$",
               "type": "string"
+            },
+            "layers": {
+              "description": "The layers of the architecture, from the inside out, each a name and directory globs. deps/layer fails an import from a unit of an inner layer to a unit of an outer layer; a unit matching two layers is in the one written first. Writing layers needs no review; changing them afterwards does.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "description": "The layer's name, which messages use.",
+                    "pattern": "^\\S(.*\\S)?$",
+                    "type": "string"
+                  },
+                  "paths": {
+                    "description": "Globs of the directories of the layer's units.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths"
+                ],
+                "type": "object"
+              },
+              "type": "array"
             }
           },
           "type": "object"

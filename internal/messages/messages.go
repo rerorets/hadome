@@ -173,8 +173,12 @@ var Japanese = map[string]string{
 	"call through the layers the call diagram allows; if the design changed, draw the arrow, which a person reviews":                   "呼び出しの図が許す層を通して呼ぶ。設計が変わったなら矢印を描く。矢印は人が確かめる",
 
 	// deps/.
-	"import not in the diagram: %s → %s (%s)": "図に無い import: %s → %s（%s）",
-	"import closes a cycle: %s":               "循環を閉じる import: %s",
+	"import not in the diagram: %s → %s (%s)":                                   "図に無い import: %s → %s（%s）",
+	"import from an inner layer: %s → %s (layer %s imports the outer layer %s)": "内側の層からの import: %s → %s（層 %s が、外側の層 %s を import している）",
+	"an import from a unit of an inner layer to a unit of an outer layer":       "内側の層のユニットから、外側の層のユニットへの import",
+	"dependencies point from the outside in; an inner layer importing an outer one ties the core to details such as the database or the web framework, and makes it hard to replace and to test": "依存は外側から内側へ向かう。内側の層が外側の層を import すると、中心のコードがデータベースや Web の枠組みのような細部に縛られ、取り替えにくく、テストしにくくなる",
+	"let the inner layer declare an interface the outer layer implements; if the design changed, rewrite the layers, which a person reviews":                                                     "内側の層がインターフェースを宣言し、外側の層がそれを実装する。設計が変わったなら層を書き換える。書き換えは人が確かめる",
+	"import closes a cycle: %s": "循環を閉じる import: %s",
 	"an import of a pair of units base does not have that closes a cycle between units":                                                                        "base に無いユニットの組の import のうち、ユニットの間の循環を閉じるもの",
 	"units in a cycle can no longer be changed, tested or split apart one at a time; it is the plainest sign that the direction of dependencies broke":         "循環したユニットは、片方だけを変えたり、テストしたり、切り出したりできなくなる。依存の向きが崩れたことの、いちばん分かりやすい形",
 	"decide which direction is right and remove the import going the other way, often by letting the inner unit declare an interface the outer one implements": "どちらの向きが正しいかを決め、逆向きの import を消す。多くの場合、内側のユニットがインターフェースを宣言し、外側のユニットがそれを実装する",

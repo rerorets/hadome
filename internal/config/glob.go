@@ -53,13 +53,3 @@ func GlobPair(entry string) (string, string, bool) {
 	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
 	return a, b, ok && a != "" && b != "" && validGlob(a) && validGlob(b)
 }
-
-// cycleAllow splits the validated entries of rules.deps.cycles.allow into their two globs.
-func cycleAllow(v any) [][2]string {
-	var out [][2]string
-	for _, e := range textList(v) {
-		a, b, _ := GlobPair(e)
-		out = append(out, [2]string{a, b})
-	}
-	return out
-}

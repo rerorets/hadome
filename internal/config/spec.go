@@ -88,7 +88,7 @@ type Key struct {
 	Unique bool
 	// OmittedIsWidest means leaving the key out covers everything, so omitting it never loosens.
 	OmittedIsWidest bool
-	// OmittedIsOff means leaving the object out turns its feature off, so adding the object to a base
+	// OmittedIsOff means leaving the object or list out turns its feature off, so adding it to a base
 	// that lacks it never loosens, whatever it holds.
 	OmittedIsOff bool
 }
@@ -254,6 +254,21 @@ var depsKey = Key{
 			"deps/cycle does not follow, in either direction: cycles a design accepts, such as a view and its presenter. "+
 			"Adding a pair needs a person's review.",
 			"allow: [app/ui/** <-> app/presenter/**]", LooserWhenAdded, Key{Kind: KindString, GlobPair: true})},
+	}, layersKey},
+}
+
+// layersKey is rules.deps.layers. Once written, any change may make it stricter or looser in ways
+// hard to tell apart, so every change needs review; writing it the first time needs none.
+var layersKey = Key{
+	Name: "layers", Kind: KindList, Sequence: true, Looser: LooserAlways, OmittedIsOff: true, Unique: true, Identity: []string{"name"},
+	Doc: "The layers of the architecture, from the inside out, each a name and directory globs. deps/layer fails an import " +
+		"from a unit of an inner layer to a unit of an outer layer; a unit matching two layers is in the one written first. " +
+		"Writing layers needs no review; changing them afterwards does.",
+	Example: "layers:\n  - name: domain\n    paths: [domain/**]\n  - name: adapters\n    paths: [infra/**, web/**]",
+	Elem: &Key{Kind: KindObject, Fields: []Key{
+		{Name: "name", Kind: KindString, Required: true, Pattern: `^\S(.*\S)?$`, Doc: "The layer's name, which messages use.", Example: "name: domain"},
+		{Name: "paths", Kind: KindList, Required: true, MinItems: 1, Elem: &globs,
+			Doc: "Globs of the directories of the layer's units.", Example: "paths: [infra/**, web/**]"},
 	}},
 }
 
