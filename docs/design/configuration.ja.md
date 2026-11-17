@@ -106,6 +106,8 @@ rules:                         # 任意。既定と違うものだけ
   deps:
     diagram: docs/conventions/dependencies.md  # Mermaid の flowchart。矢印を足すには人の確認が要る
     calls: docs/conventions/calls.md         # 呼び出しの図。矢印や wiring を足すには人の確認が要る
+    cycles:
+      allow: ["app/ui/** <-> app/presenter/**"] # 循環を許すディレクトリの組（deps/cycle）。足すには人の確認が要る
 
 files:                         # 任意。言語の慣習から外れた配置のため
   tests: ["checks/**"]         # テストのファイルとして読む（Go、Terraform、Ansible のファイルには当てない）。変えるには人の確認が要る

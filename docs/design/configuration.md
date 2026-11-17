@@ -85,6 +85,8 @@ rules:                         # optional; only what differs from the defaults
   deps:
     diagram: docs/conventions/dependencies.md  # a Mermaid flowchart; adding an arrow needs review
     calls: docs/conventions/calls.md         # the call diagram; adding an arrow or wiring needs review
+    cycles:
+      allow: ["app/ui/** <-> app/presenter/**"] # directory pairs whose cycle is allowed (deps/cycle); adding one needs review
 
 files:                         # optional; for layouts against the languages' conventions
   tests: ["checks/**"]         # read as test files (not applied to Go, Terraform or Ansible files); changing it needs review
