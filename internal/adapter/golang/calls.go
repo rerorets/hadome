@@ -200,7 +200,7 @@ func (w *walker) otherCall(x ast.Expr, t *vtype, name string) bool {
 		return true
 	}
 	if param, ok := x.(*ast.Ident); ok && t == nil {
-		w.trace.callThrough(param.Name, name)
+		w.trace.callThrough(param.Name, name, w.fset.Position(x.Pos()).Line)
 	}
 	return false
 }
@@ -239,7 +239,7 @@ func (w *walker) toolCall(c *ast.CallExpr, name string) {
 func (w *walker) record(id string, c *ast.CallExpr) {
 	cc := w.calls[id]
 	if cc == nil {
-		cc = &callCount{scopes: map[string]bool{}}
+		cc = &callCount{scopes: map[string]bool{}, line: w.fset.Position(c.Pos()).Line}
 		w.calls[id] = cc
 	}
 	cc.times++

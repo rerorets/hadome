@@ -21,15 +21,17 @@ type trace struct {
 	// through the methods called on them, <interface>.<method>: where such a call lands depends on
 	// the value passed, so it is not among the calls.
 	ifaces  map[string]string
-	through map[string]bool
+	through map[string]int // -> the line of the first call
 }
 
-// throughIDs returns the calls through an interface that are not among the walker's calls, sorted.
-func (t *trace) throughIDs(w *walker) []string {
+// throughIDs returns the calls through an interface that are not among the walker's calls, sorted,
+// and adds their lines to at.
+func (t *trace) throughIDs(w *walker, at map[string]int) []string {
 	var out []string
-	for c := range t.through {
+	for c, line := range t.through {
 		if w.calls[c] == nil {
 			out = append(out, c)
+			at[c] = line
 		}
 	}
 	sort.Strings(out)
@@ -45,9 +47,12 @@ func (t *trace) interfaceParam(name string, declared *vtype) {
 
 // callThrough records a method called on a parameter declared with one of the repository's
 // interfaces.
-func (t *trace) callThrough(param, method string) {
-	if t != nil && t.ifaces[param] != "" {
-		t.through[t.ifaces[param]+"."+method] = true
+func (t *trace) callThrough(param, method string, line int) {
+	if t == nil || t.ifaces[param] == "" {
+		return
+	}
+	if id := t.ifaces[param] + "." + method; t.through[id] == 0 {
+		t.through[id] = line
 	}
 }
 
@@ -92,7 +97,7 @@ func (t *trace) route(w *walker, c *ast.CallExpr) bool {
 			inner.local = newBlock(w.local)
 			inner.bindParams(lit.Type, nil)
 			ast.Inspect(lit.Body, inner.visit)
-			t.entries = append(t.entries, facts.Entry{Path: t.path, Line: line, Calls: callIDs(inner)})
+			t.entries = append(t.entries, facts.Entry{Path: t.path, Line: line, Calls: callIDs(inner), CallAt: callLines(inner)})
 			continue
 		}
 		if id := w.funcRef(a); id != "" {
@@ -126,6 +131,15 @@ func (w *walker) funcRef(e ast.Expr) string {
 	return ""
 }
 
+// callLines returns the line of the first call of each ID the walker called.
+func callLines(w *walker) map[string]int {
+	out := make(map[string]int, len(w.calls))
+	for id, cc := range w.calls {
+		out[id] = cc.line
+	}
+	return out
+}
+
 func callIDs(w *walker) []string {
 	out := make([]string, 0, len(w.calls))
 	for id := range w.calls {
@@ -150,7 +164,7 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 			continue
 		}
 		id := funcID(pf.pkgPath, d)
-		t := &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset, ifaces: map[string]string{}, through: map[string]bool{}}
+		t := &trace{units: map[string]bool{}, path: pf.path, fset: rd.fset, ifaces: map[string]string{}, through: map[string]int{}}
 		w := newWalker(rd, pf, nil)
 		w.testKey, w.trace = "", t
 		if d.Recv != nil && len(d.Recv.List) == 1 && len(d.Recv.List[0].Names) == 1 {
@@ -166,16 +180,25 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 		if id == "" || !ok {
 			continue
 		}
-		s := &syms[i]
-		s.IO, s.Calls, s.Through = t.io, callIDs(w), t.throughIDs(w)
-		for u, used := range t.units {
-			if used && u != pf.pkgPath {
-				s.Units = append(s.Units, u)
-			}
-		}
-		sort.Strings(s.Units)
+		t.fill(&syms[i], w, pf.pkgPath)
 	}
 	return syms, entries
+}
+
+// fill sets what a function's walk found on its symbol: its calls with their lines, the units it
+// uses other than its own package, and whether it does input or output.
+func (t *trace) fill(s *facts.Symbol, w *walker, pkgPath string) {
+	s.IO, s.Calls, s.CallAt = t.io, callIDs(w), callLines(w)
+	s.Through = t.throughIDs(w, s.CallAt)
+	if len(s.CallAt) == 0 {
+		s.CallAt = nil
+	}
+	for u, used := range t.units {
+		if used && u != pkgPath {
+			s.Units = append(s.Units, u)
+		}
+	}
+	sort.Strings(s.Units)
 }
 
 // handlerShape reports a function whose parameters are (http.ResponseWriter, *http.Request): an

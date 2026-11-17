@@ -9,9 +9,9 @@ import (
 	"github.com/rerorets/hadome/internal/facts"
 )
 
-// callEdge is one call between two of the repository's units, at the caller. Via is the method
-// the code names when the call lands on another one, an implementation of it; it is empty when the
-// callee is the one named.
+// callEdge is one call between two of the repository's units, at the line of the call, or of the
+// caller where an adapter does not know it. Via is the method the code names when the call lands on
+// another one, an implementation of it; it is empty when the callee is the one named.
 type callEdge struct {
 	fromUnit, toUnit string
 	path             string
@@ -26,12 +26,16 @@ type callEdge struct {
 func callEdges(a *facts.Analysis) []callEdge {
 	r := newReaches(a)
 	var out []callEdge
-	add := func(path string, line int, caller string, calls []string) {
+	add := func(path string, line int, caller string, calls []string, at map[string]int) {
 		from := r.unitOf[path]
 		for _, c := range calls {
+			called := line
+			if at[c] > 0 {
+				called = at[c]
+			}
 			for _, t := range r.targets(c) {
 				if from != "" && t.unit != from {
-					e := callEdge{fromUnit: from, toUnit: t.unit, path: path, line: line, caller: caller, callee: t.callee}
+					e := callEdge{fromUnit: from, toUnit: t.unit, path: path, line: called, caller: caller, callee: t.callee}
 					if t.callee != c {
 						e.via = c
 					}
@@ -41,12 +45,12 @@ func callEdges(a *facts.Analysis) []callEdge {
 		}
 	}
 	for _, s := range a.Symbols {
-		add(s.Path, s.Line, s.ID, s.Calls)
-		add(s.Path, s.Line, s.ID, s.Through)
+		add(s.Path, s.Line, s.ID, s.Calls, s.CallAt)
+		add(s.Path, s.Line, s.ID, s.Through, s.CallAt)
 	}
 	for _, e := range a.Entries {
 		if e.Symbol == "" {
-			add(e.Path, e.Line, "", e.Calls)
+			add(e.Path, e.Line, "", e.Calls, e.CallAt)
 		}
 	}
 	return out

@@ -122,7 +122,7 @@ func (ty *tsTypes) supertypes(sup supers) {
 // repository's types: the class's fields and constructor parameter properties (this.store.save()),
 // the function's parameters and locals (store.save()), and the values at the top of the file
 // (tsModuleValues). It also counts the calls on such values whose type is not written, or any.
-func (ty *tsTypes) through(decl, class *node, module map[string]string) ([]string, int) {
+func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLines, int) {
 	f := ty.tr.f
 	fields, vars, locals := tsFields(f, class), map[string]string{}, map[string]bool{}
 	walk(decl, func(x *node) bool {
@@ -138,7 +138,7 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) ([]strin
 		}
 		return true
 	})
-	out, unfollowed := map[string]bool{}, 0
+	out, unfollowed := callLines{}, 0
 	walk(decl.ChildByFieldName("body"), func(x *node) bool {
 		if x.Kind() != "call_expression" {
 			return true
@@ -160,22 +160,22 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) ([]strin
 		if written == unknownType {
 			unfollowed++
 		} else if id := ty.resolve(written); id != "" && method != "" {
-			out[id+"."+method] = true
+			out.add(id+"."+method, line(x))
 		}
 		return true
 	})
-	for _, id := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
-		out[id] = true
+	for id, at := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
+		out.add(id, at)
 	}
-	return keys(out), unfollowed
+	return out, unfollowed
 }
 
 // throughs maps the IDs of the file's functions and methods to their calls through a value's
 // declared type, and to the number of calls on values whose type is unknown, as bodies lists them.
-func (ty *tsTypes) throughs(made map[string]string) (map[string][]string, map[string]int) {
+func (ty *tsTypes) throughs(made map[string]string) (map[string]callLines, map[string]int) {
 	f, r := ty.tr.f, ty.tr.r
 	module := ty.moduleValues(made)
-	out, unfollowed := map[string][]string{}, map[string]int{}
+	out, unfollowed := map[string]callLines{}, map[string]int{}
 	add := func(id string, decl, class *node) { out[id], unfollowed[id] = ty.through(decl, class, module) }
 	for name, d := range ty.tr.top {
 		switch d.Kind() {

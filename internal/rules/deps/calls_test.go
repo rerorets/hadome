@@ -1,6 +1,7 @@
 package deps_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -75,6 +76,60 @@ func TestUndrawnCallsAreReportedOncePerPairAtTheEarliestCaller(t *testing.T) {
 	if entry.File != "jobs/j.go" || entry.Line != 5 || !strings.Contains(msg, "no node covers the calling unit") ||
 		!strings.Contains(msg, "the entry point calls store.Save") {
 		t.Errorf("want the entry-point code at jobs/j.go:5 with no node, got %s:%d %q", entry.File, entry.Line, msg)
+	}
+}
+
+// viewpoint: external contract
+// target: deps/call-not-in-diagram
+// A call is reported at its own line: of a pair's calls, the one whose path and line come first,
+// whichever function declares it, also through an interface and from entry-point code. A call
+// whose line the facts do not hold counts at the calling function's declaration.
+func TestUndrawnCallsAreReportedAtTheLineOfTheCall(t *testing.T) {
+	src := func(path, unit string) facts.File {
+		return facts.File{Path: path, Unit: unit, UnitPath: unit, Role: facts.RoleSource}
+	}
+	in := engine.Input{
+		Config: config.Config{Calls: &config.Diagram{Path: "docs/calls.md", Nodes: []config.Node{
+			{ID: "api", Label: "api"}, {ID: "store", Label: "store"}, {ID: "domain", Label: "domain"},
+			{ID: "jobs", Label: "jobs"}, {ID: "port", Label: "port"}, {ID: "pg", Label: "pg"}, {ID: "lib", Label: "lib"}}}},
+		Facts: &facts.Analysis{
+			Files: []facts.File{src("api/a.go", "api"), src("store/s.go", "store"), src("domain/d.go", "domain"),
+				src("jobs/j.go", "jobs"), src("port/p.go", "port"), src("pg/pg.go", "pg"), src("lib/l.go", "lib")},
+			Symbols: []facts.Symbol{
+				{ID: "api.Long", Path: "api/a.go", Line: 3, Calls: []string{"domain.Get"}, CallAt: map[string]int{"domain.Get": 40}},
+				{ID: "api.Short", Path: "api/a.go", Line: 10, Calls: []string{"domain.Get"}, CallAt: map[string]int{"domain.Get": 12}},
+				{ID: "api.Find", Path: "api/a.go", Line: 50, Through: []string{"port.Finder.Find"}, CallAt: map[string]int{"port.Finder.Find": 57}},
+				{ID: "api.Old", Path: "api/a.go", Line: 70, Calls: []string{"lib.Do"}},
+				{ID: "domain.Get", Path: "domain/d.go", Line: 1},
+				{ID: "store.Save", Path: "store/s.go", Line: 1},
+				{ID: "lib.Do", Path: "lib/l.go", Line: 1},
+				{ID: "port.Finder", Kind: facts.SymbolInterface, Path: "port/p.go", Line: 3},
+				{ID: "port.Finder.Find", Kind: facts.SymbolMethod, Path: "port/p.go", Line: 4},
+				{ID: "pg.Repo", Kind: facts.SymbolType, Path: "pg/pg.go", Line: 3, Supertypes: []string{"port.Finder"}},
+				{ID: "pg.Repo.Find", Kind: facts.SymbolMethod, Path: "pg/pg.go", Line: 5},
+			},
+			Entries: []facts.Entry{{Path: "jobs/j.go", Line: 5, Calls: []string{"store.Save"}, CallAt: map[string]int{"store.Save": 8}}},
+		},
+	}
+	got, err := findingRule(t, "deps/call-not-in-diagram").Find(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := map[string]string{}
+	for _, f := range got {
+		at[f.Anchor] = fmt.Sprintf("%s:%d %s", f.File, f.Line, f.Message.In("en"))
+	}
+	for anchor, want := range map[string][]string{
+		"api -> domain": {"api/a.go:12 ", "api.Short calls domain.Get"},
+		"api -> pg":     {"api/a.go:57 ", "api.Find"},
+		"jobs -> store": {"jobs/j.go:8 "},
+		"api -> lib":    {"api/a.go:70 "},
+	} {
+		for _, w := range want {
+			if !strings.Contains(at[anchor], w) {
+				t.Errorf("%s: want %q in %q", anchor, w, at[anchor])
+			}
+		}
 	}
 }
 

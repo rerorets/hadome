@@ -21,15 +21,15 @@ type madeSyntax struct {
 // madeInPlace returns the IDs of the repository's classes code makes, and <class>.<method> for the
 // methods it calls on what was just made or on local variables holding it. resolve returns the ID of the
 // repository's class a written name stands for, or "".
-func madeInPlace(f *file, code *node, syn madeSyntax, resolve func(string) string) []string {
-	out, locals := map[string]bool{}, map[string]string{}
+func madeInPlace(f *file, code *node, syn madeSyntax, resolve func(string) string) callLines {
+	out, locals := callLines{}, map[string]string{}
 	if code == nil { // a method without a body, in an interface
 		return nil
 	}
 	walk(code, func(n *node) bool {
 		if w := syn.made(f, n); w != "" {
 			if id := resolve(w); id != "" {
-				out[id] = true
+				out.add(id, line(n))
 			}
 		}
 		if name, value := syn.local(f, n); name != "" && value != nil {
@@ -41,13 +41,13 @@ func madeInPlace(f *file, code *node, syn madeSyntax, resolve func(string) strin
 		switch {
 		case obj == nil:
 		case obj.Kind() == "identifier" && locals[f.text(obj)] != "":
-			out[locals[f.text(obj)]+"."+method] = true
+			out.add(locals[f.text(obj)]+"."+method, line(n))
 		case resolve(syn.made(f, obj)) != "": // m.Repo().find(), on what was just made
-			out[resolve(syn.made(f, obj))+"."+method] = true
+			out.add(resolve(syn.made(f, obj))+"."+method, line(n))
 		}
 		return true
 	})
-	return keys(out)
+	return out
 }
 
 var javaMade = madeSyntax{

@@ -110,7 +110,7 @@ var javaSyntax = tsyntax{
 }
 
 func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
-	classes, sup, through := jvmClasses(a), supers{}, map[string][]string{}
+	classes, sup, through := jvmClasses(a), supers{}, map[string]callLines{}
 	defer func() {
 		sup.fill(a)
 		setThrough(a, through)
@@ -234,7 +234,7 @@ var kotlinSyntax = tsyntax{
 var ktorRoutes = set("get", "post", "put", "patch", "delete", "head", "options")
 
 func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
-	classes, sup, through := jvmClasses(a), supers{}, map[string][]string{}
+	classes, sup, through := jvmClasses(a), supers{}, map[string]callLines{}
 	defer func() {
 		sup.fill(a)
 		setThrough(a, through)
@@ -311,7 +311,8 @@ func (k *kotlin) entries(tr *tracing, fns []tfunc) []facts.Entry {
 			callee = callee.NamedChild(0)
 		}
 		if lambda.Kind() == "annotated_lambda" && ktorRoutes[f.text(callee)] && path {
-			out = append(out, facts.Entry{Path: f.path, Line: line(n), Calls: keys(tr.reach(enclosing(fns, n, top), lambda).calls)})
+			got := tr.reach(enclosing(fns, n, top), lambda)
+			out = append(out, got.entry(f.path, line(n)))
 		}
 		return true
 	})

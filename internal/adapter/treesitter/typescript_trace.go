@@ -63,12 +63,8 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			}
 			got := tr.reach(body)
 			s := &a.Symbols[i]
-			s.IO, s.Calls, s.Units, s.Unfollowed = got.io, keys(got.calls), keys(got.units), unfollowed[id]
-			for _, c := range through[id] {
-				if !got.calls[c] {
-					s.Through = append(s.Through, c)
-				}
-			}
+			s.IO, s.Calls, s.CallAt, s.Units, s.Unfollowed = got.io, got.ids(), got.lines(), keys(got.units), unfollowed[id]
+			addThrough(s, through[id])
 		}
 		a.Entries = append(a.Entries, tr.entries()...)
 	}
@@ -178,6 +174,9 @@ func (tr *tsTrace) reach(n *node) reached {
 func (tr *tsTrace) reachInto(n *node, got *reached, values bool) {
 	f := tr.f
 	walk(n, func(x *node) bool {
+		if values { // the code of a value used here counts where it is used
+			got.read(x)
+		}
 		if tsGlobalIO(f, x) != "" {
 			got.io = true
 		}
@@ -194,7 +193,7 @@ func (tr *tsTrace) reachInto(n *node, got *reached, values bool) {
 			return true
 		}
 		if id := tr.r.symbolID(f.path, name); tr.funcs[id] {
-			got.calls[id] = true
+			got.call(id)
 		} else if v := d.ChildByFieldName("value"); values && v != nil && d.Kind() == "variable_declarator" && v != n {
 			tr.reachInto(v, got, false)
 		}
@@ -218,7 +217,7 @@ func (tr *tsTrace) imported(x *node, b tsImported, got *reached) {
 		name = tr.f.field(parent, "property")
 	}
 	if id := tr.r.target(b.file, name); tr.funcs[id] {
-		got.calls[id] = true
+		got.call(id)
 		return
 	}
 	got.units[path.Dir(b.file)] = true
@@ -311,7 +310,8 @@ func (tr *tsTrace) declared(name string, val *node) []facts.Entry {
 	if id := tr.r.symbolID(tr.f.path, name); tr.funcs[id] {
 		return []facts.Entry{{Path: tr.f.path, Line: line(val), Symbol: id}}
 	}
-	return []facts.Entry{{Path: tr.f.path, Line: line(val), Calls: keys(tr.reach(val).calls)}}
+	got := tr.reach(val)
+	return []facts.Entry{got.entry(tr.f.path, line(val))}
 }
 
 // route returns the entries a router call registers: app.post('/orders', createOrder).
@@ -369,11 +369,12 @@ func (tr *tsTrace) consumer(call *node) []facts.Entry {
 func (tr *tsTrace) handler(a *node) []facts.Entry {
 	switch a.Kind() {
 	case "arrow_function", "function_expression", "function":
-		return []facts.Entry{{Path: tr.f.path, Line: line(a), Calls: keys(tr.reach(a).calls)}}
+		got := tr.reach(a)
+		return []facts.Entry{got.entry(tr.f.path, line(a))}
 	case "identifier", "shorthand_property_identifier":
 		got := tr.reach(a)
 		var out []facts.Entry
-		for _, id := range keys(got.calls) {
+		for _, id := range got.ids() {
 			out = append(out, facts.Entry{Path: tr.f.path, Line: line(a), Symbol: id})
 		}
 		return out

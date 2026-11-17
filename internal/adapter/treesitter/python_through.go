@@ -153,14 +153,14 @@ const unknownType = "?"
 // the repository's classes: its parameters, the attributes of its class (pyAttributes), and the
 // variables at the top of its module (pyModuleValues). It also counts the calls on such values
 // whose type is not written.
-func pyThrough(m pyModule, fn tfunc, classDef *node) ([]string, int) {
+func pyThrough(m pyModule, fn tfunc, classDef *node) (callLines, int) {
 	tr, mod, repo, module := m.tr, m.mod, m.repo, m.values
 	f := tr.f
 	attrs, vars := pyAttributes(f, classDef), map[string]string{}
 	pyAnnotated(f, definition(fn.decl), vars)
 	pyUntyped(f, definition(fn.decl), vars)
 	locals := pyLocals(f, fn.body)
-	out, unfollowed := map[string]bool{}, 0
+	out, unfollowed := callLines{}, 0
 	walk(fn.body, func(n *node) bool {
 		fun := n.ChildByFieldName("function")
 		if n.Kind() != "call" || fun == nil || fun.Kind() != "attribute" {
@@ -179,14 +179,14 @@ func pyThrough(m pyModule, fn tfunc, classDef *node) ([]string, int) {
 		if written == unknownType {
 			unfollowed++
 		} else if id := resolveClass(tr, mod, pyTypeName(written), repo); written != "" && id != "" {
-			out[id+"."+method] = true
+			out.add(id+"."+method, line(n))
 		}
 		return true
 	})
-	for _, id := range madeInPlace(f, fn.body, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) }) {
-		out[id] = true
+	for id, at := range madeInPlace(f, fn.body, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) }) {
+		out.add(id, at)
 	}
-	return keys(out), unfollowed
+	return out, unfollowed
 }
 
 // pyLocals returns the names a function's body assigns, which hide the module's names there.
