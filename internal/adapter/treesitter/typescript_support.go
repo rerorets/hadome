@@ -13,8 +13,8 @@ import (
 // testFile reads what a test file, or a test support file, binds.
 func (r *typescript) testFile(f *file, t *tables) *tsFile {
 	tf := &tsFile{f: f, r: r, t: t, names: map[string]string{}, spaces: map[string]string{}, via: map[string][2]string{},
-		unresolved: map[string]bool{}, loaderFns: map[string]string{}, external: map[string]bool{}, helpers: map[string]*node{}, comments: map[int]string{}, loaders: map[string]string{},
-		outer: map[string]string{}, params: map[string]*node{}, setups: map[string][]tsSetup{},
+		unresolved: map[string]bool{}, external: map[string]bool{}, helpers: map[string][]tsHelper{}, comments: map[int]string{},
+		outer: map[string]string{}, setups: map[string][]tsSetup{},
 		setupNodes: map[uintptr]bool{}, outerLoaded: map[string]string{}, outerModules: map[string]string{}}
 	tf.bind()
 	tf.bindLoaders()
@@ -129,7 +129,7 @@ func (tf *tsFile) bindModule(local, p string, kind tsKind) {
 // holds no function for counts as unresolved.
 func (w *tsWalk) followSupport(p, name string, args []*node) {
 	sf := w.tf.r.supportFile(p, w.tf.t)
-	if sf == nil || sf.helpers[name] == nil {
+	if sf == nil || len(sf.helpers[name]) == 0 {
 		w.t.test.Unresolved++
 		return
 	}
@@ -139,7 +139,7 @@ func (w *tsWalk) followSupport(p, name string, args []*node) {
 		done: map[uintptr]bool{}, fake: w.fake, plain: map[string]bool{}, rows: map[string][]string{}}
 	prev := w.t.f
 	w.t.f = sf.f
-	sub.followFrom(w, name, args)
+	sub.followFrom(w, name, nil, args)
 	w.t.f = prev
 }
 
