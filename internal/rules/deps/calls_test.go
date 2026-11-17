@@ -174,7 +174,7 @@ func TestCallsOutsideFunctionsCountFromTheFilesUnit(t *testing.T) {
 	}
 	for anchor, want := range map[string][]string{
 		"app -> store": {"app/state.py:4 ", "the code outside functions in app/state.py calls store.Queue"},
-		"app -> pg":    {"app/state.py:9 ", "through port.Finder.Find"},
+		"app -> pg":    {"app/state.py:9 ", "the code outside functions in app/state.py calls pg.Repo.Find through port.Finder.Find"},
 		"jobs -> lib":  {"jobs/main.py:1 "},
 	} {
 		for _, w := range want {
