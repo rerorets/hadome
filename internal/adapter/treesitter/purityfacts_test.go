@@ -207,3 +207,34 @@ adds vi.spyOn(Math, 'max') wide=false`)
 		"src/test/java/acme/CalcTest.java", "package acme;\n\nimport org.junit.jupiter.api.Test;\nimport org.mockito.Mockito;\n\nclass CalcTest {\n    @Test void adds() { new Calc().add(1, 2); }\n}\n",
 	))), "CalcTest.adds import org.mockito.Mockito; wide=true")
 }
+
+// viewpoint: behaviour
+// target: the Python reader
+// Imports in the body of `if TYPE_CHECKING:` (or `if typing.TYPE_CHECKING:`) are read only by type
+// checkers, as TypeScript's `import type` is, so they are no dependency; it is how Python code avoids
+// a cycle of imports. An import in the else branch, or under any other condition, is one.
+func TestPythonTypeCheckingImportsAreNoDependency(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"lib/b.py", "class Row: pass\n",
+		"lib/__init__.py", "",
+		"ui/__init__.py", "",
+		"ui/hints.py", "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from lib.b import Row\n\ndef f(r: 'Row'): return r\n",
+		"ui/qualified.py", "import typing\nif typing.TYPE_CHECKING:\n    import lib.b\n",
+		"app/__init__.py", "",
+		"app/main.py", "import os\nif os.environ.get('X'):\n    from lib.b import Row\nif TYPE_CHECKING:\n    pass\nelse:\n    import lib.b\n",
+	))
+	for _, im := range a.Imports {
+		if im.Internal && strings.HasPrefix(im.Path, "ui/") {
+			t.Errorf("an import under TYPE_CHECKING counts: %+v", im)
+		}
+	}
+	got := 0
+	for _, im := range a.Imports {
+		if im.Internal && im.Path == "app/main.py" {
+			got++
+		}
+	}
+	if got != 2 {
+		t.Errorf("want the imports under another condition and in the else branch counted, got %d in %s", got, importLines(a))
+	}
+}

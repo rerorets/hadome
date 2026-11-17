@@ -239,6 +239,9 @@ func (r *python) fromImport(f *file, n *node) pyImport {
 func (r *python) imports(f *file, t *tables) []facts.Import {
 	var out []facts.Import
 	for _, im := range r.parseImports(f) {
+		if typeCheckingOnly(f, im.at) {
+			continue
+		}
 		if im.unread {
 			out = append(out, unreadImport(f, im.at, im.dotted))
 			continue
@@ -264,6 +267,23 @@ func (r *python) imports(f *file, t *tables) []facts.Import {
 			Internal: internal, IO: !internal && t.isIO(c.spec)})
 	}
 	return out
+}
+
+// typeCheckingOnly reports whether n is in the body of `if TYPE_CHECKING:` (or `if
+// typing.TYPE_CHECKING:`): code type checkers read and Python never runs. Its imports bring in types
+// only, as TypeScript's `import type` does, so they are no dependency; it is how a cycle of imports
+// is avoided.
+func typeCheckingOnly(f *file, n *node) bool {
+	for c, p := n, n.Parent(); p != nil; c, p = p, p.Parent() {
+		if p.Kind() != "if_statement" {
+			continue
+		}
+		cond := f.field(p, "condition")
+		if body := p.ChildByFieldName("consequence"); body != nil && body.Id() == c.Id() && (cond == "TYPE_CHECKING" || cond == "typing.TYPE_CHECKING") {
+			return true
+		}
+	}
+	return false
 }
 
 // pyDynamic are the calls that import the module their argument names.
