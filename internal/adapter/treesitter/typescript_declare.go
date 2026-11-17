@@ -207,7 +207,7 @@ func (tf *tsFile) test(name string, at *node, d tsDecl, sc tsScope) facts.Test {
 		w.prelude(p)
 	}
 	if d.fn.Kind() == "identifier" {
-		w.follow(tf.f.text(d.fn), nil)
+		w.follow(tf.f.text(d.fn), d.fn, nil)
 	} else {
 		t.test.Drives = t.test.Drives || tf.receivesBrowser(d.fn)
 		w.params(tsParams(d.fn))

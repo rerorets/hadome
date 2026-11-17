@@ -28,11 +28,55 @@ func (tf *tsFile) dynamicImport(call *node) string {
 	return ""
 }
 
+// tsHelper is a function of a test file a test may call.
+type tsHelper struct {
+	body, params *node
+	// scope is the block the helper is declared in: a call inside it reaches this helper.
+	scope *node
+	// unit is the one module of the repository the helper loads with import(), if it loads exactly
+	// one: a test that takes names from what it returns calls that module. fn is the one function of
+	// that module it returns, if it returns one: const fn = await load() then names that function.
+	unit, fn string
+}
+
+// helper is the helper named name that a call at the node at reaches: the one declared in the
+// innermost block that holds the call, as each describe block may declare its own of the same name.
+// For a call no such block holds, or a call from another file (at is nil), it is the first of the
+// name in the file.
+func (tf *tsFile) helper(name string, at *node) (tsHelper, bool) {
+	hs := tf.helpers[name]
+	if len(hs) == 0 {
+		return tsHelper{}, false
+	}
+	best, found := hs[0], false
+	for _, h := range hs {
+		if at != nil && h.scope != nil && encloses(h.scope, at) && (!found || encloses(best.scope, h.scope)) {
+			best, found = h, true
+		}
+	}
+	return best, true
+}
+
+// encloses reports whether the node outer holds the node inner.
+func encloses(outer, inner *node) bool {
+	return outer.StartByte() <= inner.StartByte() && inner.EndByte() <= outer.EndByte()
+}
+
+// tsBlock is the block a declaration at n belongs to: the nearest statement block or the program.
+func tsBlock(n *node) *node {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == "statement_block" || p.Kind() == "program" {
+			return p
+		}
+	}
+	return nil
+}
+
 // bindLoaders finds the functions of the file, at any depth: declarations and functions held by a
 // const (const renderPage = () => render(<Page />)), which test files often declare inside a
-// describe block. Each is a helper a test may call; the first of a name wins. A function whose body
-// loads exactly one module of the repository with import() is also a loader of that module: a helper
-// that resets modules and loads a fresh copy is common.
+// describe block. Each is a helper a test may call. A function whose body loads exactly one module
+// of the repository with import() is also a loader of that module: a helper that resets modules and
+// loads a fresh copy is common.
 func (tf *tsFile) bindLoaders() {
 	f := tf.f
 	walk(f.root, func(n *node) bool {
@@ -50,17 +94,16 @@ func (tf *tsFile) bindLoaders() {
 		if name == "" || body == nil {
 			return true
 		}
-		if _, seen := tf.helpers[name]; !seen {
-			tf.helpers[name], tf.params[name] = body, params
-		}
-		tf.loaderOf(name, body)
+		h := tsHelper{body: body, params: params, scope: tsBlock(n)}
+		h.unit, h.fn = tf.loaderOf(body)
+		tf.helpers[name] = append(tf.helpers[name], h)
 		return true
 	})
 }
 
-// loaderOf records a function as a loader of the one module of the repository its body loads with
-// import(), if it loads exactly one.
-func (tf *tsFile) loaderOf(name string, body *node) {
+// loaderOf returns the one module of the repository a function's body loads with import(), if it
+// loads exactly one, and the function of it the body returns.
+func (tf *tsFile) loaderOf(body *node) (unit, fn string) {
 	units := map[string]bool{}
 	walk(body, func(x *node) bool {
 		if u := tf.dynamicImport(x); u != "" {
@@ -68,14 +111,13 @@ func (tf *tsFile) loaderOf(name string, body *node) {
 		}
 		return true
 	})
-	if len(units) == 1 {
-		for u := range units {
-			tf.loaders[name] = u
-		}
-		if fn := tf.returnedFunction(body); fn != "" {
-			tf.loaderFns[name] = fn
-		}
+	if len(units) != 1 {
+		return "", ""
 	}
+	for u := range units {
+		unit = u
+	}
+	return unit, tf.returnedFunction(body)
 }
 
 // returnedFunction is the function of a loaded module a loader's body returns, or "" unless every
@@ -141,7 +183,9 @@ func (tf *tsFile) loadedUnit(v *node) string {
 	v = tsUnwrap(v)
 	unit := tf.dynamicImport(v)
 	if unit == "" && v != nil && v.Kind() == "call_expression" {
-		unit = tf.loaders[tf.f.field(v, "function")]
+		if h, ok := tf.helper(tf.f.field(v, "function"), v); ok {
+			unit = h.unit
+		}
 	}
 	return unit
 }
@@ -151,7 +195,8 @@ func (tf *tsFile) loadedUnit(v *node) string {
 func (tf *tsFile) bindLoad(pattern, value *node, modules, loaded map[string]string) bool {
 	f := tf.f
 	if v := tsUnwrap(value); v != nil && v.Kind() == "call_expression" && pattern != nil && pattern.Kind() == "identifier" {
-		if fn := tf.loaderFns[f.field(v, "function")]; fn != "" {
+		if h, ok := tf.helper(f.field(v, "function"), v); ok && h.fn != "" {
+			fn := h.fn
 			loaded[f.text(pattern)] = fn // const fn = await load(), where load returns one function of a module
 			return true
 		}
@@ -275,8 +320,8 @@ func (tf *tsFile) objectHelpers(obj string, o *node) {
 		case "method_definition":
 			key, body = f.field(m, "name"), m.ChildByFieldName("body")
 		}
-		if _, seen := tf.helpers[obj+"."+key]; key != "" && body != nil && !seen {
-			tf.helpers[obj+"."+key] = body
+		if key != "" && body != nil {
+			tf.helpers[obj+"."+key] = append(tf.helpers[obj+"."+key], tsHelper{body: body, scope: tsBlock(o)})
 		}
 	}
 }

@@ -4,6 +4,7 @@ package treesitter
 
 import (
 	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -23,13 +24,8 @@ type tsFile struct {
 	// unresolved are the names imported from what looks like the repository's own code but names
 	// no file of it. Calling one is a call hadome cannot identify.
 	unresolved map[string]bool
-	helpers    map[string]*node
-	// loaders are the functions of the file that load one module of the repository with import():
-	// function name -> unit. A test that takes names from what they return calls that module.
-	loaders map[string]string
-	// loaderFns are the loaders that return one function of the module they load:
-	// function name -> target. const fn = await load() then names that function.
-	loaderFns map[string]string
+	// helpers are the functions of the file a test may call, by name (see helper).
+	helpers map[string][]tsHelper
 	// external are the local names the file imports from outside the repository.
 	external map[string]bool
 	// outer types the variables declared outside the tests (in a describe block, set in beforeEach):
@@ -43,8 +39,6 @@ type tsFile struct {
 	// through a test support file that does.
 	browser  bool
 	comments map[int]string
-	// params are the parameter lists of the helpers, whose default values run on each call.
-	params map[string]*node
 	// setups are what sets up each variable declared outside the tests (see bindSetups), and
 	// setupNodes the same nodes, by ID.
 	setups     map[string][]tsSetup
@@ -250,10 +244,10 @@ func (w *tsWalk) call(n *node) {
 		} else if w.tf.unresolved[callee] {
 			w.t.test.Unresolved++
 		} else {
-			w.follow(callee, args)
+			w.follow(callee, n, args)
 		}
 	case "member_expression":
-		if target := w.memberTarget(f.field(fn, "object"), f.field(fn, "property"), args); target != "" {
+		if target := w.memberTarget(fn, f.field(fn, "object"), f.field(fn, "property"), args); target != "" {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		}
 	}
@@ -284,8 +278,8 @@ func (w *tsWalk) tool(n, fn *node, callee string, args []*node) bool {
 
 // memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
 // it follows a function an object of the file holds, and a method of a local value of unknown type
-// counts as unresolved, unless the test built it itself (see plain).
-func (w *tsWalk) memberTarget(obj, prop string, args []*node) string {
+// counts as unresolved, unless the test built it itself (see plain). at is the call or element.
+func (w *tsWalk) memberTarget(at *node, obj, prop string, args []*node) string {
 	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
 	for _, files := range []map[string]string{w.tf.spaces, w.modules} {
 		if p, ok := files[obj]; ok {
@@ -302,7 +296,7 @@ func (w *tsWalk) memberTarget(obj, prop string, args []*node) string {
 			return owner + "." + prop
 		}
 	}
-	if w.follow(obj+"."+prop, args) { // a function an object of the file holds
+	if w.follow(obj+"."+prop, at, args) { // a function an object of the file holds
 		return ""
 	}
 	if (w.locals[obj] && !w.plain[obj]) || w.tf.unresolved[obj] {
@@ -354,35 +348,36 @@ func (w *tsWalk) element(n *node) {
 		} else if w.tf.unresolved[f.text(name)] {
 			w.t.test.Unresolved++
 		} else if target == "" {
-			w.follow(f.text(name), nil) // a component the file declares: function Harness() { return <Form /> }
+			w.follow(f.text(name), n, nil) // a component the file declares: function Harness() { return <Form /> }
 		}
 	case "member_expression":
-		target = w.memberTarget(f.field(name, "object"), f.field(name, "property"), nil)
+		target = w.memberTarget(name, f.field(name, "object"), f.field(name, "property"), nil)
 	}
 	if target != "" {
 		w.t.call(target, nil)
 	}
 }
 
-// follow walks a helper of the file the test calls with args, once per chain of calls, and reports
-// whether there was one.
-func (w *tsWalk) follow(name string, args []*node) bool {
-	return w.followFrom(w, name, args)
+// follow walks a helper of the file the test calls at the node at with args, once per chain of
+// calls, and reports whether there was one.
+func (w *tsWalk) follow(name string, at *node, args []*node) bool {
+	return w.followFrom(w, name, at, args)
 }
 
 // followFrom walks a helper called from the walker from, which binds its arguments (see bindArgs).
-func (w *tsWalk) followFrom(from *tsWalk, name string, args []*node) bool {
-	body, ok := w.tf.helpers[name]
+// at is the call, or nil for a call from another file.
+func (w *tsWalk) followFrom(from *tsWalk, name string, at *node, args []*node) bool {
+	h, ok := w.tf.helper(name, at)
 	if !ok {
 		return false
 	}
-	if key := w.tf.f.path + "#" + name; !w.walking[key] {
+	if key := w.tf.f.path + "#" + strconv.Itoa(int(h.body.StartByte())); !w.walking[key] {
 		w.walking[key] = true
 		locals := maps.Clone(w.locals)
-		w.params(w.tf.params[name])
-		restore := w.bindArgs(from, w.tf.params[name], args)
-		w.defaults(w.tf.params[name])
-		w.walk(body)
+		w.params(h.params)
+		restore := w.bindArgs(from, h.params, args)
+		w.defaults(h.params)
+		w.walk(h.body)
 		restore()
 		w.locals = locals
 		delete(w.walking, key)
