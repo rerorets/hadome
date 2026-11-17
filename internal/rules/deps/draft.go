@@ -22,7 +22,7 @@ func DraftDiagram(a *facts.Analysis, depth int) string {
 		}
 	}
 	return draft(wording{"Dependencies", "`hadome suggest diagram` drew this draft from the imports as they are. " +
-		"Tidy its boxes and arrows, then name this file in `rules.deps.diagram` of `.hadome.yml`.",
+		"Tidy its boxes and arrows, then name this file in `rules.deps.diagram` of `.hadome.yml`. " + patternsNote,
 		"These boxes import each other. Decide which way is right and remove the imports going the other way:"}, languages, pairs, depth)
 }
 
@@ -38,9 +38,13 @@ func DraftCalls(a *facts.Analysis, depth int) string {
 	return draft(wording{"Calls", "`hadome suggest calls` drew this draft from the calls as they are. " +
 		"Tidy its boxes and arrows, then name this file in `rules.deps.calls` of `.hadome.yml`. " +
 		"The box of the code that makes and wires everything (a DI container, `main`) is worth marking `:::wiring`, " +
-		"which takes its calls out of the check.",
+		"which takes its calls out of the check. " + patternsNote,
 		"These boxes call each other. Decide which way is right and remove the calls going the other way:"}, languages, pairs, depth)
 }
+
+// patternsNote ends a draft's note. The draft stays in the user's repository, so whoever tidies it
+// later, a person or an agent, finds examples of writing a design pattern as boxes, arrows or layers.
+const patternsNote = "Examples by design pattern: https://github.com/rerorets/hadome/blob/main/docs/patterns.md"
 
 // wording is what a draft says besides its diagram: its heading, the note under it, and the line
 // that introduces boxes with arrows both ways.

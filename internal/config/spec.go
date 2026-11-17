@@ -231,6 +231,10 @@ var rulesKey = Key{
 	}, sizeKey, commentsKey, depsKey},
 }
 
+// patternsDoc ends the documentation of the keys that write a design down, where an agent looks
+// before changing them (hadome explain), so that it finds how each pattern is written.
+const patternsDoc = "Examples by design pattern: https://github.com/rerorets/hadome/blob/main/docs/patterns.md"
+
 var depsKey = Key{
 	Name: "deps", Kind: KindObject, Doc: "Settings of the deps/ rules.",
 	Example: "deps:\n  diagram: docs/conventions/dependencies.md\n  calls: docs/conventions/calls.md",
@@ -238,21 +242,21 @@ var depsKey = Key{
 		Name: "diagram", Kind: KindString, Pattern: `^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\.md$`,
 		Doc: "The Markdown file, from the repository root, whose Mermaid flowchart is the dependency diagram. " +
 			"Node labels name directories (dir, or dir/... for everything under it); an arrow a --> b lets a import b. " +
-			"Without it, the deps/ rules find nothing. Adding an arrow needs a person's review.",
+			"Without it, the deps/ rules find nothing. Adding an arrow needs a person's review. " + patternsDoc,
 		Example: "diagram: docs/conventions/dependencies.md",
 	}, {
 		Name: "calls", Kind: KindString, Pattern: `^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*\.md$`,
 		Doc: "The Markdown file, from the repository root, whose Mermaid flowchart is the call diagram, apart from the dependency diagram. " +
 			"Written like the dependency diagram; an arrow a --> b lets the code of a call the code of b. " +
 			"Calls from a box with the class wiring (a DI container, main) are not checked. " +
-			"Without it, deps/call-not-in-diagram finds nothing. Adding an arrow or marking wiring needs a person's review.",
+			"Without it, deps/call-not-in-diagram finds nothing. Adding an arrow or marking wiring needs a person's review. " + patternsDoc,
 		Example: "calls: docs/conventions/calls.md",
 	}, {
 		Name: "cycles", Kind: KindObject, Doc: "Settings of deps/cycle.",
 		Example: "cycles:\n  allow: [app/ui/** <-> app/presenter/**]",
 		Fields: []Key{stringList("allow", "Pairs of directory globs, written a/** <-> b/**, whose imports between each other "+
 			"deps/cycle does not follow, in either direction: cycles a design accepts, such as a view and its presenter. "+
-			"Adding a pair needs a person's review.",
+			"Adding a pair needs a person's review. "+patternsDoc,
 			"allow: [app/ui/** <-> app/presenter/**]", LooserWhenAdded, Key{Kind: KindString, GlobPair: true})},
 	}, layersKey},
 }
@@ -263,7 +267,7 @@ var layersKey = Key{
 	Name: "layers", Kind: KindList, Sequence: true, Looser: LooserAlways, OmittedIsOff: true, Unique: true, Identity: []string{"name"},
 	Doc: "The layers of the architecture, from the inside out, each a name and directory globs. deps/layer fails an import " +
 		"from a unit of an inner layer to a unit of an outer layer; a unit matching two layers is in the one written first. " +
-		"Writing layers needs no review; changing them afterwards does.",
+		"Writing layers needs no review; changing them afterwards does. " + patternsDoc,
 	Example: "layers:\n  - name: domain\n    paths: [domain/**]\n  - name: adapters\n    paths: [infra/**, web/**]",
 	Elem: &Key{Kind: KindObject, Fields: []Key{
 		{Name: "name", Kind: KindString, Required: true, Pattern: `^\S(.*\S)?$`, Doc: "The layer's name, which messages use.", Example: "name: domain"},

@@ -2,6 +2,8 @@
 
 ## Purpose
 
+Examples of writing each design pattern as a diagram, layers or allowed pairs are in [patterns.md](../patterns.md), for users.
+
 A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)). Even without a diagram, an import that makes a new cycle between units fails ([`deps/cycle`](#depscycle)). With the order of layers written, an import from an inner layer to an outer one fails ([`deps/layer`](#depslayer)).
 
 ## The diagram

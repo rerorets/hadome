@@ -282,6 +282,8 @@ hadome suggest diagram > docs/dependencies.md
 hadome suggest calls > docs/calls.md
 ```
 
+Examples of keeping the direction between inner and outer layers, or GoF patterns, are in [Keeping design patterns](docs/patterns.md).
+
 Changing the settings and proposing invariants is the agents' job. Agents read the specification with `hadome explain <key>` ([the guide for agents](docs/for-agents.md)). People decide which proposals to accept and whether to allow a change that loosens the rules. Such a change stops with exit code `3` for a person's review.
 
 ### Writing an exception
