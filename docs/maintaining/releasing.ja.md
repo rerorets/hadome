@@ -174,7 +174,7 @@ git log --first-parent --format='%s' v1.1.0..origin/main
 | 設定 | Configuration | `.hadome.yml` のキーの追加・変更 |
 | その他 | Other | 表示、文書、配り方の変更。検査の結果は変わらない |
 
-- 1つの変更を1行に書き、末尾に PR の番号を付けます。例: 「`comments/broken-reference` が、`.gitignore` で無視されたパスへの参照を報告しません。（#96）」
+- 1つの変更を1行に書きます。PR の番号は付けません。例: 「`comments/broken-reference` が、`.gitignore` で無視されたパスへの参照を報告しません。」
 - 1つの PR に分類の違う変更が入っていれば、分類ごとに行を分けます。
 - 利用者に見えない変更（hadome 自身のテスト、CI、依存の更新）は書きません。
 
