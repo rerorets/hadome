@@ -169,7 +169,7 @@ rules:
   - Every unit is in some box, since an import of a unit in no box fails
 - **Arrows**: one arrow between two boxes when at least one import (a call, for the call diagram) goes between them. Nothing within a box is drawn
 - **What is counted**: arrows are drawn from what `deps/not-in-diagram` and `deps/call-not-in-diagram` count. Where a call reaches (implementations of an interface, objects made in place, and so on) is read as the rule reads it
-- **Node IDs**: the label with everything but letters and digits made `_`. When two collide, a number is added
+- **Node IDs**: the label with everything but letters and digits made `_`. When two collide, a number is added. The root's box is `root`. An ID Mermaid reads otherwise (`end`, one starting with a digit) gets the prefix `u_`
 - **Output**: a heading, a short note that it is a draft, and a `mermaid` block. The call diagram's note adds that the box making and wiring everything is worth marking `wiring`
 - **A person tidies it**: too many arrows, too coarse a grouping: a person decides what to change. Adding a diagram tightens the configuration, so it needs no review (exit code `3`). Adding arrows later loosens it and goes to review
 

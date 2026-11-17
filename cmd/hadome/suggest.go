@@ -17,24 +17,21 @@ import (
 	"github.com/rerorets/hadome/internal/suggest"
 )
 
-// suggestCmd prints the working tree's invariant candidates as configuration to paste.
+// suggestCmd prints the working tree's invariant candidates as configuration to paste, or, with
+// diagram or calls, a draft of that diagram.
 func suggestCmd(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "diagram" || args[0] == "calls") {
+		return draftCmd(args[0], args[1:], stdout, stderr)
+	}
 	if len(args) != 0 {
 		fmt.Fprint(stderr, usage)
 		return engine.ExitConfig
 	}
-	tree := os.DirFS(".")
-	c, err := config.Load(tree, ".")
-	if err != nil {
-		fmt.Fprintln(stderr, err)
+	in, ok := analyzeTree(stderr)
+	if !ok {
 		return engine.ExitConfig
 	}
-	a, err := newEngine().Analyzer.Analyze(engine.Version{Label: "working tree", FS: tree}, c)
-	if err != nil {
-		fmt.Fprintln(stderr, "hadome:", err)
-		return engine.ExitConfig
-	}
-	cands := suggest.Candidates(engine.Input{Facts: a, Config: c})
+	cands := suggest.Candidates(in)
 	if len(cands) == 0 {
 		fmt.Fprintln(stdout, "No invariant candidates that are not configured already.")
 		return engine.ExitOK
@@ -69,6 +66,14 @@ schema: 1
 # invariants:
 #   - type: idempotent
 #     target: api.CreatePost
+
+# What may import and call what. Draft the diagrams from the code as it is, then uncomment:
+#   hadome suggest diagram > docs/dependencies.md
+#   hadome suggest calls > docs/calls.md
+# rules:
+#   deps:
+#     diagram: docs/dependencies.md
+#     calls: docs/calls.md
 %s`
 
 // testCommand is a language's usual test command, and the files at the root of the repository that
@@ -164,7 +169,7 @@ func initCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "hadome:", err)
 		return engine.ExitConfig
 	}
-	fmt.Fprintf(stdout, "ok: wrote %s (detected: %s). Next: `hadome suggest` lists invariant candidates.\n", config.FileName, detected)
+	fmt.Fprintf(stdout, "ok: wrote %s (detected: %s). Next: `hadome suggest` lists invariant candidates, and `hadome suggest diagram` drafts the dependency diagram.\n", config.FileName, detected)
 	return engine.ExitOK
 }
 
