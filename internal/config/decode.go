@@ -48,16 +48,13 @@ func decode(raw map[string]any, layers []string) Config {
 		c.Mutation = &Mutation{Test: textList(m["test"]), Timeout: str(m["timeout"]),
 			MaxMutants: intOr(m["max-mutants"], 100), TestsSeparator: str(orDefault(m["tests-separator"], "|"))}
 	}
-	files := object(raw["files"])
-	c.TestFiles = textList(files["tests"])
-	c.GeneratedFiles = textList(files["generated"])
-	c.AnsibleFiles = textList(files["ansible"])
-	c.ProductFiles = textList(files["product"])
+	c.decodeFiles(object(raw["files"]))
 	size := object(object(raw["rules"])["size"])
 	c.Size = Limits{}
 	for _, k := range sizeKey.Fields {
 		c.Size[k.Name] = intOr(size[k.Name], k.Default.(int))
 	}
+	c.CycleAllow = cycleAllow(object(object(object(raw["rules"])["deps"])["cycles"])["allow"])
 	c.TodoForm = DefaultTodo
 	comments := object(object(raw["rules"])["comments"])
 	if form, ok := comments["todo"].(string); ok {
@@ -68,6 +65,14 @@ func decode(raw map[string]any, layers []string) Config {
 		c.EntryPoints = append(c.EntryPoints, EntryPoint{Names: textList(m["names"]), Paths: textList(m["paths"])})
 	}
 	return c
+}
+
+// decodeFiles reads the globs of files, which give files their roles.
+func (c *Config) decodeFiles(files map[string]any) {
+	c.TestFiles = textList(files["tests"])
+	c.GeneratedFiles = textList(files["generated"])
+	c.AnsibleFiles = textList(files["ansible"])
+	c.ProductFiles = textList(files["product"])
 }
 
 func orDefault(v, def any) any {

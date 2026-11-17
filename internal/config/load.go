@@ -50,6 +50,9 @@ type Config struct {
 	// none is configured. OwnCalls is this version's own, as OwnDiagram is.
 	Calls    *Diagram
 	OwnCalls *Diagram
+	// CycleAllow are the pairs of directory globs whose imports between each other deps/cycle does
+	// not follow (rules.deps.cycles.allow).
+	CycleAllow [][2]string
 	// Layers are the files that were read, earliest layer first. Empty means built-in settings only.
 	Layers []string
 	// Databases are the SQL databases of sql.databases, in order. Empty means every .sql file is one

@@ -64,7 +64,11 @@ func TestDraftedDiagramsGiveTheirVersionNoFinding(t *testing.T) {
 				t.Fatalf("the drafts do not load as configuration: %v\n%s\n%s", err, tree["docs/deps.md"].Data, tree["docs/calls.md"].Data)
 			}
 			for _, r := range deps.All() {
-				got, err := r.(engine.FindingRule).Find(engine.Input{Facts: a, Config: c})
+				fr, ok := r.(engine.FindingRule)
+				if !ok { // deps/cycle looks at imports, not at the diagrams
+					continue
+				}
+				got, err := fr.Find(engine.Input{Facts: a, Config: c})
 				if err != nil {
 					t.Fatal(err)
 				}

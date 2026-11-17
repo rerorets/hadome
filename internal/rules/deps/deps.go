@@ -182,4 +182,6 @@ func unitsBelow(label string, unitDir map[string]string) bool {
 }
 
 // All returns the deps/ rules.
-func All() []engine.Rule { return []engine.Rule{notInDiagram{}, diagramStale{}, callNotInDiagram{}} }
+func All() []engine.Rule {
+	return []engine.Rule{notInDiagram{}, diagramStale{}, callNotInDiagram{}, cycle{}}
+}

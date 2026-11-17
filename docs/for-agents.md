@@ -134,6 +134,8 @@ When `.hadome.yml` names a diagram (`rules.deps.diagram`), an import between the
 
 When it also names a call diagram (`rules.deps.calls`), a call between the repository's units must follow an arrow of that diagram. On `deps/call-not-in-diagram`, change the code to call through the layers the diagram allows. Do not mark a box `wiring` to make the check pass either: that returns `3` too.
 
+With or without a diagram, an import that closes a new cycle between units fails `deps/cycle`. On it, decide which direction is right and remove the import going the other way. Do not add a pair to `rules.deps.cycles.allow` to make the check pass: that returns `3`.
+
 When there is no diagram, draft them with `hadome suggest diagram` and `hadome suggest calls` and propose them to the person. A draft draws the imports and calls as they are, so configuring it fails none of today's code. How boxes are grouped (`--depth`) and which box gets `wiring` are for deciding with the person.
 
 Proved by: `hadome check` reports no `deps/` regression.

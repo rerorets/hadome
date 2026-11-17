@@ -62,11 +62,11 @@ func (e *Engine) Check(src Source) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	base, err := e.side(bv, ba, forBase, rules)
+	base, err := e.side(bv, ba, forBase, rules, nil)
 	if err != nil {
 		return Report{}, err
 	}
-	head, err := e.side(hv, ha, headCfg, rules)
+	head, err := e.side(hv, ha, headCfg, rules, &base.input)
 	if err != nil {
 		return Report{}, err
 	}
@@ -179,7 +179,8 @@ func (e *Engine) analyze(bv Version, bc config.Config, hv Version, hc config.Con
 	return ba, ha, nil
 }
 
-func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rule) (side, error) {
+// side computes one version. against is base's input when v is head, and nil when v is base.
+func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rule, against *Input) (side, error) {
 	in := Input{Facts: a, Config: c, Version: v}
 	s := side{input: in, items: map[string][]Item{}}
 	known := map[string]bool{}
@@ -188,6 +189,12 @@ func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rul
 		known[rule.ID()] = true
 		var err error
 		switch r := rule.(type) {
+		case BaseFindingRule:
+			if against != nil {
+				var found []Finding
+				found, err = r.FindAgainst(*against, in)
+				raw = append(raw, found...)
+			}
 		case FindingRule:
 			var found []Finding
 			found, err = r.Find(in)

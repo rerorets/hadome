@@ -112,6 +112,8 @@ func (v *validator) str(n ast.Node, path string, k Key) any {
 		v.fail(n, path, "is not a valid regular expression: "+err.Error(), k)
 	} else if k.Glob && !validGlob(s) {
 		v.fail(n, path, fmt.Sprintf("%q is not a valid glob", s), k)
+	} else if _, _, ok := GlobPair(s); k.GlobPair && !ok {
+		v.fail(n, path, fmt.Sprintf("%q is not two valid globs joined by <->", s), k)
 	}
 	return s
 }

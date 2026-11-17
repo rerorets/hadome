@@ -174,9 +174,13 @@ var Japanese = map[string]string{
 
 	// deps/.
 	"import not in the diagram: %s → %s (%s)": "図に無い import: %s → %s（%s）",
-	"no node covers the importing unit":       "import する側のユニットを覆うノードが無い",
-	"no node covers the imported unit":        "import される側のユニットを覆うノードが無い",
-	"no arrow %s --> %s":                      "矢印 %s --> %s が無い",
+	"import closes a cycle: %s":               "循環を閉じる import: %s",
+	"an import of a pair of units base does not have that closes a cycle between units":                                                                        "base に無いユニットの組の import のうち、ユニットの間の循環を閉じるもの",
+	"units in a cycle can no longer be changed, tested or split apart one at a time; it is the plainest sign that the direction of dependencies broke":         "循環したユニットは、片方だけを変えたり、テストしたり、切り出したりできなくなる。依存の向きが崩れたことの、いちばん分かりやすい形",
+	"decide which direction is right and remove the import going the other way, often by letting the inner unit declare an interface the outer one implements": "どちらの向きが正しいかを決め、逆向きの import を消す。多くの場合、内側のユニットがインターフェースを宣言し、外側のユニットがそれを実装する",
+	"no node covers the importing unit": "import する側のユニットを覆うノードが無い",
+	"no node covers the imported unit":  "import される側のユニットを覆うノードが無い",
+	"no arrow %s --> %s":                "矢印 %s --> %s が無い",
 	"an import between the repository's own units that the dependency diagram does not draw":                                                                   "リポジトリ自身のユニットの間の、依存の図に描かれていない import",
 	"the diagram is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                             "人とエージェントは、何が何に依存してよいかを図で知る。図に描かれていない import は、図を誤りにする",
 	"the diagram (%s) is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                        "人とエージェントは、何が何に依存してよいかを図（%s）で知る。図に描かれていない import は、図を誤りにする",
