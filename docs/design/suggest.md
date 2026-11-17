@@ -6,6 +6,7 @@ This document covers the parts that spare people from configuring hadome and spa
 
 - **Invariant candidates**: places in the code that usually carry an invariant nobody has written down yet (package `internal/suggest`)
 - **`hadome suggest`**: prints the candidates as entries ready to paste into `.hadome.yml`
+- **`hadome suggest diagram` and `hadome suggest calls`**: print drafts of the dependency diagram and the call diagram, drawn as the code is now
 - **`hadome agents`**: prints, or writes into a file, the block that tells agents about hadome
 - **`hadome init`**: writes a minimal `.hadome.yml`
 
@@ -139,6 +140,53 @@ The engine knows only the function's type. `cmd/hadome` passes `suggest.Candidat
 
 Analyses the working tree with its configuration and prints the candidates as `invariants:` entries, each with a comment saying where it is and why it was suggested. Accepting one is copying it into `.hadome.yml`.
 
+## Diagram drafts
+
+The dependency diagram and the call diagram ([rules-deps.md](rules-deps.md)) take work to draw by hand, so they tend to go undrawn. So hadome prints a diagram drawing the imports and calls as they are now.
+
+| Form | What it does |
+|---|---|
+| `hadome suggest diagram` | Prints a draft of the dependency diagram, as the contents of a Markdown file |
+| `hadome suggest calls` | Prints a draft of the call diagram, in the same form |
+| With `--depth N` | Changes the depth boxes are grouped at. Default `2` |
+
+```sh
+hadome suggest diagram > docs/dependencies.md
+hadome suggest calls > docs/calls.md
+```
+
+```yaml
+rules:
+  deps:
+    diagram: docs/dependencies.md
+    calls: docs/calls.md
+```
+
+- **Why as things are**: hadome stops only changes that make things worse. A diagram of things as they are is the first baseline as it is. A change adding the diagram fails nothing
+- **Grouping boxes**: units' directories are grouped at the `N`th level from the root. Example: with `N` at `2`, `internal/store/content` goes in the box `internal/store/...`
+  - A unit shallower than `N` levels gets a box of its directory alone. Example: `cmd`
+  - The unit of the files at the root gets a box labelled `.`
+  - Every unit is in some box, since an import of a unit in no box fails
+- **Arrows**: one arrow between two boxes when at least one import (a call, for the call diagram) goes between them. Nothing within a box is drawn
+- **What is counted**: arrows are drawn from what `deps/not-in-diagram` and `deps/call-not-in-diagram` count. Where a call reaches (implementations of an interface, objects made in place, and so on) is read as the rule reads it
+- **Node IDs**: the label with everything but letters and digits made `_`. When two collide, a number is added
+- **Output**: a heading, a short note that it is a draft, and a `mermaid` block. The call diagram's note adds that the box making and wiring everything is worth marking `wiring`
+- **A person tidies it**: too many arrows, too coarse a grouping: a person decides what to change. Adding a diagram tightens the configuration, so it needs no review (exit code `3`). Adding arrows later loosens it and goes to review
+
+### Where diagrams are recommended
+
+Diagrams are recommended in three places. Not in the output of `hadome check`: in a repository without a diagram, the same notice would only come at every run.
+
+| Where | How |
+|---|---|
+| `hadome init` | The `.hadome.yml` it writes has the `rules.deps` settings as comments, with how to draft the diagrams above them |
+| `hadome init`'s last line | Names `hadome suggest diagram` as a next step, along with `hadome suggest` |
+| The `hadome agents` block | The line on proposing invariant candidates to a person also says "propose a draft when there is no diagram", rather than a line of its own |
+
+The block's line on proposals reads:
+
+> When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
+
 ## `hadome agents`
 
 | Form | Does |
@@ -177,6 +225,8 @@ Languages are detected by file extension. Ansible's YAML cannot be told apart by
 
 hadome works without the file, so `init` is a shortcut, never a requirement.
 
+It writes the dependency diagram settings, `rules.deps.diagram` and `rules.deps.calls`, as comments, saying above them that `hadome suggest diagram` and `hadome suggest calls` draft the diagrams. A named file that does not exist is a configuration error, so they are not turned on.
+
 It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)).
 
 - For each language found it lists the usual test command, but only for a language whose file the command needs (table below) is at the root. Example: without a `package.json` at the root `npm test` cannot run, so it is not written
@@ -200,10 +250,14 @@ It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)).
 2. `hadome agents --write` run twice leaves the file as it was after the first run
 3. When `hadome agents --write` fails, no file has changed
 4. `hadome init` never overwrites a file
+5. With the diagram drafts of a working tree configured, that working tree gets no `deps/not-in-diagram`, `deps/call-not-in-diagram` or `deps/diagram-stale`
 
 ## Deliberately left out
 
 - Candidates from how code behaves (what it writes, which tables it touches). Names and parameters are all the facts hold
 - An interactive mode for accepting candidates. The output is valid configuration; accepting is pasting
 - Searching for where `hadome agents` writes. The reason is in "Writing into files"
+- hadome writing a diagram draft into the configuration. A diagram is the repository's design, so where it goes and how it changes is for a person to decide. As with `hadome suggest`, it is only printed
+- Guessing how to group boxes (layer names, splits such as `domain` and `infra`). How directories are named differs between repositories. Boxes are grouped at a fixed depth, and regrouping is left to a person
+- Guessing the wiring box. Which box is `wiring` is not decided by how many calls it makes. `wiring` is a mark that takes calls out of the check, so a guessed one would miss calls that should be looked at
 - Asking where `hadome agents` writes, interactively. Agents run `hadome agents` most, and an agent cannot answer a question. It would also stop CI
