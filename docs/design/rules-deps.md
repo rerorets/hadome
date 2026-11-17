@@ -142,7 +142,31 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 - **Where it is reported**: at the added import. With two or more imports of the pair of directories, at the first by path and line. The message gives one way back, such as `store → domain → store`: the one through the fewest units, and among those, the first by directory names
 - The anchor is the pair of directories. As with `deps/not-in-diagram`, moving the import keeps the same violation
 - **Imports counted**: as for `deps/not-in-diagram`: only imports of product code between the repository's own units. Imports bringing in types only and imports of test files do not count
-- **The diagrams**: it looks apart from them. A new cycle between units fails even when the diagram draws arrows both ways, and so does a cycle between units within one box. An intended cycle takes an exception with a reason (`gate:allow deps/cycle reason: …`) on the import's line
+  - Imports inside Python's `if TYPE_CHECKING:` bring in types only too, and do not count: they are how cycles are avoided. `deps/not-in-diagram` counts them the same way
+- **Imports between a parent and a child**: when the importing file is Rust, Java or Kotlin, an import between a directory and one of its ancestors does not count when cycles are followed. In TypeScript and Python it does
+
+| Language | What a cycle between a parent and a child does | Counted |
+|---|---|---|
+| TypeScript, Python | Values come out `undefined`, or `ImportError` is raised, depending on load order, also when a parent's `index.ts` or `__init__.py` re-exports a child | Yes |
+| Rust | Nothing. A crate compiles as one. A crate root declaring a child with `mod` and the child coming back with `use crate::…` is the usual way to write | No |
+| Java, Kotlin | Next to nothing at run time. A parent and a child package are close to containment; what matters to design is between siblings | No |
+| Go | The compiler allows no cycle | (none) |
+
+  - Why: over the last 50 commits of 14 public repositories, counting every import, Rust's nushell had 7 commits closing a new cycle; without imports between parents and children, 1. Each of the 7 Rust, Java and Kotlin repositories had 0 or 1. The cycles left without them had broken directions, such as `editor` ⇄ `view` and `error` ⇄ `util`
+- **Allowed pairs**: imports between a pair written in `rules.deps.cycles.allow` do not count when cycles are followed. They are for pairs whose cycle the design accepts. Examples: MVP with the View and the Presenter in separate packages, screens and a Coordinator, a Visitor and its elements
+- **The diagrams**: it looks apart from them. A new cycle between units fails even when the diagram draws arrows both ways, and so does a cycle between units within one box. A one-off intended cycle takes an exception with a reason (`gate:allow deps/cycle reason: …`) on the import's line. When the same shape repeats feature after feature, an allowed pair is written instead
+
+```yaml
+rules:
+  deps:
+    cycles:
+      allow:
+        - app/ui/** <-> app/presenter/**
+```
+
+- **Writing an allowed pair**: a string `<pattern> <-> <pattern>`. A pattern is a glob of directories from the repository root (`*` one level, `**` any number). Imports between a directory matching one pattern and a directory matching the other do not count, either way
+  - Adding a pair loosens the configuration, so it goes to review (exit code `3`). Removing one needs none
+  - An entry that is no pair (no `<->`, or an empty pattern) is a configuration error (exit code `2`)
 - **Cycles already there**: an import of a pair base has does not fail, even in a cycle. Only changes that make things worse are stopped
 
 ## Types
@@ -398,7 +422,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
-| `deps/cycle` | a new import closing a cycle fails · an import closing a cycle through three or more units fails too · an import of a cycle already there passes · a new import making no cycle passes · an import of types only passes even when it closes a cycle · an import of a test file passes even when it closes a cycle · a cycle between units within one box fails too |
+| `deps/cycle` | a new import closing a cycle fails · an import closing a cycle through three or more units fails too · an import of a cycle already there passes · a new import making no cycle passes · an import of types only passes even when it closes a cycle · an import inside Python's `TYPE_CHECKING` passes even when it closes a cycle · an import of a test file passes even when it closes a cycle · a cycle between units within one box fails too · a cycle between a parent and a child in TypeScript fails · a cycle between a parent and a child in Rust and Kotlin passes · a cycle between an allowed pair passes · adding an allowed pair needs review |
 | `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
@@ -411,12 +435,15 @@ Only the places that take a value from outside are counted: parameters, attribut
 6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
 7. A call within one unit always passes
 8. `deps/cycle` fails only imports of pairs of directories base has no import of. An import of a pair base has never fails, even in a cycle
-9. Every import `deps/cycle` fails is on a cycle of head
+9. Every import `deps/cycle` fails is on a cycle of head, and that cycle holds no import between an allowed pair, nor any Rust, Java or Kotlin import between a parent and a child
+10. Adding an allowed pair never passes silently
 
 ## Deliberately left out
 
 - Cycles between nodes. A diagram's arrows are allowed when the diagram draws them, even in a cycle. Cycles of imports between units are looked at apart from the diagram, by `deps/cycle`
 - Cycles of calls. Callbacks and calls through interfaces usually go against the imports; a cycle of calls is most often as designed, so it is not looked at
+- Counting every cycle between a parent and a child, whatever the language. In Rust, every new module would then fail, as the measurement above shows
+- Leaving out every cycle between a parent and a child, whatever the language. A cycle through a TypeScript barrel (`index.ts` re-exporting) is a seed of run-time failures; leaving it out would miss what is most worth stopping
 - Telling of cycles already there. A cycle in base neither fails nor is told of. The drafts ([suggest.md](suggest.md)) list them as arrows both ways
 - Cycles through other modules. hadome does not read other modules, so a way back through an external library is not counted
 - Transitive arrows. `a --> b --> c` does not allow `a` to import `c`
