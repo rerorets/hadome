@@ -155,6 +155,7 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 - `deps/not-in-diagram` が出たら、図が許すものに依存するようにコードを変えます。たいていは、import する側のユニットが宣言するインターフェースを通します。
 - チェックを通すために、図に新しい矢印を描きません。設計を変えることになるので `3` になります。
 - 呼び出しの図（`rules.deps.calls`）があるときは、ユニット間の呼び出しも、その図の矢印に沿っていなければなりません。`deps/call-not-in-diagram` が出たら、図が許す層を通して呼ぶようにコードを変えます。クラス `wiring` もチェックを通すためには付けません。付けると `3` になります。
+- 図が無いときは、`hadome suggest diagram` と `hadome suggest calls` で叩き台を作り、人に提案します。叩き台は、いまの import と呼び出しをそのまま描いたものです。設定しても、いまのコードは落ちません。箱のまとめ方（`--depth`）や、つなぎ込みの箱に付ける `wiring` は、人と決めます。
 
 確かめ方: `hadome check` が `deps/` の後退を報告しない。
 

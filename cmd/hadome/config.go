@@ -25,6 +25,8 @@ const usage = `usage:
   hadome explain [--lang en|ja] <rule, key or value>
                                                     describe one rule, configuration key or value
   hadome suggest                                    print invariant candidates as configuration to paste
+  hadome suggest diagram|calls [--depth N]          print a draft of the dependency or call diagram, drawn
+                                                    from the working tree as it is
   hadome agents [--lang en|ja] [--write FILE...]    print, or write into each FILE, the block that tells agents about hadome
   hadome init                                       write a minimal .hadome.yml (never overwrites)
   hadome version                                    print the version

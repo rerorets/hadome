@@ -53,7 +53,7 @@ hadome は自分自身も検査します。不変条件は [.hadome.yml](.hadome
 - `3` で人に聞くときは、hadome が挙げたもの（ルールとその `why`）、その変更をした理由、受け入れられないときに取る別のやり方とその手間を書く。決めるのは人に任せ、「問題ない」と言わない。
 - チェックを通すために `gate:allow` を足さない。足すのはルールが本当に当てはまらないときだけで、具体的な理由を書き、人に伝える。
 - テストが製品固有の不変条件を守るときは、doc コメントに `guards: <id>` を書く。`durable`・`erasable`・`append-only`・`fail-closed` は `guards: <type> <target>` を書く。`idempotent`・`round-trip`・`isolated` はテストの呼び出しから自動で見つかる。一覧は `hadome explain invariants`。
-- `hadome check` が不変条件の候補を出し、それが大事な振る舞いに当たるなら、自分で足さずに人に提案する。
+- `hadome check` が不変条件の候補を出し、それが大事な振る舞いに当たるとき、また `.hadome.yml` に依存の図（`rules.deps.diagram`）が無いときは、自分で足さずに人に提案する。図の叩き台は `hadome suggest diagram` と `hadome suggest calls` で作る。
 - `.hadome.yml` を変える前に `hadome explain <key>` を実行し、変えた後に `hadome config check` を実行する。
 - ある種類の変更を止めたいと人に頼まれたら（例: 本番のデータを書き換える SQL、コードに混ざった鍵）、門番か不変条件で書く。例は次にある。 https://github.com/rerorets/hadome/blob/main/docs/for-agents.ja.md#やってはいけない変更を止める
 <!-- hadome:end -->

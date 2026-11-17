@@ -237,7 +237,7 @@ This repository uses hadome to stop regressions in code and tests.
 - When you ask about `3`, give what hadome listed (the rule and its `why`), why you made that change, and the other way you would take if it is not accepted, with what that costs. Leave the decision to the person; do not tell them it is fine.
 - Never add `gate:allow` to get a check to pass. Add one only when the rule truly does not apply, with a specific reason, and tell the person.
 - When a test guards a product-specific invariant, add `guards: <id>` to its doc comment; for `durable`, `erasable`, `append-only` and `fail-closed`, add `guards: <type> <target>`. `idempotent`, `round-trip` and `isolated` are recognised from the test's calls. `hadome explain invariants` lists them.
-- When `hadome check` lists invariant candidates and one covers behaviour that matters, propose it to the person instead of adding it yourself.
+- When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
 - Before changing `.hadome.yml`, run `hadome explain <key>`. After changing it, run `hadome config check`.
 - When a person asks to stop a kind of change (for example SQL that rewrites production data, or a key in the code), write it as a gate or an invariant. Examples: https://github.com/rerorets/hadome/blob/main/docs/for-agents.md#stopping-changes-that-must-not-be-made
 <!-- hadome:end -->
@@ -282,6 +282,13 @@ hadomeはリポジトリを読むだけで、GitHubなどのサービスとは�
 設定は`.hadome.yml`に書きます。例: 上限の数字、依存の図、不変条件。ファイルが無くても動きます。
 
 `hadome init`で最小の`.hadome.yml`を作れます。すでにあるファイルは上書きしません。出力をいつも日本語にするなら、そこに`messages: ja`を書きます。`--lang`を付けたときは、`--lang`を優先します。
+
+依存の図は`hadome suggest diagram`で、呼び出しの図は`hadome suggest calls`で、叩き台を作れます。叩き台は、いまのコードのとおりに描いた図です。ファイルに書いて`rules.deps.diagram`と`rules.deps.calls`に書くと、図より悪くする変更が落ちるようになります。
+
+```sh
+hadome suggest diagram > docs/dependencies.md
+hadome suggest calls > docs/calls.md
+```
 
 設定を変えたり、不変条件を提案したりするのはエージェントの役目です。エージェントは`hadome explain <キー>`で仕様を読みます。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。人は提案を採るかどうかと、ルールを緩める変更を認めるかどうかを決めます。緩める変更には、終了コード`3`で人の確認が入ります。
 

@@ -9,7 +9,7 @@ This repository uses hadome to stop regressions in code and tests.
 - When you ask about `3`, give what hadome listed (the rule and its `why`), why you made that change, and the other way you would take if it is not accepted, with what that costs. Leave the decision to the person; do not tell them it is fine.
 - Never add `gate:allow` to get a check to pass. Add one only when the rule truly does not apply, with a specific reason, and tell the person.
 - When a test guards a product-specific invariant, add `guards: <id>` to its doc comment; for `durable`, `erasable`, `append-only` and `fail-closed`, add `guards: <type> <target>`. `idempotent`, `round-trip` and `isolated` are recognised from the test's calls. `hadome explain invariants` lists them.
-- When `hadome check` lists invariant candidates and one covers behaviour that matters, propose it to the person instead of adding it yourself.
+- When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
 - Before changing `.hadome.yml`, run `hadome explain <key>`. After changing it, run `hadome config check`.
 - When a person asks to stop a kind of change (for example SQL that rewrites production data, or a key in the code), write it as a gate or an invariant. Examples: https://github.com/rerorets/hadome/blob/main/docs/for-agents.md#stopping-changes-that-must-not-be-made
 <!-- hadome:end -->
