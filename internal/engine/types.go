@@ -95,6 +95,14 @@ type FindingRule interface {
 	Find(in Input) ([]Finding, error)
 }
 
+// BaseFindingRule finds violations in head that depend on base as well, such as an import of a pair
+// base does not have. The engine calls nothing on base, so each finding it returns is a regression
+// unless a marker suppresses it; leaving out what base already had is the rule's job.
+type BaseFindingRule interface {
+	Rule
+	FindAgainst(base, head Input) ([]Finding, error)
+}
+
 // MeasureRule reports what is guarded in one version. An item in base missing from head is a
 // regression unless RemovedLegitimately says otherwise.
 type MeasureRule interface {

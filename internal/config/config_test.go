@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -597,5 +598,38 @@ func TestAnEntryPointNeedsReadableNames(t *testing.T) {
 		if es[0].Key != key {
 			t.Errorf("%q: want an error at %s, got %v", yml, key, es)
 		}
+	}
+}
+
+func TestAllowingACyclePairLoosensAndIsRead(t *testing.T) {
+	dir := t.TempDir()
+	none := mustLoad(t, "schema: 1\n", dir)
+	one := mustLoad(t, "schema: 1\nrules:\n  deps:\n    cycles:\n      allow: [\"app/ui/**  <->app/presenter/*\"]\n", dir)
+	if got := looser(Diff(none, one)); len(got) != 1 {
+		t.Errorf("adding: want 1 looser change, got %v", got)
+	}
+	if got := looser(Diff(one, none)); len(got) != 0 {
+		t.Errorf("removing: want no looser change, got %v", got)
+	}
+	if want := [][2]string{{"app/ui/**", "app/presenter/*"}}; !reflect.DeepEqual(one.CycleAllow, want) {
+		t.Errorf("want %v, got %v", want, one.CycleAllow)
+	}
+}
+
+// An entry that is not two globs around <-> would allow nothing without a word, so it is a
+// configuration error.
+func TestAMalformedCyclePairIsAnError(t *testing.T) {
+	for _, entry := range []string{"app/ui/**", "app/ui/** <->", " <-> app/b", "app/[a <-> app/b", "app/a <-> app/[b"} {
+		es := loadErrors(t, "schema: 1\nrules:\n  deps:\n    cycles:\n      allow: [\""+entry+"\"]\n", t.TempDir())
+		if len(es) != 1 || !strings.Contains(es[0].Problem, "not two valid globs joined by <->") {
+			t.Errorf("%q: got %v", entry, es)
+		}
+	}
+}
+
+func TestAStringKeyGivenAnotherKindIsAnError(t *testing.T) {
+	es := loadErrors(t, "schema: 1\nrules:\n  deps:\n    cycles:\n      allow: [[app/a, app/b]]\n", t.TempDir())
+	if len(es) != 1 || !strings.Contains(es[0].Problem, "must be a string") {
+		t.Fatalf("got %v", es)
 	}
 }

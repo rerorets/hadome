@@ -45,3 +45,21 @@ func validGlob(g string) bool {
 	}
 	return true
 }
+
+// GlobPair splits an entry written "<glob> <-> <glob>" into its two globs. It reports false when the
+// entry has no "<->", or either side is empty or not a valid glob.
+func GlobPair(entry string) (string, string, bool) {
+	a, b, ok := strings.Cut(entry, "<->")
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	return a, b, ok && a != "" && b != "" && validGlob(a) && validGlob(b)
+}
+
+// cycleAllow splits the validated entries of rules.deps.cycles.allow into their two globs.
+func cycleAllow(v any) [][2]string {
+	var out [][2]string
+	for _, e := range textList(v) {
+		a, b, _ := GlobPair(e)
+		out = append(out, [2]string{a, b})
+	}
+	return out
+}

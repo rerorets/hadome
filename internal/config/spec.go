@@ -71,6 +71,7 @@ type Key struct {
 	Pattern  string  // for strings; a regular expression the whole value must match
 	Regexp   bool    // for strings: the value is itself a regular expression and must compile
 	Glob     bool    // for strings: the value is a path glob (MatchesAny) and must be well formed
+	GlobPair bool    // for strings: the value is two path globs joined by <->
 	Default  any     // for ints and strings: the value when the key is omitted
 	Min      int     // for ints: the smallest value accepted
 	MinItems int     // for lists
@@ -246,6 +247,13 @@ var depsKey = Key{
 			"Calls from a box with the class wiring (a DI container, main) are not checked. " +
 			"Without it, deps/call-not-in-diagram finds nothing. Adding an arrow or marking wiring needs a person's review.",
 		Example: "calls: docs/conventions/calls.md",
+	}, {
+		Name: "cycles", Kind: KindObject, Doc: "Settings of deps/cycle.",
+		Example: "cycles:\n  allow: [app/ui/** <-> app/presenter/**]",
+		Fields: []Key{stringList("allow", "Pairs of directory globs, written a/** <-> b/**, whose imports between each other "+
+			"deps/cycle does not follow, in either direction: cycles a design accepts, such as a view and its presenter. "+
+			"Adding a pair needs a person's review.",
+			"allow: [app/ui/** <-> app/presenter/**]", LooserWhenAdded, Key{Kind: KindString, GlobPair: true})},
 	}},
 }
 
