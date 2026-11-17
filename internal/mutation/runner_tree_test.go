@@ -78,7 +78,7 @@ func runLeavingALeaf(t *testing.T, mode, hold string) bool {
 			endErr = w.gone()
 		}
 	}}
-	passed, err := runTree(ctx, t.TempDir(), []string{exe, StandInTree, mode, w.arg, hold}, out)
+	passed, err := runTree(ctx, t.TempDir(), "", []string{exe, StandInTree, mode, w.arg, hold}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -71,8 +71,9 @@ type threadEntry struct {
 }
 
 // ownTree makes a job for the command and has the command start suspended, so that it cannot start
-// a process before it is in the job.
-func ownTree(cmd *exec.Cmd) (*processTree, error) {
+// a process before it is in the job. An interrupt ends hadome on Windows without passing through
+// it, so last is never run; the next run empties the temporary directory before it starts.
+func ownTree(cmd *exec.Cmd, _ func()) (*processTree, error) {
 	r, _, err := procCreateJobObjectW.Call(0, 0)
 	if r == 0 {
 		return nil, fmt.Errorf("creating a job object for the test command: %w", err)

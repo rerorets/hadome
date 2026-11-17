@@ -531,7 +531,7 @@ So hadome gives the test command a temporary directory of its own, and empties i
 
 - **Why the path stays the same.** `go test` puts the environment variables a test read into the key of its test result cache. `t.TempDir()` reads `TMPDIR`, so with a new path at every run, such tests would never hit the cache. Most of stage 3's whole test run comes from the cache
 - **Why under `os.TempDir`.** To keep what the user's temporary directory is like (a file system in memory, a setting that forbids running programs, and so on). It also brings paths only 31 characters nearer to the length limit of Unix domain socket paths (104 bytes on macOS)
-- **Why it is emptied before as well.** So that what was left when hadome itself was stopped with `SIGKILL` is removed by the next run
+- **Why it is emptied before as well.** So that what was left when hadome itself was stopped with `SIGKILL` is removed by the next run. The same goes for an interrupt on Windows: there an interrupt ends hadome without passing through it, so hadome ends before it empties the directory
 - **Someone else's.** If the path already exists and is a symbolic link, or a directory not owned by the user running hadome, hadome stops with exit code `2`. This is so as not to write into something another user prepared, in a temporary directory shared with other users such as `/tmp` on Linux. It is made with permissions `0700`
 - **When it cannot be emptied.** The result and the exit code do not change, and one line on standard error says so. What is left is removed again before the next run
 
@@ -559,7 +559,7 @@ So hadome gives the test command a temporary directory of its own, and empties i
 17. A command whose GOOS or GOARCH differs from the environment hadome runs in is never run
 18. In a version with two or more Go modules, a mutant is never reported as a survivor without the tests of its file's module having run
 19. With `{module}`, stage 3 runs the tests in every module holding a `_test.go` file
-20. After a run of the test command, the temporary directory hadome gave it is empty, whether the run ended at the time limit, by an interrupt or by the command exiting. When it could not be emptied, hadome says so
+20. After a run of the test command, the temporary directory hadome gave it is empty, whether the run ended at the time limit, by an interrupt or by the command exiting. After an interrupt on Windows, though, it is emptied before the next run. When it could not be emptied, hadome says so
 
 ## Deliberately left out
 
