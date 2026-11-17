@@ -41,6 +41,20 @@
 
 `Review` の付いた項目が head に無いときは、後退ではなく人の確認に回ります。`Review` の付いた違反と同じ扱いです。
 
+### base と比べて見つけるルール
+
+見つけるルールの中には、head のものが違反かどうかを base で決めるものがあります。例: `deps/cycle` は、base に無い組の import だけを落とします。1つの版しか見ないと、前からある import が新しい循環に入ったときに、それを新しい違反と見分けられません。
+
+このルールは `BaseFindingRule` として、`Find` の代わりに `FindAgainst(base, head Input)` を持ちます。
+
+| 版 | エンジンが呼ぶもの |
+|---|---|
+| base | 何も呼びません。違反はありません |
+| head | `FindAgainst(base, head)` です。返した違反は、ほかの違反と同じく例外の印で抑えられ、後退か人の確認になります |
+
+- base に違反が無いので、head の違反はどれも base と対応せず、後退になります。base を見て前からあるものを外すのは、ルールの仕事です
+- この違反を抑えた例外の印は、変更が base に入ったあとは何も抑えません。両方の版で `engine/marker-unused` として出ますが、base と対応するので後退にはなりません。消しても構いません
+
 ## 版をまたいで違反を突き合わせる
 
 行が動いても、base と head の「同じ違反」は、同じ違反だと認められなければなりません。行番号だけで見ると、違反より上を編集するたびに、新しい違反に見えてしまうからです。
@@ -280,6 +294,10 @@ classDiagram
     <<interface>>
     +Find(in Input) ([]Finding, error)
   }
+  class BaseFindingRule {
+    <<interface>>
+    +FindAgainst(base Input, head Input) ([]Finding, error)
+  }
   class MeasureRule {
     <<interface>>
     +Measure(in Input) ([]Item, error)
@@ -337,11 +355,14 @@ classDiagram
   Engine --> Rule
   Source --> Version
   Rule <|-- FindingRule
+  Rule <|-- BaseFindingRule
   Rule <|-- MeasureRule
   MeasureRule <|-- LossExplainer
   FindingRule ..> Input
+  BaseFindingRule ..> Input
   MeasureRule ..> Input
   FindingRule --> Finding
+  BaseFindingRule --> Finding
   MeasureRule --> Item
   Engine --> Report
   Report --> Finding
