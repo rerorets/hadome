@@ -78,8 +78,9 @@ func TestDraftedDiagramsGiveTheirVersionNoFinding(t *testing.T) {
 
 // viewpoint: behaviour
 // target: deps.DraftDiagram
-// Design suggest, "Diagram drafts": units are grouped at the depth into boxes, a directory with
-// units under it as dir/..., a shallower unit in a box of its own, the root's in the box "." (root), and an
+// Design suggest, "Diagram drafts": units are grouped at the depth into boxes, counting only
+// directories that branch, a directory with units under it as dir/..., a unit that branches fewer
+// times in a box of its own (cmd/tool/run, under directories with one child each), the root's in the box "." (root), and an
 // arrow is drawn once between two boxes, never within one; IDs are the labels' letters and digits,
 // told apart by a number when two come out the same; boxes and arrows come in the order of their
 // text, so the same version always gives the same file.
@@ -87,9 +88,9 @@ func TestADraftGroupsUnitsIntoBoxesAtTheDepth(t *testing.T) {
 	got := deps.DraftDiagram(drafted(), 2)
 	for _, want := range []string{
 		"  web_app_src2[\"web_app/src\"]\n", "  u_9lives[\"9lives\"]\n",
-		"  root[\".\"]\n", "  cmd[\"cmd\"]\n", "  cmd_tool[\"cmd/tool/...\"]\n", "  internal_store[\"internal/store/...\"]\n",
+		"  root[\".\"]\n", "  cmd[\"cmd\"]\n", "  cmd_tool_run[\"cmd/tool/run\"]\n", "  internal_store[\"internal/store/...\"]\n",
 		"  u_end[\"end\"]\n", "  web_app_src[\"web-app/src\"]\n",
-		"  root --> cmd\n", "  cmd --> internal_store\n", "  cmd_tool --> internal_store\n", "  internal_store --> internal_domain\n",
+		"  root --> cmd\n", "  cmd --> internal_store\n", "  cmd_tool_run --> internal_store\n", "  internal_store --> internal_domain\n",
 		"  u_end --> web_app_src\n",
 	} {
 		if !strings.Contains(got, want) {
@@ -138,5 +139,84 @@ func TestACallDraftDrawsCallsAsTheRuleCountsThem(t *testing.T) {
 	}
 	if !strings.Contains(got, "wiring") {
 		t.Errorf("want the note on wiring in the call diagram's draft, got\n%s", got)
+	}
+}
+
+// viewpoint: behaviour
+// target: deps.DraftDiagram
+// Design suggest, "Counting levels": directories with one child each, as Java's and Kotlin's
+// src/main/kotlin/<package path>, are not counted, so the packages under a long path still get boxes
+// of their own; a unit at the top of such a path, such as a build script's, does not count either,
+// nor does a split by language (src/main into kotlin, resources and webui), since branching is seen
+// among units of one language.
+func TestALongUnbranchedPathDoesNotTakeEverythingIntoOneBox(t *testing.T) {
+	const pkg = "mod/server/src/main/kotlin/com/example/shop"
+	a := &facts.Analysis{}
+	unit := func(dir, lang string) {
+		a.Files = append(a.Files, facts.File{Path: dir + "/f", Language: lang, Unit: "m/" + dir, UnitPath: dir, Role: facts.RoleSource})
+	}
+	for _, u := range []string{"mod/server", pkg + "/order", pkg + "/user", pkg + "/user/api", "scripts"} {
+		unit(u, "kotlin")
+	}
+	unit("mod/server/src/main/webui/app", "typescript")
+	unit("mod/server/src/main/resources/db", "sql")
+	got := deps.DraftDiagram(a, 2)
+	for _, want := range []string{"[\"mod/server\"]", "[\"" + pkg + "/order\"]", "[\"" + pkg + "/user/...\"]", "[\"scripts\"]",
+		"[\"mod/server/src/main/webui/app\"]"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want the box %s in the draft, got\n%s", want, got)
+		}
+	}
+}
+
+// viewpoint: behaviour
+// target: deps.DraftDiagram, deps.DraftCalls
+// Design suggest, "Arrows both ways": boxes that import (or call) each other are listed after the
+// note, once per pair, so that a person decides the direction; both arrows are still drawn.
+func TestADraftListsBoxesThatDependOnEachOther(t *testing.T) {
+	a := &facts.Analysis{}
+	for _, u := range []string{"a", "b", "c", "d", "e"} {
+		a.Files = append(a.Files, facts.File{Path: u + "/f.go", Unit: "m/" + u, UnitPath: u, Role: facts.RoleSource})
+	}
+	imp := func(from, to string) facts.Import {
+		return facts.Import{Path: from + "/f.go", Line: 1, FromUnit: "m/" + from, ToUnit: "m/" + to, Internal: true}
+	}
+	a.Imports = []facts.Import{imp("d", "e"), imp("e", "d"), imp("a", "b"), imp("a", "b"), imp("b", "a"), imp("b", "c")}
+	a.Symbols = []facts.Symbol{{ID: "a.F", Path: "a/f.go", Line: 1, Calls: []string{"b.G"}},
+		{ID: "b.G", Path: "b/f.go", Line: 1, Calls: []string{"a.F"}}}
+	got := deps.DraftDiagram(a, 2)
+	if !strings.Contains(got, "import each other") || strings.Count(got, "- `a` ⇄ `b`\n") != 1 || strings.Contains(got, "`b` ⇄ `c`") {
+		t.Errorf("want a ⇄ b listed once and b, c not, got\n%s", got)
+	}
+	if strings.Index(got, "`a` ⇄ `b`") > strings.Index(got, "`d` ⇄ `e`") {
+		t.Errorf("want the boxes listed in order of their names, got\n%s", got)
+	}
+	if !strings.Contains(got, "  a --> b\n") || !strings.Contains(got, "  b --> a\n") {
+		t.Errorf("want both arrows drawn, got\n%s", got)
+	}
+	if calls := deps.DraftCalls(a, 2); !strings.Contains(calls, "call each other") || !strings.Contains(calls, "- `a` ⇄ `b`\n") {
+		t.Errorf("want a ⇄ b listed as calling each other, got\n%s", calls)
+	}
+	if one := deps.DraftDiagram(&facts.Analysis{Files: a.Files, Imports: a.Imports[5:]}, 2); strings.Contains(one, "each other") {
+		t.Errorf("want no list when no boxes depend on each other, got\n%s", one)
+	}
+}
+
+// TestADirectoryOfTwoLanguagesIsGroupedByTheFirstByName pins that a directory holding units of two
+// languages is grouped as the first language by name counts it: here Kotlin, whose packages branch
+// under kotlin, rather than Python, whose one package never branches and would get a box of its own.
+func TestADirectoryOfTwoLanguagesIsGroupedByTheFirstByName(t *testing.T) {
+	a := &facts.Analysis{}
+	file := func(path, lang string) {
+		dir := path[:strings.LastIndex(path, "/")]
+		a.Files = append(a.Files, facts.File{Path: path, Language: lang, Unit: lang + ":" + dir, UnitPath: dir, Role: facts.RoleSource})
+	}
+	file("src/main/kotlin/a/x/X.kt", "kotlin")
+	file("src/main/kotlin/a/x/x.py", "python")
+	file("src/main/kotlin/a/y/Y.kt", "kotlin")
+	file("src/main/kotlin/b/B.kt", "kotlin")
+	got := deps.DraftDiagram(a, 1)
+	if !strings.Contains(got, "[\"src/main/kotlin/a/...\"]") || strings.Contains(got, "[\"src/main/kotlin/a/x\"]") {
+		t.Errorf("want src/main/kotlin/a/x in the box src/main/kotlin/a/..., got\n%s", got)
 	}
 }
