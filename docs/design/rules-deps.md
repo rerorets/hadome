@@ -193,6 +193,8 @@ rules:
         paths: [infra/**, web/**]
 ```
 
+- **Why imports**: the dependency rule of clean architecture is about the direction of source code dependencies. Calls rightly go the other way. Example: usecase calls infra's implementation through `UserRepository`, which domain declares. The imports, `usecase → domain` and `infra → domain`, point inward, while the call reaches `usecase → infra`, outward. Layers applied to calls would fail every correctly inverted dependency. Calls are drawn as arrows of the call diagram
+- **DI containers**: the place that wires everything (a DI container, `main`) imports every layer. In the outermost layer, its imports all point inward and pass. It can also be left in no layer. Example: `name: main`, `paths: [cmd/**, di/**]`
 - **Which layer**: a unit whose directory matches the globs of two layers is in the one written first, the inner one. Example: writing both `app/**` and `app/domain/**`, write `app/domain/**` first
 - **Imports that pass**: those within one layer, and those from the outside in. Importing an inner layer past the layers between passes too
 - **Changing the configuration**: writing layers for the first time needs no review. Once written, changing a layer or its `paths` is hard to tell as stricter or looser, so every such change goes to review (exit code `3`)
