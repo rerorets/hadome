@@ -277,8 +277,13 @@ Branches inside nested functions (arrow functions, function expressions, lambdas
 | TypeScript | `*.test.*`, `*.spec.*`, under `__tests__/`, test support files | A call to `it` or `test` with a name and a function (see the notes below) | `.skip`, `xit`, `xtest`, `.todo`, `.fixme`, or inside `describe.skip` or `xdescribe`. Skipped only in some cases: `.skipIf(cond)`, `.runIf(cond)`, and Playwright's `test.skip(cond, description)` and `test.fixme(cond, description)` | A comment on the skip's line or the line before. For Playwright's `test.skip`, the description after the condition |
 | Python | `test_*.py`, `*_test.py` | A function whose name starts with `test`, at module level or in a test class. A test class is a class whose name starts with `Test`, or a class that extends `unittest.TestCase` (see the notes below) | `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip(...)` | The `reason` argument or the first string argument |
 | Rust | Files under `tests/` and `benches/`; `#[cfg(test)]` modules in any file | A function with `#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[sqlx::test]`, `#[test_log::test]`, `#[rstest]`, `#[test_case(…)]` or `#[test_matrix(…)]` (also with the crate's name, such as `rstest::rstest` or `test_case::test_case`) | `#[ignore]`. A case `#[test_case(… => ignore)]` or `=> inconclusive` does not run: a skip in some cases when some cases are like that, a skip when all are | `#[ignore = "…"]`. `=> ignore["…"]` |
-| Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/` and the like) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
+| Java | Under a directory in `src/` whose name contains test (`src/test/`, `src/integrationTest/`, `src/jvmTest/` and the like). Under a `test/` or `test@…/` outside `src/` (note below) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | `@Disabled`, `@Ignore` | The annotation's string argument |
 | Kotlin | Same as Java | A function with the same annotations as Java | `@Disabled`, `@Ignore` | The annotation's string argument |
+
+Java and Kotlin test directories are read in Kotlin Multiplatform layouts too, besides Gradle's `src/test/`.
+
+- Under a directory named `test`, or with a name starting `test@`, that is not inside `src/`, files are test files. Examples: `ktor-client/ktor-client-tests/nonJvm/test/`, `jvm/test/` (with its sources beside it in `jvm/src/`), Amper's `test@jvm/`
+- A directory named `test` inside `src/` may be a package's name, so this rule does not look at it. Example: `src/main/kotlin/com/example/test/` stays product code
 
 TypeScript test declarations are read as follows.
 

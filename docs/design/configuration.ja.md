@@ -108,6 +108,11 @@ rules:                         # 任意。既定と違うものだけ
     calls: docs/conventions/calls.md         # 呼び出しの図。矢印や wiring を足すには人の確認が要る
     cycles:
       allow: ["app/ui/** <-> app/presenter/**"] # 循環を許すディレクトリの組（deps/cycle）。足すには人の確認が要る
+    layers:                    # 層（deps/layer）。内側から並べる。書いたあとで変えるには人の確認が要る
+      - name: domain
+        paths: [domain/**]
+      - name: adapters
+        paths: [infra/**, web/**]
 
 files:                         # 任意。言語の慣習から外れた配置のため
   tests: ["checks/**"]         # テストのファイルとして読む（Go、Terraform、Ansible のファイルには当てない）。変えるには人の確認が要る

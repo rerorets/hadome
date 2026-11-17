@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)). Even without a diagram, an import that makes a new cycle between units fails ([`deps/cycle`](#depscycle)).
+A dependency diagram is the easiest design document to write, and also the first to go out of date: with each import added because it was close at hand, the code stops matching it. When the diagram and the code disagree, the `deps/` rules treat the diagram as correct. An import the diagram does not draw fails, and so does a diagram box that names nothing. With a call diagram drawn, a call it does not draw fails too ([The call diagram](#the-call-diagram)). Even without a diagram, an import that makes a new cycle between units fails ([`deps/cycle`](#depscycle)). With the order of layers written, an import from an inner layer to an outer one fails ([`deps/layer`](#depslayer)).
 
 ## The diagram
 
@@ -104,8 +104,9 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
 | `deps/diagram-stale` | finding | A node of the dependency diagram or the call diagram names a directory that holds no unit |
 | `deps/call-not-in-diagram` | finding | A call between two of the repository's units is not drawn in the call diagram |
 | `deps/cycle` | finding | An import the change added closes a cycle between units |
+| `deps/layer` | finding | A unit of an inner layer imports a unit of an outer layer |
 
-`deps/not-in-diagram` is off until `rules.deps.diagram` is set, and `deps/call-not-in-diagram` until `rules.deps.calls` is; `deps/diagram-stale` looks only at the diagrams that are set. `deps/cycle` works without a diagram. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
+`deps/not-in-diagram` is off until `rules.deps.diagram` is set, and `deps/call-not-in-diagram` until `rules.deps.calls` is; `deps/diagram-stale` looks only at the diagrams that are set. `deps/cycle` works without a diagram. `deps/layer` is off until `rules.deps.layers` is set. Only imports of product code count (test files are not dependencies of the product), and only imports between the repository's own units: external libraries are not drawn. Imports that bring in types only, such as TypeScript's `import type`, do not count: they disappear when compiled, so they are no dependency of the running code. Nor do imports in TypeScript declaration files (`.d.ts` and the like), which are never run.
 
 ### `deps/not-in-diagram`
 
@@ -170,6 +171,34 @@ rules:
 - **Cycles already there**: an import of a pair base has does not fail, even in a cycle. Only changes that make things worse are stopped
   - Because it looks at base, it is a `BaseFindingRule` of the engine ("[Rules that find against base](engine.md#rules-that-find-against-base)"). An exception marker suppresses nothing once the change is in base. It can stay or be removed
 
+### `deps/layer`
+
+- **Finds**: an import from unit A to unit B where A's layer lies inside B's layer. Units in no layer are not looked at
+- **Why it matters**: in clean or hexagonal architecture, dependencies point from the outside in. When the inside imports the outside, the domain code gets tied to the database or the web framework, and becomes hard to replace and hard to test. Example: `domain` imports `infra`
+- **Fix**: the inner layer declares an interface and the outer layer implements it. If the design changed, rewrite the layers, which a person reviews
+- **Where it is reported**: the import's line. The anchor is the pair of directories, so, as with `deps/not-in-diagram`, moving the import leaves the same violation. The message names both layers. Example: `domain/user → infra/db (layer domain imports the outer layer adapters)`
+- **Imports that count**: those of `deps/not-in-diagram`
+- **The diagrams**: it looks apart from them. A diagram draws arrows from box to box one by one, while layers give only an order. For a design of a few layers, they are shorter to write than a diagram. With both set, both judge
+- **Writing layers**: `rules.deps.layers` lists the layers from the inside out. A layer is a name and a list of directory globs
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: domain
+        paths: [domain/**]
+      - name: usecase
+        paths: [usecase/**]
+      - name: adapters
+        paths: [infra/**, web/**]
+```
+
+- **Which layer**: a unit whose directory matches the globs of two layers is in the one written first, the inner one. Example: writing both `app/**` and `app/domain/**`, write `app/domain/**` first
+- **Imports that pass**: those within one layer, and those from the outside in. Importing an inner layer past the layers between passes too
+- **Changing the configuration**: writing layers for the first time needs no review. Once written, changing a layer or its `paths` is hard to tell as stricter or looser, so every such change goes to review (exit code `3`)
+  - An empty name, two layers of one name, empty `paths`, or a glob that cannot be read is a configuration error (exit code `2`)
+- **Violations already there**: a violation base has does not fail. Base is judged by head's layers too, so every violation there when the layers are first written is one already there
+
 ## Types
 
 ```mermaid
@@ -177,6 +206,11 @@ classDiagram
   class Config {
     +OwnDiagram *Diagram
     +OwnCalls *Diagram
+    +Layers []Layer
+  }
+  class Layer {
+    +Name string
+    +Paths []string
   }
   class Diagram {
     +Path string
@@ -227,6 +261,7 @@ classDiagram
     +Find(in Input) []Finding
   }
   Config --> Diagram : dependency and call diagrams
+  Config --> Layer : from the inside out
   Diagram --> Node
   callNotInDiagram ..> CallEdge : made by callEdges(facts)
   CallEdge ..> Symbol : from Calls, Through, Supertypes, CallAt
@@ -236,6 +271,7 @@ classDiagram
 ```
 
 - **`Config.OwnCalls`**: the diagram of `rules.deps.calls`. Like `OwnDiagram`, each version holds its own, and head's arrows are used
+- **`Config.Layers`**: the layers of `rules.deps.layers`, from the inside out. `Paths` are directory globs
 - **`Node.Wiring`**: a node with the class `wiring`; `WiringLine` is the line that gives the class
 - **`CallEdge`**: one call between units, made from the facts by `callEdges`. `Line` is the line of the call, or, when `CallAt` lacks it, of the calling function's declaration or the entry point. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
 - **The three facts added to `Symbol`** are defined in [Call facts](#call-facts), and `CallAt` in [Call lines](#call-lines)
@@ -424,6 +460,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
 | `deps/cycle` | a new import closing a cycle fails · an import closing a cycle through three or more units fails too · an import of a cycle already there passes · a new import making no cycle passes · an import of types only passes even when it closes a cycle · an import inside Python's `TYPE_CHECKING` passes even when it closes a cycle · an import of a test file passes even when it closes a cycle · a cycle between units within one box fails too · a cycle between a parent and a child in TypeScript fails · a cycle between a parent and a child in Rust and Kotlin passes · a cycle between an allowed pair passes · adding an allowed pair needs review |
+| `deps/layer` | an import from the outside in passes · a new import from the inside out fails · an existing import from the inside out passes · an import within one layer passes · an import with a unit in no layer passes · a unit matching two layers is in the one written first · an import in a test file passes · writing layers for the first time needs no review · changing layers needs review |
 | `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
@@ -438,10 +475,14 @@ Only the places that take a value from outside are counted: parameters, attribut
 8. `deps/cycle` fails only imports of pairs of directories base has no import of. An import of a pair base has never fails, even in a cycle
 9. Every import `deps/cycle` fails is on a cycle of head, and that cycle holds no import between an allowed pair, nor any Rust, Java or Kotlin import between a parent and a child
 10. Adding an allowed pair never passes silently
+11. Without `rules.deps.layers`, `deps/layer` finds nothing
+12. Changing layers once written never passes silently
 
 ## Deliberately left out
 
 - Cycles between nodes. A diagram's arrows are allowed when the diagram draws them, even in a cycle. Cycles of imports between units are looked at apart from the diagram, by `deps/cycle`
+- Stopping imports that skip a layer. An order of layers alone does not say whether only the next layer in is allowed, or any inner one. In many designs the outside uses any inner layer. To allow only the next layer, draw a dependency diagram
+- The direction within a layer. Imports between units of one layer are not looked at; cycles are `deps/cycle`'s
 - Cycles of calls. Callbacks and calls through interfaces usually go against the imports; a cycle of calls is most often as designed, so it is not looked at
 - Counting every cycle between a parent and a child, whatever the language. In Rust, every new module would then fail, as the measurement above shows
 - Leaving out every cycle between a parent and a child, whatever the language. A cycle through a TypeScript barrel (`index.ts` re-exporting) is a seed of run-time failures; leaving it out would miss what is most worth stopping

@@ -87,6 +87,11 @@ rules:                         # optional; only what differs from the defaults
     calls: docs/conventions/calls.md         # the call diagram; adding an arrow or wiring needs review
     cycles:
       allow: ["app/ui/** <-> app/presenter/**"] # directory pairs whose cycle is allowed (deps/cycle); adding one needs review
+    layers:                    # layers (deps/layer), from the inside out; changing them once written needs review
+      - name: domain
+        paths: [domain/**]
+      - name: adapters
+        paths: [infra/**, web/**]
 
 files:                         # optional; for layouts against the languages' conventions
   tests: ["checks/**"]         # read as test files (not applied to Go, Terraform or Ansible files); changing it needs review
