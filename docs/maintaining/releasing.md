@@ -168,7 +168,7 @@ The groups differ in what happens to a user's CI after upgrading. Leave out empt
 | 設定 | Configuration | New or changed `.hadome.yml` keys |
 | その他 | Other | Output, documents, distribution. Check results do not change |
 
-- One line per change, ending with the PR number. Example: "`comments/broken-reference` does not report references to paths `.gitignore` ignores. (#96)"
+- One line per change, without the PR number. Example: "`comments/broken-reference` does not report references to paths `.gitignore` ignores."
 - When one PR holds changes of different groups, give each group its own line.
 - Changes users cannot see (hadome's own tests, CI, dependency updates) are left out.
 
