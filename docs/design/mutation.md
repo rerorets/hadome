@@ -517,6 +517,24 @@ So hadome ends the tree as a whole.
 - **Why leftovers are ended without a word.** A process the test command leaves behind (a server it started, a daemon of the build tool) gets into the next mutant's run and makes its result flaky. For a command that leaves one every time, reporting it would only repeat the same line
 - **When hadome crashes on Windows.** The job is made to end what it holds when its last handle closes (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`). However hadome ends, the tree does not stay
 
+### Temporary files
+
+A test command decides where to put its temporary files from environment variables such as `TMPDIR`. A command ended with `SIGKILL` cannot remove its temporary files. For example, `go test` leaves behind the work directory (`go-build…`) where it keeps what it is building. One is left at every time limit, so a few days of runs add up to tens of gigabytes.
+
+So hadome gives the test command a temporary directory of its own, and empties it at every run.
+
+| What | Rule |
+|---|---|
+| Path | `<temporary directory>/hadome-mutate-<repository mark>`. The temporary directory is what Go's `os.TempDir` returns, and the mark is the one in "The working directory" above |
+| How it is given | `TMPDIR`, `TMP` and `TEMP` in the test command's environment are set to this path |
+| When it is emptied | Before and after each run of the test command. On an interrupt, hadome ends the tree, empties the directory, then ends itself by the same signal |
+
+- **Why the path stays the same.** `go test` puts the environment variables a test read into the key of its test result cache. `t.TempDir()` reads `TMPDIR`, so with a new path at every run, such tests would never hit the cache. Most of stage 3's whole test run comes from the cache
+- **Why under `os.TempDir`.** To keep what the user's temporary directory is like (a file system in memory, a setting that forbids running programs, and so on). It also brings paths only 31 characters nearer to the length limit of Unix domain socket paths (104 bytes on macOS)
+- **Why it is emptied before as well.** So that what was left when hadome itself was stopped with `SIGKILL` is removed by the next run
+- **Someone else's.** If the path already exists and is a symbolic link, or a directory not owned by the user running hadome, hadome stops with exit code `2`. This is so as not to write into something another user prepared, in a temporary directory shared with other users such as `/tmp` on Linux. It is made with permissions `0700`
+- **When it cannot be emptied.** The result and the exit code do not change, and one line on standard error says so. What is left is removed again before the next run
+
 ## Invariants
 
 1. When the tests fail on a tree with nothing broken, `hadome mutate` gives no result and returns exit code `2`
@@ -541,6 +559,7 @@ So hadome ends the tree as a whole.
 17. A command whose GOOS or GOARCH differs from the environment hadome runs in is never run
 18. In a version with two or more Go modules, a mutant is never reported as a survivor without the tests of its file's module having run
 19. With `{module}`, stage 3 runs the tests in every module holding a `_test.go` file
+20. After a run of the test command, the temporary directory hadome gave it is empty, whether the run ended at the time limit, by an interrupt or by the command exiting. When it could not be emptied, hadome says so
 
 ## Deliberately left out
 
@@ -556,6 +575,7 @@ So hadome ends the tree as a whole.
 - Guessing how to split the command per module (hadome adding `-C`, and the like). Where a directory goes in a command differs by runner and script. It is written with `{module}`
 - Narrowing by package in languages other than Go. pytest narrows by file path and `::`, Jest by a regular expression of file paths, cargo by crate and test path. The forms differ by runner and do not fit one `{packages}`. Outside Go, `{tests}` narrows
 - Ending the tree when hadome itself is stopped with `SIGKILL` on Unix. `SIGKILL` cannot be caught, so hadome stops before it ends the tree. macOS has no way to end children when their parent ends
+- Changing `GOTMPDIR`. When the user sets `GOTMPDIR`, `go` makes its work directory there, and hadome does not empty it. This is so as not to change where the user chose to build (a disk that can run programs, and so on)
 - Waiting for the lock to be released. While waiting, the user cannot see why nothing moves. The second run stops and says why
 - Telling which files are outside the build in languages other than Go. TypeScript's `exclude` in `tsconfig.json`, Rust's `#[cfg(...)]` and Python's branches at run time differ widely by language. Only Go is told apart. A mutant of another language is tried with every command of `test` and `builds`
 - Asking `go list` which files are in the build. Starting a command depends on module downloads and caches. What syntax cannot tell (a `mutation.test` that calls a shell script that changes the environment, and the like) is not told apart
