@@ -65,6 +65,7 @@ classDiagram
     +Through []string
     +Supertypes []string
     +Unfollowed int
+    +CallAt map[string]int
     +Units []string
     +IO bool
   }
@@ -73,6 +74,7 @@ classDiagram
     +Line int
     +Symbol string
     +Calls []string
+    +CallAt map[string]int
   }
   class Nested {
     +Line int
@@ -146,7 +148,7 @@ classDiagram
 
 `Symbol.Calls`, `Units`, `IO` and `Analysis.Entries` are the facts that decide whether a function reaches input or output and whether an entry point that can be retried reaches it. Every adapter of a language with functions fills them for its functions and methods. `Calls` are the IDs of the repository's functions the body calls, `Units` the repository's units whose values the body uses, and `IO` that the body uses something that does input or output directly. How they are read is in [suggest.md](suggest.md), "Conditions of `idempotent`".
 
-`Symbol.Through`, `Supertypes` and `Unfollowed` are the facts for the call diagram (`deps/call-not-in-diagram`): `Through` holds calls through a value's declared type such as an interface, `Supertypes` the repository's types a type implements or extends, and `Unfollowed` the number of calls on values of unknown type. They are kept out of `Calls`, so what reads `Calls` gives the same results. How each language is read is in [rules-deps.md](rules-deps.md), "Call facts".
+`Symbol.Through`, `Supertypes`, `Unfollowed` and `CallAt` are the facts for the call diagram (`deps/call-not-in-diagram`): `Through` holds calls through a value's declared type such as an interface, `Supertypes` the repository's types a type implements or extends, `Unfollowed` the number of calls on values of unknown type, and `CallAt` the line of the first call of each ID in `Calls` and `Through`. `Entry.CallAt` is the same. They are kept out of `Calls`, so what reads `Calls` gives the same results. How each language is read is in [rules-deps.md](rules-deps.md), "Call facts".
 
 ### Files and roles
 

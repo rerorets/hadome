@@ -127,7 +127,7 @@ The kinds, finding and measure, are defined in [engine.md](engine.md#two-kinds-o
   - A or B is in no node of the call diagram
 - **Why**: the call diagram tells which layers a request goes through, in which order. An undrawn call does not show in the diagram even when it skips a layer or goes backwards — a controller calling the repository past the service, for one
 - **Fix**: call through the layers the diagram allows, or, if the design really changed, draw the arrow — a change a person reviews
-- **Where it is reported**: the declaration of the function making a call of that pair with the earliest path and line, or the entry-point code that makes it, since the facts hold no line for a call. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
+- **Where it is reported**: the line of the call of that pair with the earliest path and line. The line comes from `CallAt` (see [Call lines](#call-lines)). A call whose line is unknown counts at the declaration of the calling function, or at the entry point. The message names the calling function and the method reached; for a call through an interface, both the interface's method and the implementation it reaches
 - The anchor is the pair of directories, as for `deps/not-in-diagram`, so moving the call keeps it the same finding
 - Only calls hadome can follow are checked ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
 
@@ -160,6 +160,13 @@ classDiagram
     +Through []string
     +Supertypes []string
     +Unfollowed int
+    +CallAt map[string]int
+  }
+  class Entry {
+    +Path string
+    +Line int
+    +Calls []string
+    +CallAt map[string]int
   }
   class CallEdge {
     +FromUnit string
@@ -176,14 +183,15 @@ classDiagram
   Config --> Diagram : dependency and call diagrams
   Diagram --> Node
   callNotInDiagram ..> CallEdge : made by callEdges(facts)
-  CallEdge ..> Symbol : from Calls, Through, Supertypes
+  CallEdge ..> Symbol : from Calls, Through, Supertypes, CallAt
+  CallEdge ..> Entry : from Calls, CallAt
   callNotInDiagram ..> Config : head's OwnCalls arrows
 ```
 
 - **`Config.OwnCalls`**: the diagram of `rules.deps.calls`. Like `OwnDiagram`, each version holds its own, and head's arrows are used
 - **`Node.Wiring`**: a node with the class `wiring`; `WiringLine` is the line that gives the class
-- **`CallEdge`**: one call between units, made from the facts by `callEdges`. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
-- **The three facts added to `Symbol`** are defined in [Call facts](#call-facts)
+- **`CallEdge`**: one call between units, made from the facts by `callEdges`. `Line` is the line of the call, or, when `CallAt` lacks it, of the calling function's declaration or the entry point. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
+- **The three facts added to `Symbol`** are defined in [Call facts](#call-facts), and `CallAt` in [Call lines](#call-lines)
 
 ## Facts
 
@@ -194,6 +202,7 @@ classDiagram
 | `Symbol.Calls`, `Entry.Calls` | direct calls (call diagram) |
 | `Symbol.Through`, `Symbol.Supertypes` | calls through an interface, and where they reach (call diagram) |
 | `Symbol.Unfollowed` | the number of calls hadome cannot follow (call diagram) |
+| `Symbol.CallAt`, `Entry.CallAt` | the lines of calls (where the call diagram reports) |
 
 ### Call facts
 
@@ -207,6 +216,21 @@ classDiagram
 
 - `Calls` is left as it is so that what else reads it (the `idempotent` candidates) gives the same results
 - The IDs have the form of `Calls`, for example `<unit>.<Type>.<Method>`
+
+### Call lines
+
+`Calls` and `Through` hold the IDs of what is called, not the lines of the calls. The lines are kept apart, in `CallAt`.
+
+| Fact | Held by | Content |
+|---|---|---|
+| `Symbol.CallAt` | functions and methods | for each ID in `Calls` and `Through`, the line where the body first calls it |
+| `Entry.CallAt` | entry-point code that is no symbol | for each ID in `Entry.Calls`, the line where it is first called |
+
+- **Keys**: `Calls` and `Through` never hold the same ID, so one map serves both. Example: `{"app/repo.Repo.find": 42}`
+- **Why the first line only**: a finding is reported once per pair of units, so later calls of the same ID are never used
+- **Why `Calls` stays as it is**: `Calls` stays `[]string`, so the other things that read it (the `idempotent` candidates) do not change
+- **When a line is missing**: an ID missing from `CallAt` has no known line, and is reported at the declaration of the calling function or at the entry point. An adapter that does not fill the lines only makes the place coarser; the findings stay the same
+- **Adapters that fill it**: every adapter that fills `Calls` or `Through` fills `CallAt` too: the Go adapter and the tree-sitter adapters of five languages
 
 ### Where a call reaches
 
@@ -304,7 +328,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 | `json` | `unfollowed` lists each unit where it grew, with `unit` (the directory, as the call diagram's labels name it), `base` and `head` (the sum in each version). An empty array when none grew |
 | `text` | After the invariant candidates, "Calls on values of unknown type grew (information only; a type annotation makes them followable):", then one line per unit, as `app/controller: 3 → 5` |
 
-- Only the difference of the sums is reported, not which calls were added, since a call holds no line
+- Only the difference of the sums is reported, not which calls were added, since `Unfollowed` holds a count only, with no IDs or lines of calls
 - The engine is given a function that makes the list from both versions' input, as for invariant candidates; the `deps` package holds it
 
 ## Self-test cases
@@ -313,7 +337,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
-| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · drawing the arrow needs review instead · marking `wiring` needs review |
+| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call with no arrow is reported at the line of the call · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
 
@@ -321,7 +345,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 2. The arrows that judge a change are head's, for both versions; drawing an arrow is never silent
 3. Marking `wiring` is never silent
 4. The call diagram does not change how the dependency diagram judges, nor the other way round
-5. Adding `Through`, `Supertypes` and `Unfollowed` changes no other fact, nor the results of rules and candidates that read `Calls`
+5. Adding `Through`, `Supertypes`, `Unfollowed` and `CallAt` changes no other fact, nor the results of rules and candidates that read `Calls`
 6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
 7. A call within one unit always passes
 
