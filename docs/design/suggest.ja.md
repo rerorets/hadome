@@ -189,12 +189,11 @@ rules:
 |---|---|
 | `hadome init` | 書く `.hadome.yml` に、`rules.deps` の設定をコメントで書く。その上に、叩き台の作り方を書く |
 | `hadome init` の最後の1行 | 次にすることとして、`hadome suggest` に加えて `hadome suggest diagram` を挙げる |
-| `hadome agents` のブロック | 不変条件の候補を人に提案する行を広げ、「図が無ければ、叩き台を人に提案する」も入れる。行は増やさない |
+| `hadome agents` のブロック | 不変条件の候補を人に提案する行に、「図が無ければ、叩き台を人に提案する」も入れる。図のための行は分けない |
 
-ブロックの行は、次のように変えます。
+ブロックの、提案についての行は次のとおりです。
 
-- 今: `hadome check` が不変条件の候補を出し、それが大事な振る舞いに当たるなら、自分で足さずに人に提案する。
-- 後: `hadome check` が不変条件の候補を出し、それが大事な振る舞いに当たるとき、また `.hadome.yml` に依存の図（`rules.deps.diagram`）が無いときは、自分で足さずに人に提案する。図の叩き台は `hadome suggest diagram` と `hadome suggest calls` で作る。
+> `hadome check` が不変条件の候補を出し、それが大事な振る舞いに当たるとき、また `.hadome.yml` に依存の図（`rules.deps.diagram`）が無いときは、自分で足さずに人に提案する。図の叩き台は `hadome suggest diagram` と `hadome suggest calls` で作る。
 
 ## `hadome agents`
 

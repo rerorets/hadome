@@ -181,12 +181,11 @@ Diagrams are recommended in three places. Not in the output of `hadome check`: i
 |---|---|
 | `hadome init` | The `.hadome.yml` it writes has the `rules.deps` settings as comments, with how to draft the diagrams above them |
 | `hadome init`'s last line | Names `hadome suggest diagram` as a next step, along with `hadome suggest` |
-| The `hadome agents` block | The line on proposing invariant candidates to a person widens to "propose a draft when there is no diagram", without adding a line |
+| The `hadome agents` block | The line on proposing invariant candidates to a person also says "propose a draft when there is no diagram", rather than a line of its own |
 
-The block's line changes as follows.
+The block's line on proposals reads:
 
-- Now: When `hadome check` lists invariant candidates and one covers behaviour that matters, propose it to the person instead of adding it yourself.
-- After: When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
+> When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
 
 ## `hadome agents`
 
