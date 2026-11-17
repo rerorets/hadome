@@ -115,6 +115,219 @@ rules:
 - 止まる変更の例: `store → domain` があるところに、`domain → store` を足す。メッセージには戻る道（`store → domain → store`）が出ます。
 - Rust・Java・Kotlin では、ディレクトリとその祖先の間の import はたどりません。Rust のクレートのルートと `mod` で宣言したモジュールは、互いを参照するのがふつうの書き方だからです。
 
+## フロントエンドのパターン
+
+### Feature-Sliced Design
+
+層を下から順に書きます。上の層は下の層だけを import できます。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: shared
+        paths: [src/shared/**]
+      - name: entities
+        paths: [src/entities/**]
+      - name: features
+        paths: [src/features/**]
+      - name: widgets
+        paths: [src/widgets/**]
+      - name: pages
+        paths: [src/pages/**]
+      - name: app
+        paths: [src/app/**]
+```
+
+- 止まる変更の例: `entities/user` が `features/auth` を import する。
+- 同じ層のスライスどうし（`features/auth` と `features/cart` など）の import は、層では止まりません。止めるなら、依存の図でスライスの箱どうしに矢印を描きません。
+
+### Atomic Design
+
+部品の大きさの順に、層を書きます。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: atoms
+        paths: [src/components/atoms/**]
+      - name: molecules
+        paths: [src/components/molecules/**]
+      - name: organisms
+        paths: [src/components/organisms/**]
+      - name: templates
+        paths: [src/components/templates/**]
+      - name: pages
+        paths: [src/pages/**]
+```
+
+- 止まる変更の例: atom が organism を import する。
+
+### Flux・Redux
+
+データが一方向に流れる形です。store（reducer・action・selector）を内側、画面のコンポーネントを外側の層に置きます。
+
+- 止まる変更の例: reducer が画面のコンポーネントを import する。
+- 層の書き方は上の Atomic Design と同じ形です。`store/**` を先に、`components/**` を後に書きます。
+
+## モバイルのパターン
+
+### Android の推奨アーキテクチャ
+
+UI 層・ドメイン層・データ層に分ける形です。Android の推奨では、ドメイン層がデータ層のリポジトリを使うので、いちばん内側はデータ層になります。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: data
+        paths: [app/src/main/kotlin/com/example/data/**]
+      - name: domain
+        paths: [app/src/main/kotlin/com/example/domain/**]
+      - name: ui
+        paths: [app/src/main/kotlin/com/example/ui/**]
+```
+
+- 止まる変更の例: データ層が UI 層の ViewModel を import する。
+- ドメイン層を置かない構成なら、`domain` の層を消します。
+
+### feature と core のモジュール
+
+機能ごとの `feature` モジュールと、共通の `core` モジュールに分ける形です（Now in Android など）。
+
+- 層で `core/**` を内側、`feature/**` をその外、`app/**` をいちばん外に置きます。止まる変更の例: core が feature を import する。
+- feature どうしの import は、層では止まりません。止めるなら、依存の図で feature の箱どうしに矢印を描きません。
+
+### VIPER
+
+View・Interactor・Presenter・Entity・Router を役ごとのディレクトリに分けているなら、依存の図で向きを描きます。
+
+```mermaid
+flowchart LR
+  view["view/..."] --> presenter["presenter/..."]
+  presenter --> interactor["interactor/..."]
+  presenter --> router["router/..."]
+  interactor --> entity["entity/..."]
+```
+
+- 止まる変更の例: Interactor が View を import する。
+- Presenter から View への呼び出しは、Presenter の側に置いたプロトコルを通します。プロトコルを View の側に置くと、View と Presenter が互いを import するので、許す組に書くことになります。
+- 1つの画面の役者を1つのディレクトリにまとめる構成では、役の間の向きは1つのユニットの中の話になり、hadome は見ません。
+
+## バックエンドと全体の構成のパターン
+
+### モジュラーモノリス・境界づけられたコンテキスト
+
+コンテキスト（注文、会員など）ごとにディレクトリを分け、ほかのコンテキストへは公開の窓口だけを通す形です。依存の図で、ほかのコンテキストからは窓口の箱にだけ矢印を描きます。
+
+```mermaid
+flowchart LR
+  members["members/..."] --> ordersAPI["orders/api"]
+  orders["orders/..."] --> membersAPI["members/api"]
+  ordersAPI --> orders
+  membersAPI --> members
+```
+
+- 止まる変更の例: 会員のコードが注文の内部のクラスを直接 import する。
+- `orders/...` の箱は `orders/api` も含みますが、ユニットはいちばん細かく合う箱に入ります。`orders/api` のユニットは `ordersAPI` の箱に入ります。
+- 窓口から自分のコンテキストの中へは矢印を描きます（`ordersAPI --> orders`）。窓口が中の実装に処理を渡すためです。
+
+### CQRS
+
+書き込み（command）と読み取り（query）のコードを分ける形です。依存の図で、query の箱から command の箱へ矢印を描きません。
+
+```mermaid
+flowchart LR
+  command["app/command/..."] --> domain["domain/..."]
+  query["app/query/..."] --> readmodel["infra/readmodel/..."]
+```
+
+- 止まる変更の例: 読み取りのコードが書き込みのコードを import する。
+
+### プラグイン（マイクロカーネル）
+
+コアがプラグインの約束（インターフェース）を宣言し、プラグインがそれを実装する形です。層でコアを内側、プラグインを外側に置きます。
+
+- 止まる変更の例: コアが特定のプラグインを import する。
+
+### イベント駆動（発行と購読）
+
+イベントの型を共通のユニットに置き、発行する側と購読する側の両方がそれを import する形です。依存の図で、発行する側から購読する側へ矢印を描きません。
+
+```mermaid
+flowchart LR
+  orders["orders/..."] --> events["events/..."]
+  notifications["notifications/..."] --> events
+```
+
+- 止まる変更の例: 注文のコードが通知のコードを直接 import して呼ぶ。
+
+### モノレポの apps と packages
+
+アプリ（`apps/`）が共有のパッケージ（`packages/`）を使い、逆は無い形です。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: packages
+        paths: [packages/**]
+      - name: apps
+        paths: [apps/**]
+```
+
+- 止まる変更の例: 共有のパッケージが特定のアプリを import する。
+
+### Strangler Fig
+
+古いコードを少しずつ新しいコードに置き換える形です。依存の図で、新しいコードから古いコードへ矢印を描きません。
+
+```mermaid
+flowchart LR
+  legacy["legacy/..."] --> next["next/..."]
+  next --> shared["shared/..."]
+  legacy --> shared
+```
+
+- 止まる変更の例: 新しいコードが古いコードへの依存を足す。
+- 図に描いていない import でも、main にすでにあるものは落ちません。新しいコードから古いコードへの依存が残っていても、図には描かずにおけます。そうすると、いまある依存はそのまま通り、増やす変更だけが落ちます。置き換えのあいだに依存が増えていきません。
+
+## インフラのパターン
+
+### Terraform の環境とモジュール
+
+再利用するモジュール（`modules/`）と、それを呼ぶ環境（`envs/`）に分ける形です。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: modules
+        paths: [modules/**]
+      - name: envs
+        paths: [envs/**]
+```
+
+- 止まる変更の例: モジュールが環境のディレクトリを `source` で呼ぶ。
+- import として数えるのは、`source = "./…"` か `"../…"` のローカルのモジュールの呼び出しです。
+
+### Ansible の基盤のロールとアプリのロール
+
+OS の設定や監視のような基盤のロールを内側、アプリのロールを外側の層に置きます。ユニットが2つの層に合うときは先に書いた層に入るので、基盤のロールを先に書きます。
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: base
+        paths: [roles/common/**, roles/monitoring/**]
+      - name: apps
+        paths: [roles/**]
+```
+
+- 止まる変更の例: 基盤のロールの `meta/main.yml` がアプリのロールを `dependencies` に足す。
+
 ## GoF のデザインパターン
 
 GoF のパターンの多くは、クラスの中や、近くのクラスの組の形の話です。hadome が守れるのは、パターンの役者が別々のユニットに分かれていて、その向きに決まりがあるときだけです。
@@ -154,6 +367,7 @@ iOS の `weak var delegate` のような Delegate は、Observer や Strategy �
 ## 守れないこと
 
 - **リフレクションやフレームワークの自動の呼び出し**: Spring の `@EventListener` や、名前の文字列で呼ぶ `getattr` などです。構文に呼び先が無いので、呼び出しをたどれません。
+- **外部のライブラリを使ってよい場所**: 「データベースのドライバを import してよいのは `infra/` だけ」のような決まりです。腐敗防止層（Anti-Corruption Layer）もこの形です。図に描くのはリポジトリの中のユニットだけなので、書けません。製品固有の門番としてなら書けます。
 - **ほかのモジュールを通した依存**: hadome はリポジトリの外のライブラリを読まないので、ライブラリを通って戻る循環は数えません。
 - **1つのユニットの中の形**: クラスの責務の分け方や、メソッドの長さ以外の形は見ません。大きさは `size/` のルールが見ます。
 

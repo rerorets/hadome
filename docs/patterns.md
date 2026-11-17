@@ -115,6 +115,219 @@ No configuration is needed. `deps/cycle` works without a diagram and fails an im
 - A change it stops: adding `domain → store` where `store → domain` is. The message gives the way back (`store → domain → store`).
 - In Rust, Java and Kotlin, imports between a directory and its ancestor are not followed. A Rust crate root and the modules it declares with `mod` refer to each other as a matter of course.
 
+## Front-end patterns
+
+### Feature-Sliced Design
+
+Write the layers from the bottom up. A layer may import only the layers below it.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: shared
+        paths: [src/shared/**]
+      - name: entities
+        paths: [src/entities/**]
+      - name: features
+        paths: [src/features/**]
+      - name: widgets
+        paths: [src/widgets/**]
+      - name: pages
+        paths: [src/pages/**]
+      - name: app
+        paths: [src/app/**]
+```
+
+- A change it stops: `entities/user` imports `features/auth`.
+- Imports between slices of one layer (`features/auth` and `features/cart`) are not stopped by layers. To stop them, draw no arrows between the slices' boxes in the dependency diagram.
+
+### Atomic Design
+
+Write the layers in the order of the components' size.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: atoms
+        paths: [src/components/atoms/**]
+      - name: molecules
+        paths: [src/components/molecules/**]
+      - name: organisms
+        paths: [src/components/organisms/**]
+      - name: templates
+        paths: [src/components/templates/**]
+      - name: pages
+        paths: [src/pages/**]
+```
+
+- A change it stops: an atom imports an organism.
+
+### Flux and Redux
+
+Data flows one way. Put the store (reducers, actions, selectors) in an inner layer and the screen components in an outer one.
+
+- A change it stops: a reducer imports a screen component.
+- The layers are written as for Atomic Design above, with `store/**` first and `components/**` after.
+
+## Mobile patterns
+
+### Android's recommended architecture
+
+UI, domain and data layers. In Android's recommendation the domain layer uses the data layer's repositories, so the data layer is the innermost.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: data
+        paths: [app/src/main/kotlin/com/example/data/**]
+      - name: domain
+        paths: [app/src/main/kotlin/com/example/domain/**]
+      - name: ui
+        paths: [app/src/main/kotlin/com/example/ui/**]
+```
+
+- A change it stops: the data layer imports a ViewModel of the UI layer.
+- Without a domain layer, remove the `domain` layer.
+
+### Feature and core modules
+
+`feature` modules per feature and shared `core` modules, as in Now in Android.
+
+- In layers, put `core/**` inside, `feature/**` around it, and `app/**` outermost. A change it stops: core imports a feature.
+- Imports between features are not stopped by layers. To stop them, draw no arrows between feature boxes in the dependency diagram.
+
+### VIPER
+
+With View, Interactor, Presenter, Entity and Router in directories by role, draw their direction in the dependency diagram.
+
+```mermaid
+flowchart LR
+  view["view/..."] --> presenter["presenter/..."]
+  presenter --> interactor["interactor/..."]
+  presenter --> router["router/..."]
+  interactor --> entity["entity/..."]
+```
+
+- A change it stops: an Interactor imports a View.
+- The Presenter calls the View through a protocol kept on the Presenter's side. With the protocol on the View's side, View and Presenter import each other and have to be written as an allowed pair.
+- When each screen keeps all its roles in one directory, the direction between roles is inside one unit, which hadome does not look at.
+
+## Back-end and whole-system patterns
+
+### Modular monolith and bounded contexts
+
+Each context (orders, members) has its own directory, and other contexts go only through its public front. In the dependency diagram, draw arrows from other contexts only to the front's box.
+
+```mermaid
+flowchart LR
+  members["members/..."] --> ordersAPI["orders/api"]
+  orders["orders/..."] --> membersAPI["members/api"]
+  ordersAPI --> orders
+  membersAPI --> members
+```
+
+- A change it stops: members' code imports a class inside orders directly.
+- The box `orders/...` covers `orders/api` too, but a unit goes to the box that fits it most closely, so the unit `orders/api` is in the box `ordersAPI`.
+- Draw the arrow from the front into its own context (`ordersAPI --> orders`): the front hands work to the implementation inside.
+
+### CQRS
+
+Writes (commands) and reads (queries) in separate code. In the dependency diagram, draw no arrow from the query box to the command box.
+
+```mermaid
+flowchart LR
+  command["app/command/..."] --> domain["domain/..."]
+  query["app/query/..."] --> readmodel["infra/readmodel/..."]
+```
+
+- A change it stops: read code imports write code.
+
+### Plugins (microkernel)
+
+The core declares the plugin contract (an interface), and plugins implement it. In layers, put the core inside and the plugins outside.
+
+- A change it stops: the core imports one particular plugin.
+
+### Event-driven (publish and subscribe)
+
+The event types are in a shared unit, which publishers and subscribers both import. In the dependency diagram, draw no arrow from a publisher to a subscriber.
+
+```mermaid
+flowchart LR
+  orders["orders/..."] --> events["events/..."]
+  notifications["notifications/..."] --> events
+```
+
+- A change it stops: order code imports notification code and calls it directly.
+
+### Monorepo apps and packages
+
+Apps (`apps/`) use shared packages (`packages/`), never the other way.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: packages
+        paths: [packages/**]
+      - name: apps
+        paths: [apps/**]
+```
+
+- A change it stops: a shared package imports one particular app.
+
+### Strangler Fig
+
+Old code is replaced by new code bit by bit. In the dependency diagram, draw no arrow from the new code to the old.
+
+```mermaid
+flowchart LR
+  legacy["legacy/..."] --> next["next/..."]
+  next --> shared["shared/..."]
+  legacy --> shared
+```
+
+- A change it stops: new code adds a dependency on old code.
+- An import the diagram does not draw does not fail when main already has it. So the arrow can stay undrawn even while new code still depends on old code: the dependencies there today pass, and only changes adding more fail. Dependencies do not grow while the replacement goes on.
+
+## Infrastructure patterns
+
+### Terraform environments and modules
+
+Reusable modules (`modules/`) and the environments that call them (`envs/`).
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: modules
+        paths: [modules/**]
+      - name: envs
+        paths: [envs/**]
+```
+
+- A change it stops: a module calls an environment's directory in `source`.
+- What counts as an import is a local module call, `source = "./…"` or `"../…"`.
+
+### Ansible base roles and app roles
+
+Put base roles, such as OS settings and monitoring, in an inner layer and app roles in an outer one. A unit matching two layers is in the one written first, so write the base roles first.
+
+```yaml
+rules:
+  deps:
+    layers:
+      - name: base
+        paths: [roles/common/**, roles/monitoring/**]
+      - name: apps
+        paths: [roles/**]
+```
+
+- A change it stops: a base role's `meta/main.yml` adds an app role to its `dependencies`.
+
 ## GoF design patterns
 
 Most GoF patterns are about the shape inside a class, or of a few classes near each other. hadome keeps one only when its participants are in separate units and their direction has a rule.
@@ -154,6 +367,7 @@ A delegate such as iOS's `weak var delegate` has the shape of Observer or Strate
 ## What cannot be kept
 
 - **Reflection and calls a framework makes**: Spring's `@EventListener`, `getattr` calling by a name in a string, and the like. The syntax names no callee, so the call cannot be followed.
+- **Where an external library may be used**: a rule such as "only `infra/` may import the database driver". An anti-corruption layer has this shape too. The diagrams draw only the repository's own units, so this cannot be written there. It can be written as a product-specific gate.
 - **Dependencies through other modules**: hadome does not read libraries outside the repository, so a cycle back through a library is not counted.
 - **The shape inside one unit**: how a class's responsibilities are split, and any shape beyond the size of methods, is not looked at. Size is the `size/` rules' job.
 
