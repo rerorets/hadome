@@ -114,7 +114,7 @@ npx hadome check
 <summary>Python（uv・pip）</summary>
 
 ```sh
-uv add --dev hadome==0.6.0                   # pip なら pip install hadome==0.6.0
+uv add --dev hadome==0.7.0                   # pip なら pip install hadome==0.7.0
 uv run hadome check
 ```
 
@@ -125,7 +125,7 @@ uv run hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.6.0" }
+plugins { id("io.github.rerorets.hadome") version "0.7.0" }
 ```
 
 `./gradlew hadomeCheck`で動かします。
@@ -140,7 +140,7 @@ plugins { id("io.github.rerorets.hadome") version "0.6.0" }
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.6.0</version>
+  <version>0.7.0</version>
 </plugin>
 ```
 
@@ -172,7 +172,7 @@ go tool -modfile=tools.mod hadome check
 <summary>Rust（cargo binstall）</summary>
 
 ```sh
-cargo binstall hadome@0.6.0
+cargo binstall hadome@0.7.0
 hadome check
 ```
 
@@ -190,7 +190,7 @@ hadome check
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
-Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.6.0_windows_amd64.zip -OutFile hadome.zip
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.7.0_windows_amd64.zip -OutFile hadome.zip
 Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$HOME\hadome", "User")
 # open a new terminal, then:
@@ -199,8 +199,8 @@ hadome version
 
 ```sh
 # macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
-curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.6.0_linux_amd64.tar.gz
-tar -xzf hadome_0.6.0_linux_amd64.tar.gz
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.7.0_linux_amd64.tar.gz
+tar -xzf hadome_0.7.0_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```
@@ -250,7 +250,7 @@ This repository uses hadome to stop regressions in code and tests.
 | 分類 | ルール |
 |---|---|
 | `tests/` | `scope-shrunk`（テストが守る範囲の縮小）・`invariant-unguarded`・`no-clock`・`no-sleep`・`always-true`・`skip-without-reason`・`no-mock`（純粋なコードのテストのモック）・`guards-nothing`（製品のコードを呼ばないテスト）・`no-assertion`（assert の無いテスト）・`duplicate`（本体が同じテスト）・`purity-lost`と`target-unknown`（確認待ち） |
-| `deps/` | `not-in-diagram`（依存の図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱） |
+| `deps/` | `not-in-diagram`（依存の図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱）・`cycle`（ユニットの間に新しい循環を作るimport。図が無くても動く）・`layer`（内側の層から外側の層へのimport） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
 | `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル・`import`（確認待ち）: 行き先が実行するまで決まらないimport |
