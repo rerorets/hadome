@@ -316,3 +316,26 @@ func tsRepoTypes(a *facts.Analysis) map[string]bool {
 	}
 	return out
 }
+
+// bodies maps the IDs of the file's functions and methods to their bodies, as symbols lists them.
+func (tr *tsTrace) bodies() map[string]*node {
+	f, r := tr.f, tr.r
+	out := map[string]*node{}
+	for name, d := range tr.top {
+		switch d.Kind() {
+		case "function_declaration", "generator_function_declaration":
+			out[r.symbolID(f.path, name)] = d.ChildByFieldName("body")
+		case "class_declaration", "abstract_class_declaration":
+			for _, m := range named(d.ChildByFieldName("body")) {
+				if m.Kind() == "method_definition" {
+					out[r.symbolID(f.path, name)+"."+f.field(m, "name")] = m.ChildByFieldName("body")
+				}
+			}
+		case "variable_declarator":
+			if v := d.ChildByFieldName("value"); v != nil && (v.Kind() == "arrow_function" || v.Kind() == "function_expression") {
+				out[r.symbolID(f.path, name)] = v.ChildByFieldName("body")
+			}
+		}
+	}
+	return out
+}

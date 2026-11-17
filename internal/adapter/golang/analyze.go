@@ -124,6 +124,7 @@ func analyze(v engine.Version, c config.Analysis, paths []string, texts bool) (*
 		a.Imports = append(a.Imports, importsOf(fset, pf, idx, tb.io)...)
 		if !pf.generated {
 			syms, entries := traceFile(rd, pf, symbolsOf(fset, pf))
+			traceVars(rd, pf, &a.Files[at[pf.path]])
 			a.Symbols = append(a.Symbols, syms...)
 			a.Entries = append(a.Entries, entries...)
 		}

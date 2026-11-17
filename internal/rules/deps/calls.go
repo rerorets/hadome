@@ -18,15 +18,16 @@ type callEdge struct {
 	line             int
 	caller, callee   string
 	via              string
+	outside          bool // the caller is the file's code outside functions
 }
 
 // callEdges lists the calls of product code from one unit to another, as far as hadome can follow
-// them: the calls of symbols, and of entry-point code that is no symbol. A callee that is no symbol
-// of the version (test or generated code) is not counted.
+// them: the calls of symbols, of entry-point code that is no symbol, and of files outside their
+// functions. A callee that is no symbol of the version (test or generated code) is not counted.
 func callEdges(a *facts.Analysis) []callEdge {
 	r := newReaches(a)
 	var out []callEdge
-	add := func(path string, line int, caller string, calls []string, at map[string]int) {
+	add := func(path string, line int, caller string, calls []string, at map[string]int, outside bool) {
 		from := r.unitOf[path]
 		for _, c := range calls {
 			called := line
@@ -35,7 +36,7 @@ func callEdges(a *facts.Analysis) []callEdge {
 			}
 			for _, t := range r.targets(c) {
 				if from != "" && t.unit != from {
-					e := callEdge{fromUnit: from, toUnit: t.unit, path: path, line: called, caller: caller, callee: t.callee}
+					e := callEdge{fromUnit: from, toUnit: t.unit, path: path, line: called, caller: caller, callee: t.callee, outside: outside}
 					if t.callee != c {
 						e.via = c
 					}
@@ -45,13 +46,17 @@ func callEdges(a *facts.Analysis) []callEdge {
 		}
 	}
 	for _, s := range a.Symbols {
-		add(s.Path, s.Line, s.ID, s.Calls, s.CallAt)
-		add(s.Path, s.Line, s.ID, s.Through, s.CallAt)
+		add(s.Path, s.Line, s.ID, s.Calls, s.CallAt, false)
+		add(s.Path, s.Line, s.ID, s.Through, s.CallAt, false)
 	}
 	for _, e := range a.Entries {
 		if e.Symbol == "" {
-			add(e.Path, e.Line, "", e.Calls, e.CallAt)
+			add(e.Path, e.Line, "", e.Calls, e.CallAt, false)
 		}
+	}
+	for _, f := range a.Files {
+		add(f.Path, 1, "", f.Calls, f.CallAt, true)
+		add(f.Path, 1, "", f.Through, f.CallAt, true)
 	}
 	return out
 }
@@ -218,7 +223,10 @@ func (r callNotInDiagram) Find(in engine.Input) ([]engine.Finding, error) {
 // the callee, with the method the code names when the call lands on an implementation of it.
 func calling(c callEdge) engine.Text {
 	var who any = c.caller
-	if c.caller == "" {
+	switch {
+	case c.outside:
+		who = engine.T("the code outside functions in %s", c.path)
+	case c.caller == "":
 		who = engine.T("the entry point")
 	}
 	if c.via != "" {

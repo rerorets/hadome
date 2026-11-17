@@ -143,6 +143,7 @@ func (j *java) trace(files []*file, t *tables, a *facts.Analysis) {
 		for _, fn := range fns {
 			through[fn.id] = madeInPlace(f, fn.body, javaMade, jvmClass(tr, classes))
 		}
+		tr.madeOutside = func(skip map[uintptr]bool) callLines { return madeIn(f, f.root, skip, javaMade, jvmClass(tr, classes)) }
 		return fns, tr, func() []facts.Entry {
 			var out []facts.Entry
 			for _, fn := range fns {
@@ -274,6 +275,9 @@ func (k *kotlin) trace(files []*file, t *tables, a *facts.Analysis) {
 		}
 		for _, fn := range fns {
 			through[fn.id] = madeInPlace(f, fn.body, kotlinMade, jvmClass(tr, classes))
+		}
+		tr.madeOutside = func(skip map[uintptr]bool) callLines {
+			return madeIn(f, f.root, skip, kotlinMade, jvmClass(tr, classes))
 		}
 		return fns, tr, func() []facts.Entry { return k.entries(tr, fns) }
 	})

@@ -22,11 +22,19 @@ type madeSyntax struct {
 // methods it calls on what was just made or on local variables holding it. resolve returns the ID of the
 // repository's class a written name stands for, or "".
 func madeInPlace(f *file, code *node, syn madeSyntax, resolve func(string) string) callLines {
+	return madeIn(f, code, nil, syn, resolve)
+}
+
+// madeIn is madeInPlace in code without the nodes skip holds.
+func madeIn(f *file, code *node, skip map[uintptr]bool, syn madeSyntax, resolve func(string) string) callLines {
 	out, locals := callLines{}, map[string]string{}
 	if code == nil { // a method without a body, in an interface
 		return nil
 	}
 	walk(code, func(n *node) bool {
+		if skip[n.Id()] {
+			return false
+		}
 		if w := syn.made(f, n); w != "" {
 			if id := resolve(w); id != "" {
 				out.add(id, line(n))

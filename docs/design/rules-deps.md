@@ -256,13 +256,15 @@ queue = Queue(DATA_DIR)  # makes the Queue of app/store/queue
 | Fact | Content |
 |---|---|
 | `File.Calls` | the IDs of the repository's functions and methods called outside the bodies of functions and methods, by the rules of `Symbol.Calls` |
-| `File.Through` | in the same places, methods called through a value's declared type and objects made in place, by the rules of `Symbol.Through` |
+| `File.Through` | objects made in the same places, and methods called on what was made, by the rules of [Objects made in place](#objects-made-in-place) |
 | `File.CallAt` | for each ID in `File.Calls` and `File.Through`, the line where it is first called |
 
 - **The caller**: the file's unit. The message names the caller as "the code outside functions in `app/state.py`"
 - **What is outside functions**: every place not in the body of a function or method symbol. Inside a type's declaration, a place outside its methods is included. So is the inside of a function expression that is no function symbol (`items.map(i => make(i))`)
 - **Why when it runs is not told apart**: code that runs on loading and code called later are treated the same. The call diagram says which unit's code may call which unit, not when
 - **Overlap with entry-point code**: entry-point code (`Entry.Calls`) is outside functions too, so it is also in `File.Calls`. A finding is made once per pair of units, so the overlap adds none. `Entry.Calls` stays as it is, for the `idempotent` candidates
+- **Calls through a value's declared type**: not read outside functions. The values `Symbol.Through` reads (parameters, fields, attributes) hardly occur outside functions
+- **What is not read**: imports, the names of declarations, and Rust's test modules. Imports and declarations bring in or declare a name and call nothing; test modules are test code
 - **Files that hold them**: product code files only, not test files or generated files, as with symbols
 - **Why on `File`**: making the code outside functions a symbol would change the results of other rules that read symbols (`size/`, `comments/`)
 
