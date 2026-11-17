@@ -56,6 +56,20 @@ func (s jvmScope) nested() jvmScope {
 	return out
 }
 
+// retype types a field a setup assigns by the class of the object assigned, or leaves it untyped
+// when the value is no object built of a product class. Names that are no typed field are left as
+// they are.
+func retype(fields map[string]string, name, class string) {
+	if _, field := fields[name]; !field {
+		return
+	}
+	if class != "" {
+		fields[name] = class
+	} else {
+		delete(fields, name)
+	}
+}
+
 // withInputs adds the annotations of a class to the scope's inputs when the class is parameterised.
 // anns are the class's annotations by name; they join in the order they are written.
 func (s jvmScope) withInputs(anns map[string]*node) jvmScope {

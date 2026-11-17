@@ -160,6 +160,9 @@ func (jf *jvmFile) javaClass(n *node, prefix string, classSkip *node, outer jvmS
 			}
 		}
 	}
+	for _, s := range scope.setups[len(outer.setups):] {
+		jf.javaSetupAssigns(s.n, scope.fields)
+	}
 	var out []facts.Test
 	for _, m := range methods {
 		if a := annotations(f, m); hasAny(a, jvmTestAnnotations) {
@@ -348,49 +351,4 @@ var javaUses = useGrammar{
 	members: map[string]string{"field_access": "object"},
 	names:   map[string]string{"field_access": "field"},
 	callees: map[string][]string{"method_invocation": {"object", "name"}},
-}
-
-// javaField reads a field of a test class: a mock, typed only when it is a spy, or a field typed
-// into fields and noted when its initializer uses the product.
-func (jf *jvmFile) javaField(m *node, fields map[string]string) {
-	anns := annotations(jf.f, m)
-	mock, spy := hasAny(anns, jvmMockAnnotations), hasAny(anns, jvmSpyAnnotations)
-	if mock {
-		jf.mocks = append(jf.mocks, m)
-	}
-	if !mock || spy {
-		jf.javaFieldTypes(m, fields)
-	}
-	if mock {
-		return
-	}
-	for _, d := range named(m) {
-		if d.Kind() == "variable_declarator" {
-			jf.noteValueField(jf.f.field(d, "name"), d.ChildByFieldName("value"))
-		}
-	}
-}
-
-// javaFieldTypes types the fields of a test class, as ktFieldType does: by the constructor that
-// builds a field, or, with no initializer (injected), by its declared type. A field built some other
-// way (mock(), a factory) is left untyped.
-func (jf *jvmFile) javaFieldTypes(n *node, into map[string]string) {
-	f := jf.f
-	declared := typeName(f.field(n, "type"))
-	for _, d := range named(n) {
-		if d.Kind() != "variable_declarator" {
-			continue
-		}
-		name, v := f.field(d, "name"), d.ChildByFieldName("value")
-		switch {
-		case v == nil:
-			if class := jf.names[declared]; class != "" {
-				into[name] = class
-			}
-		case v.Kind() == "object_creation_expression":
-			if class := jf.names[typeName(f.field(v, "type"))]; class != "" {
-				into[name] = class
-			}
-		}
-	}
 }

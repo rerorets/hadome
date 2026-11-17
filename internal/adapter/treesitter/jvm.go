@@ -97,8 +97,8 @@ func (j *jvm) testType(unit, name string) (jvmDecl, bool) {
 }
 
 // jvmSetupAnnotations mark the methods that run before each test of their class, or once before
-// all of them.
-var jvmSetupAnnotations = set("BeforeEach", "BeforeAll", "Before", "BeforeClass")
+// all of them. BeforeTest is kotlin.test's.
+var jvmSetupAnnotations = set("BeforeEach", "BeforeAll", "Before", "BeforeClass", "BeforeTest")
 
 // place sets a file's unit from its package declaration, and records the package and its classes.
 func (j *jvm) place(f *file, pkg string, classes []string) {

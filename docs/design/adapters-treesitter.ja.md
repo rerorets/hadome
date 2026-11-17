@@ -322,6 +322,7 @@ Python のテストのクラスは、次のように見分けます。
   - コンストラクタで作ったフィールドは、そのクラスとして読みます
   - 初期値の無いフィールド（`lateinit`、注入、コンストラクタのプロパティ）は、宣言した型として読みます
   - モックなど、ほかの方法で作ったフィールドは読みません
+  - 各テストの前に走るコードで代入したフィールドは、代入した値を初期値にしたときと同じに読みます。例: `lateinit var store: Store` に `@BeforeEach` で `store = mockk()` を代入すると、宣言した型としては読まず、モックとして扱います。`store = Store()` なら `Store` として読みます。何度か代入していれば、最後の代入で決めます
   - スパイのフィールド（`@Spy`、`@SpyK`、Quarkus の `@InjectSpy`）は、モックに数えたうえで、宣言した型か作ったクラスとして読みます。スパイは包んだオブジェクトの本物のメソッドを動かすので、スパイの上の呼び出しは製品のメソッドの呼び出しです
   - Mockito の `@InjectMocks` のフィールドは、モックに数えず、宣言した型か作ったクラスとして読みます。このフィールドは本物のインスタンスにモックを注入したものなので、その上の呼び出しは製品のメソッドの呼び出しです。`org.mockito.InjectMocks` の import もモックに数えません
   - Kotlin の `companion object` の中のフィールドとヘルパーも、クラスのものと同じに読みます
@@ -437,7 +438,7 @@ TypeScript のテストが偽の時計に切り替えた後は、`Date.now`・`n
 
 | 言語 | 各テストの前に走るコード |
 |---|---|
-| Java、Kotlin | `@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass` の付いたメソッドと、Kotlin の `init` のブロック。外側のクラスと継承元のクラスのものも入ります |
+| Java、Kotlin | `@BeforeEach`・`@BeforeAll`・`@Before`・`@BeforeClass`・`@BeforeTest`（kotlin.test）の付いたメソッドと、Kotlin の `init` のブロック。外側のクラスと継承元のクラスのものも入ります |
 | TypeScript | テストを囲む `describe` と、ファイルの直下の `beforeEach`・`beforeAll` の本体。偽の時計に切り替えた後のものは数えません（前の段落） |
 | Python | `autouse=True` の付いた pytest の fixture。同じファイル、テストのディレクトリとその上の `conftest.py`、テストのクラスとその継承元のクラスの中のものです。クラスの `setUp`・`setUpClass`・`asyncSetUp`・`setup_method`・`setup_class`。継承元のクラスのものも入ります（下の「Python の継承元の準備」）。ファイルの `setup_module`。クラスの外のテストには `setup_function` も入ります |
 

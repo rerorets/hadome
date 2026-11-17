@@ -9,6 +9,7 @@ package treesitter
 // tests and its mock fields.
 func (jf *jvmFile) ktCollect(n *node, scope *jvmScope) (tests, mocks []*node) {
 	f := jf.f
+	own := len(scope.setups)
 	for name, class := range jf.ktConstructorFields(n) {
 		scope.fields[name] = class
 	}
@@ -44,7 +45,46 @@ func (jf *jvmFile) ktCollect(n *node, scope *jvmScope) (tests, mocks []*node) {
 			scope.setups = append(scope.setups, jvmCode{jf, m})
 		}
 	}
+	for _, s := range scope.setups[own:] {
+		jf.ktSetupAssigns(s.n, scope.fields)
+	}
 	return tests, mocks
+}
+
+// ktSetupAssigns retypes the fields a setup assigns (store = mockk() in a @BeforeEach) as
+// ktFieldType types a field with the assigned value as its initializer, so that a lateinit field
+// assigned a mock before each test is a mock, not its declared type. The last assignment wins.
+// Assignments inside lambdas and nested declarations, and to the setup's own locals, are not the
+// field's.
+func (jf *jvmFile) ktSetupAssigns(body *node, fields map[string]string) {
+	f := jf.f
+	locals := map[string]bool{}
+	walk(body, func(n *node) bool {
+		switch n.Kind() {
+		case "lambda_literal", "anonymous_function", "function_declaration", "class_declaration", "object_declaration",
+			"object_literal":
+			return false
+		case "property_declaration":
+			for _, c := range named(n) {
+				if c.Kind() == "variable_declaration" {
+					locals[f.text(c.NamedChild(0))] = true
+				}
+			}
+		case "assignment":
+			if n.NamedChildCount() != 2 || ktOperator(n) != "=" {
+				break
+			}
+			target := n.NamedChild(0)
+			if target.Kind() == "navigation_expression" && target.NamedChildCount() == 2 &&
+				target.NamedChild(0).Kind() == "this_expression" {
+				target = target.NamedChild(1)
+			} else if locals[f.text(target)] {
+				break
+			}
+			retype(fields, f.text(target), jf.ktBuilt(n.NamedChild(1)))
+		}
+		return true
+	})
 }
 
 // ktInherit adds to scope what a test class inherits from the test class it extends, which may be
