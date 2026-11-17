@@ -3,6 +3,7 @@
 package treesitter
 
 import (
+	"maps"
 	"slices"
 	"sort"
 
@@ -42,16 +43,35 @@ func (s supers) fill(a *facts.Analysis) {
 	}
 }
 
+// callLines maps the ID of each method called to the line of its first call.
+type callLines map[string]int
+
+// add records a call of id at line at, keeping the earlier line.
+func (c callLines) add(id string, at int) {
+	if old, ok := c[id]; !ok || at < old {
+		c[id] = at
+	}
+}
+
 // setThrough sets Symbol.Through of the functions and methods to the calls through a value's
-// declared type that are not already among their calls.
-func setThrough(a *facts.Analysis, through map[string][]string) {
+// declared type that are not already among their calls, with their lines.
+func setThrough(a *facts.Analysis, through map[string]callLines) {
 	for i := range a.Symbols {
-		s := &a.Symbols[i]
-		for _, c := range through[s.ID] {
-			if !slices.Contains(s.Calls, c) {
-				s.Through = append(s.Through, c)
-			}
+		addThrough(&a.Symbols[i], through[a.Symbols[i].ID])
+	}
+}
+
+// addThrough adds to a symbol the calls of through that are not among its calls.
+func addThrough(s *facts.Symbol, through callLines) {
+	for _, c := range slices.Sorted(maps.Keys(through)) {
+		if slices.Contains(s.Calls, c) {
+			continue
 		}
+		s.Through = append(s.Through, c)
+		if s.CallAt == nil {
+			s.CallAt = map[string]int{}
+		}
+		s.CallAt[c] = through[c]
 	}
 }
 

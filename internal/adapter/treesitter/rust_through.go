@@ -40,7 +40,7 @@ func rustSupertypes(f *file, c *node, sup supers, resolve func(string) tbind) {
 // rustThrough returns the methods a function's body calls on values whose type, through &, dyn,
 // impl, Box, Arc or Rc, or a type parameter's trait bound, is one of the repository's types: its
 // parameters and locals, and the fields of its type (self.finder.find()).
-func rustThrough(tr *tracing, fn tfunc, repo map[string]bool) []string {
+func rustThrough(tr *tracing, fn tfunc, repo map[string]bool) callLines {
 	f := tr.f
 	bounds := rustBounds(f, fn.decl)
 	typed := func(written string) string {
@@ -70,7 +70,7 @@ func rustThrough(tr *tracing, fn tfunc, repo map[string]bool) []string {
 		}
 		return true
 	})
-	out := map[string]bool{}
+	out := callLines{}
 	walk(fn.body, func(n *node) bool {
 		if n.Kind() != "call_expression" {
 			return true
@@ -88,11 +88,11 @@ func rustThrough(tr *tracing, fn tfunc, repo map[string]bool) []string {
 			written = fields[f.field(obj, "field")]
 		}
 		if id := typed(written); id != "" {
-			out[id+"."+method] = true
+			out.add(id+"."+method, line(n))
 		}
 		return true
 	})
-	return keys(out)
+	return out
 }
 
 // rustUnwrap reduces a written type to the name of the type a method call reaches: &mut dyn Finder,

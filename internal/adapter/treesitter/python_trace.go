@@ -29,7 +29,7 @@ var pySyntax = tsyntax{
 }
 
 func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
-	repo, classes, through, unfollowed := pyRepoTypes(a), pyClasses{}, map[string][]string{}, map[string]int{}
+	repo, classes, through, unfollowed := pyRepoTypes(a), pyClasses{}, map[string]callLines{}, map[string]int{}
 	defer func() {
 		classes.supertypes().fill(a)
 		setThrough(a, through)

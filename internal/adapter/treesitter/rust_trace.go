@@ -66,7 +66,7 @@ func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 	last := segs[len(segs)-1]
 	if segs[0] == "Self" && fn.class != "" {
 		if tr.funcs[fn.class+"."+last] {
-			got.calls[fn.class+"."+last] = true
+			got.call(fn.class + "." + last)
 		}
 		return true
 	}
@@ -76,14 +76,14 @@ func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 		case b.io:
 			got.io = true
 		case tr.funcs[id]:
-			got.calls[id] = true
+			got.call(id)
 		case b.unit != "":
 			got.units[b.unit] = true
 		}
 		return true
 	}
 	if own := fn.own + "." + strings.Join(segs, "."); tr.funcs[own] { // Type::f of the same module
-		got.calls[own] = true
+		got.call(own)
 		return true
 	}
 	loc, internal := r.resolve(f.path, segs)
@@ -91,10 +91,10 @@ func (r *rust) path(tr *tracing, fn tfunc, n *node, got *reached) bool {
 	case !internal:
 		got.io = got.io || tr.ioPath(strings.Join(segs, "::"))
 	case tr.funcs[r.item(loc, last)]:
-		got.calls[r.item(loc, last)] = true
+		got.call(r.item(loc, last))
 	default:
 		if t := r.item(loc, segs[len(segs)-2]) + "." + last; tr.funcs[t] { // module::Type::f
-			got.calls[t] = true
+			got.call(t)
 		} else {
 			got.units[loc] = true
 		}
@@ -117,7 +117,7 @@ func (tr *tracing) ioPath(p string) bool { return tr.io != nil && tr.io(p) }
 
 func (r *rust) trace(files []*file, t *tables, a *facts.Analysis) {
 	syn := r.traceSyntax()
-	repo, sup, through := rustRepoTypes(a), supers{}, map[string][]string{}
+	repo, sup, through := rustRepoTypes(a), supers{}, map[string]callLines{}
 	defer func() {
 		sup.fill(a)
 		setThrough(a, through)
@@ -193,6 +193,9 @@ func (r *rust) localBinds(f *file, t *tables, file map[string]tbind, body *node)
 // bindUses adds to out the names the use declarations directly in n bring in.
 func (r *rust) bindUses(f *file, t *tables, n *node, out map[string]tbind) map[string]tbind {
 	for _, u := range uses(f, n) {
+		if u.local == "self" && len(u.segs) > 1 { // use crate::store::{self, Finder}: store, the module
+			u.segs, u.local = u.segs[:len(u.segs)-1], u.segs[len(u.segs)-2]
+		}
 		if u.local == "" || u.local == "self" {
 			continue
 		}

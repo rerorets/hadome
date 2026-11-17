@@ -169,6 +169,9 @@ type Symbol struct {
 	// type, <type>.<method>, that are not in Calls: where the call lands depends on the value. They
 	// are kept out of Calls so that what reads Calls is not changed.
 	Through []string
+	// CallAt maps each ID in Calls and Through to the line of its first call, where an adapter
+	// knows it.
+	CallAt map[string]int
 	// Supertypes are the IDs of the repository's types a type implements or extends, the direct
 	// ones only.
 	Supertypes []string
@@ -180,15 +183,6 @@ type Symbol struct {
 	Units []string
 	// IO is true when the body itself uses something that does input or output.
 	IO bool
-}
-
-// Entry is an entry point that can be retried: an HTTP handler, a route. It is either a symbol, or
-// code that is not one (a function written where a route is registered), whose calls are listed.
-type Entry struct {
-	Path   string
-	Line   int
-	Symbol string
-	Calls  []string
 }
 
 // Nested is a function nested in a symbol: an arrow function, lambda, closure, function literal,

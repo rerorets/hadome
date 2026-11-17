@@ -92,6 +92,7 @@ type walker struct {
 type callCount struct {
 	times  int
 	scopes map[string]bool
+	line   int // of the first call site
 }
 
 // extractTests reads the tests of one file. main is the TestMain of the file's directory, or nil;

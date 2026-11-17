@@ -18,15 +18,6 @@ type tracer interface {
 	trace(files []*file, t *tables, a *facts.Analysis)
 }
 
-// reached is what a piece of code reaches.
-type reached struct {
-	io    bool
-	calls map[string]bool
-	units map[string]bool
-}
-
-func newReached() reached { return reached{calls: map[string]bool{}, units: map[string]bool{}} }
-
 // keys returns the keys set to true, sorted.
 func keys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
@@ -120,7 +111,7 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 			}
 			got := tr.reach(fn, fn.body)
 			s := &a.Symbols[i]
-			s.IO, s.Calls, s.Units = got.io, keys(got.calls), keys(got.units)
+			s.IO, s.Calls, s.CallAt, s.Units = got.io, got.ids(), got.lines(), keys(got.units)
 		}
 		a.Entries = append(a.Entries, entries()...)
 	}
@@ -191,6 +182,7 @@ func (tr *tracing) fieldsOf(class *node) map[string]string {
 func (tr *tracing) reachInto(fn tfunc, code *node, got *reached) {
 	f := tr.f
 	walk(code, func(n *node) bool {
+		got.read(n)
 		if tr.syn.special != nil && tr.syn.special(tr, fn, n, got) {
 			return false
 		}
@@ -227,13 +219,16 @@ func (tr *tracing) name(fn tfunc, x string, got *reached) {
 	}
 	switch {
 	case fn.class != "" && tr.funcs[fn.class+"."+x]:
-		got.calls[fn.class+"."+x] = true
+		got.call(fn.class + "." + x)
 	case tr.funcs[fn.own+"."+x]:
-		got.calls[fn.own+"."+x] = true
+		got.call(fn.own + "." + x)
 	default:
 		if v, ok := tr.values[x]; ok && !tr.seen[x] { // a value made from another reaches what that one does
 			tr.seen[x] = true
+			held := got.held
+			got.held = true
 			tr.reachInto(fn, v, got)
+			got.held = held
 		}
 	}
 }
@@ -244,7 +239,7 @@ func (tr *tracing) use(b tbind, got *reached) {
 	case b.io:
 		got.io = true
 	case tr.funcs[b.id]:
-		got.calls[b.id] = true
+		got.call(b.id)
 	case b.unit != "":
 		got.units[b.unit] = true
 	}
@@ -256,7 +251,7 @@ func (tr *tracing) use(b tbind, got *reached) {
 func (tr *tracing) memberOf(fn tfunc, obj *node, name string, got *reached) bool {
 	if tr.self(obj) {
 		if fn.class != "" && tr.funcs[fn.class+"."+name] {
-			got.calls[fn.class+"."+name] = true
+			got.call(fn.class + "." + name)
 		}
 		return true
 	}
@@ -273,7 +268,7 @@ func (tr *tracing) memberOf(fn tfunc, obj *node, name string, got *reached) bool
 	case b.io:
 		got.io = true
 	case b.id != "" && tr.funcs[tr.memberID(b.id, name)]:
-		got.calls[tr.memberID(b.id, name)] = true
+		got.call(tr.memberID(b.id, name))
 	case b.unit != "":
 		got.units[b.unit] = true
 	}
@@ -375,10 +370,10 @@ func simpleType(s string) string {
 func (tr *tracing) handlers(fn tfunc, a *node, inline map[string]bool) []facts.Entry {
 	got := tr.reach(fn, a)
 	if inline[a.Kind()] {
-		return []facts.Entry{{Path: tr.f.path, Line: line(a), Calls: keys(got.calls)}}
+		return []facts.Entry{got.entry(tr.f.path, line(a))}
 	}
 	var out []facts.Entry
-	for _, id := range keys(got.calls) {
+	for _, id := range got.ids() {
 		out = append(out, facts.Entry{Path: tr.f.path, Line: line(a), Symbol: id})
 	}
 	return out

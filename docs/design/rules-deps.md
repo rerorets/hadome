@@ -240,6 +240,7 @@ classDiagram
 - **Why `Calls` stays as it is**: `Calls` stays `[]string`, so the other things that read it (the `idempotent` candidates) do not change
 - **When a line is missing**: an ID missing from `CallAt` has no known line, and is reported at the declaration of the calling function or at the entry point. An adapter that does not fill the lines only makes the place coarser; the findings stay the same
 - **Adapters that fill it**: every adapter that fills `Calls` or `Through` fills `CallAt` too: the Go adapter and the tree-sitter adapters of five languages
+- **How it is checked**: a self-test case cannot check a finding's line, so the reported line is checked by unit tests of `deps`, and each language's lines by unit tests of its adapter
 
 ### Code outside functions
 
@@ -381,7 +382,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 |---|---|
 | `deps/not-in-diagram` | an import along an arrow passes · an import with no arrow fails · an existing undrawn import passes · an import within one node passes · an import from a unit in no node fails · a `/...` node covers what is under it · an import in a test file passes · an import between two units in no node fails · drawing the arrow needs review instead |
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
-| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call with no arrow is reported at the line of the call · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
+| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
 

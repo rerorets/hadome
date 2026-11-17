@@ -241,6 +241,7 @@ TypeScript で型だけを持ち込む import と export は、import の一覧�
 
 ### Rust の解決
 
+- **モジュール自身**: `use crate::store::{self, Finder}` の `self` は、`store` にモジュール `crate::store` を束縛します
 - **子のモジュール**: パスの最初の要素が、そのファイルのモジュールの子のモジュールなら、`self` から始まるパスとして解決します。例: `src/doc/mod.rs` の `use yaml::quote` は `src/doc/yaml` の `quote` です
 - **公開し直した名前**: モジュールが宣言していない名前は、そのモジュールの可視性の付いた `use`（`pub use`、`pub(crate) use` など）で探します。名前を挙げたもの、`*`、`as` の別名のどれでも、宣言した場所の項目にたどります。公開し直した先でさらに公開し直していても、8段までたどります
   - 例: `src/doc/mod.rs` に `pub use yaml::quote;` があれば、`crate::doc::quote` は `src/doc/yaml.quote` です

@@ -232,6 +232,7 @@ When a path follows the name, as in `@acme/shared/sub`, the path is resolved in 
 
 ### Resolving Rust
 
+- **The module itself**: `self` in `use crate::store::{self, Finder}` binds `store` to the module `crate::store`
 - **Child modules**: a path whose first element is a child module of the file's module resolves as a path starting with `self`. Example: `use yaml::quote` in `src/doc/mod.rs` is `quote` of `src/doc/yaml`
 - **Re-exported names**: a name the module does not declare is looked up in the module's `use` declarations that have a visibility (`pub use`, `pub(crate) use` and the like). By name, by `*` or under an `as` alias, it is followed to the item where it is declared. A re-export of a re-export is followed up to 8 levels
   - Example: with `pub use yaml::quote;` in `src/doc/mod.rs`, `crate::doc::quote` is `src/doc/yaml.quote`

@@ -137,3 +137,40 @@ func TestGoCallsThroughAreSorted(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+// viewpoint: behaviour
+// target: golang.Adapter.Analyze
+// Each call in Calls and Through has the line of its first call, and so do the calls of a handler
+// written in place where a route is registered.
+func TestGoCallsCarryTheLineOfTheirFirstCall(t *testing.T) {
+	a := analyzeTree(t, fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com/app\n")},
+		"port/port.go":   {Data: []byte("package port\n\ntype Finder interface{ Find(id string) string }\n")},
+		"store/store.go": {Data: []byte("package store\n\nfunc Save() {}\n")},
+		"api/api.go": {Data: []byte("package api\n\nimport (\n\t\"net/http\"\n\n\t\"example.com/app/port\"\n\t\"example.com/app/store\"\n)\n\n" +
+			"func Use(f port.Finder) string {\n\t_ = 1\n\tf.Find(\"x\")\n\tstore.Save()\n\tstore.Save()\n\treturn f.Find(\"y\")\n}\n\n" +
+			"func Routes(m *http.ServeMux) {\n\tm.HandleFunc(\"/x\", func(w http.ResponseWriter, r *http.Request) {\n\t\tstore.Save()\n\t})\n}\n")},
+	})
+	found := false
+	for _, s := range a.Symbols {
+		if s.ID == "example.com/app/api.Use" {
+			found = true
+			want := map[string]int{"example.com/app/port.Finder.Find": 12, "example.com/app/store.Save": 13}
+			if fmt.Sprint(s.CallAt) != fmt.Sprint(want) {
+				t.Errorf("Use: got %v, want %v", s.CallAt, want)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no symbol api.Use")
+	}
+	var inline []string
+	for _, e := range a.Entries {
+		if e.Symbol == "" {
+			inline = append(inline, fmt.Sprint(e.CallAt))
+		}
+	}
+	if got, want := strings.Join(inline, " "), "map[example.com/app/store.Save:20]"; got != want {
+		t.Errorf("entries: got %s, want %s", got, want)
+	}
+}
