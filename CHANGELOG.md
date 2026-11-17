@@ -15,14 +15,29 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
-## 0.7.0 - 2026-11-17
+## 0.7.0 - 2026-11-18
 
 ### Finds more
 
 - `deps/call-not-in-diagram` also counts calls made outside functions and methods: code at the top of a module, initial values of fields, decorators, default values of parameters, initial values of a Go package's `var`s, and the like. They count as calls from the file's unit.
 - Calls through a module brought in with Rust's `use crate::store::{self, Finder}` are counted too.
+- A new rule, `deps/cycle`, fails an import that makes a new cycle between units. It works without a diagram. It fails only when an import of a directory pair base does not have closes a cycle, and the message gives the way back (`store → domain → store`). When the importing file is Rust, Java or Kotlin, imports between a directory and its ancestor are not followed.
+- A new rule, `deps/layer`, fails an import from an inner layer to an outer one, by the layers written in `rules.deps.layers`. Until layers are written, it does nothing.
+
+### Fewer false findings and misses
+
+- Imports inside Python's `if TYPE_CHECKING:` count as imports of types only, so they make no dependency for `deps/`.
+- In Java and Kotlin, files under a `test/` or `test@…/` that is not inside `src/` are read as tests: the Kotlin Multiplatform layouts `jvm/test/` and `nonJvm/test/`, and Amper's `test@jvm/`. They used to be read as product code.
+
+### Configuration
+
+- `rules.deps.cycles.allow` takes directory pairs whose cycles `deps/cycle` does not follow, written `app/ui/** <-> app/presenter/**`. Adding a pair goes to review (exit 3).
+- `rules.deps.layers` takes the layers from the inside out, each a name and directory globs. Writing them the first time needs no review; any later change goes to review (exit 3).
 
 ### Other
+
+- `hadome suggest diagram` and `hadome suggest calls` draft the dependency and call diagrams from the imports and calls as they are; configuring a draft fails none of today's code. Boxes group units `--depth` levels down (2 by default), counting only directories that branch, per language. Pairs of boxes that depend on each other both ways are listed.
+- The configuration `hadome init` writes, and the block of instructions for agents, recommend drafting the diagrams and proposing them to the person when there are none.
 
 - `deps/call-not-in-diagram` reports a call at the line where it is written. It used to report at the declaration of the calling function.
 - `hadome mutate` gives the test command a temporary directory of its own, and empties it at every run. Before, every `go test` stopped at its time limit left its work directory behind in the temporary directory.

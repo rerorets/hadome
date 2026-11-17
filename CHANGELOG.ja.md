@@ -15,14 +15,29 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
-## 0.7.0 - 2026-11-17
+## 0.7.0 - 2026-11-18
 
 ### 検出が増える変更
 
 - `deps/call-not-in-diagram` が、関数とメソッドの外のコードの呼び出しも数えます。モジュールの先頭のコード、フィールドの初期値、デコレータ、引数の既定値、Go のパッケージの `var` の初期値などです。呼ぶ側は、そのファイルのユニットとして数えます。
 - Rust の `use crate::store::{self, Finder}` で取り込んだモジュールを通した呼び出しも数えます。
+- 新しいルール `deps/cycle` が、ユニットの間に新しい循環を作る import を落とします。図が無くても動きます。落とすのは、base に無いディレクトリの組の import が循環を閉じたときだけで、メッセージに戻る道（`store → domain → store`）を書きます。import するファイルが Rust・Java・Kotlin なら、ディレクトリとその祖先の間の import はたどりません。
+- 新しいルール `deps/layer` が、`rules.deps.layers` に書いた層を見て、内側の層から外側の層への import を落とします。層を書くまでは何もしません。
+
+### 誤検知・漏れの修正
+
+- Python の `if TYPE_CHECKING:` の中の import を、型だけを持ち込む import として数えます。`deps/` の依存にはなりません。
+- Java と Kotlin で、`src/` の下に無い `test/` か `test@…/` の下のファイルを、テストとして読みます。Kotlin Multiplatform の `jvm/test/`・`nonJvm/test/` や、Amper の `test@jvm/` の配置です。これまでは製品のコードとして読んでいました。
+
+### 設定
+
+- `rules.deps.cycles.allow` に、`deps/cycle` が循環をたどらないディレクトリの組を `app/ui/** <-> app/presenter/**` の形で書けます。組を足す変更は確認（exit 3）に回します。
+- `rules.deps.layers` に、層を内側から順に、名前とディレクトリのグロブで書けます。初めて書くときは確認が要りません。書いたあとで変える変更は、どれも確認（exit 3）に回します。
 
 ### その他
+
+- `hadome suggest diagram` と `hadome suggest calls` が、いまの import と呼び出しから、依存の図と呼び出しの図の叩き台を書きます。設定しても、いまのコードは落ちません。箱は、枝分かれするディレクトリだけを数えて `--depth` 段（既定は 2）でまとめ、言語ごとに数えます。両向きに依存している箱の組は、一覧にして書き出します。
+- `hadome init` が書く設定の雛形と、エージェント向けの指示のブロックが、図が無いときに叩き台を作って人に提案するよう勧めます。
 
 - `deps/call-not-in-diagram` は、呼び出しを書いた行で報告します。これまでは、呼ぶ関数の宣言の行で報告していました。
 - `hadome mutate` は、テストのコマンドに専用の一時ディレクトリを渡し、1回ごとに空にします。これまでは、時間切れで止めた `go test` の作業用のディレクトリが、一時ディレクトリに1つずつ残っていました。

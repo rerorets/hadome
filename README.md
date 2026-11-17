@@ -242,7 +242,7 @@ This repository uses hadome to stop regressions in code and tests.
 | Group | Rules |
 |---|---|
 | `tests/` | `scope-shrunk` (what tests guard shrank) · `invariant-unguarded` · `no-clock` · `no-sleep` · `always-true` · `skip-without-reason` · `no-mock` (mocks in tests of pure code) · `guards-nothing` (tests that call no product code) · `no-assertion` (tests without an assertion) · `duplicate` (tests with the same body) · `purity-lost` and `target-unknown` (review) |
-| `deps/` | `not-in-diagram` (imports your dependency diagram does not draw) · `call-not-in-diagram` (calls your call diagram does not draw) · `diagram-stale` (boxes that name nothing) |
+| `deps/` | `not-in-diagram` (imports your dependency diagram does not draw) · `call-not-in-diagram` (calls your call diagram does not draw) · `diagram-stale` (boxes that name nothing) · `cycle` (imports that make a new cycle between units, with or without a diagram) · `layer` (imports from an inner layer to an outer one) |
 | `size/` | `file-lines` · `function-lines` · `params` · `complexity` · `interface-methods` |
 | `comments/` | `todo-format` (TODOs without a when) · `missing-doc` · `broken-reference` (comments pointing at missing documents) |
 | `unknown/` | `unread` (review): a file hadome could not read · `import` (review): an import whose destination is decided only at run time |
