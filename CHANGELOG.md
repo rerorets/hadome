@@ -15,6 +15,20 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.9.0 - 2026-11-18
+
+### Finds more
+
+- In a Go type switch, inside a `case` that names one type, the switch's variable is read as that type. It used to be read as a value of unknown type, and method calls on it were not counted. `deps/call-not-in-diagram` now asks for arrows for those calls, and tests count them as calls they make.
+
+### Fewer false findings and misses
+
+- `deps/call-not-in-diagram` no longer asks for arrows for method calls on a value taken out as an interface after asking whether a value holds that type: Go's `errors.As(err, &v)`, `v.(I)` and type switches, and in Java, Kotlin and TypeScript, a local with a written type set to a cast. Which implementation such a value holds is decided by the call that returned it, whose arrows are already asked for. It used to ask for arrows to every type with the same method, including types whose values never reach the call in production. Those arrows also leave the drafts of `hadome suggest calls`.
+
+### Other
+
+- [docs/hooks.md](docs/hooks.md) gains a Stop hook for Claude Code and Codex that runs hadome before an agent finishes its work. The README names what hadome stops and how it differs from tools made for agents.
+
 ## 0.8.0 - 2026-11-18
 
 ### Finds more
