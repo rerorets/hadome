@@ -81,6 +81,7 @@ type tracing struct {
 	member func(mod, name string) string
 	io     func(path string) bool // whether a whole path names something that does input or output
 	locals map[string]string      // the variables of the function being read, and their types
+	asked  map[string]bool        // those of its locals declared with a cast as their value
 	fields map[string]string      // the fields of its class, and their types
 	seen   map[string]bool        // the values at the top of the file already read for it
 	// classFields are the fields of each class read so far, by the class's node: a class's methods
@@ -120,7 +121,7 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 			}
 			got := tr.reach(fn, fn.body)
 			s := &a.Symbols[i]
-			s.IO, s.Calls, s.CallAt, s.Units = got.io, got.ids(), got.lines(), keys(got.units)
+			s.IO, s.Calls, s.Asserted, s.CallAt, s.Units = got.io, got.ids(), got.askedIDs(), got.lines(), keys(got.units)
 		}
 		if i, ok := fileAt[f.path]; ok {
 			tr.outside(&a.Files[i], fns)
@@ -132,7 +133,7 @@ func traceFiles(files []*file, a *facts.Analysis, read func(f *file, funcs map[s
 // reach reads what code of a function reaches.
 func (tr *tracing) reach(fn tfunc, code *node) reached {
 	got := newReached()
-	tr.locals, tr.fields = map[string]string{}, map[string]string{}
+	tr.locals, tr.fields, tr.asked = map[string]string{}, map[string]string{}, map[string]bool{}
 	if fn.binds != nil {
 		file := tr.binds
 		tr.binds = fn.binds
@@ -159,9 +160,7 @@ func (tr *tracing) reach(fn tfunc, code *node) reached {
 		}
 		if fn.decl != nil {
 			walk(fn.decl, func(n *node) bool {
-				for k, v := range tr.syn.vars(tr.f, n) {
-					tr.locals[k] = v
-				}
+				tr.declare(n)
 				return true
 			})
 		}
@@ -282,6 +281,8 @@ func (tr *tracing) memberOf(fn tfunc, obj *node, name string, got *reached) bool
 	switch {
 	case b.io:
 		got.io = true
+	case b.id != "" && tr.funcs[tr.memberID(b.id, name)] && known && tr.asked[tr.f.text(obj)]:
+		got.ask(tr.memberID(b.id, name))
 	case b.id != "" && tr.funcs[tr.memberID(b.id, name)]:
 		got.call(tr.memberID(b.id, name))
 	case b.unit != "":

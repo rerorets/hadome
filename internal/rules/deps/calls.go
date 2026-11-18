@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -23,13 +24,18 @@ type callEdge struct {
 
 // callEdges lists the calls of product code from one unit to another, as far as hadome can follow
 // them: the calls of symbols, of entry-point code that is no symbol, and of files outside their
-// functions. A callee that is no symbol of the version (test or generated code) is not counted.
+// functions. A callee that is no symbol of the version (test or generated code) is not counted, nor
+// is a method of an interface called on a value taken out by asking whether it holds the interface
+// (Asserted).
 func callEdges(a *facts.Analysis) []callEdge {
 	r := newReaches(a)
 	var out []callEdge
-	add := func(path string, line int, caller string, calls []string, at map[string]int, outside bool) {
+	add := func(path string, line int, caller string, calls, asserted []string, at map[string]int, outside bool) {
 		from := r.unitOf[path]
 		for _, c := range calls {
+			if slices.Contains(asserted, c) && r.onInterface(c) {
+				continue // left to the call that returned the value
+			}
 			called := line
 			if at[c] > 0 {
 				called = at[c]
@@ -46,17 +52,17 @@ func callEdges(a *facts.Analysis) []callEdge {
 		}
 	}
 	for _, s := range a.Symbols {
-		add(s.Path, s.Line, s.ID, s.Calls, s.CallAt, false)
-		add(s.Path, s.Line, s.ID, s.Through, s.CallAt, false)
+		add(s.Path, s.Line, s.ID, s.Calls, s.Asserted, s.CallAt, false)
+		add(s.Path, s.Line, s.ID, s.Through, s.Asserted, s.CallAt, false)
 	}
 	for _, e := range a.Entries {
 		if e.Symbol == "" {
-			add(e.Path, e.Line, "", e.Calls, e.CallAt, false)
+			add(e.Path, e.Line, "", e.Calls, e.Asserted, e.CallAt, false)
 		}
 	}
 	for _, f := range a.Files {
-		add(f.Path, 1, "", f.Calls, f.CallAt, true)
-		add(f.Path, 1, "", f.Through, f.CallAt, true)
+		add(f.Path, 1, "", f.Calls, f.Asserted, f.CallAt, true)
+		add(f.Path, 1, "", f.Through, f.Asserted, f.CallAt, true)
 	}
 	return out
 }
@@ -85,6 +91,12 @@ func newReaches(a *facts.Analysis) reaches {
 		}
 	}
 	return r
+}
+
+// onInterface reports whether id is a method of one of the version's interfaces.
+func (r reaches) onInterface(id string) bool {
+	i := strings.LastIndex(id, ".")
+	return i > 0 && r.kind[id[:i]] == facts.SymbolInterface
 }
 
 // target is a unit a call lands in, and the function or method there.

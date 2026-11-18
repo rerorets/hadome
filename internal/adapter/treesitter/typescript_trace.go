@@ -61,7 +61,7 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 	for _, ty := range types {
 		tr := ty.tr
 		ty.supertypes(sup)
-		through, unfollowed := ty.throughs(made)
+		through, asked, unfollowed := ty.throughs(made)
 		bodies := tr.bodies()
 		for id, body := range bodies {
 			i, ok := at[id]
@@ -72,6 +72,11 @@ func (r *typescript) trace(files []*file, t *tables, a *facts.Analysis) {
 			s := &a.Symbols[i]
 			s.IO, s.Calls, s.CallAt, s.Units, s.Unfollowed = got.io, got.ids(), got.lines(), keys(got.units), unfollowed[id]
 			addThrough(s, through[id])
+			for _, c := range s.Through {
+				if asked[id][c] {
+					s.Asserted = append(s.Asserted, c)
+				}
+			}
 		}
 		if i, ok := fileAt[tr.f.path]; ok {
 			ty.outside(&a.Files[i], slices.Collect(maps.Values(bodies)))

@@ -12,6 +12,9 @@ import (
 type reached struct {
 	io    bool
 	calls map[string]int // the ID of each function called -> the line of its first call
+	// asked tells, by ID, whether every call so far was on a value taken out by a cast
+	// (facts.Symbol.Asserted).
+	asked map[string]bool
 	units map[string]bool
 	// at is the line being read; held keeps it while the code of a value used there is read, so
 	// that a call the value makes counts where the value is used.
@@ -19,13 +22,38 @@ type reached struct {
 	held bool
 }
 
-func newReached() reached { return reached{calls: map[string]int{}, units: map[string]bool{}} }
+func newReached() reached {
+	return reached{calls: map[string]int{}, asked: map[string]bool{}, units: map[string]bool{}}
+}
 
 // call records a call of id at the line being read, unless an earlier line called it.
 func (g *reached) call(id string) {
 	if _, ok := g.calls[id]; !ok {
 		g.calls[id] = g.at
 	}
+	g.asked[id] = false
+}
+
+// ask records a call of id on a value taken out by a cast, unless an earlier line called it.
+func (g *reached) ask(id string) {
+	if _, ok := g.calls[id]; !ok {
+		g.calls[id] = g.at
+	}
+	if _, ok := g.asked[id]; !ok {
+		g.asked[id] = true
+	}
+}
+
+// askedIDs returns, sorted, the IDs called only on values taken out by a cast, or nil.
+func (g *reached) askedIDs() []string {
+	var out []string
+	for id, only := range g.asked {
+		if only {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // read moves the line being read to n's, unless it is held.
@@ -45,7 +73,7 @@ func (g *reached) lines() map[string]int {
 
 // entry is code at path and line that is an entry point, with its calls.
 func (g *reached) entry(path string, at int) facts.Entry {
-	return facts.Entry{Path: path, Line: at, Calls: g.ids(), CallAt: g.lines()}
+	return facts.Entry{Path: path, Line: at, Calls: g.ids(), Asserted: g.askedIDs(), CallAt: g.lines()}
 }
 
 // ids returns the IDs of the calls, sorted.

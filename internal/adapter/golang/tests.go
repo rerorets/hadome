@@ -70,6 +70,9 @@ type walker struct {
 	loops    int    // how many loops enclose the node being walked
 	branches int    // how many ifs, switches and selects enclose it
 	curPath  string // the file being walked: the test's, or a helper's
+	// asking is true while the walker records a method called on a value it took out by asking
+	// whether the value holds a type (vtype.asserted).
+	asking bool
 	// callees holds the expressions in call position, and fields the identifiers after a dot, so
 	// that neither is taken for a read of a product value.
 	callees map[ast.Expr]bool
@@ -93,6 +96,9 @@ type callCount struct {
 	times  int
 	scopes map[string]bool
 	line   int // of the first call site
+	// asked is true while every call site is on a value taken out by asking whether it holds a
+	// type.
+	asked bool
 }
 
 // extractTests reads the tests of one file. main is the TestMain of the file's directory, or nil;
@@ -251,9 +257,7 @@ func (w *walker) statement(n ast.Node) bool {
 		w.inspect(n.Tag)
 		w.inBranch(n.Body)
 	case *ast.TypeSwitchStmt:
-		w.inspect(n.Init)
-		w.inspect(n.Assign)
-		w.inBranch(n.Body)
+		w.typeSwitch(n)
 	case *ast.SelectStmt:
 		w.inBranch(n.Body)
 	default:

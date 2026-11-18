@@ -151,7 +151,7 @@ classDiagram
 
 `Symbol.Calls`・`Units`・`IO` と `Analysis.Entries` は、関数が入出力に届くかと、やり直されうる入口から届くかを決めるための事実です。関数を持つ言語のアダプタはすべて、関数とメソッドについてこれを埋めます。`Calls` は本体から呼ぶリポジトリの関数の ID、`Units` は本体が値を使うリポジトリのユニット、`IO` は本体が入出力をするものを直接使うことです。読み方は [suggest.ja.md](suggest.ja.md) の「`idempotent` の条件」にあります。
 
-`Symbol.Through`・`Supertypes`・`Unfollowed`・`CallAt` は、呼び出しの図（`deps/call-not-in-diagram`）のための事実です。`Through` はインターフェースなど値の宣言した型を通した呼び出し、`Supertypes` は型が実装・継承するリポジトリの型、`Unfollowed` は型が分からない値の呼び出しの数、`CallAt` は `Calls` と `Through` の ID ごとの最初の呼び出しの行です。`Entry.CallAt` も同じです。`File.Calls`・`File.Through`・`File.CallAt` は、関数とメソッドの本体の外のコードの同じ事実です。`Calls` には入れず、`Calls` を読む仕組みの結果は変えません。言語ごとの読み方は、[rules-deps.ja.md](rules-deps.ja.md) の「呼び出しの事実」にあります。
+`Symbol.Through`・`Supertypes`・`Unfollowed`・`Asserted`・`CallAt` は、呼び出しの図（`deps/call-not-in-diagram`）のための事実です。`Through` はインターフェースなど値の宣言した型を通した呼び出し、`Supertypes` は型が実装・継承するリポジトリの型、`Unfollowed` は型が分からない値の呼び出しの数、`Asserted` は型を問うて取り出した値でだけ呼ぶ呼び出し、`CallAt` は `Calls` と `Through` の ID ごとの最初の呼び出しの行です。`Entry.Asserted` と `Entry.CallAt` も同じです。`File.Calls`・`File.Through`・`File.Asserted`・`File.CallAt` は、関数とメソッドの本体の外のコードの同じ事実です。`Calls` には入れず、`Calls` を読む仕組みの結果は変えません。言語ごとの読み方は、[rules-deps.ja.md](rules-deps.ja.md) の「呼び出しの事実」にあります。
 
 ### ファイルと役割
 
@@ -431,6 +431,7 @@ Go のテストでは、メソッドを呼んだ値の型を宣言から読み�
 - 関数、メソッド、テストのヘルパーの結果。宣言した結果の型で読みます（`newStore(t).Append()`）。複数の値を返す呼び出しでは、どの変数もそれぞれの結果の型で読みます（`s, q := store.Pair()`）
 - range の要素（`for _, s := range stores`）と、宣言した構造体のフィールド（`tc.store.Append()`、`f.w.Drain()`）
 - `var c Config` と `:=` で作った変数
+- 型を問うて取り出した値（`v.(T)`、型の switch の変数）。問うた型で読みます。型の switch では、型を1つだけ書いた `case` の中ではその型で読み、型を2つ以上書いた `case` と `default` の中では switch した値の型で読みます
 - ヘルパーと関数リテラルの引数。宣言した引数の型で読みます（`func check(t *testing.T, s *store.Store)`）
 - ヘルパーの引数のうち、インターフェースか、読めない型（`http.Handler` など、ほかのモジュールの型）で宣言したもの。呼んだ側が渡した値の型で読みます。例: `func add(t *testing.T, a Appender)` を `add(t, &store.Store{})` で呼ぶと、`a.Append()` は `Store.Append` の呼び出しです。渡した値の型も分からないときは `unknown` です。インターフェースのメソッドの呼び出しにはしません。インターフェースのメソッドは、それ自体のコードを持たないためです
 

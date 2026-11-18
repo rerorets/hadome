@@ -121,10 +121,12 @@ func (ty *tsTypes) supertypes(sup supers) {
 // through returns the methods a function's body calls on values whose written type is one of the
 // repository's types: the class's fields and constructor parameter properties (this.store.save()),
 // the function's parameters and locals (store.save()), and the values at the top of the file
-// (tsModuleValues). It also counts the calls on such values whose type is not written, or any.
-func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLines, int) {
+// (tsModuleValues). It also counts the calls on such values whose type is not written, or any, and
+// tells, by method, whether it calls the method only on locals declared with a cast as their value
+// (facts.Symbol.Asserted).
+func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLines, map[string]bool, int) {
 	f := ty.tr.f
-	fields, vars, locals := tsFields(f, class), map[string]string{}, map[string]bool{}
+	fields, vars, locals, cast := tsFields(f, class), map[string]string{}, map[string]bool{}, map[string]bool{}
 	walk(decl, func(x *node) bool {
 		switch x.Kind() {
 		case "required_parameter", "optional_parameter":
@@ -132,13 +134,15 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 				vars[f.field(x, "pattern")] = unknownType
 			}
 			tsTyped(f, x, vars)
+			delete(cast, f.field(x, "pattern"))
 		case "variable_declarator":
 			locals[f.field(x, "name")] = true
 			tsTyped(f, x, vars)
+			cast[f.field(x, "name")] = isCast(x.ChildByFieldName("value"))
 		}
 		return true
 	})
-	out, unfollowed := callLines{}, 0
+	out, asked, unfollowed := callLines{}, map[string]bool{}, 0 // asked: whether every call is on a cast
 	walk(decl.ChildByFieldName("body"), func(x *node) bool {
 		if x.Kind() != "call_expression" {
 			return true
@@ -160,23 +164,36 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		if written == unknownType {
 			unfollowed++
 		} else if id := ty.resolve(written); id != "" && method != "" {
-			out.add(id+"."+method, line(x))
+			call := id + "." + method
+			out.add(call, line(x))
+			noteCast(asked, call, obj.Kind() == "identifier" && cast[f.text(obj)])
 		}
 		return true
 	})
 	for id, at := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
 		out.add(id, at)
+		asked[id] = false
 	}
-	return out, unfollowed
+	return out, asked, unfollowed
+}
+
+// noteCast records whether a call is on a cast, in asked, which stays false once one is not.
+func noteCast(asked map[string]bool, call string, onCast bool) {
+	if only, seen := asked[call]; !seen || only {
+		asked[call] = onCast
+	}
 }
 
 // throughs maps the IDs of the file's functions and methods to their calls through a value's
-// declared type, and to the number of calls on values whose type is unknown, as bodies lists them.
-func (ty *tsTypes) throughs(made map[string]string) (map[string]callLines, map[string]int) {
+// declared type, to those of them made only on values taken out by a cast, and to the number of
+// calls on values whose type is unknown, as bodies lists them.
+func (ty *tsTypes) throughs(made map[string]string) (map[string]callLines, map[string]map[string]bool, map[string]int) {
 	f, r := ty.tr.f, ty.tr.r
 	module := ty.moduleValues(made)
-	out, unfollowed := map[string]callLines{}, map[string]int{}
-	add := func(id string, decl, class *node) { out[id], unfollowed[id] = ty.through(decl, class, module) }
+	out, asked, unfollowed := map[string]callLines{}, map[string]map[string]bool{}, map[string]int{}
+	add := func(id string, decl, class *node) {
+		out[id], asked[id], unfollowed[id] = ty.through(decl, class, module)
+	}
 	for name, d := range ty.tr.top {
 		switch d.Kind() {
 		case "function_declaration", "generator_function_declaration":
@@ -193,7 +210,7 @@ func (ty *tsTypes) throughs(made map[string]string) (map[string]callLines, map[s
 			}
 		}
 	}
-	return out, unfollowed
+	return out, asked, unfollowed
 }
 
 // moduleValues returns, by name, the written types of the values at the top of the file that come

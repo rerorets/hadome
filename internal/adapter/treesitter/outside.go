@@ -46,7 +46,7 @@ func (tr *tracing) outside(file *facts.File, fns []tfunc) {
 	tr.skip = outsideSkip(tr.f, bodies)
 	defer func() { tr.skip = nil }()
 	got := tr.reach(tfunc{own: tr.f.unit}, tr.f.root)
-	file.Calls, file.CallAt = got.ids(), got.lines()
+	file.Calls, file.Asserted, file.CallAt = got.ids(), got.askedIDs(), got.lines()
 	if tr.madeOutside != nil {
 		addFileThrough(file, tr.madeOutside(tr.skip))
 	}

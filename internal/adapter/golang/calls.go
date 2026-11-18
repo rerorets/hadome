@@ -180,7 +180,9 @@ func (w *walker) selectorCall(c *ast.CallExpr, sel *ast.SelectorExpr) {
 	// result of a call (store.New().Len()) or a literal ((Config{}).Validate()).
 	t := w.valueType(sel.X)
 	if t != nil && t.id != "" && (ast.IsExported(name) || w.ownType(t.id)) {
+		w.asking = t.asserted
 		w.record(t.id+"."+name, c)
+		w.asking = false
 		return
 	}
 	if !w.otherCall(sel.X, t, name) {
@@ -239,9 +241,10 @@ func (w *walker) toolCall(c *ast.CallExpr, name string) {
 func (w *walker) record(id string, c *ast.CallExpr) {
 	cc := w.calls[id]
 	if cc == nil {
-		cc = &callCount{scopes: map[string]bool{}, line: w.fset.Position(c.Pos()).Line}
+		cc = &callCount{scopes: map[string]bool{}, line: w.fset.Position(c.Pos()).Line, asked: w.asking}
 		w.calls[id] = cc
 	}
+	cc.asked = cc.asked && w.asking
 	cc.times++
 	if w.loops > 0 {
 		cc.times++
@@ -339,6 +342,7 @@ func (w *walker) subtest(fn ast.Expr) {
 }
 
 func (w *walker) packageCall(c *ast.CallExpr, p, name string) {
+	w.errorsAs(c, p, name)
 	if w.tables.io.has(p) {
 		w.trace.doesIO()
 	}

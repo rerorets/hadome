@@ -97,7 +97,7 @@ func (t *trace) route(w *walker, c *ast.CallExpr) bool {
 			inner.local = newBlock(w.local)
 			inner.bindParams(lit.Type, nil)
 			ast.Inspect(lit.Body, inner.visit)
-			t.entries = append(t.entries, facts.Entry{Path: t.path, Line: line, Calls: callIDs(inner), CallAt: callLines(inner)})
+			t.entries = append(t.entries, facts.Entry{Path: t.path, Line: line, Calls: callIDs(inner), Asserted: askedIDs(inner), CallAt: callLines(inner)})
 			continue
 		}
 		if id := w.funcRef(a); id != "" {
@@ -149,6 +149,19 @@ func callIDs(w *walker) []string {
 	return out
 }
 
+// askedIDs returns, sorted, the IDs the walker called only on values it took out by asking whether
+// they hold a type, or nil.
+func askedIDs(w *walker) []string {
+	var out []string
+	for id, cc := range w.calls {
+		if cc.asked {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // traceFile fills in the calls, units and input or output of the file's functions and methods,
 // and returns the entry points the file declares or registers.
 func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, []facts.Entry) {
@@ -188,7 +201,12 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 // fill sets what a function's walk found on its symbol: its calls with their lines, the units it
 // uses other than its own package, and whether it does input or output.
 func (t *trace) fill(s *facts.Symbol, w *walker, pkgPath string) {
-	s.IO, s.Calls, s.CallAt = t.io, callIDs(w), callLines(w)
+	for id := range t.through { // a call on a parameter is no value asked for
+		if cc := w.calls[id]; cc != nil {
+			cc.asked = false
+		}
+	}
+	s.IO, s.Calls, s.Asserted, s.CallAt = t.io, callIDs(w), askedIDs(w), callLines(w)
 	s.Through = t.throughIDs(w, s.CallAt)
 	if len(s.CallAt) == 0 {
 		s.CallAt = nil
@@ -241,6 +259,6 @@ func traceVars(rd reading, pf parsedFile, file *facts.File) {
 		}
 	}
 	if len(w.calls) > 0 {
-		file.Calls, file.CallAt = callIDs(w), callLines(w)
+		file.Calls, file.Asserted, file.CallAt = callIDs(w), askedIDs(w), callLines(w)
 	}
 }
