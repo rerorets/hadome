@@ -37,7 +37,7 @@ classDiagram
 ```
 
 - **パッケージ。** `internal/adapter/terraform` と `internal/adapter/ansible` を足します。どちらも Go のアダプタと同じく純粋な Go で書くので、cgo の無いビルドでも読めます
-- **Terraform のパーサー。** Terraform 自身が使う HCL のパーサー（`hashicorp/hcl/v2` の `hclsyntax`）で読みます。tree-sitter の HCL の文法は使いません。Go のバインディングを持つバージョンが ABI 15 で、hadome が使う Go のバインディング（ABI 14 まで）では読めないからです
+- **Terraform のパーサー。** Terraform 自身が使う HCL のパーサー（`hashicorp/hcl/v2` の `hclsyntax`）で読みます。Terraform と同じ読み方になります。tree-sitter の HCL の文法は使いません。tree-sitter は cgo を使うので、cgo の無いビルドで Terraform を読めなくなるからです
 - **ライセンス。** `hashicorp/hcl/v2` のライセンスは MPL-2.0 です。MPL はファイル単位で効くので、hadome のコードは MIT のままでかまいません。配る実行ファイルには MPL-2.0 の本文と、`hashicorp/hcl/v2` のソースの在りかを書いた文書を添えます
 - **Ansible のパーサー。** 設定を読むのに使っている `goccy/go-yaml` で読みます。依存は増えません
 - **依存の図。** `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible` の矢印と、2つから `engine`、`config`、`facts` への矢印を足します
