@@ -122,7 +122,7 @@ func (ty *tsTypes) supertypes(sup supers) {
 // repository's types: the class's fields and constructor parameter properties (this.store.save()),
 // the function's parameters and locals (store.save()), and the values at the top of the file
 // (tsModuleValues). It also counts the calls on such values whose type is not written, or any, and
-// returns the methods it calls only on locals declared with a cast as their value
+// tells, by method, whether it calls the method only on locals declared with a cast as their value
 // (facts.Symbol.Asserted).
 func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLines, map[string]bool, int) {
 	f := ty.tr.f
@@ -142,7 +142,7 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		}
 		return true
 	})
-	out, asked, plain, unfollowed := callLines{}, map[string]bool{}, map[string]bool{}, 0
+	out, asked, unfollowed := callLines{}, map[string]bool{}, 0 // asked: whether every call is on a cast
 	walk(decl.ChildByFieldName("body"), func(x *node) bool {
 		if x.Kind() != "call_expression" {
 			return true
@@ -164,21 +164,17 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		if written == unknownType {
 			unfollowed++
 		} else if id := ty.resolve(written); id != "" && method != "" {
-			out.add(id+"."+method, line(x))
-			if obj.Kind() == "identifier" && cast[f.text(obj)] {
-				asked[id+"."+method] = true
-			} else {
-				plain[id+"."+method] = true
+			call := id + "." + method
+			out.add(call, line(x))
+			if only, seen := asked[call]; !seen || only {
+				asked[call] = obj.Kind() == "identifier" && cast[f.text(obj)]
 			}
 		}
 		return true
 	})
 	for id, at := range madeInPlace(f, decl.ChildByFieldName("body"), tsMade, ty.resolve) {
 		out.add(id, at)
-		plain[id] = true
-	}
-	for id := range plain {
-		delete(asked, id)
+		asked[id] = false
 	}
 	return out, asked, unfollowed
 }

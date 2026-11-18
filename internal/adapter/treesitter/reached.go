@@ -3,8 +3,6 @@
 package treesitter
 
 import (
-	"maps"
-	"slices"
 	"sort"
 
 	"github.com/rerorets/hadome/internal/facts"
@@ -14,7 +12,8 @@ import (
 type reached struct {
 	io    bool
 	calls map[string]int // the ID of each function called -> the line of its first call
-	// asked holds the IDs called so far only on values taken out by a cast (facts.Symbol.Asserted).
+	// asked tells, by ID, whether every call so far was on a value taken out by a cast
+	// (facts.Symbol.Asserted).
 	asked map[string]bool
 	units map[string]bool
 	// at is the line being read; held keeps it while the code of a value used there is read, so
@@ -32,23 +31,29 @@ func (g *reached) call(id string) {
 	if _, ok := g.calls[id]; !ok {
 		g.calls[id] = g.at
 	}
-	delete(g.asked, id)
+	g.asked[id] = false
 }
 
 // ask records a call of id on a value taken out by a cast, unless an earlier line called it.
 func (g *reached) ask(id string) {
 	if _, ok := g.calls[id]; !ok {
 		g.calls[id] = g.at
+	}
+	if _, ok := g.asked[id]; !ok {
 		g.asked[id] = true
 	}
 }
 
 // askedIDs returns, sorted, the IDs called only on values taken out by a cast, or nil.
 func (g *reached) askedIDs() []string {
-	if len(g.asked) == 0 {
-		return nil
+	var out []string
+	for id, only := range g.asked {
+		if only {
+			out = append(out, id)
+		}
 	}
-	return slices.Sorted(maps.Keys(g.asked))
+	sort.Strings(out)
+	return out
 }
 
 // read moves the line being read to n's, unless it is held.
