@@ -15,7 +15,7 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
-## 0.7.1 - 2026-11-18
+## 0.8.0 - 2026-11-18
 
 ### 検出が増える変更
 
