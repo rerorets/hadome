@@ -37,7 +37,7 @@ hadome (歯止め) compares a change with main and reports the violations the ch
 
 It looks at how code is written (dependency direction, size, comments) and how tests are written. Tests are compared not by their number but by the functions they call. When deleting a test narrows that scope, it is reported as a regression.
 
-It is meant for repositories where AI agents write most of the code. The result is also available as JSON, which agents read to fix what it reports.
+It is meant for repositories where AI agents such as Claude Code and Codex write most of the code. It stops an agent from getting a task through by deleting a test, skipping one without a reason, or removing the assertions until the test checks nothing. The result is also available as JSON, which agents read to fix what it reports.
 
 One binary reads TypeScript, Python, Java, Kotlin, Go, Rust, Terraform and Ansible.
 
@@ -211,6 +211,7 @@ hadome agents --write CLAUDE.md
 - The file is created if it is missing. Later runs update the same block.
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
+- To have the agent run `hadome check` by itself before it finishes, use a Claude Code or Codex Stop hook: see [Running hadome from an agent's hook](docs/hooks.md).
 
 To add it by hand, paste this block as it is, including the first and last lines, `<!-- hadome:begin -->` and `<!-- hadome:end -->`. With those two lines, `hadome agents --write` can later rewrite the same block.
 
@@ -256,6 +257,7 @@ Every rule reports why it matters and how to fix it. The rules are specified in 
 | Where | What to run | What you get |
 |---|---|---|
 | Inside an agent's loop | `hadome check --format json` | For each regression: the rule, file and line, why it matters, how to fix it |
+| When an agent tries to finish | A Stop hook ([Running hadome from an agent's hook](docs/hooks.md)) | While a regression remains, the agent keeps fixing instead of finishing |
 | Before a push | `hadome check --head HEAD` (as a pre-push hook) | A readable list |
 | CI on every pull request | `hadome check --base origin/main` | An exit code and a summary to post as a comment |
 | Before finishing a change (locally) | `hadome mutate` | The breaks no test noticed |
@@ -321,6 +323,8 @@ hadome checks both sides of a change, before (base) and after (head), and compar
 | Judging only new code (SonarQube's New Code) | Keeps results on a server and judges the new code | hadome has no server. The same binary runs locally and in CI |
 | Coverage diffs (Codecov and the like) | Runs the tests and measures the lines they pass through | `hadome check` does not run the tests; it reads the functions they call, so it does not depend on each language's test runner. A call whose destination is decided only at run time cannot be read, and goes to a person's review |
 | AI code review | Has an LLM read the change | hadome uses no LLM and talks to no network. The same change gets the same result every time |
+| Hooks that watch an agent's actions (AgentTrail Guard) | Before a tool runs, match its command and paths, and ask a person when it deletes a test file | hadome looks at the result of the change, not the actions. Weakening inside a file, such as emptying a test or removing its assertions, and deleting through a script are caught as long as they show in the result |
+| Tools that run the tests on both versions (trustbut, goalline) | Run the new tests on the old code, or the old tests on the new code; count skips and lost assertions in the diff | Weakening that shows only when the tests run, such as a rewritten expected value, is what these are for; hadome does not run the tests, so it does not catch that. Instead it compares the set of functions the tests call rather than counts, so making up the numbers by adding tests elsewhere does not hide a narrowed scope |
 
 ## The name
 
