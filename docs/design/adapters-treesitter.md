@@ -466,7 +466,7 @@ The other rules are Go's too.
 
 ## Grammars
 
-The grammars are pinned to versions built for tree-sitter's language ABI 14, the newest the Go binding loads. A grammar is upgraded together with the binding, never alone.
+The grammars are pinned to fixed versions. The Go binding loads tree-sitter's language ABIs 13 to 15; a grammar built for a newer ABI is upgraded together with the binding.
 
 TypeScript picks the grammar by extension, because neither grammar reads all of the other's files.
 

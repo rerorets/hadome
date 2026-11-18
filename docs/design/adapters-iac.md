@@ -33,7 +33,7 @@ classDiagram
 ```
 
 - Packages `internal/adapter/terraform` and `internal/adapter/ansible` are added. Both are pure Go, like the Go adapter, so the build without cgo reads them too
-- Terraform is read with the HCL parser Terraform itself uses (`hclsyntax` from `hashicorp/hcl/v2`), not with tree-sitter's HCL grammar. The versions of that grammar with Go bindings are built for ABI 15, which the Go binding hadome uses (ABI 14 at most) cannot load
+- Terraform is read with the HCL parser Terraform itself uses (`hclsyntax` from `hashicorp/hcl/v2`), so it is read the way Terraform reads it. tree-sitter's HCL grammar is not used: tree-sitter needs cgo, so the build without cgo could not read Terraform
 - `hashicorp/hcl/v2` is licensed under MPL-2.0. MPL applies file by file, so hadome's code stays MIT. The distributed executables ship with the MPL-2.0 text and a note on where the source of `hashicorp/hcl/v2` is
 - Ansible is read with `goccy/go-yaml`, which already reads the configuration. No dependency is added
 - The dependency diagram gains `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible`, and arrows from both to `engine`, `config` and `facts`
