@@ -7,6 +7,8 @@ type Entry struct {
 	Line   int
 	Symbol string
 	Calls  []string
+	// Asserted are those of Symbol for the calls in Calls.
+	Asserted []string
 	// CallAt maps each ID in Calls to the line of its first call, where an adapter knows it.
 	CallAt map[string]int
 }

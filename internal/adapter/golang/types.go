@@ -83,6 +83,19 @@ type vtype struct {
 	// called on a value of it runs that module's code, like a call of one of its functions. It is
 	// empty for other types.
 	ext string
+	// asserted is true for a value taken out of another by asking whether it holds the type:
+	// x.(T), errors.As(err, &v), a case of a type switch (facts.Symbol.Asserted).
+	asserted bool
+}
+
+// askedFor returns the type of a value taken out by asking whether it holds t.
+func (t *vtype) askedFor() *vtype {
+	if t == nil {
+		return nil
+	}
+	c := *t
+	c.asserted = true
+	return &c
 }
 
 // maxDepth bounds the chains of named types and package-level variables followed, so that code
@@ -196,7 +209,7 @@ func (s scope) valueTypeAt(e ast.Expr, depth int) *vtype {
 	case *ast.SliceExpr:
 		return s.valueTypeAt(e.X, depth+1)
 	case *ast.TypeAssertExpr:
-		return s.resolve(e.Type)
+		return s.resolve(e.Type).askedFor()
 	}
 	return nil
 }

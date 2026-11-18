@@ -31,31 +31,6 @@ const (
 	HazardAlwaysTrue HazardCategory = "always-true"
 )
 
-// File is one file of a version.
-type File struct {
-	Path     string
-	Language string
-	Role     Role
-	Lines    int
-	// Unit is what a dependency diagram draws a box for, as imports name it: in Go, the package's
-	// import path. Empty for files that belong to no unit.
-	Unit string
-	// UnitPath is where the unit is in the repository, the name a dependency diagram uses: a
-	// directory, or for Rust a module's path such as src/store.
-	UnitPath string
-	// Unread is true for a file of a supported language that could not be read: it does not parse,
-	// or this build of hadome has no reader for its language.
-	Unread bool
-	// Build is the condition a Go file is built under: its //go:build expression and its _GOOS and
-	// _GOARCH name, joined by &&. Empty for a file without one and for other languages.
-	Build string
-	// Calls, Through and CallAt are those of Symbol for the code of a product file outside the
-	// bodies of its functions and methods: package variables, class bodies, top-level statements.
-	Calls   []string
-	Through []string
-	CallAt  map[string]int
-}
-
 // ShortName is how every message shows a symbol or unit ID, and how configuration names it: the
 // unit's last path element, then the name. example.com/app/store.Append is store.Append, and
 // web/src/lib.getSession is lib.getSession. A unit at the root of a TypeScript project is ".", so
@@ -174,6 +149,11 @@ type Symbol struct {
 	// type, <type>.<method>, that are not in Calls: where the call lands depends on the value. They
 	// are kept out of Calls so that what reads Calls is not changed.
 	Through []string
+	// Asserted are the IDs in Calls and Through that the body calls only on values it took out by
+	// asking whether they hold a type: a type assertion, errors.As, a cast. When that type is an
+	// interface, which implementation the value holds is decided by the call that returned it, so
+	// the call diagram leaves the call to that one.
+	Asserted []string
 	// CallAt maps each ID in Calls and Through to the line of its first call, where an adapter
 	// knows it.
 	CallAt map[string]int

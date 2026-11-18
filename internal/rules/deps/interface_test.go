@@ -20,7 +20,8 @@ func (interfaceRule) Cases() []engine.Case { return interfaceCases() }
 // viewpoint: behaviour
 // target: deps/call-not-in-diagram
 // In Java too, a call through an interface needs arrows to the units of its implementations in
-// product code, and to no others; making another unit's class needs an arrow to it.
+// product code, and to no others, unless the value was cast to the interface; making another unit's
+// class needs an arrow to it.
 func TestJavaCallsThroughAnInterfaceNeedArrowsToTheImplementations(t *testing.T) {
 	e := &engine.Engine{Analyzer: adapter.New(), Rules: []engine.Rule{interfaceRule{}}, Workdir: "."}
 	for _, f := range e.SelfTest() {
@@ -56,7 +57,9 @@ func interfaceCases() []engine.Case {
 			"public class MemoryFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
 		making = "package com.ex.controller;\n\nimport com.ex.service.UserService;\n\npublic class UserController {\n" +
 			"    public String show(String id) { var s = new UserService(); return s.find(id); }\n}\n"
-		fake = "package com.ex.controller;\n\npublic class FakeFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
+		fake    = "package com.ex.controller;\n\npublic class FakeFinder implements Finder {\n    public String find(String id) { return \"\"; }\n}\n"
+		casting = "package com.ex.controller;\n\npublic class UserController {\n" +
+			"    public String show(Object found) { Finder f = (Finder) found; return f.find(\"x\"); }\n}\n"
 	)
 	toService := "  c --> s"
 	return []engine.Case{
@@ -74,5 +77,7 @@ func interfaceCases() []engine.Case {
 		{Name: "making another unit's class along an arrow passes", Base: javaCalls(toService), Head: javaCalls(toService, controller, making)},
 		{Name: "an implementation in the caller's own unit passes", Base: javaCalls(toService),
 			Head: javaCalls(toService, controller, calling, "src/main/java/com/ex/controller/FakeFinder.java", fake)},
+		{Name: "a call on a value cast to an interface is left to the call that returned it", Base: javaCalls(""),
+			Head: javaCalls("", controller, casting)},
 	}
 }

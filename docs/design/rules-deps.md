@@ -278,7 +278,7 @@ classDiagram
 - **`Config.ArchLayers`**: the layers of `rules.deps.layers`, from the inside out. `Paths` are directory globs
 - **`Node.Wiring`**: a node with the class `wiring`; `WiringLine` is the line that gives the class
 - **`CallEdge`**: one call between units, made from the facts by `callEdges`. `Line` is the line of the call, or, when `CallAt` lacks it, of the calling function's declaration or the entry point. For a call through an interface, `Via` is the ID of the interface's method; for a direct call it is empty
-- **The three facts added to `Symbol`** are defined in [Call facts](#call-facts), and `CallAt` in [Call lines](#call-lines)
+- **The four facts added to `Symbol`** are defined in [Call facts](#call-facts), and `CallAt` in [Call lines](#call-lines)
 
 ## Facts
 
@@ -289,18 +289,20 @@ classDiagram
 | `Symbol.Calls`, `Entry.Calls` | direct calls (call diagram) |
 | `Symbol.Through`, `Symbol.Supertypes` | calls through an interface, and where they reach (call diagram) |
 | `Symbol.Unfollowed` | the number of calls hadome cannot follow (call diagram) |
+| `Symbol.Asserted`, `Entry.Asserted`, `File.Asserted` | calls on values taken out by asking for a type (call diagram) |
 | `Symbol.CallAt`, `Entry.CallAt` | the lines of calls (where the call diagram reports) |
-| `File.Calls`, `File.Through`, `File.CallAt` | calls of the code outside functions (call diagram) |
+| `File.Calls`, `File.Through`, `File.Asserted`, `File.CallAt` | calls of the code outside functions (call diagram) |
 
 ### Call facts
 
-`Symbol.Calls` holds only calls whose callee the syntax settles on one function ([suggest.md](suggest.md), "Calls hadome can follow"); whether calls on an interface value are in it differs by language: Java and Kotlin put in calls on values of a declared type, Go only calls through a field, and TypeScript and Python none. The call diagram needs them in every language, so three facts are added to `Symbol`, leaving `Calls` as it is:
+`Symbol.Calls` holds only calls whose callee the syntax settles on one function ([suggest.md](suggest.md), "Calls hadome can follow"); whether calls on an interface value are in it differs by language: Java and Kotlin put in calls on values of a declared type, Go only calls through a field, and TypeScript and Python none. The call diagram needs them in every language, so four facts are added to `Symbol`, leaving `Calls` as it is:
 
 | Fact | On | Content |
 |---|---|---|
 | `Through` | functions and methods | IDs of the repository's methods called through a value's declared type that are not in `Calls`: methods of interfaces, abstract types and traits. In TypeScript and Python, methods of concrete classes too (see the table below). Also the IDs of classes made in place, and their methods ([Objects made in place](#objects-made-in-place)) |
 | `Supertypes` | types | IDs of the repository's types the type implements or extends; direct ones only, not the transitive closure |
 | `Unfollowed` | functions and methods | the number of method calls on parameters and attributes whose type is not written ([Calls hadome cannot follow](#calls-hadome-cannot-follow)) |
+| `Asserted` | functions and methods | the IDs in `Calls` and `Through` the function calls only on values taken out by asking for a type ([Values taken out by asking for a type](#values-taken-out-by-asking-for-a-type)). `Entry` and `File` have the same |
 
 - `Calls` is left as it is so that what else reads it (the `idempotent` candidates) gives the same results
 - The IDs have the form of `Calls`, for example `<unit>.<Type>.<Method>`
@@ -376,6 +378,36 @@ From the facts of a symbol of unit A, the units A reaches are:
 - When implementations lie in several units, the call reaches all of them. With implementations of `Repository` in `repository/pg` and `repository/memory`, arrows to both are needed, since a call can reach either
 - Types in test files are not counted as implementations, so the diagram is never asked for arrows to test fakes (mocks)
 - A fake placed in product code counts. Which files are test files is decided in [adapters.md](adapters.md), "Files and roles"
+
+### Values taken out by asking for a type
+
+A value taken out as a type after asking whether a value holds that type is called here a value taken out by asking for a type. A call of an interface's method on such a value reaches nowhere.
+
+```go
+// workspace: ask whether the error holds MissingHashes, and take it out
+var mh missingHashes
+if errors.As(err, &mh) {
+	missing = mh.MissingHashes() // reaches nowhere
+}
+```
+
+- **Why it reaches nowhere**: which implementation the value holds is decided by the call that returned it. In the example that is `Sender.Submit`, which returned `err`, and the arrows to where it lands are already asked for. Asking for arrows from the call on the value taken out too would reach every type with the same method, whether or not it can be returned. For one: even when only `client.MissingError` ever reaches `err` in production, an arrow to `core.MissingError` would be asked for
+- **How it differs from a value handed in**: for a value received as a parameter or a field, the calling code does not say which implementation it holds. The wiring decides, so the arrows can only be asked for from the call through the interface ([Where a call reaches](#where-a-call-reaches)). For a value taken out by asking for a type, the call in the calling code that returned the value decides which implementation it holds
+- A value taken out by asking for a concrete type (`errors.As(err, &target)` with `target` a `*client.MissingError`) reaches that type, like any other value: the code names the type
+- When one function calls the same method both on a value taken out by asking and on another value, it is a call on the other value, and its arrows are asked for
+- The call stays in `Calls` and `Through`, marked in `Asserted`, so what else reads `Calls` gives the same results ([Call facts](#call-facts))
+
+The ways of asking for a type that are read, by language:
+
+| Language | Written as |
+|---|---|
+| Go | `v.(I)`; the `v` of `errors.As(err, &v)` (and of `golang.org/x/xerrors`); the variable of a type switch in a `case` that names one type |
+| Java | a local set to a cast (`Finder f = (Finder) found;`, in parentheses or not) |
+| Kotlin | a local set to a value taken out with `as` or `as?` (`val f: Finder = found as Finder`) |
+| TypeScript | a local set to a value taken out with `as` or `<T>` (`const f: Finder = found as Finder`) |
+
+- Other forms were never read as the type asked for. For example: Kotlin's smart cast after `is`, TypeScript's type guards, Python's `isinstance`, a Java `instanceof` pattern variable, and a cast called without a variable (`((Finder) found).find()`). The first four are read with the value's declared type, the last as a value of unknown type. None of them asks for arrows to the implementations of the type asked for
+- Rust has no way of taking a value out as a trait: `downcast_ref` takes out a concrete type
 
 ### Objects made in place
 
@@ -465,7 +497,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 | `deps/diagram-stale` | a node naming a missing directory fails · a node naming an existing unit passes · a node naming a directory of tests only fails · moving a unit away from its node fails · a planned box naming a missing directory passes · a box made planned by a `class` statement passes too · a planned box naming a unit fails · marking `planned` a box base's diagram draws needs review · a node of the call diagram naming a missing directory fails |
 | `deps/cycle` | a new import closing a cycle fails · an import closing a cycle through three or more units fails too · an import of a cycle already there passes · a new import making no cycle passes · an import of types only passes even when it closes a cycle · an import inside Python's `TYPE_CHECKING` passes even when it closes a cycle · an import of a test file passes even when it closes a cycle · a cycle between units within one box fails too · a cycle between a parent and a child in TypeScript fails · a cycle between a parent and a child in Rust and Kotlin passes · a cycle between an allowed pair passes · adding an allowed pair needs review · a Terraform module call closing a cycle fails · an Ansible role dependency closing a cycle fails |
 | `deps/layer` | an import from the outside in passes · a new import from the inside out fails · an existing import from the inside out passes · an import within one layer passes · an import with a unit in no layer passes · a unit matching two layers is in the one written first · an import in a test file passes · writing layers for the first time needs no review · changing layers needs review |
-| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
+| `deps/call-not-in-diagram` | a direct call along an arrow passes · a direct call with no arrow fails · an existing undrawn call passes · a call within one node passes · a call from a `wiring` node passes · an undrawn call to a `wiring` node fails · a call through an interface needs an arrow to the implementation's unit · with implementations in two units, an arrow to one alone fails · an implementation in a test file does not count · a call on a value asked for an interface asks for no arrow · a call on a value asked for a concrete type of another unit with no arrow fails · a call with an import arrow but no call arrow fails · a call on a value of unknown type passes · a call outside functions with no arrow fails · drawing the arrow needs review instead · marking `wiring` needs review |
 
 ## Invariants
 
@@ -473,7 +505,7 @@ Only the places that take a value from outside are counted: parameters, attribut
 2. The arrows that judge a change are head's, for both versions; drawing an arrow is never silent
 3. Marking `wiring` is never silent
 4. The call diagram does not change how the dependency diagram judges, nor the other way round
-5. Adding `Through`, `Supertypes`, `Unfollowed` and `CallAt`, and `Calls`, `Through` and `CallAt` of `File`, changes no other fact, nor the results of rules and candidates that read `Calls`
+5. Adding `Through`, `Supertypes`, `Unfollowed`, `Asserted` and `CallAt`, and `Calls`, `Through`, `Asserted` and `CallAt` of `File`, changes no other fact, nor the results of rules and candidates that read `Calls`
 6. A call hadome cannot follow never fails the check and is never sent to review; only calls it follows change the exit code
 7. A call within one unit always passes
 8. `deps/cycle` fails only imports of pairs of directories base has no import of. An import of a pair base has never fails, even in a cycle
@@ -505,4 +537,6 @@ Only the places that take a value from outside are counted: parameters, attribut
 - Transitive arrows. `a --> b --> c` does not allow `a` to call `c` directly, as in the dependency diagram
 - Arrows drawn but never called. As in the dependency diagram, they are not a regression
 - Calls outside functions that cannot be followed. Calls on values of unknown type outside functions are not counted in `Unfollowed`. Of the values `Unfollowed` counts, parameters and attributes are not outside functions
+- **Functions that return a value taken out by asking.** The result of a function such as `func asMissing(err error) missingHashes` is read with its declared result type, so a call on it asks for arrows to every implementation, like a value handed in. Following a value across functions needs type checking and a call graph built on it, which hadome cannot do without reading other modules
+- **Taking a value handed in out as another interface, and calling it.** That is `w.(http.Flusher)`. No arrows are asked for, so when the function never calls the value it was handed, the arrow is missed. Only the call arrow is missed; nothing fails by mistake
 - Generated implementations. `Symbol` holds no generated code, so a type in generated code (sqlc's `Queries`, for one) is not counted as an implementation and calls to it are not asked for. Nothing fails by mistake; fewer calls are seen

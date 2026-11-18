@@ -142,6 +142,10 @@ func goInterfaceCases() []engine.Case {
 		port    = "package api\n\ntype Finder interface{ Find(id string) string }\n"
 		calling = port + "\nfunc Show(f Finder) string { return f.Find(\"x\") }\n"
 		impl    = "type Repo struct{}\n\nfunc (Repo) Find(id string) string { return id }\n"
+		asking  = "package api\n\nimport \"errors\"\n\ntype Finder interface{ Find(id string) string }\n\n" +
+			"func Show(err error) string {\n\tvar f Finder\n\tif errors.As(err, &f) {\n\t\treturn f.Find(\"x\")\n\t}\n\treturn \"\"\n}\n"
+		askingRepo = "package api\n\nimport (\n\t\"errors\"\n\n\t\"example.com/app/domain\"\n)\n\n" +
+			"func Show(err error) string {\n\tvar r domain.Repo\n\tif errors.As(err, &r) {\n\t\treturn r.Find(\"x\")\n\t}\n\treturn \"\"\n}\n"
 	)
 	inDomain, inStore := "package domain\n\n"+impl, "package store\n\n"+impl
 	return []engine.Case{
@@ -159,5 +163,12 @@ func goInterfaceCases() []engine.Case {
 		{Name: "an implementation in a test file does not count",
 			Base: callApp(callsDrawn, "api/api.go", port, "domain/repo_test.go", inDomain),
 			Head: callApp(callsDrawn, "api/api.go", calling, "domain/repo_test.go", inDomain)},
+		{Name: "a call on a value asked for an interface is left to the call that returned it",
+			Base: callApp(callsDrawn, "api/api.go", port, "domain/repo.go", inDomain),
+			Head: callApp(callsDrawn, "api/api.go", asking, "domain/repo.go", inDomain)},
+		{Name: "a call on a value asked for a type of another unit with no arrow fails",
+			Base:     callApp(callsDrawn, "domain/repo.go", inDomain),
+			Head:     callApp(callsDrawn, "api/api.go", askingRepo, "domain/repo.go", inDomain),
+			WantFail: []string{"deps/call-not-in-diagram"}},
 	}
 }
