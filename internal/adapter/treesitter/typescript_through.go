@@ -166,9 +166,7 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		} else if id := ty.resolve(written); id != "" && method != "" {
 			call := id + "." + method
 			out.add(call, line(x))
-			if only, seen := asked[call]; !seen || only {
-				asked[call] = obj.Kind() == "identifier" && cast[f.text(obj)]
-			}
+			noteCast(asked, call, obj.Kind() == "identifier" && cast[f.text(obj)])
 		}
 		return true
 	})
@@ -177,6 +175,13 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		asked[id] = false
 	}
 	return out, asked, unfollowed
+}
+
+// noteCast records whether a call is on a cast, in asked, which stays false once one is not.
+func noteCast(asked map[string]bool, call string, onCast bool) {
+	if only, seen := asked[call]; !seen || only {
+		asked[call] = onCast
+	}
 }
 
 // throughs maps the IDs of the file's functions and methods to their calls through a value's
