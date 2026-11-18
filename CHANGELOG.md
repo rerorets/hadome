@@ -15,6 +15,18 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.8.0 - 2026-11-18
+
+### Finds more
+
+- Methods annotated with kotlin.test's `@BeforeTest` are read as code that runs before each test. The `clock` and `sleep` hazards in them count as hazards of each test of the class.
+
+### Fewer false findings and misses
+
+- In a TypeScript test file where several `describe` blocks each declare a helper of the same name, a call is read as calling the helper of the block that holds it. It used to be read as calling the first of the name in the file, so a change that merged tests into one file could be reported as `tests/scope-shrunk`. Helpers that load a module with `import()` work the same way.
+- In Java and Kotlin, a value that the code run before each test assigns to a field is read as that field's initializer. `lateinit var store: Store` assigned `store = mockk()` is treated as a mock, not as its declared type. Calls on it used to count as calls to the product's methods, so a change that stubbed or verified another method in `every { … }` or `verify { … }` was reported as `tests/scope-shrunk`.
+- Product code called in a method annotated with kotlin.test's `@BeforeTest` counts as run by each test of the class.
+
 ## 0.7.0 - 2026-11-18
 
 ### Finds more
