@@ -15,6 +15,19 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.0 - 2026-11-19
+
+### 検出が増える変更
+
+- TypeScript と Python の製品のコードで、リポジトリの型を要素に持つと型を書いた入れ物から要素を取り出し、そのメソッドを呼ぶと、`deps/call-not-in-diagram` がその型への矢印を求めます。例: `ports: Port[]` のときの `for (const p of ports) p.find()`。
+- テストの中で種類の分からない値のメソッドは未解決の呼び出しとして数えます。当たるのは、これまで追わなかったループの変数（TypeScript・Kotlin）と、Kotlin と Python でリポジトリの関数の戻り値を入れた変数です。後者のメソッドは、これまでその関数の名前の付いたメソッドとして数えていました。テストにほかの対象が無ければ、`tests/target-unknown` になります。
+
+### 誤検知・漏れの修正
+
+- テストの中の値がどんな値かを、5 つの言語（TypeScript・Python・Rust・Java・Kotlin）で同じ決め方で決めます。順に、書いた型、初期値、取り出した入れ物の要素、リポジトリから import した値の宣言を見ます。決め方は [docs/design/adapters-treesitter.ja.md](docs/design/adapters-treesitter.ja.md) の「テストの中の値の種類」にあります。
+  - import した `FRAMES: string[][]` から添字やループで取り出した値に組み込みのメソッド（`join`・`map` など）を呼んでも、テストが `tests/target-unknown` にならなくなりました。外の型の値のメソッドは呼び出しに数えず、その値を読んだと数えます。
+  - 書いた型がリポジトリの型の変数、その型を要素に持つ入れ物から取り出した値、リポジトリの型の定数のメソッドを、その型のメソッドとして数えます。Python と Rust では、これまで型を書いたローカルの変数のメソッドも未解決でした。
+
 ## 0.9.0 - 2026-11-18
 
 ### 検出が増える変更
