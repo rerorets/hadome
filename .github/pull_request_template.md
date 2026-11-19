@@ -12,5 +12,5 @@ Do not include code, names or paths from a private repository. / 非公開のリ
 - [ ] `go test ./...` passes / 通る
 - [ ] `hadome check` exits 0 (and `hadome mutate`, when `.hadome.yml` has `mutation`) / exit 0 になる
 - [ ] A new package or rule starts from a design document in `docs/design/` / 新しいパッケージやルールは `docs/design/` の設計書から始めた
-- [ ] Changed documents are updated in both `foo.ja.md` and `foo.md`, Japanese first / 文書は日本語を先に直し、英語も揃えた
+- [ ] Changed documents: one language is enough; the maintainer brings the other up to it / 文書はどちらか一方の言語を直せば十分（もう一方はメンテナが合わせる）
 - [ ] User-visible changes are described above; the maintainer writes `CHANGELOG` when the version goes up / 利用者に見える変更は上に書いた（`CHANGELOG` はメンテナが版を上げるときに書く）
