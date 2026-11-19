@@ -106,7 +106,7 @@ npx hadome check
 <summary>Python (uv, pip)</summary>
 
 ```sh
-uv add --dev hadome==0.10.0                   # or pip install hadome==0.10.0
+uv add --dev hadome==0.10.1                   # or pip install hadome==0.10.1
 uv run hadome check
 ```
 
@@ -117,7 +117,7 @@ uv run hadome check
 
 ```kotlin
 // build.gradle.kts
-plugins { id("io.github.rerorets.hadome") version "0.10.0" }
+plugins { id("io.github.rerorets.hadome") version "0.10.1" }
 ```
 
 Run it with `./gradlew hadomeCheck`.
@@ -132,7 +132,7 @@ Run it with `./gradlew hadomeCheck`.
 <plugin>
   <groupId>io.github.rerorets</groupId>
   <artifactId>hadome-maven-plugin</artifactId>
-  <version>0.10.0</version>
+  <version>0.10.1</version>
 </plugin>
 ```
 
@@ -164,7 +164,7 @@ go tool -modfile=tools.mod hadome check
 <summary>Rust (cargo binstall)</summary>
 
 ```sh
-cargo binstall hadome@0.10.0
+cargo binstall hadome@0.10.1
 hadome check
 ```
 
@@ -182,7 +182,7 @@ You can also install from an archive on the [releases](https://github.com/rerore
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
-Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.10.0_windows_amd64.zip -OutFile hadome.zip
+Invoke-WebRequest https://github.com/rerorets/hadome/releases/latest/download/hadome_0.10.1_windows_amd64.zip -OutFile hadome.zip
 Expand-Archive hadome.zip -DestinationPath "$HOME\hadome"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$HOME\hadome", "User")
 # open a new terminal, then:
@@ -191,8 +191,8 @@ hadome version
 
 ```sh
 # macOS and Linux; linux_arm64, darwin_amd64 and darwin_arm64 are there too
-curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.10.0_linux_amd64.tar.gz
-tar -xzf hadome_0.10.0_linux_amd64.tar.gz
+curl -LO https://github.com/rerorets/hadome/releases/latest/download/hadome_0.10.1_linux_amd64.tar.gz
+tar -xzf hadome_0.10.1_linux_amd64.tar.gz
 sudo mkdir -p /usr/local/bin && sudo mv hadome /usr/local/bin/
 hadome version
 ```

@@ -139,6 +139,7 @@ cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
 - Create `hadome` last, after every platform package exists.
 - When creating a package with a trial version, use `--tag next`.
 - When npm judges a package name to be spam, the package cannot be created. `npm publish` returns `403 Package name triggered spam detection`, and `npm stage publish` may return `400 Version uniqueness check failed unexpectedly`. This cannot be cleared from a maintainer's machine; ask npm support to allow the name.
+- When support allows a name, support creates the package by publishing a placeholder version (for example `0.0.1-security`) and transfers write access. Then skip steps 1 and 2 and start from step 3. The placeholder's version number cannot be used later.
 
 ## Changelog
 

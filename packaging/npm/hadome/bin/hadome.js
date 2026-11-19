@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Runs the hadome binary of the platform package npm installed next to this one. Each platform
-// package declares its os and cpu, so npm installs only the one that matches. Windows on ARM64 runs
-// the x86-64 package, which declares both CPUs, through the emulation Windows 11 provides.
+// package declares its os and cpu, so npm installs only the one that matches.
 "use strict";
 
 const { spawnSync } = require("node:child_process");
@@ -12,7 +11,7 @@ const platforms = {
   "darwin x64": "hadome-darwin-x64",
   "darwin arm64": "hadome-darwin-arm64",
   "win32 x64": "hadome-win32-x64",
-  "win32 arm64": "hadome-win32-x64",
+  "win32 arm64": "hadome-win32-arm64",
 };
 
 const key = `${process.platform} ${process.arch}`;

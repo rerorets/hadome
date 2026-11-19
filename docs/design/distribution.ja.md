@@ -19,7 +19,7 @@ hadome は広く使われている6言語と、Terraform、Ansible に対応し�
 
 | エコシステム | 宣言する場所 | 動かし方 | 入るもの |
 |---|---|---|---|
-| npm / pnpm / yarn | `package.json` の devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | 今のプラットフォームのバイナリだけ。プラットフォームごとの optional なパッケージを通して入ります。Windows の ARM64 では x86-64 のバイナリが入ります（下の「npm のプラットフォームのパッケージ」） |
+| npm / pnpm / yarn | `package.json` の devDependencies: `"hadome": "1.2.0"` | `npx hadome check` | 今のプラットフォームのバイナリだけ。プラットフォームごとの optional なパッケージを通して入ります（下の「npm のプラットフォームのパッケージ」） |
 | Python（pip / uv / Poetry） | `pyproject.toml` の開発用の依存: `hadome==1.2.0` | `hadome check` | バイナリを含む、プラットフォームごとの wheel |
 | Go | `go.mod` の tool ディレクティブ: `go get -tool github.com/rerorets/hadome/cmd/hadome` | `go tool hadome check` | ソースからビルドします（下の節を参照） |
 | Gradle（Java、Kotlin） | `plugins { id("io.github.rerorets.hadome") version "1.2.0" }` | `./gradlew hadomeCheck` | プラグインが、今のプラットフォームのバイナリをダウンロードして検証します |
@@ -87,7 +87,7 @@ flowchart LR
 
 ### npm のプラットフォームのパッケージ
 
-npm のプラットフォームのパッケージは、次の5つです。
+npm のプラットフォームのパッケージは、次の6つです。
 
 | パッケージ | `os` | `cpu` | 入るバイナリ |
 |---|---|---|---|
@@ -95,13 +95,11 @@ npm のプラットフォームのパッケージは、次の5つです。
 | `hadome-linux-arm64` | `["linux"]` | `["arm64"]` | Linux の ARM64 |
 | `hadome-darwin-x64` | `["darwin"]` | `["x64"]` | macOS の x86-64 |
 | `hadome-darwin-arm64` | `["darwin"]` | `["arm64"]` | macOS の ARM64 |
-| `hadome-win32-x64` | `["win32"]` | `["x64", "arm64"]` | Windows の x86-64 |
+| `hadome-win32-x64` | `["win32"]` | `["x64"]` | Windows の x86-64 |
+| `hadome-win32-arm64` | `["win32"]` | `["arm64"]` | Windows の ARM64 |
 
-- **Windows の ARM64。** 専用のパッケージはありません。`hadome-win32-x64` が入ります。Windows 11 の ARM64 は、x86-64 のバイナリを変換して動かせるからです
-- **起動スクリプト。** Windows では、CPU が x64 でも arm64 でも、`hadome-win32-x64` のバイナリを動かします
-- **Windows 10 の ARM64。** x86-64 のバイナリを変換して動かせないので、npm から入れた hadome は動きません
-- **変換を通さずに動かすとき。** Windows の ARM64 のバイナリは、npm のほかの配り方で入れます。例: リリースのアーカイブ（`hadome_<版>_windows_arm64.zip`）、PyPI の wheel（`win_arm64`）、`cargo binstall`
-- npm のほかの配り方は、Windows の ARM64 にもそのアーキテクチャのバイナリを配ります
+- **選ぶ基準。** npm は、Node の `process.platform` と `process.arch` に合うパッケージだけを入れます。起動スクリプトも同じ2つの値でパッケージを選ぶので、入ったパッケージと動かすバイナリが食い違いません
+- **Windows の ARM64 で x64 の Node を使うとき。** `process.arch` が `x64` になるので、`hadome-win32-x64` が入り、Windows の変換を通して動きます。Windows 10 の ARM64 はこの変換ができないので、ARM64 の Node を使います
 
 ## 依存のライセンス
 

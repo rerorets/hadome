@@ -145,6 +145,7 @@ cd npm/hadome-win32-x64 && npm stage publish --access public --tag latest
 - `hadome` は、プラットフォームのパッケージをすべて作ってから、最後に作ります。
 - 試しの版でパッケージを作るときは、`--tag next` にします。
 - npm がパッケージの名前をスパムと判定すると、そのパッケージは作れません。`npm publish` は `403 Package name triggered spam detection` を、`npm stage publish` は `400 Version uniqueness check failed unexpectedly` を返すことがあります。この判定は手元からは解けないので、npm のサポートに名前の解除を頼みます。
+- サポートが名前を解除するときは、サポートが仮のバージョン（例: `0.0.1-security`）を公開してパッケージを作り、書き込み権を移します。そのときは手順1と2を飛ばし、手順3から進めます。仮のバージョンの番号は、あとで使えません。
 
 ## 変更履歴
 
