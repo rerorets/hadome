@@ -24,10 +24,12 @@ CGO_ENABLED=0 go test ./...             # the build that reads Go, Terraform and
 go test -tags sqlgrammars ./internal/adapter/sql/...  # the build with the readers of SQL dialects that are not enabled
 go run ./cmd/hadome self-test           # every rule's self-test
 go run ./cmd/hadome check --format json # hadome checks itself
+go test -run '^$' -fuzz '^FuzzTreeSitterReaders$' -fuzztime 30s ./internal/adapter/treesitter  # fuzz the tree-sitter readers
+go test -run '^$' -fuzz '^FuzzLoad$' -fuzztime 30s ./internal/config  # fuzz loading .hadome.yml
 packaging/smoke.sh 0.0.0-local          # build, install and run every package
 ```
 
-CI runs on every pull request and every push to main: the first two and the self-tests on Linux, macOS and Windows, and the tests and vet with the tag `sqlgrammars`, `hadome check` and `packaging/smoke.sh` on Linux.
+CI runs on every pull request and every push to main: the first two and the self-tests on Linux, macOS and Windows, and the tests and vet with the tag `sqlgrammars`, `hadome check`, `packaging/smoke.sh` and the fuzz tests on Linux. The fuzz tests run 30 seconds each with AddressSanitizer (`-asan`): the tree-sitter grammars are C, and ASan finds the reads and writes past their memory that Go cannot. `-asan` works on Linux only; on macOS, run them without it.
 
 Main runs everything. A pull request runs only what the files it changes can break.
 
@@ -36,6 +38,7 @@ Main runs everything. A pull request runs only what the files it changes can bre
 | The tests on Linux and Windows | When it changes a file other than Markdown. With Markdown alone, only `go test ./cmd/hadome` (which checks the documents) runs on Linux |
 | The tests on macOS | When it changes `go.mod`, `go.sum`, `.github/workflows/`, `internal/mutation/`, `internal/adapter/walk/` or `internal/source/` |
 | `packaging/smoke.sh` | When it changes `go.mod`, `go.sum`, `.github/workflows/`, `packaging/`, `cmd/hadome/`, `LICENSE` or `THIRD_PARTY_NOTICES` |
+| The fuzz tests (ASan) | When it changes a file other than Markdown |
 | The tests and vet with the tag `sqlgrammars` | When it changes `go.mod`, `go.sum`, `.github/workflows/` or `internal/adapter/sql/` |
 
 - macOS is narrowed because its runners are often too busy to start, which holds merges up
