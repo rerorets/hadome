@@ -2,6 +2,8 @@
 
 Bugs and requests go to [Issues](https://github.com/rerorets/hadome/issues). Send changes to code or documents as pull requests.
 
+In issues, pull requests, discussions and every other exchange in this project, follow the [Code of Conduct](CODE_OF_CONDUCT.md). If something goes wrong, tell <conduct@hadome.dev>.
+
 ## Map of the documents
 
 | Reader | Documents |

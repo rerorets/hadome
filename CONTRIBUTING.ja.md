@@ -2,6 +2,8 @@
 
 不具合の報告や要望は[Issues](https://github.com/rerorets/hadome/issues)へどうぞ。コードや文書の変更はプルリクエストで送ってください。
 
+Issue・プルリクエスト・Discussionsなど、このプロジェクトのやりとりでは[行動規範](CODE_OF_CONDUCT.ja.md)に従ってください。困ったことがあれば<conduct@hadome.dev>に知らせてください。
+
 ## 文書の一覧
 
 読み手ごとの文書は次のとおりです。
