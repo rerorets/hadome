@@ -4,9 +4,10 @@
 
 脆弱性はIssueに書かず、GitHubの非公開の報告で知らせてください。
 
-1. リポジトリの「Security」タブを開く
-2. 「Report a vulnerability」を押す
-3. 再現の手順と、影響のあるバージョンを書く
+1. 報告の書式を開く: https://github.com/rerorets/hadome/security/advisories/new
+2. 再現の手順と、影響のあるバージョンを書く
+
+報告の書式は、リポジトリの「Security」タブの「Report a vulnerability」からも開けます。
 
 報告はメンテナだけが読みます。直したバージョンを出すまで、内容は公開しません。
 

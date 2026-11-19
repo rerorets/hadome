@@ -4,9 +4,10 @@
 
 Do not open an issue for a vulnerability. Report it privately through GitHub:
 
-1. Open the repository's "Security" tab
-2. Press "Report a vulnerability"
-3. Write how to reproduce it and which versions it affects
+1. Open the report form: https://github.com/rerorets/hadome/security/advisories/new
+2. Write how to reproduce it and which versions it affects
+
+The form also opens from "Report a vulnerability" on the repository's "Security" tab.
 
 Only the maintainer reads the report. Its content stays private until a fixed version is released.
 
