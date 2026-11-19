@@ -14,7 +14,8 @@ Issue・プルリクエスト・Discussionsなど、このプロジェクトの�
 | 利用者のリポジトリで動くエージェント | [エージェント向けの手引き](docs/for-agents.ja.md)。`hadome agents`が書き込むブロックの中身は`cmd/hadome/agents.ja.md` |
 | hadomeを作る人 | この文書、[設計書](docs/design)、[依存の図](docs/design/dependencies.ja.md) |
 | メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[SQL の文法](docs/maintaining/sql-grammars.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
-| 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md) |
+| 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md)、[セキュリティの保証](docs/assurance-case.ja.md) |
+| 運営を知りたい人 | [運営](GOVERNANCE.ja.md)、[行動規範](CODE_OF_CONDUCT.ja.md) |
 
 ## 手元で動かす
 
@@ -73,6 +74,7 @@ git config core.hooksPath .githooks
 ## 書き方
 
 - コード・コメント・コミットメッセージは英語で書きます。
+- Goのコードは`gofmt`で整えます。整っていないと、CIのLinuxのテストが落ちます。
 - 文書は日本語の`foo.ja.md`と英語の`foo.md`の2本です。
 - 日本語のほうを正とします。日本語を先に直し、同じ変更で英語を合わせます。
 - 2本の見出しとコードブロックがそろっていないと、`cmd/hadome/docs_test.go`が落ちます。

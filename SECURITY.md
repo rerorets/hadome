@@ -11,10 +11,26 @@ The form also opens from "Report a vulnerability" on the repository's "Security"
 
 Only the maintainer reads the report. Its content stays private until a fixed version is released.
 
+## After a report
+
+1. Within 14 days, the maintainer replies that the report was received
+2. The maintainer reproduces it and decides which versions it affects and how severe it is
+3. A fixed version is released, and a GitHub security advisory is published, with a CVE when needed
+4. The advisory and the [changelog](CHANGELOG.md) credit the reporter by name. If you would rather not be named, say so in the report
+
+When step 2 is done, the reporter is told how long the fix is expected to take.
+
 ## Supported versions
 
 Only the latest version gets fixes. If you use an older one, upgrade.
 
 ## What hadome runs
 
-hadome only reads the repository it is pointed at and never talks to the network. It does run the external commands listed under `gates` in the configuration, with the same permissions as the repository's other scripts ([product-specific gates](docs/external-gates.md)). Before running hadome on a repository you do not trust, read the `gates` in its `.hadome.yml`.
+hadome only reads the repository it is pointed at and never talks to the network. Two things do run the repository's code or commands:
+
+- The external commands listed under `gates` in the configuration run with the same permissions as the repository's other scripts.
+- `hadome mutate` runs the repository's test command. It runs it in a copy of the version in a working directory, and never rewrites the repository's working tree.
+
+How to write the external commands is in [product-specific gates](docs/external-gates.md). Before running hadome on a repository you do not trust, read the `gates` in its `.hadome.yml`. Do not run `hadome mutate` on a repository you do not trust.
+
+What hadome protects, and how, is in [the security assurance case](docs/assurance-case.md).

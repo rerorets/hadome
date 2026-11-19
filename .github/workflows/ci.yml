@@ -81,6 +81,11 @@ jobs:
           cache-dependency-path: |
             go.sum
             .github/workflows/ci.yml
+      - name: Check formatting
+        if: env.CODE == 'true' && runner.os == 'Linux'
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          [ -z "$unformatted" ] || { echo "::error::not formatted with gofmt:"; echo "$unformatted"; exit 1; }
       - name: Test with cgo (all eight languages)
         if: env.CODE == 'true'
         run: go test ./...

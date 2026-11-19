@@ -12,7 +12,8 @@ In issues, pull requests, discussions and every other exchange in this project, 
 | Agents working in a user's repository | [The guide for agents](docs/for-agents.md). The block `hadome agents` writes is `cmd/hadome/agents.en.md` |
 | People who build hadome | This document, [the design documents](docs/design), [the dependency diagram](docs/design/dependencies.md) |
 | Maintainers | [Releasing](docs/maintaining/releasing.md), [SQL grammars](docs/maintaining/sql-grammars.md), [the JVM plugins](packaging/jvm/README.md) |
-| People who found a vulnerability | [Security](SECURITY.md) |
+| People who found a vulnerability | [Security](SECURITY.md), [the security assurance case](docs/assurance-case.md) |
+| People who want to know how the project is run | [Governance](GOVERNANCE.md), [Code of Conduct](CODE_OF_CONDUCT.md) |
 
 ## Running it locally
 
@@ -71,6 +72,7 @@ git config core.hooksPath .githooks
 ## Writing
 
 - Code, comments and commit messages are in English.
+- Go code is formatted with `gofmt`. Unformatted code fails the Linux tests in CI.
 - Every document has two files, Japanese `foo.ja.md` and English `foo.md`. The Japanese is the source: change it first, then bring the English up to it in the same change. If the two do not have the same headings and code blocks, `cmd/hadome/docs_test.go` fails.
 - In a pull request too, change a document in both Japanese and English, because the maintainer reviews in Japanese. A machine translation into Japanese is fine.
 - Before merging, the maintainer may edit the wording in either language.
