@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: If you use hadome, please cite it as below.
+title: hadome
+type: software
+authors:
+  - alias: rerorets
+    orcid: https://orcid.org/0009-0000-3311-1418
+abstract: >-
+  A ratcheting checker that compares a change against the base branch and
+  fails only on regressions: the violations the change adds and the tests it
+  weakens. It reads Go, TypeScript, Python, Rust, Java, Kotlin, Terraform and
+  Ansible without running the tests.
+repository-code: https://github.com/rerorets/hadome
+url: https://github.com/rerorets/hadome
+license: MIT
+keywords:
+  - static analysis
+  - testing
+  - mutation testing
+  - regression testing
+  - ratchet
+  - AI coding agents
