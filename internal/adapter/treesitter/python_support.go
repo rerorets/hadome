@@ -73,7 +73,8 @@ func (w *pyWalk) in(pf *pyFile, walk func(*pyWalk)) {
 		walk(w)
 		return
 	}
-	sub := &pyWalk{body: w.body, pf: pf, t: w.t, vars: map[string]string{}, locals: map[string]bool{}, walking: w.walking}
+	sub := &pyWalk{body: w.body, pf: pf, t: w.t, vars: map[string]string{}, locals: map[string]bool{},
+		kinds: map[string]vkind{}, walking: w.walking}
 	prev := w.t.f
 	w.t.f = pf.f
 	walk(sub)

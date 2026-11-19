@@ -196,7 +196,7 @@ func (tf *tsFile) test(name string, at *node, d tsDecl, sc tsScope) facts.Test {
 	}
 	w := &tsWalk{tf: tf, t: t, at: at, vars: tf.outerVars(), locals: map[string]bool{}, walking: map[string]bool{},
 		loaded: maps.Clone(tf.outerLoaded), modules: maps.Clone(tf.outerModules), used: map[string]bool{}, done: map[uintptr]bool{},
-		plain: map[string]bool{}, rows: maps.Clone(sc.rows)}
+		kinds: map[string]vkind{}, rows: maps.Clone(sc.rows)}
 	if w.rows == nil {
 		w.rows = map[string][]string{}
 	}

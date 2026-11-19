@@ -22,6 +22,9 @@ type jvm struct {
 	// testTypes are the top-level classes of test files by simple name, which a test class of
 	// another file may extend.
 	testTypes map[string][]jvmDecl
+	// decls are the product's top-level classes, and Kotlin's top-level properties, by target.
+	decls map[string]jvmDecl
+	bound map[string]jvmNames // what each file binds, by path (see namesOf)
 }
 
 // jvmDecl is a declaration with the file that holds it.
@@ -55,6 +58,7 @@ func jvmTestPath(p string) bool {
 func (j *jvm) reset() {
 	j.packages, j.classes, j.scopes = map[string]bool{}, map[string]map[string]bool{}, map[string]int{}
 	j.entries, j.testTypes = map[string]map[string]bool{}, map[string][]jvmDecl{}
+	j.decls, j.bound = map[string]jvmDecl{}, map[string]jvmNames{}
 }
 
 // isClass reports whether a target names a class of the product, not a function or a constant.
@@ -69,6 +73,7 @@ func (j *jvm) noteType(f *file, n *node, name string, entries []string) {
 		j.testTypes[name] = append(j.testTypes[name], jvmDecl{f, n})
 		return
 	}
+	j.decls[f.unit+"."+name] = jvmDecl{f, n}
 	if len(entries) == 0 {
 		return
 	}

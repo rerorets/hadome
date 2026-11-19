@@ -120,8 +120,8 @@ func (ty *tsTypes) supertypes(sup supers) {
 
 // through returns the methods a function's body calls on values whose written type is one of the
 // repository's types: the class's fields and constructor parameter properties (this.store.save()),
-// the function's parameters and locals (store.save()), and the values at the top of the file
-// (tsModuleValues). It also counts the calls on such values whose type is not written, or any, and
+// the function's parameters and locals (store.save()), the values at the top of the file
+// (tsModuleValues), and the elements taken out of a container of the repository's type (elements). It also counts the calls on such values whose type is not written, or any, and
 // tells, by method, whether it calls the method only on locals declared with a cast as their value
 // (facts.Symbol.Asserted).
 func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLines, map[string]bool, int) {
@@ -142,6 +142,11 @@ func (ty *tsTypes) through(decl, class *node, module map[string]string) (callLin
 		}
 		return true
 	})
+	for name, id := range ty.elements(decl, class) {
+		if vars[name] == "" {
+			vars[name] = id // resolve takes the ID of one of the repository's types as it is
+		}
+	}
 	out, asked, unfollowed := callLines{}, map[string]bool{}, 0 // asked: whether every call is on a cast
 	walk(decl.ChildByFieldName("body"), func(x *node) bool {
 		if x.Kind() != "call_expression" {

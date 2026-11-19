@@ -425,11 +425,13 @@ def show(id):
 | Calling a method on what was just made, or on a local variable holding it (`repo.find()` after `repo = UserRepo(db)`, `var s = new Service()`, `const s = new Service()`, `new repo.Repo().find()`) | the ID of the class's method | Java, Kotlin, TypeScript, Python |
 | Calling a method on an attribute or field set to what was made (`self.repo = UserRepo(db)` in `__init__`, `private repo = new Repo()`) | the ID of the class's method | TypeScript, Python |
 | Importing a value made, or written with its type, at the top of another module and calling its method (`manager.switch()` after `from app.state import manager`, with `manager = Manager()` in `app/state.py`; `api.get()` after importing `export const api = new Api()`) | the ID of the class's method | TypeScript, Python |
+| Taking an element out of a container whose written type has one of the repository's types as its elements, and calling its method (`for (const p of ports) p.find()` with `ports: Port[]`; `p.find()` after `p = ports[0]` with `ports: list[Port]`) | the ID of the type's method | TypeScript, Python |
 
 - Making one counts as a call because it runs the constructor
 - Go's and Rust's struct literals (`store.Repo{}`, `Store { … }`) run no code, so they are not counted. In both languages a call of the function that makes one (`store.New()`, `Store::new()`) is already in `Calls`, and local variables already have a type
 - A local variable without a type annotation is followed only when its value is an expression making one of the repository's classes. Other local variables are not counted ([Calls hadome cannot follow](#calls-hadome-cannot-follow))
 - An attribute or field set to what was made has a type plain from its value, so it is not counted among calls hadome cannot follow, though it has no annotation
+- The type of an element taken out of a container is decided the way tests decide it ([adapters-treesitter.md](adapters-treesitter.md), "Kinds of values in tests"). The container may be a parameter, a local variable, a field or attribute, a value at the top of the file, or an imported value
 - Go has no constructors, so these cannot be self-test cases, which are written in Go so that every build runs them; each language's adapter tests check them
 
 ### Reading each language

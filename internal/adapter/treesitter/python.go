@@ -30,6 +30,7 @@ type python struct {
 	supports map[string]*pyFile
 	// modules are the other files read for the classes a test class extends, by path.
 	modules map[string]*pyFile
+	kinds   *pyKinds // what the names of the modules stand for
 }
 
 var pythonGrammar = sitter.NewLanguage(py.Language())
@@ -71,6 +72,7 @@ var pyProjectFiles = []string{"pyproject.toml", "setup.cfg", "setup.py"}
 func (r *python) index(v engine.Version, files []*file) {
 	r.exists, r.dirs, r.scopes = map[string]bool{}, map[string]bool{}, map[string]int{}
 	r.files, r.supports, r.modules = map[string]*file{}, map[string]*pyFile{}, map[string]*pyFile{}
+	r.kinds = newPyKinds(r)
 	roots := map[string]bool{"": true, "src/": true}
 	seen := map[string]bool{}
 	for _, f := range files {

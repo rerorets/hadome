@@ -151,7 +151,8 @@ func (pf *pyFile) test(name string, n, class *node) facts.Test {
 		}
 	}
 	pf.setupHazards(t, class)
-	w := &pyWalk{body: def.ChildByFieldName("body"), pf: pf, t: t, vars: pf.given(def, class), locals: map[string]bool{}, walking: map[string]bool{}}
+	w := &pyWalk{body: def.ChildByFieldName("body"), pf: pf, t: t, vars: pf.given(def, class), locals: map[string]bool{},
+		kinds: map[string]vkind{}, walking: map[string]bool{}}
 	for _, p := range pyParams(f, def) {
 		w.fixture(p)
 	}
@@ -196,11 +197,14 @@ func (pf *pyFile) reason(args *node) string {
 }
 
 type pyWalk struct {
-	body    *node // the test's own body; branches above it do not count
-	pf      *pyFile
-	t       *testFacts
-	vars    map[string]string
-	locals  map[string]bool
+	body   *node // the test's own body; branches above it do not count
+	pf     *pyFile
+	t      *testFacts
+	vars   map[string]string
+	locals map[string]bool
+	// kinds are what the locals hold (see kindOf): a method of one that holds an outside value is
+	// not the repository's.
+	kinds   map[string]vkind
 	walking map[string]bool
 }
 
@@ -210,18 +214,17 @@ func (w *pyWalk) walk(body *node) {
 
 func (w *pyWalk) visit(n *node, kind string) bool {
 	f := w.pf.f
+	if p := n.Parent(); p != nil && p.Kind() == "for_statement" && p.ChildByFieldName("left") == n {
+		// the walk takes each of a loop's children on its own, the declared names first
+		w.bindLocals(n, w.kindOf(p.ChildByFieldName("right")).element())
+	}
 	switch kind {
 	case "assignment":
 		left, right := n.ChildByFieldName("left"), n.ChildByFieldName("right")
-		if left != nil && left.Kind() == "identifier" {
-			w.locals[f.text(left)] = true
-			delete(w.vars, f.text(left)) // reassigning a fixture's name drops what the fixture gave
-			if right != nil && right.Kind() == "call" {
-				if target, ok := w.pf.names[f.field(right, "function")]; ok {
-					w.vars[f.text(left)] = target
-				}
-			}
+		if left != nil {
+			w.bindLocals(left, w.typeKind(n.ChildByFieldName("type")).or(func() vkind { return w.kindOf(right) }))
 		}
+
 	case "assert_statement":
 		w.t.test.Asserts++
 		if alwaysTruePy(f, n) {
@@ -278,7 +281,8 @@ func (w *pyWalk) call(n *node) {
 // function of a test support module, or counts the call as unresolved when it cannot tell.
 func (w *pyWalk) target(fn *node) string {
 	f := w.pf.f
-	if fn.Kind() == "identifier" {
+	switch fn.Kind() {
+	case "identifier":
 		name := f.text(fn)
 		if tg, ok := w.pf.names[name]; ok {
 			return tg
@@ -290,27 +294,36 @@ func (w *pyWalk) target(fn *node) string {
 		} else {
 			w.follow(name)
 		}
-		return ""
+	case "attribute":
+		return w.attributeTarget(fn)
 	}
-	if fn.Kind() != "attribute" {
-		return ""
-	}
+	return ""
+}
+
+// attributeTarget names what obj.attr() calls: a method of a module, of the class of a value whose
+// kind is known, or of a name imported from the repository. A method of a local of unknown kind is
+// unresolved.
+func (w *pyWalk) attributeTarget(fn *node) string {
+	f := w.pf.f
 	obj, attr := f.field(fn, "object"), f.field(fn, "attribute")
-	// A method called on what a call returns at once (Store().append()) is typed as a local that
-	// holds the result would be.
+	// A method called on what a call returns at once (Store().append()) is read as one called on a
+	// local that holds the result.
 	if o := fn.ChildByFieldName("object"); o.Kind() == "call" {
-		if owner, ok := w.pf.names[f.field(o, "function")]; ok {
-			return owner + "." + attr
+		if k := w.callKind(o); k.repo != "" {
+			return k.repo + "." + attr
 		}
 	}
-	for _, owners := range []map[string]string{w.pf.spaces, w.vars, w.pf.names} {
+	for _, owners := range []map[string]string{w.pf.spaces, w.vars} {
 		if owner, ok := owners[obj]; ok {
 			return owner + "." + attr
 		}
 	}
+	if owner, ok := w.pf.names[obj]; ok {
+		return w.importedMember(owner, obj, attr)
+	}
 	if v, ok := w.pf.via[obj]; ok && v[1] == "" {
 		w.followSupport(v[0], attr)
-	} else if w.pf.unresolved[obj] || w.locals[obj] {
+	} else if w.pf.unresolved[obj] || (w.locals[obj] && !w.kinds[obj].outside) {
 		w.t.test.Unresolved++
 	}
 	return ""

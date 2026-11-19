@@ -116,16 +116,20 @@ func (sc *rustScope) test(name string, fn *node) facts.Test {
 	for _, m := range sc.mocks {
 		t.fileHazard(facts.HazardMock, m)
 	}
-	w := &rustWalk{sc: sc, t: t, vars: map[string]string{}, locals: map[string]bool{}, walking: map[string]bool{}}
+	w := &rustWalk{sc: sc, t: t, vars: map[string]string{}, locals: map[string]bool{}, kinds: map[string]vkind{},
+		walking: map[string]bool{}}
 	w.walk(fn.ChildByFieldName("body"))
 	return t.done()
 }
 
 type rustWalk struct {
-	sc      *rustScope
-	t       *testFacts
-	vars    map[string]string
-	locals  map[string]bool
+	sc     *rustScope
+	t      *testFacts
+	vars   map[string]string
+	locals map[string]bool
+	// kinds are what the locals hold (see kindOf): a method of one that holds an outside value is
+	// not the repository's.
+	kinds   map[string]vkind
 	walking map[string]bool
 }
 
@@ -135,15 +139,14 @@ func (w *rustWalk) walk(body *node) {
 
 func (w *rustWalk) visit(n *node, kind string) bool {
 	f := w.sc.f
+	if p := n.Parent(); p != nil && p.Kind() == "for_expression" && p.ChildByFieldName("pattern") == n {
+		// the walk takes each of a loop's children on its own, the declared names first
+		w.bindLocals(n, w.kindOf(p.ChildByFieldName("value")).element())
+	}
 	switch kind {
 	case "let_declaration":
-		name := f.field(n, "pattern")
-		w.locals[name] = true
-		if v := n.ChildByFieldName("value"); v != nil {
-			if typ := w.typeOf(v); typ != "" {
-				w.vars[name] = typ
-			}
-		}
+		v := n.ChildByFieldName("value")
+		w.bindLocals(n.ChildByFieldName("pattern"), w.typeKind(n.ChildByFieldName("type")).or(func() vkind { return w.kindOf(v) }))
 	case "macro_invocation":
 		w.macro(n)
 	case "call_expression":
@@ -254,16 +257,33 @@ func (w *rustWalk) call(n *node) {
 	case "scoped_identifier":
 		target = w.scoped(f.field(fn, "path"), f.field(fn, "name"))
 	case "field_expression":
-		obj, field := f.field(fn, "value"), f.field(fn, "field")
-		if typ, ok := w.vars[obj]; ok {
-			target = typ + "." + field
-		} else if w.locals[obj] {
-			w.t.test.Unresolved++
-		}
+		target = w.method(f.field(fn, "value"), f.field(fn, "field"))
 	}
 	if target != "" {
 		w.t.call(target, scopeArg(w.sc.r.scopes, target, named(n.ChildByFieldName("arguments"))))
 	}
+}
+
+// method names what obj.field() calls: a method of the type of a local or of a constant of the
+// crate. A method of a local of unknown kind is unresolved, and one of a constant of an outside type
+// counts as nothing but reads the constant.
+func (w *rustWalk) method(obj, field string) string {
+	if typ, ok := w.vars[obj]; ok {
+		return typ + "." + field
+	}
+	if w.locals[obj] {
+		if !w.kinds[obj].outside {
+			w.t.test.Unresolved++
+		}
+		return ""
+	}
+	if id, ok := w.sc.names[obj]; ok {
+		if k := w.sc.r.kinds.constant(id); k.repo != "" {
+			return k.repo + "." + field
+		}
+		w.t.test.Reads++ // FRAMES.iter() reads the constant FRAMES
+	}
+	return ""
 }
 
 // scoped resolves path::name: a bound module, a bound type, or a crate/self/super path.

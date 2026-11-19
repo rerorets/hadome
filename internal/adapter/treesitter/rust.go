@@ -31,6 +31,7 @@ type rust struct {
 	// automocks are the types mockall's #[automock] generates (MockStore for trait Store). The
 	// attribute sits on product code, so a test that uses one imports nothing that says mock.
 	automocks map[string]bool
+	kinds     *rustKinds // what the names of the modules stand for
 }
 
 var rustGrammar = sitter.NewLanguage(rustgrammar.Language())
@@ -62,6 +63,7 @@ var rustTestDir = regexp.MustCompile(`(^|/)(tests|benches)/`)
 func (r *rust) index(v engine.Version, files []*file) {
 	r.modules, r.crates, r.defs, r.scopes = map[string]bool{}, map[string]bool{}, map[string][]string{}, map[string]int{}
 	r.automocks, r.names, r.files = map[string]bool{}, map[string]string{}, map[string]*file{}
+	r.kinds = newRustKinds(r)
 	paths, _ := fsFiles(v)
 	for _, p := range paths {
 		if path.Base(p) == "Cargo.toml" {

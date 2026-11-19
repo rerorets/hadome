@@ -333,17 +333,70 @@ Python test classes are recognised as follows.
 
 Calls from tests are resolved to targets through the names each file imports from the repository, and through variables built by constructors of imported classes, like the Go adapter does. A call that cannot be resolved counts as unresolved.
 
-In TypeScript, a method of a value the test built itself does not count as unresolved, because it is not a method of the repository.
+### Kinds of values in tests
 
-- A value the test built itself is a local variable made from literals (`[1, 2]`, `{ n: 1 }`), built-ins (`JSON.parse(s)`, `Math.max(…)`, `new Map()`), an external library (`userEvent.setup()`), or a method of such a value (`xs.filter(…)`)
-- For example, `const xs = [1, 2]; xs.reduce(…)` is a test that calls nothing, the same as `Math.max(...xs)`
-- Such a value passed to a helper of the file is treated the same inside the helper
-- A method of a value a function of the repository returned (`const c = open(); c.close()`), or of a value the test receives as a parameter, counts as unresolved
+How `x.m()` in a test counts depends on what `x` is. The five languages decide it the same way, because deciding it per language makes the same code a target in one language and unresolved in another. For example, a method of a value taken by index out of a constant the test reads used to be unresolved in Kotlin, with Java's `var`, in Python and in TypeScript.
 
-In Java and Kotlin too, a method called on a local the test built as a string or a standard collection counts neither as a call of the product nor as unresolved, since it is the language's own method. Example: `sql.contains("SELECT")` with `val sql = "SELECT 1"`
+There are three kinds of values.
 
-- A string is a string literal, a member of a string (`"…".trimIndent().split(" ")`), a Java concatenation with a string, or a local declared `String`
-- A collection is one built by a standard function such as `listOf`, or a local declared `List`, `Map` and the like. Its elements may be anything, so calls through an element (`xs.first().push(1)`) are read like any other call
+| Kind | Example | How `x.m()` counts |
+|---|---|---|
+| One of the repository's types | `new Store()`, `s: Store` | a target (`Store.m`) |
+| An outside type | `[1, 2]`, `g: string[]`, `new Map()`, `JSON.parse(s)`, a type of an external library | nothing, since it is a method of the language or the library |
+| Unknown | what a function of the repository returns (`const c = open()`), a parameter with no written type, `any` | unresolved |
+
+**How it is decided**: the sources below are looked at in order, and the first that decides it wins. A source that says "unknown" passes on to the next.
+
+1. **The written type**: the type written on a variable, a parameter or a loop variable, and the type of a cast (`as T`, `(T) x`)
+   - A type naming one of the repository's types is that type
+   - A type whose names are all of the language's built-ins or of external libraries is an outside type. Examples: `string[]`, `Map<string, number>`, `list[str]`, `Vec<String>`, `List<String>`
+   - Anything else is unknown. Examples: `any`, a type parameter `T`, an object type literal (`{ save(): void }`). An object of the repository may be in it
+   - An alias the repository declares is decided by the type it names. Example: `type Grid = string[][]` is an outside type
+   - A container holding one of the repository's types (`Store[]`, `List<Store>`) is an outside type, and its elements are of the repository's type
+   - A union with `null` (`Store | null`, `String?`, `Optional[Store]`), and Rust's references, `Box`, `Rc` and `Arc`, are read as the type inside
+2. **The value**, when no type is written
+   - A value made from literals, built-ins or external libraries, and the result of its methods, is an outside type. Examples: `[1, 2]`, `JSON.parse(s)`, `listOf("a")`, `list(xs)`, `xs.filter(…)`
+   - A container that names something of the repository inside (`[new Store()]`) is an outside type, and its elements are unknown
+   - An expression making one of the repository's classes is of that class
+   - Another variable gives that variable's kind
+   - What a function of the repository returns is unknown
+3. **An element taken out**: by index (`xs[0]`), by a loop (`for (const g of xs)`, `for g in xs`) or by destructuring (`const [g] = xs`)
+   - It has the kind of the container's elements. The elements of a container made only of outside types (`string[][]`) are of an outside type
+   - The elements of a container whose element kind is unknown are unknown
+   - `for (const k in o)` takes out keys, so they are of an outside type (strings)
+   - Rust's `iter()`, `iter_mut()` and `into_iter()` are read as taking out the container's elements as they are, since `for s in stores.iter()` is the usual way to write it
+4. **A value imported from the repository**: the kind decided the same way in the file that declares it
+   - Example: `export const FRAMES: string[][]` is of an outside type. So are `FRAMES[0]` in a test, and `g` in `for (const g of FRAMES)`
+   - A method of a value of an outside type (`FRAMES.map(…)`) is not counted as a call; the value counts as read instead. Otherwise a test that reads a value of the product would fail `tests/guards-nothing`
+   - A method of a value of one of the repository's types counts as a target, that type's method. Example: `api.get()` with `export const api = new Api()` is `Api.get`
+   - A method of a value its declaration does not decide counts as a target named after the value, as before (`config.load()` is `config.load`)
+
+**Operators**: in TypeScript and Java, the arithmetic operators (`a + b`) return only numbers and strings, so the result is of an outside type. In Python, Rust and Kotlin a class may define an operator (`Money(1) + Money(2)`), so the result is of an outside type only when both sides are. Comparisons and logical operators give an outside type (a boolean) in every language.
+
+**A helper's parameters**: in TypeScript, a written type decides. Without one, the parameter has the kind of the value the call passes in its position. In the other languages a method of a helper's parameter is still not counted, as before.
+
+**Built-in types per language**: the names decided to be outside types. A type imported from an external library is an outside type too.
+
+| Language | Built-in types |
+|---|---|
+| TypeScript | `string`, `number`, `boolean`, `bigint`, `symbol`, literal types, `Array`, `ReadonlyArray`, `Map`, `Set`, `WeakMap`, `WeakSet`, `Record`, `Partial`, `Readonly`, `Promise`, `Date`, `RegExp`, `Error`, `URL`, typed arrays |
+| Python | `str`, `int`, `float`, `bool`, `bytes`, `list`, `dict`, `set`, `frozenset`, `tuple`. The types of `typing` and `collections.abc` are outside types as types imported from an external library |
+| Rust | numbers, `bool`, `char`, `str`, `String`, `Vec`, `VecDeque`, `HashMap`, `HashSet`, `BTreeMap`, `BTreeSet`, `Option`, `Result`, arrays and slices, the types of `std`, `core` and `alloc` |
+| Java | primitives and their boxes, `String`, arrays, `List`, `Set`, `Map`, `Collection`, `Optional`, `Stream` and the like, the types of `java` and `javax` |
+| Kotlin | numbers, `Boolean`, `Char`, `String`, `List`, `MutableList`, `Set`, `Map`, `Array`, `Sequence`, `Pair`, `Triple` and the like, the types of `kotlin` and `kotlinx` |
+
+**What changes**:
+
+| Language | Before | Now |
+|---|---|---|
+| TypeScript | Inside a test, no written type is read (except for variables outside the test). Only values the test built itself are of an outside type. Loop variables are not followed | Written types, elements and the declarations of imported values are read. Loop variables are followed |
+| Python | Every method of a local variable is unresolved. A variable holding what a function of the repository returns counts as a value named after the function | Read the way above |
+| Rust | A method of a local variable is unresolved, even with a written type. A method of a constant counts neither as a call nor as a read | Read the way above |
+| Java, Kotlin | Locals declared or made as strings and standard collections are of an outside type. Elements are unknown. Kotlin's loop variables are not followed. In Kotlin, a variable holding what a function of the repository returns counts as a value named after the function | Element types are read too. Loop variables are followed |
+
+- **When unresolved calls grow**: loop variables are now followed, so a test going through a container whose elements are unknown has more unresolved calls. Example: `for (const s of listStores()) s.save()`. Such a test calls `listStores()`, so it never becomes a test whose target cannot be identified
+- **The call diagram**: `Through` of TypeScript's and Python's product code ([rules-deps.md](rules-deps.md), "[Objects made in place](rules-deps.md#objects-made-in-place)") decides the type of an element taken out of a container the same way. So a method of an element taken out of a value written `Store[]` goes into `Through` too
+- **What is not read**: the return types of methods and functions (the type of `xs.get(0)`, a declared function's return type). hadome infers no types. A method of a value made only of outside types gives an outside type because nothing of the repository is in what it takes from
 
 ### Test support files
 
