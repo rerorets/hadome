@@ -92,6 +92,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      discussions: write # opens the release's announcement in Discussions
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -114,9 +115,10 @@ jobs:
           notes="$RUNNER_TEMP/notes.md"
           packaging/release-notes.sh "${VERSION#v}" CHANGELOG.md > "$notes"
           printf '\nJapanese / 日本語: https://github.com/%s/blob/%s/CHANGELOG.ja.md\n' "$GITHUB_REPOSITORY" "$VERSION" >> "$notes"
-          pre=""
-          case "$VERSION" in *-*) pre=--prerelease ;; esac # v1.2.0-rc.1 is a trial, never "latest"
-          gh release create "$VERSION" dist/* --title "hadome ${VERSION#v}" --notes-file "$notes" --verify-tag $pre
+          # A trial (v1.2.0-rc.1) is never "latest" and is not announced in Discussions.
+          flags="--discussion-category Announcements"
+          case "$VERSION" in *-*) flags=--prerelease ;; esac
+          gh release create "$VERSION" dist/* --title "hadome ${VERSION#v}" --notes-file "$notes" --verify-tag $flags
 
   npm:
     needs: release

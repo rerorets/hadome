@@ -189,6 +189,7 @@ git log --first-parent --format='%s' v1.1.0..origin/main
 
 - `release` ワークフローは、タグの版の節を `CHANGELOG.md` から抜き出して、GitHub のリリースの本文にします。抜き出すのは [packaging/release-notes.sh](../../packaging/release-notes.sh) です。
 - 本文は英語です。末尾に、タグの時点の `CHANGELOG.ja.md` へのリンクを足します。
+- 試しの版でなければ、同じ本文で Discussions の Announcements にも告知を立てます。リポジトリを Watch している人に届きます。告知はリリースを作った時点で立つので、npm の承認より先に出ます。
 - タグの版の節が無いか空なら、ワークフローはビルドの最初の段で落ち、何も公開しません。落ちたら、節を足す PR をマージし、新しいパッチ版でリリースし直します。タグは付け替えません。
 
 手元で抜き出しを確かめるには、次のようにします。

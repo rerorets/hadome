@@ -183,6 +183,7 @@ The groups differ in what happens to a user's CI after upgrading. Leave out empt
 
 - The `release` workflow takes the tagged version's section out of `CHANGELOG.md` and makes it the GitHub release's body. [packaging/release-notes.sh](../../packaging/release-notes.sh) does the extraction.
 - The body is in English. A link to `CHANGELOG.ja.md` as of the tag is added at the end.
+- Unless it is a trial version, the same body is also posted as an announcement in the Announcements category of Discussions, which reaches everyone watching the repository. It is posted when the release is created, so it comes before the npm approval.
 - If the tagged version has no section, or an empty one, the workflow fails at the first step of the build and publishes nothing. Then merge a PR that adds the section and release again as a new patch version. The tag is not moved.
 
 To check the extraction locally:
