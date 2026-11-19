@@ -27,7 +27,7 @@ git push origin v1.2.0
 
 Sign the tag. GitHub then marks it Verified, which shows who tagged the release. The workflow does not check the signature, so an unsigned tag behaves the same.
 
-The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS`, then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
+The workflow builds the six binaries natively, publishes the GitHub release with `SHA256SUMS` and the build provenance (`hadome_<version>.intoto.jsonl`), then publishes to each ecosystem that is switched on. Running the workflow by hand (Actions → release → Run workflow) builds and checks everything without publishing.
 
 If publishing fails part way, fix the cause and re-run only the failed jobs. The npm job skips versions that are published, and versions that are staged and await approval.
 
