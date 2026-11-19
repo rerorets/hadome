@@ -155,10 +155,13 @@ jobs:
         with:
           node-version: "22"
           package-manager-cache: false
+      # npm ci checks the tarball against the hash in packaging/npm/tool/package-lock.json, so a
+      # republished or tampered npm release cannot run with the job's OIDC token.
       - name: Install an npm that can stage through trusted publishing
         run: |
-          npm install -g npm@11.21.1
-          npm --version
+          npm ci --prefix packaging/npm/tool --ignore-scripts --no-audit --no-fund
+          echo "$PWD/packaging/npm/tool/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: npm --version
       # The packages are staged, not published: a maintainer approves each one with 2FA
       # (docs/maintaining/releasing.md).
       - name: Build and stage

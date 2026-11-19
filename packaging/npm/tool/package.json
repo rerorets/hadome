@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "The npm the release workflow stages packages with, pinned by hash in package-lock.json",
+  "dependencies": {
+    "npm": "11.21.1"
+  }
+}
