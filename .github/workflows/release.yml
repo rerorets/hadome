@@ -93,6 +93,8 @@ jobs:
     permissions:
       contents: write
       discussions: write # opens the release's announcement in Discussions
+      id-token: write # signs the build provenance with Sigstore
+      attestations: write # stores the build provenance in the repository's attestations
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -106,6 +108,22 @@ jobs:
           name: release
           path: dist/*
           retention-days: 7
+      # The provenance says which workflow run built each archive from which commit. It is stored
+      # with the repository (`gh attestation verify`) and attached to the release, where OpenSSF
+      # Scorecard recognises it by the .intoto.jsonl extension.
+      - name: Build provenance
+        id: provenance
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/hadome_*
+            dist/SHA256SUMS
+      - name: Add the provenance to the release files
+        if: github.event_name == 'push'
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$BUNDLE" "dist/hadome_${VERSION#v}.intoto.jsonl"
       - name: Publish the GitHub release
         if: github.event_name == 'push'
         env:
