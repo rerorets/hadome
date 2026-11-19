@@ -55,8 +55,14 @@ body:
       description: The finding from `hadome check --format json`, and the exit code. / `hadome check --format json` の該当する指摘と終了コード
       render: json
   - type: textarea
-    id: expected
+    id: why
     attributes:
-      label: What you expected / 期待した結果
+      label: Why it looks wrong / おかしいと思う理由
+      description: |
+        A sentence is enough. You do not need to know what hadome should do. / 一言で十分です。hadome がどう動くべきかまで分からなくても構いません。
+        Examples / 例:
+        - The change only renames a function, so nothing should be reported. / 関数の名前を変えただけなので、何も出ないはず
+        - The change deletes a test's assertion, but it exits 0. / テストの assert を消したのに exit 0 になる
+        - The test calls `store.Append` directly, so its target should be known. / テストが `store.Append` を直接呼んでいるので、対象は分かるはず
     validations:
       required: true
