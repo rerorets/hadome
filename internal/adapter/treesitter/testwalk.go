@@ -142,8 +142,12 @@ func (t *testFacts) done() facts.Test {
 
 // bodyIn walks a test body, or a helper's, written in f; tb are the tables of f's language. The
 // strings it reaches belong to the test (see textCollector). isLoop and visit are given each node's
-// kind, read once for all of them.
+// kind, read once for all of them. A body the grammar could not read (a test method without one) is
+// nil and walks nothing.
 func (t *testFacts) bodyIn(f *file, tb *tables, n *node, isLoop func(kind string) bool, visit func(n *node, kind string) bool) {
+	if n == nil {
+		return
+	}
 	in, inTables := t.texts.in, t.texts.tables
 	t.texts.use(f, tb)
 	t.body(n, placeOf(n), isLoop, visit)

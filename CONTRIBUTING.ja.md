@@ -26,10 +26,12 @@ CGO_ENABLED=0 go test ./...             # Go・Terraform・Ansible だけを読�
 go test -tags sqlgrammars ./internal/adapter/sql/...  # 有効でない SQL 方言の読み手も入れたビルド
 go run ./cmd/hadome self-test           # 各ルールの自己テスト
 go run ./cmd/hadome check --format json # hadome で hadome 自身を検査する
+go test -run '^$' -fuzz '^FuzzTreeSitterReaders$' -fuzztime 30s ./internal/adapter/treesitter  # tree-sitter の読み手をファズする
+go test -run '^$' -fuzz '^FuzzLoad$' -fuzztime 30s ./internal/config  # .hadome.yml の読み込みをファズする
 packaging/smoke.sh 0.0.0-local          # 全パッケージを作り、入れて動かす
 ```
 
-CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の2つと自己テストはLinux・macOS・Windowsで動かします。タグ `sqlgrammars` を付けたテストと vet、`hadome check`、`packaging/smoke.sh` はLinuxで動かします。
+CIは、プルリクエストのたびと、mainへのpushのたびに動きます。最初の2つと自己テストはLinux・macOS・Windowsで動かします。タグ `sqlgrammars` を付けたテストと vet、`hadome check`、`packaging/smoke.sh`、ファズテストはLinuxで動かします。ファズテストは、AddressSanitizer（`-asan`）を付けて、1つにつき30秒動かします。tree-sitter の文法は C で書かれているので、Go では見つからないメモリの読み書きの誤りを、ASan で見つけるためです。`-asan` はLinuxでだけ使えます。手元のmacOSでは付けずに動かします。
 
 mainではすべてを動かします。プルリクエストでは、変えたファイルが壊しうるものだけを動かします。
 
@@ -38,6 +40,7 @@ mainではすべてを動かします。プルリクエストでは、変えた�
 | LinuxとWindowsのテスト | Markdown以外のファイルを変えたとき。Markdownだけなら、Linuxで `go test ./cmd/hadome`（文書の突き合わせを含む）だけを動かす |
 | macOSのテスト | `go.mod`・`go.sum`・`.github/workflows/`・`internal/mutation/`・`internal/adapter/walk/`・`internal/source/` を変えたとき |
 | `packaging/smoke.sh` | `go.mod`・`go.sum`・`.github/workflows/`・`packaging/`・`cmd/hadome/`・`LICENSE`・`THIRD_PARTY_NOTICES` を変えたとき |
+| ファズテスト（ASan） | Markdown以外のファイルを変えたとき |
 | タグ `sqlgrammars` のテストと vet | `go.mod`・`go.sum`・`.github/workflows/`・`internal/adapter/sql/` を変えたとき |
 
 - macOSを絞るのは、実行環境が空かずにマージが止まることが多いからです

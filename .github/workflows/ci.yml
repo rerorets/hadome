@@ -143,6 +143,27 @@ jobs:
           go test -tags sqlgrammars ./internal/adapter/sql/...
           go vet -tags sqlgrammars ./internal/adapter/sql/...
 
+  # The fuzz targets run briefly with AddressSanitizer on every pull request with code. The
+  # tree-sitter grammars are C, so ASan catches what Go cannot: reading or writing past their memory.
+  # Each target gets its own run, since go test fuzzes one target at a time. The fuzz tests in the
+  # cache key keep this cache apart from the others, whose packages are built without ASan.
+  fuzz:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            internal/**/fuzz_test.go
+      - name: Fuzz the tree-sitter readers with ASan
+        run: go test -asan -run '^$' -fuzz '^FuzzTreeSitterReaders$' -fuzztime 30s ./internal/adapter/treesitter
+      - name: Fuzz the configuration with ASan
+        run: go test -asan -run '^$' -fuzz '^FuzzLoad$' -fuzztime 30s ./internal/config
+
   # hadome checks itself on one system: the result does not depend on it. Exit code 3 does not fail
   # the job. What needs a person's review is shown on the pull request instead, and the person who
   # merges it is the one who reviews it.
