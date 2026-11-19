@@ -15,6 +15,19 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.0 - 2026-11-19
+
+### Finds more
+
+- In TypeScript and Python product code, when an element is taken out of a container whose written type has one of the repository's types as its elements, and a method is called on it, `deps/call-not-in-diagram` asks for an arrow to that type. Example: `for (const p of ports) p.find()` with `ports: Port[]`.
+- In tests, a method on a value of unknown kind is counted as an unresolved call. This covers loop variables, which were not followed before (TypeScript, Kotlin), and, in Kotlin and Python, variables set to the result of one of the repository's functions. Methods on the latter used to be counted as methods named after the function. A test with no other target becomes `tests/target-unknown`.
+
+### Fewer false findings and misses
+
+- What a value in a test is, is decided the same way in the five languages (TypeScript, Python, Rust, Java, Kotlin): its written type, then its initial value, then the element of the container it was taken out of, then the declaration of the value imported from the repository. The rules are in "Kinds of values in tests" in [docs/design/adapters-treesitter.md](docs/design/adapters-treesitter.md).
+  - Calling a built-in method (`join`, `map` and so on) on a value taken out of an imported `FRAMES: string[][]` by an index or a loop no longer makes the test `tests/target-unknown`. A method on a value of an outside type is not counted as a call; the test is counted as reading the value.
+  - A method on a variable whose written type is one of the repository's types, on a value taken out of a container of that type, or on a constant of that type is counted as that type's method. In Python and Rust, methods on locals with a written type used to be unresolved too.
+
 ## 0.9.0 - 2026-11-18
 
 ### Finds more
