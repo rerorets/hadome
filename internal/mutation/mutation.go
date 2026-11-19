@@ -45,6 +45,9 @@ type Mutate struct {
 	// Temp is the temporary directory the test commands are given (TempFor). Empty means they get
 	// hadome's own.
 	Temp string
+	// GoCache is the Go build cache the test commands are given (GoCacheFor), removed at the start
+	// and end of every run that tries a mutant. Empty means they get hadome's own.
+	GoCache string
 }
 
 // Run tries the mutants of head, then base's counterparts of head's survivors, and compares the two
@@ -144,6 +147,8 @@ func (m *Mutate) judge(vs versions, funcs []facts.Symbol, c config.Mutation, lan
 		return nil, err
 	}
 	defer release()
+	m.dropGoCache(lang)
+	defer m.dropGoCache(lang)
 	head, err := m.runner("head", hv, marks(vs.headFacts, mutants), c, lang)
 	if err != nil {
 		return nil, err
@@ -236,6 +241,7 @@ func (m *Mutate) runner(role string, v engine.Version, marked map[string]string,
 		return nil, err
 	}
 	r.temp = m.Temp
+	r.gocache = m.GoCache
 	r.unemptied = func(err error) {
 		fmt.Fprintln(m.Progress, engine.T("mutate: %s, the test command's temporary directory, could not be emptied; it is tried again before the next run: %v",
 			m.Temp, err).In(lang))

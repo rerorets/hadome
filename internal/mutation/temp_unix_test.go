@@ -5,6 +5,7 @@ package mutation
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,5 +78,31 @@ func TestWhatCannotBeRemovedIsReportedAsNotEmptied(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(temp, 0o755) })
 	if err := empty(temp); err == nil {
 		t.Error("want an entry that could not be removed reported")
+	}
+}
+
+// viewpoint: failure
+// target: mutation.Mutate.dropGoCache
+// Design "The Go build cache": a build cache that cannot be removed, as one in a directory the user
+// cannot write, does not stop the run, and is told of.
+func TestABuildCacheThatCannotBeRemovedIsToldOf(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("root removes entries of a directory it cannot write, so nothing cannot be removed")
+	}
+	closed := t.TempDir()
+	cache := filepath.Join(closed, "gocache")
+	if err := os.Mkdir(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(closed, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(closed, 0o755) })
+	var progress strings.Builder
+	m := &Mutate{GoCache: cache, Progress: &progress}
+	m.dropGoCache("en")
+	if want := cache + ", the test commands' Go build cache, could not be removed"; !strings.Contains(progress.String(), want) {
+		t.Errorf("want %q told, got %q", want, progress.String())
 	}
 }

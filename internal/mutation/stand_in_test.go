@@ -169,7 +169,7 @@ func StandInRunTreeRun(watch, temp string) int {
 		return 2
 	}
 	defer os.RemoveAll(dir)
-	_, err = runTree(context.Background(), dir, temp, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
+	_, err = runTree(context.Background(), dir, scratch{temp: temp}, []string{exe, StandInTree, "hang", watch, "-"}, os.Stdout)
 	fmt.Println("the run ended without a signal:", err)
 	return 2
 }

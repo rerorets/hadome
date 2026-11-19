@@ -60,6 +60,9 @@ type Runner struct {
 	// temp is the temporary directory the test command is given, emptied before and after each run
 	// (TempFor). Empty means the command gets hadome's own.
 	temp string
+	// gocache is the Go build cache the test command is given (GoCacheFor). Empty means the command
+	// gets hadome's own.
+	gocache string
 	// unemptied is told when temp could not be emptied, once per runner.
 	unemptied func(error)
 	warned    bool
@@ -229,7 +232,7 @@ func (r *Runner) run(argv []string, limit time.Duration) (string, bool, bool, er
 		w = io.MultiWriter(&out, seen)
 	}
 	r.emptyTemp()
-	passed, err := runTree(ctx, r.dir, r.temp, argv, w)
+	passed, err := runTree(ctx, r.dir, scratch{r.temp, r.gocache}, argv, w)
 	r.emptyTemp()
 	return out.String(), passed, ctx.Err() != nil, err
 }
@@ -247,20 +250,22 @@ func (r *Runner) emptyTemp() {
 }
 
 // runTree runs a command in dir until it ends or ctx is done, writing what it prints to out, and
-// reports whether it passed. With temp, the command is given temp as its temporary directory, and
-// an interrupt that ends hadome empties it once the tree has ended. The command is the root of a tree of processes, such as go test and
+// reports whether it passed. The command is given s (scratch.env), and an interrupt that ends hadome
+// empties s.temp once the tree has ended. The command is the root of a tree of processes, such as go test and
 // the test binaries it starts, and nothing of the tree outlives the run: ctx being done ends the
 // whole tree, and whatever the command leaves running when it exits is ended without a word.
 // Along with an error, it reports that the command did not pass.
-func runTree(ctx context.Context, dir, temp string, argv []string, out io.Writer) (passed bool, err error) {
+func runTree(ctx context.Context, dir string, s scratch, argv []string, out io.Writer) (passed bool, err error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.WaitDelay = 5 * time.Second // a child that keeps the output open must not hang the run
 	var last func()
-	if temp != "" {
-		cmd.Env = tempEnv(temp)
-		last = func() { empty(temp) }
+	if s != (scratch{}) {
+		cmd.Env = s.env()
+	}
+	if s.temp != "" {
+		last = func() { empty(s.temp) }
 	}
 	tree, err := ownTree(cmd, last)
 	if err != nil {

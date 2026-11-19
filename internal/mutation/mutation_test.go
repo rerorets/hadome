@@ -37,7 +37,8 @@ const catchChanges = "stand-in-tests-catch-changes"
 // (mutation.StandInUnwritableLock), and a test command that starts a process of its own
 // (mutation.StandInTree, mutation.StandInLeaf) run by a hadome mutate (mutation.StandInRunTree) or
 // by a test binary holding a lifeline of its own (mutation.StandInHolder), and a test command that
-// uses its temporary directory (mutation.StandInTemp).
+// uses its temporary directory (mutation.StandInTemp), and one that uses Go's build cache
+// (useGoCache).
 // Every stand-in ends once the binary running the tests has ended (mutation.WatchLifeline).
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") { // a stand-in, not the tests
@@ -67,6 +68,8 @@ func TestMain(m *testing.M) {
 			os.Exit(mutation.StandInAfterRunRun())
 		case mutation.StandInTemp:
 			os.Exit(mutation.StandInTempRun(os.Args[2]))
+		case useGoCache:
+			os.Exit(standInGoCache(os.Args[2], os.Args[3]))
 		}
 	}
 	release := mutation.HoldLifeline()
