@@ -69,7 +69,8 @@ git config core.hooksPath .githooks
 
 - Code, comments and commit messages are in English.
 - Every document has two files, Japanese `foo.ja.md` and English `foo.md`. The Japanese is the source: change it first, then bring the English up to it in the same change. If the two do not have the same headings and code blocks, `cmd/hadome/docs_test.go` fails.
-- In a pull request, changing only one of the two languages is fine. The maintainer brings the other up to it before merging; until then, a failing `docs_test.go` is fine.
+- In a pull request too, change a document in both Japanese and English, because the maintainer reviews in Japanese. A machine translation into Japanese is fine.
+- Before merging, the maintainer may edit the wording in either language.
 - Comments say only what reading the code does not tell: for example, why an unusual approach was taken, or an invariant. No history, progress notes or ticket numbers.
 - Tests follow [the three layers for trusting tests](docs/model.md): test observable behaviour only, never copy expected values from the implementation, never read the clock, never wait with sleep, never skip silently.
 - This is a public repository: bring in no code, names, paths or table names from an employer or a private project. Use generic examples such as `store.Append` or "product A".
