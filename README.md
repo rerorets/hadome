@@ -14,6 +14,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://github.com/rerorets/hadome/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rerorets/hadome?include_prereleases&sort=semver"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/rerorets/hadome"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/rerorets/hadome/badge"></a>
+  <a href="https://www.bestpractices.dev/projects/16919"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/16919/badge"></a>
   <img alt="Languages" src="https://img.shields.io/badge/languages-TS%20%7C%20Python%20%7C%20Java%20%7C%20Kotlin%20%7C%20Go%20%7C%20Rust%20%7C%20Terraform%20%7C%20Ansible-555.svg">
 </p>
 
