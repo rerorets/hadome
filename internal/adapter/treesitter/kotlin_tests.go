@@ -123,6 +123,9 @@ func (jf *jvmFile) ktTest(name string, m, classSkip *node, scope jvmScope) facts
 }
 
 func (w *jvmWalk) ktVisit(n *node, kind string) bool {
+	if p := n.Parent(); p != nil && p.Kind() == "for_statement" && p.NamedChild(0) == n {
+		w.ktLoop(n, p.NamedChild(1)) // the walk takes each of a loop's children on its own, the variables first
+	}
 	switch kind {
 	case "property_declaration":
 		w.ktProperty(n)
@@ -199,18 +202,17 @@ func (w *jvmWalk) ktProperty(n *node) {
 		switch {
 		case c.Kind() == "variable_declaration":
 			name = f.text(c.NamedChild(0))
-			w.locals[name] = true
-			kind := ""
+			var typ *node
 			if c.NamedChildCount() > 1 {
-				kind = w.builtinType(f.text(c.NamedChild(1)))
+				typ = c.NamedChild(1)
 			}
-			w.noteBuiltin(name, kind)
+			w.bindLocal(name, w.typeKind(typ))
 		case name != "" && !strings.Contains(c.Kind(), "comment"):
-			if class := w.jf.ktBuilt(c); class != "" {
+			if class := w.jf.ktBuilt(c); class != "" && w.jf.j.isClass(class) {
 				w.vars[name] = class
 			}
-			if w.builtins[name] == "" {
-				w.noteBuiltin(name, w.ktBuiltin(c))
+			if !w.kinds[name].known() {
+				w.bindLocal(name, w.ktKindOf(c))
 			}
 		}
 	}

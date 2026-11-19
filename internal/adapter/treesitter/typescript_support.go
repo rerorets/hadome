@@ -136,7 +136,7 @@ func (w *tsWalk) followSupport(p, name string, args []*node) {
 	w.t.callsSupport(sf.f.path)
 	sub := &tsWalk{tf: sf, t: w.t, vars: sf.outerVars(), locals: map[string]bool{}, walking: w.walking,
 		loaded: maps.Clone(sf.outerLoaded), modules: maps.Clone(sf.outerModules), used: map[string]bool{},
-		done: map[uintptr]bool{}, fake: w.fake, plain: map[string]bool{}, rows: map[string][]string{}}
+		done: map[uintptr]bool{}, fake: w.fake, kinds: map[string]vkind{}, rows: map[string][]string{}}
 	prev := w.t.f
 	w.t.f = sf.f
 	sub.followFrom(w, name, nil, args)

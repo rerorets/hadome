@@ -25,12 +25,14 @@ var (
 
 // jvmFile is what a Java or Kotlin test file binds: class names it can use, helpers, and mocks.
 type jvmFile struct {
-	f       *file
-	j       *jvm
-	t       *tables
-	names   map[string]string // simple name -> target: a class ("a.b.Store") or a static import ("a.b.Store.create")
-	helpers map[string]*node
-	mocks   []*node
+	f     *file
+	j     *jvm
+	t     *tables
+	names map[string]string // simple name -> target: a class ("a.b.Store") or a static import ("a.b.Store.create")
+	// external are the simple names the file imports from outside the repository.
+	external map[string]bool
+	helpers  map[string]*node
+	mocks    []*node
 	// drivers are the names of the HTTP test clients the file imports, whose calls drive the
 	// application from outside.
 	drivers map[string]bool
@@ -67,17 +69,10 @@ func (jf *jvmFile) bindClasses(imports func(visit func(name string, wildcard boo
 				}
 			}
 		}
-		pkg, class, internal := jf.j.resolve(name, wildcard)
-		switch {
-		case !internal:
-		case wildcard && class == "":
-			for c := range jf.j.classes[pkg] {
-				jf.names[c] = pkg + "." + c
-			}
-		case class != "":
-			rest := name[len(pkg)+1:] // "Store", or "Store.create" for a static import
-			jf.names[lastElem(rest)] = pkg + "." + rest
+		if jf.external == nil {
+			jf.external = map[string]bool{}
 		}
+		jf.j.bindImport(jf.names, jf.external, name, wildcard)
 	})
 }
 
@@ -215,8 +210,9 @@ type jvmWalk struct {
 	inherited map[string]jvmCode
 	// values are the value fields of that class.
 	values map[string]bool
-	// builtins are the locals that hold a string or a standard collection (jvm_builtins.go).
-	builtins map[string]string
+	// kinds are what the locals hold (see javaKindOf, ktKindOf): a method of one that holds an
+	// outside value is not the product's.
+	kinds map[string]vkind
 }
 
 func (w *jvmWalk) walk(body *node, loops map[string]bool, visit func(*node, string) bool) {
@@ -252,9 +248,9 @@ func (w *jvmWalk) invoke(n *node, obj, name string, args []*node, follow func(*n
 	case w.vars[obj] != "":
 		target = w.vars[obj] + "." + name
 	case w.jf.names[obj] != "":
-		target = w.jf.names[obj] + "." + name
+		target = w.namedMember(obj, name)
 	case w.locals[obj]:
-		if w.builtins[obj] == "" {
+		if !w.kinds[obj].outside {
 			w.t.test.Unresolved++
 		}
 	default:
@@ -263,6 +259,20 @@ func (w *jvmWalk) invoke(n *node, obj, name string, args []*node, follow func(*n
 	if target != "" {
 		w.t.call(target, scopeArg(w.jf.j.scopes, target, args))
 	}
+}
+
+// namedMember names what obj.name() calls when obj is a name the file binds: a method of the class
+// of a property of the product, by its declaration; nothing for one of an outside value, which reads
+// the property; else a member of what obj names.
+func (w *jvmWalk) namedMember(obj, name string) string {
+	switch k := w.jf.j.field(packageOf(w.jf.names[obj]), obj); {
+	case k.repo != "":
+		return k.repo + "." + name
+	case k.outside:
+		w.t.test.Reads++ // FRAMES.first() of val FRAMES: List<String> reads FRAMES
+		return ""
+	}
+	return w.jf.names[obj] + "." + name
 }
 
 // unqualified resolves a call by a bare name: a target the file binds, or a helper of the file or
@@ -296,27 +306,15 @@ func jvmAlwaysTrue(f *file, name string, args []*node) bool {
 
 func (w *jvmWalk) javaVisit(n *node, kind string) bool {
 	f := w.jf.f
+	w.javaLoop(n) // the walk takes each of a loop's children on its own, the declared name first
 	switch kind {
 	case "local_variable_declaration":
-		typ := f.field(n, "type")
 		for _, d := range named(n) {
 			if d.Kind() != "variable_declarator" {
 				continue
 			}
 			name := f.field(d, "name")
-			w.locals[name] = true
-			kind := w.builtinType(typ)
-			if kind == "" {
-				kind = w.javaBuiltin(d.ChildByFieldName("value"))
-			}
-			w.noteBuiltin(name, kind)
-			if class, ok := w.jf.names[typ]; ok {
-				w.vars[name] = class
-			} else if v := d.ChildByFieldName("value"); v != nil && v.Kind() == "object_creation_expression" {
-				if class, ok := w.jf.names[f.field(v, "type")]; ok {
-					w.vars[name] = class
-				}
-			}
+			w.bindLocal(name, w.typeKind(n.ChildByFieldName("type")).or(func() vkind { return w.javaKindOf(d.ChildByFieldName("value")) }))
 		}
 	case "object_creation_expression":
 		typ := f.field(n, "type")

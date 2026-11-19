@@ -7,84 +7,14 @@ import (
 	"strings"
 )
 
-// What a name in a TypeScript test holds: a value the test built itself, an argument a helper
-// receives, or a row of the table of describe.each and it.each.
-
-var (
-	tsPlainKinds = set("array", "object", "string", "template_string", "number", "true", "false", "null", "undefined",
-		"regex", "arrow_function", "function_expression", "binary_expression", "unary_expression")
-	// tsBuiltinObjects are the globals whose methods return plain data: JSON.parse(s), Object.keys(o).
-	tsBuiltinObjects = set("JSON", "Object", "Array", "Math", "Number", "String", "Boolean", "Promise", "Buffer",
-		"Date", "Reflect", "Symbol", "Intl", "process")
-	tsBuiltinFunctions = set("String", "Number", "Boolean", "BigInt", "Symbol", "structuredClone", "parseInt", "parseFloat")
-	tsBuiltinClasses   = set("Map", "Set", "WeakMap", "WeakSet", "Array", "Date", "URL", "URLSearchParams", "Error",
-		"RegExp", "Uint8Array", "ArrayBuffer", "TextEncoder", "TextDecoder", "AbortController", "Headers", "FormData")
-)
-
-// plainValue reports whether v is built from literals, the language's built-ins, external libraries
-// or other such values, so that a method called on it is not the repository's: [1, 2], new Map(),
-// JSON.parse(s), xs.filter(…), userEvent.setup(). A name of the repository is never plain.
-func (w *tsWalk) plainValue(v *node) bool {
-	v = tsUnwrap(v)
-	if v == nil {
-		return false
-	}
-	f := w.tf.f
-	switch k := v.Kind(); {
-	case tsPlainKinds[k]:
-		return true
-	case k == "identifier":
-		return w.plainName(f.text(v), nil)
-	case k == "member_expression" || k == "subscript_expression":
-		return w.plainName(tsRoot(f, v), nil)
-	case k == "call_expression":
-		fn := v.ChildByFieldName("function")
-		if fn.Kind() == "identifier" {
-			return w.plainName(f.text(fn), tsBuiltinFunctions)
-		}
-		return fn.Kind() == "member_expression" && w.plainName(tsRoot(f, fn), tsBuiltinObjects)
-	case k == "new_expression":
-		return w.plainName(f.field(v, "constructor"), tsBuiltinClasses)
-	}
-	return false
-}
-
-// plainName reports whether a name holds or makes plain values: a plain local, an external
-// import, or one of builtins, unless the repository or the test's loaded modules bind it.
-func (w *tsWalk) plainName(name string, builtins map[string]bool) bool {
-	if _, ok := w.tf.names[name]; ok {
-		return false
-	}
-	if _, ok := w.loaded[name]; ok {
-		return false
-	}
-	if _, ok := w.modules[name]; ok {
-		return false
-	}
-	if w.locals[name] {
-		return w.plain[name]
-	}
-	return w.tf.external[name] || builtins[name]
-}
-
-// tsRoot is the name a chain of members starts with: o in o.items[0].push.
-func tsRoot(f *file, n *node) string {
-	for n = tsUnwrap(n); n != nil; n = tsUnwrap(n.ChildByFieldName("object")) {
-		switch n.Kind() {
-		case "identifier":
-			return f.text(n)
-		case "member_expression", "subscript_expression":
-		default:
-			return ""
-		}
-	}
-	return ""
-}
+// What a name in a TypeScript test holds: an argument a helper receives, or a row of the table of
+// describe.each and it.each.
 
 // tsParam is one parameter of a function: its name, or the pattern it destructures.
 type tsParam struct {
 	name    string
 	pattern *node
+	typ     *node // the written type, nil for none
 }
 
 // tsParamList reads a parameter list in order. A parameter with a default value keeps its name: the
@@ -99,23 +29,25 @@ func tsParamList(f *file, params *node) []tsParam {
 	}
 	var out []tsParam
 	for _, p := range list {
+		var typ *node
 		if k := p.Kind(); k == "required_parameter" || k == "optional_parameter" {
+			typ = p.ChildByFieldName("type")
 			p = p.ChildByFieldName("pattern")
 		}
 		if p != nil && p.Kind() == "identifier" {
-			out = append(out, tsParam{name: f.text(p)})
+			out = append(out, tsParam{name: f.text(p), typ: typ})
 		} else {
-			out = append(out, tsParam{pattern: p})
+			out = append(out, tsParam{pattern: p, typ: typ})
 		}
 	}
 	return out
 }
 
 // tsBinding is what a name holds in a walker: a module, a function or class of a module, a
-// class of the repository, a plain value, or the functions of a table's rows.
+// class of the repository, a value of a kind, or the functions of a table's rows.
 type tsBinding struct {
 	module, loaded, class string
-	plain                 bool
+	kind                  vkind
 	rows                  []string
 }
 
@@ -126,11 +58,12 @@ func (from *tsWalk) binding(arg *node) tsBinding {
 		return tsBinding{}
 	}
 	if arg.Kind() != "identifier" {
-		return tsBinding{plain: from.plainValue(arg)}
+		k := from.kindOf(arg)
+		return tsBinding{class: k.repo, kind: k}
 	}
 	name := from.tf.f.text(arg)
 	b := tsBinding{module: from.modules[name], loaded: from.loaded[name], class: from.vars[name],
-		plain: from.locals[name] && from.plain[name], rows: from.rows[name]}
+		kind: from.nameKind(name, nil), rows: from.rows[name]}
 	if b.module == "" {
 		b.module = from.tf.spaces[name]
 	}
@@ -162,6 +95,9 @@ func (w *tsWalk) bindArgs(from *tsWalk, params *node, args []*node) func() {
 		if i < len(args) {
 			b = from.binding(args[i])
 		}
+		if k := w.typeKind(p.typ); k.known() {
+			b.kind, b.class = k, k.repo
+		}
 		names, binds = append(names, p.name), append(binds, b)
 	}
 	var old []saved
@@ -178,7 +114,7 @@ func (w *tsWalk) bindArgs(from *tsWalk, params *node, args []*node) func() {
 
 // current is what a name holds in the walker.
 func (w *tsWalk) current(name string) tsBinding {
-	return tsBinding{module: w.modules[name], loaded: w.loaded[name], class: w.vars[name], plain: w.plain[name],
+	return tsBinding{module: w.modules[name], loaded: w.loaded[name], class: w.vars[name], kind: w.kinds[name],
 		rows: w.rows[name]}
 }
 
@@ -194,10 +130,10 @@ func (w *tsWalk) set(name string, b tsBinding) {
 	put(w.modules, b.module)
 	put(w.loaded, b.loaded)
 	put(w.vars, b.class)
-	if b.plain {
-		w.plain[name] = true
+	if b.kind.known() {
+		w.kinds[name] = b.kind
 	} else {
-		delete(w.plain, name)
+		delete(w.kinds, name)
 	}
 	if b.rows != nil {
 		w.rows[name] = b.rows

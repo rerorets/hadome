@@ -117,9 +117,9 @@ type tsWalk struct {
 	setup int
 	// fake is true after the test turned on fake timers: Date and setTimeout then read the fake clock.
 	fake bool
-	// plain are the locals that hold a value built in the test from literals, the language's
-	// built-ins or external libraries: their methods are not the repository's.
-	plain map[string]bool
+	// kinds are what the locals hold (see kindOf): a method of one that holds an outside value is
+	// not the repository's.
+	kinds map[string]vkind
 	// rows are the parameters of a describe.each or it.each callback bound to functions of the
 	// repository in its table: name -> the targets, one per row that holds one.
 	rows map[string][]string
@@ -132,6 +132,9 @@ func (w *tsWalk) walk(body *node) {
 func (w *tsWalk) visit(n *node, kind string) bool {
 	if w.walked(n) {
 		return false
+	}
+	if p := n.Parent(); p != nil && p.Kind() == "for_in_statement" && p.ChildByFieldName("left") == n {
+		w.loop(p) // the walk takes each of a loop's children on its own, the declared names first
 	}
 	switch kind {
 	case "pair", "method_definition":
@@ -166,24 +169,9 @@ func (w *tsWalk) walked(n *node) bool {
 
 // declare records a local of the test, which shadows a variable of the same name outside it.
 func (w *tsWalk) declare(n *node) {
-	f := w.tf.f
-	name := f.field(n, "name")
-	w.locals[name] = true
-	plain := w.plainValue(n.ChildByFieldName("value"))
-	for _, local := range append(tsPatternNames(f, n.ChildByFieldName("name")), name) {
-		w.locals[local] = true
-		delete(w.vars, local)
-		delete(w.loaded, local)
-		delete(w.modules, local)
-		delete(w.rows, local)
-		w.plain[local] = plain
-	}
+	k := w.typeKind(n.ChildByFieldName("type")).or(func() vkind { return w.kindOf(n.ChildByFieldName("value")) })
+	w.bindLocals(n.ChildByFieldName("name"), k)
 	w.bindLoaded(n)
-	if v := n.ChildByFieldName("value"); v != nil && v.Kind() == "new_expression" {
-		if target, ok := w.tf.names[f.field(v, "constructor")]; ok {
-			w.vars[name] = target
-		}
-	}
 }
 
 func (w *tsWalk) construct(n *node) {
@@ -278,7 +266,7 @@ func (w *tsWalk) tool(n, fn *node, callee string, args []*node) bool {
 
 // memberTarget names what obj.prop() calls: a function of a module or a method of a class. Else
 // it follows a function an object of the file holds, and a method of a local value of unknown type
-// counts as unresolved, unless the test built it itself (see plain). at is the call or element.
+// counts as unresolved, unless it holds an outside value (see kindOf). at is the call or element.
 func (w *tsWalk) memberTarget(at *node, obj, prop string, args []*node) string {
 	obj = strings.TrimSuffix(obj, "!") // store!.add(): the assertion that store is set
 	for _, files := range []map[string]string{w.tf.spaces, w.modules} {
@@ -291,15 +279,23 @@ func (w *tsWalk) memberTarget(at *node, obj, prop string, args []*node) string {
 			return w.tf.r.target(p, prop)
 		}
 	}
-	for _, owners := range []map[string]string{w.vars, w.tf.names} {
-		if owner, ok := owners[obj]; ok {
-			return owner + "." + prop
+	if owner, ok := w.vars[obj]; ok {
+		return owner + "." + prop
+	}
+	if owner, ok := w.tf.names[obj]; ok {
+		switch k := w.tf.r.kinds.importedValue(w.tf.f.path, obj); {
+		case k.repo != "":
+			return k.repo + "." + prop
+		case k.outside:
+			w.t.test.Reads++ // FRAMES.map(…) of export const FRAMES: string[][] reads FRAMES
+			return ""
 		}
+		return owner + "." + prop
 	}
 	if w.follow(obj+"."+prop, at, args) { // a function an object of the file holds
 		return ""
 	}
-	if (w.locals[obj] && !w.plain[obj]) || w.tf.unresolved[obj] {
+	if (w.locals[obj] && !w.kinds[obj].outside) || w.tf.unresolved[obj] {
 		w.t.test.Unresolved++
 	}
 	return ""

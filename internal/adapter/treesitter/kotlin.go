@@ -50,7 +50,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 	for _, f := range files {
 		pkg := ""
 		var classes, functions, values []string
-		var types, fns []*node
+		var types, fns, props []*node
 		for _, n := range named(f.root) {
 			switch {
 			case n.Kind() == "package_header" && n.NamedChildCount() > 0:
@@ -65,6 +65,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 				for _, c := range named(n) {
 					if c.Kind() == "variable_declaration" && c.NamedChildCount() > 0 {
 						values = append(values, f.text(c.NamedChild(0)))
+						props = append(props, n)
 					}
 				}
 			}
@@ -76,6 +77,7 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 		if !f.test {
 			k.functions[f.unit] = append(k.functions[f.unit], functions...)
 			k.values[f.unit] = append(k.values[f.unit], values...)
+			k.noteValues(f, values, props)
 			continue
 		}
 		for _, n := range fns {
@@ -84,6 +86,13 @@ func (k *kotlin) index(_ engine.Version, files []*file) {
 			}
 			k.testFunctions[f.unit][f.field(n, "name")] = jvmDecl{f, n}
 		}
+	}
+}
+
+// noteValues records the declarations of a product file's top-level properties, by target.
+func (k *kotlin) noteValues(f *file, values []string, props []*node) {
+	for i, v := range values {
+		k.decls[f.unit+"."+v] = jvmDecl{f, props[i]}
 	}
 }
 

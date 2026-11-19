@@ -9,8 +9,9 @@ import (
 // viewpoint: behaviour
 // target: the Java and Kotlin readers
 // A method called on a local the test built as a string or a standard collection, from a literal,
-// a string method or a collection builder, is the language's own method: it is neither a call of the
-// product nor an unresolved call. A method called on a local of unknown origin stays unresolved.
+// a string method, a collection builder or Java's +, which makes only strings and numbers, is the
+// language's own method: it is neither a call of the product nor an unresolved call. A method
+// called on a local of unknown origin stays unresolved.
 func TestCallsOnLocalStringsAndCollectionsAreTheLanguages(t *testing.T) {
 	t.Run("kotlin", func(t *testing.T) {
 		expect(t, calls(t, "kotlin",
@@ -121,7 +122,7 @@ class QueryTest {
 `), `QueryTest.derived calls=[] unresolved=0
 QueryTest.literal calls=[] unresolved=0
 QueryTest.returned calls=[] unresolved=1
-QueryTest.sum calls=[] unresolved=1
+QueryTest.sum calls=[] unresolved=0
 QueryTest.typed calls=[] unresolved=0
 QueryTest.unknown calls=[] unresolved=1`)
 	})

@@ -24,6 +24,7 @@ type typescript struct {
 	scopes  map[string]int       // target ID -> position of its scope parameter
 	// supports are the test support files read as a test's helpers, by path.
 	supports map[string]*tsFile
+	kinds    *tsKinds // what the names of the files stand for
 }
 
 // grammar parses .ts, .mts and .cts with the TypeScript grammar and every other file with the TSX
@@ -77,6 +78,7 @@ func supportFile(f *file, named *regexp.Regexp) bool {
 
 func (r *typescript) index(v engine.Version, files []*file) {
 	r.files, r.modules, r.scopes, r.supports = map[string]*file{}, map[string]*tsModule{}, map[string]int{}, map[string]*tsFile{}
+	r.kinds = newTSKinds(r)
 	r.project = newTSProject(v.FS, files)
 	for _, f := range files {
 		r.files[f.path] = f

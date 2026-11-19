@@ -41,7 +41,7 @@ func (r *python) trace(files []*file, t *tables, a *facts.Analysis) {
 			types:  func(string) tbind { return tbind{} },
 			member: func(mod, name string) string { return r.packageMember(mod, name, t) }}
 		mod := module(f.path)
-		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo, made)}
+		pm := pyModule{tr: tr, mod: mod, repo: repo, values: pyModuleValues(tr, mod, repo, made), kinds: r.kinds}
 		tr.madeOutside = func(skip map[uintptr]bool) callLines {
 			return madeIn(f, f.root, skip, pyMade, func(w string) string { return resolveClass(tr, mod, w, repo) })
 		}

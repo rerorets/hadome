@@ -143,6 +143,7 @@ type pyModule struct {
 	mod    string
 	repo   map[string]bool
 	values map[string]string
+	kinds  *pyKinds
 }
 
 // unknownType stands, in the maps of written types below, for a value from outside whose type is
@@ -150,16 +151,17 @@ type pyModule struct {
 const unknownType = "?"
 
 // pyThrough returns the methods a function's body calls on values whose annotation names one of
-// the repository's classes: its parameters, the attributes of its class (pyAttributes), and the
-// variables at the top of its module (pyModuleValues). It also counts the calls on such values
-// whose type is not written.
+// the repository's classes: its parameters, the attributes of its class (pyAttributes), the
+// variables at the top of its module (pyModuleValues), and the elements taken out of a container of
+// the repository's class (pyElements). It also counts the calls on such values whose type is not
+// written.
 func pyThrough(m pyModule, fn tfunc, classDef *node) (callLines, int) {
 	tr, mod, repo, module := m.tr, m.mod, m.repo, m.values
 	f := tr.f
 	attrs, vars := pyAttributes(f, classDef), map[string]string{}
 	pyAnnotated(f, definition(fn.decl), vars)
 	pyUntyped(f, definition(fn.decl), vars)
-	locals := pyLocals(f, fn.body)
+	locals, elems := pyLocals(f, fn.body), pyElements(m, fn, classDef)
 	out, unfollowed := callLines{}, 0
 	walk(fn.body, func(n *node) bool {
 		fun := n.ChildByFieldName("function")
@@ -167,6 +169,10 @@ func pyThrough(m pyModule, fn tfunc, classDef *node) (callLines, int) {
 			return true
 		}
 		obj, method := fun.ChildByFieldName("object"), f.field(fun, "attribute")
+		if id := elems[f.text(obj)]; obj.Kind() == "identifier" && id != "" {
+			out.add(id+"."+method, line(n))
+			return true
+		}
 		written := ""
 		switch {
 		case obj.Kind() == "identifier" && vars[f.text(obj)] != "":

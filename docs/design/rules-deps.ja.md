@@ -460,11 +460,13 @@ def show(id):
 | 作ってすぐ、または作ったものを入れたローカル変数のメソッドを呼ぶ（`repo = UserRepo(db)` のあとの `repo.find()`、`var s = new Service()`、`const s = new Service()`、`new repo.Repo().find()`） | そのクラスのメソッドの ID | Java・Kotlin・TypeScript・Python |
 | 作ったものを入れた属性・フィールドのメソッドを呼ぶ（`__init__` の `self.repo = UserRepo(db)`、`private repo = new Repo()`） | そのクラスのメソッドの ID | TypeScript・Python |
 | 別のモジュールの直下で作った値、または型を書いた値を import して、そのメソッドを呼ぶ（`app/state.py` の `manager = Manager()` を `from app.state import manager` で取り込んだあとの `manager.switch()`、`export const api = new Api()` を取り込んだあとの `api.get()`） | そのクラスのメソッドの ID | TypeScript・Python |
+| リポジトリの型を要素に持つと型を書いた入れ物から、要素を取り出してそのメソッドを呼ぶ（`ports: Port[]` のときの `for (const p of ports) p.find()`、`ports: list[Port]` のときの `p = ports[0]` のあとの `p.find()`） | その型のメソッドの ID | TypeScript・Python |
 
 - 作ることを呼び出しに数えるのは、コンストラクタを動かすからです
 - Go と Rust の構造体のリテラル（`store.Repo{}`、`Store { … }`）は、コードを動かさないので数えません。どちらの言語も、作る関数（`store.New()`、`Store::new()`）の呼び出しは `Calls` に入っています。ローカル変数も、もう型が付きます
 - 型の注釈の無いローカル変数で追うのは、右辺がリポジトリのクラスを作る式のときだけです。それ以外のローカル変数は数えません（「[たどれない呼び出し](#たどれない呼び出し)」）
 - 作ったものを入れた属性とフィールドは、値から型が明らかなので、型の注釈が無くても「たどれない呼び出し」には数えません
+- 入れ物から取り出した要素の型は、テストと同じ決め方で決めます（[adapters-treesitter.ja.md](adapters-treesitter.ja.md) の「テストの中の値の種類」）。入れ物は、引数・ローカル変数・フィールドと属性・ファイルの直下の値・import した値です
 - Go にはコンストラクタが無いので、この書き方は自己テストの事例にできません。言語ごとのアダプタのテストで確かめます
 
 ### 言語ごとの読み方
