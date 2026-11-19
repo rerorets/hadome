@@ -1,0 +1,54 @@
+name: Bug / 不具合
+description: hadome crashed, failed to install, or behaved wrongly outside of its findings. / 落ちた、入らない、指摘以外の動きがおかしい。
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or Japanese is fine. / 英語でも日本語でも構いません。
+        For a finding that is wrong or missing, use "Wrong finding or miss" instead. / 指摘が違う・出ないときは「誤検知・漏れ」を使ってください。
+
+        **Do not paste code or paths from a private repository.** / **非公開のリポジトリのコードやパスは貼らないでください。**
+  - type: input
+    id: version
+    attributes:
+      label: Version / 版
+      description: The output of `hadome version`. / `hadome version` の出力
+      placeholder: hadome 0.10.1
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed through / 入れ方
+      options: [npm / pnpm / yarn, PyPI (pip / uv / Poetry), Go (go tool), Gradle, Maven, cargo binstall, Homebrew, Release archive / リリースのアーカイブ, Built from source / ソースからビルド]
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and CPU / OS と CPU
+      placeholder: macOS 15, arm64
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps / 手順
+      description: The command you ran, from a state anyone can reproduce. / 誰でも再現できる状態から、実行したコマンドまで
+      render: sh
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened / 起きたこと
+      description: The output and the exit code. / 出力と終了コード
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected / 期待した結果
+    validations:
+      required: true

@@ -1,0 +1,68 @@
+name: Wrong finding or miss / 誤検知・漏れ
+description: hadome reported something it should not have, or missed something it should have caught. / 出るはずのない指摘が出た、または止めるはずのものを止めなかった。
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or Japanese is fine. / 英語でも日本語でも構いません。
+
+        **Do not paste code from a private repository.** Rewrite it into the smallest example that still shows the problem, with generic names.
+        **非公開のリポジトリのコードは貼らないでください。** 名前を一般的なものに替え、問題が再現するいちばん小さな例に書き直してください。
+  - type: input
+    id: version
+    attributes:
+      label: Version / 版
+      description: The output of `hadome version`. / `hadome version` の出力
+      placeholder: hadome 0.10.1
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which / どちらか
+      options:
+        - Reported something it should not have / 出るはずのない指摘が出た
+        - Missed something it should have caught / 止めるはずのものを止めなかった
+        - Could not identify something (exit 3, target-unknown and similar) / 特定できなかった（exit 3、target-unknown など）
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule / ルール
+      placeholder: tests/target-unknown
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language / 言語
+      multiple: true
+      options: [Go, TypeScript, Python, Rust, Java, Kotlin, Terraform, Ansible, SQL, Other / その他]
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Smallest example / いちばん小さな例
+      description: The code on the base branch and the change, and the `.hadome.yml` if it matters. / base のブランチのコードと変更、関係するなら `.hadome.yml`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / 出力
+      description: The finding from `hadome check --format json`, and the exit code. / `hadome check --format json` の該当する指摘と終了コード
+      render: json
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it looks wrong / おかしいと思う理由
+      description: |
+        A sentence is enough. You do not need to know what hadome should do. / 一言で十分です。hadome がどう動くべきかまで分からなくても構いません。
+        Examples / 例:
+        - The change only renames a function, so nothing should be reported. / 関数の名前を変えただけなので、何も出ないはず
+        - The change deletes a test's assertion, but it exits 0. / テストの assert を消したのに exit 0 になる
+        - The test calls `store.Append` directly, so its target should be known. / テストが `store.Append` を直接呼んでいるので、対象は分かるはず
+    validations:
+      required: true

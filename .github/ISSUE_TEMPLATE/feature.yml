@@ -1,0 +1,26 @@
+name: Request / 要望
+description: A rule, a language or a way of using hadome that it does not have yet. / まだ無いルール・言語・使い方の要望。
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or Japanese is fine. / 英語でも日本語でも構いません。
+        To talk an idea over first, Discussions is fine too. / まず相談したいときは Discussions でも構いません。
+  - type: textarea
+    id: problem
+    attributes:
+      label: The change you want to stop, or the problem / 止めたい変更、困っていること
+      description: A concrete example helps most, such as "a change that deletes a test's assertion passes". / 「テストの assert を消す変更が通ってしまう」のような具体例があると助かります
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind / 考えている形
+      description: Optional. A rule, an option or an output. / 任意。ルール、オプション、出力の形など
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now / 今の回避策
+      description: Optional. For example a gate in `.hadome.yml`, or a review by hand. / 任意。`.hadome.yml` の gate や、人の目での確認など
