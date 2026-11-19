@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability / 脆弱性の報告
+    url: https://github.com/rerorets/hadome/security/advisories/new
+    about: Report it privately, not in an issue. / Issue に書かず、非公開で知らせてください。
+  - name: Questions and ideas / 質問・相談
+    url: https://github.com/rerorets/hadome/discussions
+    about: Ask how to use hadome or talk over an idea. / 使い方の質問や、アイデアの相談はこちら。
