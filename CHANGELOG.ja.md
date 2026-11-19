@@ -15,6 +15,12 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.1 - 2026-11-19
+
+### その他
+
+- npm に Windows の ARM64 のパッケージ `hadome-win32-arm64` を足しました。ARM64 の Node から入れると、変換を通さずに ARM64 のバイナリが動きます。これまでは x86-64 のバイナリが入り、Windows 11 の変換で動いていました。Windows 10 の ARM64 でも、npm から入れた hadome が動きます。`hadome-win32-x64` は x64 の Node にだけ入ります。
+
 ## 0.10.0 - 2026-11-19
 
 ### 検出が増える変更

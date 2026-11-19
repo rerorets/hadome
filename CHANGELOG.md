@@ -15,6 +15,12 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.1 - 2026-11-19
+
+### Other
+
+- npm has a package for Windows on ARM64, `hadome-win32-arm64`. Installed from an ARM64 Node, the ARM64 binary runs without emulation. It used to install the x86-64 binary, which ran through Windows 11's emulation. hadome installed from npm now runs on Windows 10 on ARM64 too. `hadome-win32-x64` installs only for an x64 Node.
+
 ## 0.10.0 - 2026-11-19
 
 ### Finds more
