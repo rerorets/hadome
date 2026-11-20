@@ -219,7 +219,9 @@ func TestSavedRowsSurviveRestart(t *testing.T) {
 
 あとから門番を変えたり消したりすると、`3` になります。
 
-確かめ方: `hadome self-test` が門番の `id` を挙げ、`hadome check` がそれを実行する。
+門番を足した変更では、`hadome check` は門番を実行せず、`config/gate-not-run` を挙げて `3` で終わります。まだ誰も確かめていないコマンドを、変更の中の設定だけで動かさないためです。人に確認を頼み、変更が基準のブランチに入ると、以降のチェックで門番が実行されます。`run` を変えたときも同じです。
+
+確かめ方: `hadome self-test` が門番の `id` を挙げ、`hadome check` が `config/gate-not-run` でその門番を挙げる。
 
 ## やってはいけない変更を止める
 
@@ -281,7 +283,7 @@ func TestExpiredTokenIsRejected(t *testing.T) {
 | 新しい外部の通信先 | 依存の図（`rules.deps`）は、リポジトリの中のユニットの間の import だけを数える |
 | 呼び出しの回数や費用の見積もり | 実際の回数や料金は、実行したときの量や料金表で決まり、ツリーからは分からない |
 
-確かめ方: `hadome config check` と `hadome self-test` が `0` で終わり、`hadome check` が門番を実行し、`tests/invariant-unguarded` を報告しない。
+確かめ方: `hadome config check` と `hadome self-test` が `0` で終わり、`hadome check` が足した門番を `config/gate-not-run` で挙げ、`tests/invariant-unguarded` を報告しない。
 
 ## ほかのエージェントに伝える
 

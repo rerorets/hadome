@@ -26,7 +26,8 @@ type Engine struct {
 	// report lists the units where head has more than base.
 	Unfollowed func(in Input) map[string]int
 	// ConfigRules, when set, builds more rules from head's configuration (product-specific gates).
-	// They run on both versions next to Rules.
+	// They run on both versions next to Rules. It is given only the gates base declares with the
+	// same command; the others are reported as not run and never reach it.
 	ConfigRules func(c config.Config) ([]Rule, error)
 	// Elsewhere, when set, names rules that another command reports: hadome check leaves
 	// mutation/survived to hadome mutate, which leaves every other rule to hadome check. Markers
@@ -56,7 +57,7 @@ func (e *Engine) Check(src Source) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
 	}
-	rules, err := e.rules(hv, headCfg)
+	rules, held, err := e.rules(hv, baseCfg, headCfg)
 	if err != nil {
 		return Report{}, err
 	}
@@ -81,7 +82,8 @@ func (e *Engine) Check(src Source) (Report, error) {
 	} else {
 		r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
 	}
-	if err := compareItems(&r, rules, base, head); err != nil {
+	r.Reviews = append(r.Reviews, heldReviews(baseCfg, headCfg, held)...)
+	if err := compareItems(&r, rules.all, base, head); err != nil {
 		return Report{}, err
 	}
 	if e.Candidates != nil {
@@ -94,28 +96,6 @@ func (e *Engine) Check(src Source) (Report, error) {
 	sortFindings(r.Reviews)
 	sort.Slice(r.NewExceptions, func(i, j int) bool { return markerLess(r.NewExceptions[i], r.NewExceptions[j]) })
 	return r, nil
-}
-
-// rules returns the built-in rules and those head's configuration adds.
-func (e *Engine) rules(hv Version, headCfg config.Config) ([]Rule, error) {
-	if e.ConfigRules == nil {
-		return e.Rules, nil
-	}
-	more, err := e.ConfigRules(headCfg)
-	if err != nil {
-		return nil, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
-	}
-	// Built-in rules have their cases checked before hadome is released. Configured rules live
-	// only in the user's repository, so a check is the one place to test them before trusting
-	// what they report.
-	for _, r := range more {
-		if st, ok := r.(SelfTester); ok {
-			if err := st.SelfTest(); err != nil {
-				return nil, fmt.Errorf("%s failed its own self-test, so the check does not use it:\n%w", r.ID(), err)
-			}
-		}
-	}
-	return append(append([]Rule{}, e.Rules...), more...), nil
 }
 
 // read reads both versions and the renames between them.
@@ -183,12 +163,12 @@ func (e *Engine) analyze(bv Version, bc config.Config, hv Version, hc config.Con
 }
 
 // side computes one version. against is base's input when v is head, and nil when v is base.
-func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rule, against *Input) (side, error) {
+func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules ruleSet, against *Input) (side, error) {
 	in := Input{Facts: a, Config: c, Version: v}
 	s := side{input: in, items: map[string][]Item{}}
 	known := map[string]bool{}
 	var raw []Finding
-	for _, rule := range rules {
+	for _, rule := range rules.all {
 		known[rule.ID()] = true
 		var err error
 		switch r := rule.(type) {
@@ -211,7 +191,7 @@ func (e *Engine) side(v Version, a *facts.Analysis, c config.Config, rules []Rul
 			return side{}, fmt.Errorf("rule %s on %s: %w", rule.ID(), v.Label, err)
 		}
 	}
-	markers, bad := parseMarkers(e.ownComments(a.Comments), known)
+	markers, bad := parseMarkers(e.ownComments(a.Comments, rules.held), known)
 	markTop(markers, a.Comments, v.FS)
 	kept, unused := suppress(raw, markers)
 	s.findings = append(append(kept, bad...), unused...)
@@ -375,19 +355,4 @@ func markerLess(a, b Marker) bool {
 		return a.Line < b.Line
 	}
 	return a.Rule < b.Rule
-}
-
-// ownComments leaves out the comments whose marker names a rule reported elsewhere.
-func (e *Engine) ownComments(cs []facts.Comment) []facts.Comment {
-	if e.Elsewhere == nil {
-		return cs
-	}
-	var out []facts.Comment
-	for _, c := range cs {
-		if m := markerPattern.FindStringSubmatch(c.Text); m != nil && e.Elsewhere(m[1]) {
-			continue
-		}
-		out = append(out, c)
-	}
-	return out
 }

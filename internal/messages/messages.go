@@ -44,6 +44,12 @@ var Japanese = map[string]string{
 	"the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive": "この変更を判定するのは、この変更の中の設定である。消す、変える、足すと、検査が緩くなりうる",
 	"if the removal is intended, a person approves it; otherwise restore the entry":                                              "意図した変更なら人が認める。そうでなければ項目を元に戻す",
 
+	// config/gate-not-run.
+	"gate %s is new in this change and was not run: %s":                                                                              "門番 %s はこの変更で足したもので、実行していない: %s",
+	"gate %s changes its command in this change and was not run: %s":                                                                 "門番 %s はこの変更でコマンドが変わったので、実行していない: %s",
+	"a gate runs a command, and a command that only this change declares has not been reviewed by anyone, so hadome does not run it": "門番はコマンドを実行する。この変更だけが宣言するコマンドはまだ誰も確かめていないので、hadome は実行しない",
+	"a person reviews the command; once the change is on the base branch, the gate runs in every later check":                        "人がコマンドを確かめる。変更が基準のブランチに入れば、以降のチェックで門番が実行される",
+
 	// tests/no-clock, tests/no-sleep, tests/always-true, tests/no-mock.
 	"test reads the clock: %s":                    "テストが時計を読む: %s",
 	"a test that reads the current time directly": "今の時刻をじかに読むテスト",

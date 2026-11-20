@@ -41,7 +41,8 @@ sequenceDiagram
 ```
 
 - The working directory is the root of the version being checked: usually a copy of that version that hadome prepares and removes afterwards. Never write to it
-- A command in `run` that contains a `/` is found from the directory hadome runs in (your repository's working tree), so a gate added in a change runs on base as well; other commands are looked up on `PATH`. Arguments are not looked up ([Passing the gate's location as an argument](#passing-the-gates-location-as-an-argument))
+- A command in `run` that contains a `/` is found from the directory hadome runs in (your repository's working tree); other commands are looked up on `PATH`. Arguments are not looked up ([Passing the gate's location as an argument](#passing-the-gates-location-as-an-argument))
+- `hadome check` does not run a gate the change adds or whose command it changes. It runs only the gates base's configuration declares with the same `id` and the same `run`. Any other gate goes to a person's review as `config/gate-not-run`, and hadome exits `3`. Once the change is on the base branch, the gate runs in later checks. Check that a gate you add works with `hadome self-test` locally
 - The request arrives as JSON on standard input
 - Your command writes its response as JSON on standard output
 - Anything on standard error is shown to the user as diagnostics
@@ -50,9 +51,9 @@ sequenceDiagram
 
 The second and later entries of `run` (the arguments) are not looked up; they are passed as they are. A relative path in an argument is therefore relative to the working directory, the copy of the version being checked.
 
-Example: `run: [go, run, ./tools/gates/mygate]` tries to run `./tools/gates/mygate` in the copy of base. A gate added in the change is not in base yet, so the gate cannot run and hadome exits `2`.
+Example: `run: [go, run, ./tools/gates/mygate]` runs `./tools/gates/mygate` from the copy of base for the base version, and from the copy of head for the head version. When a change edits the gate, the two versions are judged by different code, and what the edit adds looks like a regression.
 
-Put a launcher script next to the gate and make it the first entry of `run`, and a gate added in a change runs on base as well.
+Put a launcher script next to the gate and make it the first entry of `run`, and both versions are judged by the same gate, the one in the working tree.
 
 ```sh
 #!/bin/sh
@@ -137,7 +138,7 @@ Keys not listed as legitimate are regressions. A gate that does not support `mod
 
 ## Self-test
 
-Your command must answer `--self-test`: run its own cases and exit `0` only if all pass. `hadome self-test` runs it alongside the built-in rules. `hadome check` also runs `--self-test` once before using the gate; if it does not exit `0`, the check stops with exit code `2` without using the gate's results.
+Your command must answer `--self-test`: run its own cases and exit `0` only if all pass. `hadome self-test` runs it alongside the built-in rules. `hadome check` also runs `--self-test` once before using the gate; if it does not exit `0`, the check stops with exit code `2` without using the gate's results. It does not run the self-test of a gate it does not run (one the change adds, or whose command it changes).
 
 ## Rules your gate must follow
 
@@ -149,3 +150,6 @@ Your command must answer `--self-test`: run its own cases and exit `0` only if a
 ## Trust
 
 hadome runs the commands listed in your repository's configuration, with the same permissions as any script in that repository. Review gate commands like any other code in your repository.
+
+- **The commands `hadome check` runs**: only those of gates already in the base branch's configuration. When a pull request adds a gate to `.hadome.yml`, its command does not run until a person has reviewed it and it is on the base branch.
+- **What this does not prevent**: when a pull request rewrites the script of a gate the base branch has, the rewritten script runs, because `run[0]` is found in the working tree. For untrusted pull requests, review changes to gate scripts first.

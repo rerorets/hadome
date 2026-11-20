@@ -155,6 +155,12 @@ type Gate struct {
 	Options any // passed to the gate untouched
 }
 
+// GateLine returns the line of the gate with this id in .hadome.yml, or of the gates key when the
+// gate comes from a shared layer.
+func (c Config) GateLine(id string) int {
+	return c.lineOf(Change{Key: gateKey.Name, Added: id})
+}
+
 // Load reads the product layer from product (the version's tree) and the shared layers it extends
 // from workdir (the working tree, since shared files live outside the repository). Without a
 // product file it returns the built-in settings. An error means the check must not run.

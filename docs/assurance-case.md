@@ -35,8 +35,9 @@ flowchart LR
   rules --> out[Findings and exit code]
 ```
 
-- **The part that only reads.** `hadome check` reads files and parses them. It does not run the repository's code
+- **The part that only reads.** `hadome check` reads files and parses them. The only repository code it runs is the `gates` in the base branch's configuration
 - **The parts that run commands.** `gates` in the configuration and `hadome mutate` run the repository's commands. They are treated as trusted to the same degree as the repository's other scripts. On a repository you do not trust, read its `gates` first, and do not run `hadome mutate`
+- **The gates `hadome check` runs.** Only those the base branch's configuration declares with the same `id` and the same `run`. A gate the change adds, or whose command it changes, is not run, not even its self-test, and goes to a person's review with exit code `3` ([gates design](design/gates.md)). The `.hadome.yml` in a change cannot run a new command on its own
 
 ## Threats and countermeasures
 
@@ -48,6 +49,7 @@ flowchart LR
 | Information is sent out, or configuration is fetched, over the network | hadome does not talk to the network. That it never reads configuration from the network is one of hadome's own invariants (`no-network` in `.hadome.yml`) |
 | A crafted file name or exception reason that slips a forged display or command into the terminal or the CI log | The `text` output writes a value with a control character quoted and escaped. In `json`, `encoding/json` escapes it. [The CI example](ci.md) escapes the values it puts into warning commands and table cells |
 | Loosening the configuration to slip past the check | Exceptions and changes that loosen the configuration go to a person's review with exit code `3`. An exception without a reason has no effect |
+| Adding a gate to a pull request's `.hadome.yml` to run a command in CI | `hadome check` runs only the gates the base branch's configuration declares with the same `id` and the same `run`. Any other gate is not run and goes to a person's review as `config/gate-not-run` with exit code `3`. A change that rewrites the script of a gate already on the base branch is not prevented: that script runs with the same trust as the repository's other scripts |
 | The shipped binaries are replaced | Releases are built only by GitHub Actions, with SHA256SUMS and minisign signatures. npm, PyPI and crates.io packages are published through trusted publishing, with no tokens stored. The workflows' actions are pinned to commit SHAs |
 
 ## Design principles
@@ -62,7 +64,7 @@ flowchart LR
 | Weakness | Countermeasure |
 |---|---|
 | Memory corruption (CWE-119 and others) | The language protects the Go parts. The C grammars are checked by fuzzing with AddressSanitizer |
-| Command injection (CWE-78) | hadome runs only the commands written in the configuration, and git. Commands do not go through a shell; they run as lists of arguments. Test names put in through `{tests}` and the like are each passed as one argument |
+| Command injection (CWE-78) | hadome runs only the commands written in the configuration, and git. The gate commands `hadome check` runs are only those in the base branch's configuration. Commands do not go through a shell; they run as lists of arguments. Test names put in through `{tests}` and the like are each passed as one argument |
 | Path traversal and link following (CWE-22, CWE-59) | hadome writes only to its own working directories, and never to a symbolic link or another user's directory |
 | Leaked secrets (CWE-798) | No credentials are kept in the repository. GitHub secret scanning and push protection are on |
 

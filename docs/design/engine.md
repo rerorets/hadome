@@ -198,7 +198,7 @@ A finding about a whole file still has a line when there is one to point at. Exa
 | `0` | No regressions |
 | `1` | At least one regression |
 | `2` | Configuration error or a rule failed to run |
-| `3` | No regressions, but something needs a person's review: a new exception, a change that loosens configuration, or something a rule sent for review (more unidentified facts than in base, and the like) |
+| `3` | No regressions, but something needs a person's review: a new exception, a change that loosens configuration, a gate not run (one the change adds, or whose command it changes), or something a rule sent for review (more unidentified facts than in base, and the like) |
 
 When several apply, the highest-priority one wins: `2`, then `1`, then `3`, then `0`.
 
@@ -206,7 +206,7 @@ Exit code `3` is raised once, by the change that introduces the thing to review.
 
 ## Self-tests
 
-Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates, and fails a rule without cases. The built-in rules' cases also run in hadome's own tests. When the analyzer is a `Reuser`, which reuses results across versions, every case runs twice, with reuse and without, and fails when the two reports' JSON differ byte for byte ([analysis-reuse.md](analysis-reuse.md)). Gates live only in the user's repository, so `hadome check` also runs a gate's self-test once before using it. If it fails, the check stops with exit code `2` without using the gate's results.
+Every rule ships with cases: a small base tree, a small head tree, and the expected regressions. `hadome self-test` runs all cases of all rules, including product-specific gates, and fails a rule without cases. The built-in rules' cases also run in hadome's own tests. When the analyzer is a `Reuser`, which reuses results across versions, every case runs twice, with reuse and without, and fails when the two reports' JSON differ byte for byte ([analysis-reuse.md](analysis-reuse.md)). Gates live only in the user's repository, so `hadome check` also runs a gate's self-test once before using it. If it fails, the check stops with exit code `2` without using the gate's results. It does not run the self-test of a gate it does not run (next section).
 
 ## Product-specific gates
 
@@ -214,7 +214,7 @@ A product adds its own gate as an **external command** declared in its configura
 
 The full protocol is in [external-gates.md](../external-gates.md). Any language can implement a gate this way, and the product's knowledge stays in the product's repository.
 
-The engine itself never starts a process. `Engine.ConfigRules` builds extra rules from head's configuration; `cmd/hadome` sets it to the gate package's builder ([gates.md](gates.md)). A rule that returns an error could not run, and the check stops with exit code `2`. A rule that implements `SelfTester` tests itself instead of providing cases. Every built-in rule implements `Describer`: `About` returns what it finds, why that matters, how to fix it, and the configuration keys that tune it. `hadome explain <rule id>` prints that with the names of the rule's self-test cases. A finding's `why` and `fix` use the same text as `About` wherever they do not depend on what was found, so the explanation and the output never disagree.
+The engine itself never starts a process. `Engine.ConfigRules` builds extra rules from head's configuration; `cmd/hadome` sets it to the gate package's builder ([gates.md](gates.md)). The engine passes `ConfigRules` only the gates base's configuration declares with the same `id` and the same `run`; it builds no rule for any other gate, and reports it for review as `config/gate-not-run` (exit code `3`), so that whether a command may run is never decided by the configuration in the change ([gates.md](gates.md), "Which gates may run"). A rule that returns an error could not run, and the check stops with exit code `2`. A rule that implements `SelfTester` tests itself instead of providing cases. Every built-in rule implements `Describer`: `About` returns what it finds, why that matters, how to fix it, and the configuration keys that tune it. `hadome explain <rule id>` prints that with the names of the rule's self-test cases. A finding's `why` and `fix` use the same text as `About` wherever they do not depend on what was found, so the explanation and the output never disagree.
 
 ## Types and interfaces
 
@@ -376,6 +376,7 @@ The engine loads the configuration of both versions before analysing anything. A
 5. The engine never writes to the repository and never opens a network connection
 6. Every built-in rule has at least one self-test case, and all cases pass in a release. A gate is used by `check` only when its self-test passes
 7. In the `text` output, no value from the repository starts a new line or writes a control character
+8. The gates `check` runs are only those base's configuration declares with the same `id` and the same `run`
 
 ## Deliberately left out
 
