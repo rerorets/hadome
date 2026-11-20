@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package adapter is the analyzer the engine uses: it gives each file of a version to the language
 // that claims it and merges what the languages report.
 //

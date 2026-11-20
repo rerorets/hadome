@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Regenerates the Go parsers of the SQL dialects from the grammars in each directory's src/.
 #
 # Each directory is one dialect's grammar: src/*.g4 are the ANTLR grammars, src/*.go.in the support

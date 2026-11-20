@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package deps holds the deps/ rules: the dependency diagram is the source of truth for which of the
 // repository's units may import which, and the call diagram for which may call which.
 //

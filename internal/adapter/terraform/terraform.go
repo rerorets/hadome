@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package terraform is the Terraform language adapter. It reads Terraform with HCL's own parser,
 // in pure Go, so it reads in builds without cgo too. Terraform has no functions or classes: the
 // module's variables and outputs are its symbols, each run block of a test file is a test.

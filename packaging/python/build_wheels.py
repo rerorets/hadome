@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 """Builds the Python wheels of one release from its binaries.
 
     python3 build_wheels.py <version> <binaries dir> <out dir>

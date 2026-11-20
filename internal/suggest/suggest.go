@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package suggest finds invariant candidates: places in the code that usually carry an invariant
 // nobody has configured. It only informs; nothing here changes an exit code.
 //

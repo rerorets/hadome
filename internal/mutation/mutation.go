@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package mutation is hadome mutate: it breaks the functions a change touched, one small change at a
 // time, runs the configured test command, and reports breaks that no test notices and that base's
 // tests did notice, or that base had no counterpart for.

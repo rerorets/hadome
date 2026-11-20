@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Blocks commits whose added lines or file names contain a term from a private, local-only denylist.
 # The list lives outside this repository on purpose: committing it would itself leak the terms.
 # Location: $HADOME_DENYLIST, or ~/.config/hadome-dev/denylist.txt (one term per line, # starts a comment).

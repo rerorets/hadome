@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 package mutation
 
 // StandInUnwritable is the run of StandInUnwritableLock, which needs a limit on file size that

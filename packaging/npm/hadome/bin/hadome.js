@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Runs the hadome binary of the platform package npm installed next to this one. Each platform
 // package declares its os and cpu, so npm installs only the one that matches.
 "use strict";

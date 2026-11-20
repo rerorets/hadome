@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package messages holds the wording hadome writes in languages other than English: for each
 // language, a catalog from the English format to the same wording in that language. It imports
 // nothing of hadome's, so that any package can use it.

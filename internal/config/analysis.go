@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 package config
 
 // Analysis is the part of the configuration adapters read: only settings that can change the

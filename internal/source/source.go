@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package source provides the two versions the engine compares.
 //
 // Design: docs/design/engine.md (Sources)

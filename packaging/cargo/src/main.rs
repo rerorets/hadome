@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 //! hadome is a Go binary. This crate only lets Rust projects pin it with `cargo binstall`, which
 //! downloads the prebuilt binary of the release. Building the crate from source gives this
 //! program, which explains that.

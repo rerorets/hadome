@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Unpacks a release's archives into <out>/<os>_<arch>/hadome[.exe], the layout the package builders read.
 #   extract.sh <dir with hadome_<version>_<os>_<arch>.{tar.gz,zip}> <out>
 set -eu

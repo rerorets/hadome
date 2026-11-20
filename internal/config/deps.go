@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 package config
 
 // depsRules reads the validated settings of the deps/ rules besides the diagrams: the layers of

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 package facts
 
 // Entry is an entry point that can be retried: an HTTP handler, a route. It is either a symbol, or
