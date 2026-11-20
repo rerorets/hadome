@@ -5,11 +5,12 @@ This repository uses hadome to stop regressions in code and tests.
 
 - Before you finish any change, run `hadome check --format json` and fix every regression it reports.
 - When `.hadome.yml` has `mutation`, also run `hadome mutate --format json` before you finish, after `check` exits `0`, and add a test for every mutant it reports. Its exit codes are `check`'s.
-- Exit codes: `0` done · `1` regression, fix it · `2` configuration error, fix the configuration · `3` a person must review (a new exception, a loosened configuration, code that stopped being pure, or something hadome could not identify). On `3`, stop and ask. Never change the code just to make it pass.
+- Exit codes: `0` done · `1` regression, fix it · `2` configuration error, fix the configuration · `3` a person must review (a new exception, a loosened configuration, a gate it did not run, code that stopped being pure, or something hadome could not identify). On `3`, stop and ask. Never change the code just to make it pass.
 - When you ask about `3`, give what hadome listed (the rule and its `why`), why you made that change, and the other way you would take if it is not accepted, with what that costs. Leave the decision to the person; do not tell them it is fine.
 - Never add `gate:allow` to get a check to pass. Add one only when the rule truly does not apply, with a specific reason, and tell the person.
 - When a test guards a product-specific invariant, add `guards: <id>` to its doc comment; for `durable`, `erasable`, `append-only` and `fail-closed`, add `guards: <type> <target>`. `idempotent`, `round-trip` and `isolated` are recognised from the test's calls. `hadome explain invariants` lists them.
 - When `hadome check` lists invariant candidates and one covers behaviour that matters, or when `.hadome.yml` has no dependency diagram (`rules.deps.diagram`), propose it to the person instead of adding it yourself. `hadome suggest diagram` and `hadome suggest calls` draft the diagrams.
 - Before changing `.hadome.yml`, run `hadome explain <key>`. After changing it, run `hadome config check`.
+- When you add a gate or change its `run`, run `hadome self-test` before you finish and make sure the gate passes. `hadome check` does not run such a gate (it lists it as `config/gate-not-run`, exit `3`), so CI cannot check it.
 - When a person asks to stop a kind of change (for example SQL that rewrites production data, or a key in the code), write it as a gate or an invariant. Examples: https://github.com/rerorets/hadome/blob/main/docs/for-agents.md#stopping-changes-that-must-not-be-made
 <!-- hadome:end -->
