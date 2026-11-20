@@ -62,8 +62,13 @@ jobs:
           flags="-s -w -X main.version=$v"
           exe=hadome
           case "${{ matrix.goos }}" in
-            linux) flags="$flags -linkmode external -extldflags -static" ;; # one binary for glibc and musl
+            linux) flags="$flags -linkmode external -extldflags '-static -Wl,-z,relro'" ;; # one binary for glibc and musl
             windows) exe=hadome.exe ;;
+          esac
+          # The C grammars get the usual compiler hardening; MinGW would need libssp for it, and Go
+          # already builds Windows binaries as PIE.
+          case "${{ matrix.goos }}" in
+            linux|darwin) export CGO_CFLAGS="-O2 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2" ;;
           esac
           if [ "${{ matrix.goos }}/${{ matrix.goarch }}" = windows/arm64 ]; then
             export CC="zig cc -target aarch64-windows-gnu"
@@ -72,6 +77,10 @@ jobs:
           go build -trimpath -ldflags "$flags" -o "out/$exe" ./cmd/hadome
           "out/$exe" version
           "out/$exe" self-test
+      - name: Check that the Linux binary has RELRO
+        if: matrix.goos == 'linux'
+        run: |
+          readelf -l out/hadome | grep -q GNU_RELRO
       - name: Archive
         run: |
           v="${VERSION#v}"
