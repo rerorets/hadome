@@ -61,7 +61,7 @@ TypeScript や Python のファイルも持つ Go のプロジェクトは、C �
 flowchart LR
   T["タグ vX.Y.Z"] --> B["ビルド: 6プラットフォーム<br/>ネイティブの runner、cgo"]
   B --> R["GitHub のリリース<br/>アーカイブ + SHA256SUMS"]
-  R --> N["npm<br/>hadome + hadome-&lt;os&gt;-&lt;arch&gt; の5つ"]
+  R --> N["npm<br/>hadome + hadome-&lt;os&gt;-&lt;arch&gt; の6つ"]
   R --> P["PyPI<br/>プラットフォームごとに wheel 1つ"]
   R --> C["crates.io<br/>binstall のメタデータ"]
   R --> J["Gradle Plugin Portal<br/>Maven Central"]
@@ -74,7 +74,7 @@ flowchart LR
 
 | ディレクトリ | 作るもの | バイナリの届け方 |
 |---|---|---|
-| `packaging/npm` | `hadome` と、5つのプラットフォームのパッケージ `hadome-<os>-<arch>` | プラットフォームのパッケージは、`os` と `cpu` で絞った optional な依存です。npm は合うものだけを入れ、`hadome` の起動スクリプトがそれを動かします |
+| `packaging/npm` | `hadome` と、6つのプラットフォームのパッケージ `hadome-<os>-<arch>` | プラットフォームのパッケージは、`os` と `cpu` で絞った optional な依存です。npm は合うものだけを入れ、`hadome` の起動スクリプトがそれを動かします |
 | `packaging/python` | プラットフォームごとに1つの wheel（`py3-none-<platform>`） | バイナリは、wheel のスクリプトとして `PATH` に入ります |
 | `packaging/cargo` | `hadome` クレート | `cargo binstall` がクレートのメタデータを読み、リリースのアーカイブをダウンロードし、メタデータにある公開鍵で署名を確かめます。クレートをソースからビルドしても、入れ方を説明するだけです |
 | `packaging/jvm` | Gradle のプラグインと Maven のプラグイン。インストーラを1つ共有します | 初めて使うときに、プラットフォームのアーカイブをリリースからダウンロードします。プラグインに組み込んだチェックサムと照らし合わせ、ビルドツールのキャッシュに置きます |

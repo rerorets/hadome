@@ -46,7 +46,7 @@ A Go project that also has TypeScript or Python files gets all eight where a C c
 flowchart LR
   T["tag vX.Y.Z"] --> B["build: 6 platforms<br/>native runners, cgo"]
   B --> R["GitHub release<br/>archives + SHA256SUMS"]
-  R --> N["npm<br/>hadome + five hadome-&lt;os&gt;-&lt;arch&gt;"]
+  R --> N["npm<br/>hadome + six hadome-&lt;os&gt;-&lt;arch&gt;"]
   R --> P["PyPI<br/>one wheel per platform"]
   R --> C["crates.io<br/>binstall metadata"]
   R --> J["Gradle Plugin Portal<br/>Maven Central"]
@@ -59,7 +59,7 @@ Everything that turns a release into a package lives under `packaging/`, one dir
 
 | Directory | Builds | How the binary arrives |
 |---|---|---|
-| `packaging/npm` | `hadome` and five platform packages `hadome-<os>-<arch>` | The platform packages are optional dependencies limited by `os` and `cpu`; npm installs only the matching one. `hadome`'s launcher runs it |
+| `packaging/npm` | `hadome` and six platform packages `hadome-<os>-<arch>` | The platform packages are optional dependencies limited by `os` and `cpu`; npm installs only the matching one. `hadome`'s launcher runs it |
 | `packaging/python` | One wheel per platform (`py3-none-<platform>`) | The binary is a script of the wheel, installed onto `PATH` |
 | `packaging/cargo` | The `hadome` crate | `cargo binstall` reads the crate's metadata, downloads the release archive, and checks its signature with the public key in the metadata. Building the crate from source only explains how to install |
 | `packaging/jvm` | The Gradle plugin and the Maven plugin, sharing one installer | On first use, downloads the archive for the platform from the release, checks it against the checksums built into the plugin, and keeps it in the build tool's cache |
