@@ -77,6 +77,7 @@ chmod +x .claude/hooks/hadome-stop.sh
 
 - フックが `2` で終わると、Claude は標準エラーの中身を理由として受け取り、作業を続けます。
 - Claude Code は、Stop フックが続けて8回止めると、次は止めずに終えます。Claude がツールを呼ぶたびに数え直します。
+- この8回は環境変数 `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` で変えられます。後退を直しきる前に終えてしまうなら、`.claude/settings.json` の `env` で上げます（[環境変数の一覧](https://code.claude.com/docs/en/env-vars)）。
 - 人が中断（Ctrl+C）したときは、Stop フックは動きません。
 
 ## Codex の設定
