@@ -332,8 +332,11 @@ var Spec = Key{Kind: KindObject, Doc: "The configuration of hadome, `.hadome.yml
 	Example: "schema: 1\nlanguages: [go]", Fields: []Key{
 		{Name: "schema", Kind: KindInt, Required: true, Allowed: SchemaVersions,
 			Doc: "The configuration format version.", Example: "schema: 1"},
-		stringList("extends", "Local files whose settings this file builds on, relative to this file. Later layers add to or "+
-			"override earlier ones. Never a URL.", "extends: [../shared/hadome.yml]", LooserNever),
+		{Name: "extends", Kind: KindList, Sequence: true, Looser: LooserAlways, Elem: &Key{Kind: KindString},
+			Doc: "Local files whose settings this file builds on, relative to this file. Later layers add to or " +
+				"override earlier ones. Never a URL. A check reads only the files base's configuration extends, so " +
+				"changing the list needs a person's review.",
+			Example: "extends: [../shared/hadome.yml]"},
 		{Name: "languages", Kind: KindList, Looser: LooserWhenRemoved, OmittedIsWidest: true,
 			Elem: &Key{Kind: KindString, Allowed: Languages},
 			Doc:  "Languages to check. Detected when omitted.", Example: "languages: [go, typescript]"},

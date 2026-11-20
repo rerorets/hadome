@@ -65,7 +65,7 @@ func agents(args []string, stdout, stderr io.Writer) int {
 		return engine.ExitConfig
 	}
 	for i, p := range paths {
-		if err := os.WriteFile(p, []byte(texts[i]), 0o644); err != nil {
+		if err := replaceFile(p, []byte(texts[i])); err != nil {
 			fmt.Fprintln(stderr, "hadome:", err)
 			return engine.ExitConfig
 		}
@@ -80,6 +80,9 @@ func agents(args []string, stdout, stderr io.Writer) int {
 func withBlock(path, block string) (string, error) {
 	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("%s: the directory %s does not exist", path, filepath.Dir(path))
+	}
+	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not a regular file (a symbolic link, say); hadome writes only to regular files, so name the file itself", path)
 	}
 	old, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

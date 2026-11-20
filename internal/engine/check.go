@@ -53,7 +53,7 @@ func (e *Engine) Check(src Source) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("configuration of %s:\n%w", bv.Label, err)
 	}
-	headCfg, err := config.Load(hv.FS, e.Workdir)
+	headCfg, err := config.LoadHead(hv.FS, e.Workdir, baseCfg)
 	if err != nil {
 		return Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
 	}
@@ -79,9 +79,8 @@ func (e *Engine) Check(src Source) (Report, error) {
 	r.NewExceptions = newMarkers(base.markers, head.markers, renames)
 	if introduces(baseCfg, headCfg) {
 		r.Introduced = config.Diff(baseCfg, headCfg)
-	} else {
-		r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
 	}
+	r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
 	r.Reviews = append(r.Reviews, heldReviews(baseCfg, headCfg, held)...)
 	if err := compareItems(&r, rules.all, base, head); err != nil {
 		return Report{}, err

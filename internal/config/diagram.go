@@ -42,6 +42,9 @@ const (
 	CallsKey   = "rules.deps.calls"
 )
 
+// ExtendsKey is the setting that lists the shared layers.
+const ExtendsKey = "extends"
+
 // loadDiagram reads a diagram from the version's tree: it is part of the repository, like the code
 // it describes.
 func loadDiagram(product fs.FS, path, key string) (*Diagram, error) {

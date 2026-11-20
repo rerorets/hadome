@@ -64,16 +64,16 @@ func (m *Mutate) Run(src engine.Source) (engine.Report, error) {
 	if err != nil {
 		return engine.Report{}, err
 	}
-	headCfg, err := config.Load(hv.FS, m.Workdir)
+	baseCfg, err := config.Load(bv.FS, m.Workdir)
+	if err != nil {
+		return engine.Report{}, fmt.Errorf("configuration of %s:\n%w", bv.Label, err)
+	}
+	headCfg, err := config.LoadHead(hv.FS, m.Workdir, baseCfg)
 	if err != nil {
 		return engine.Report{}, fmt.Errorf("configuration of %s:\n%w", hv.Label, err)
 	}
 	if headCfg.Mutation == nil {
 		return engine.Report{}, ErrNotConfigured
-	}
-	baseCfg, err := config.Load(bv.FS, m.Workdir)
-	if err != nil {
-		return engine.Report{}, fmt.Errorf("configuration of %s:\n%w", bv.Label, err)
 	}
 	baseFacts, headFacts, err := analyzeBoth(m.Analyzer, bv, config.ForBase(baseCfg, headCfg), hv, headCfg)
 	if err != nil {

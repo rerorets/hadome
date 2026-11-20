@@ -41,8 +41,10 @@ var Japanese = map[string]string{
 	"configuration changes %s: %s → %s":  "設定が %s を変える: %s → %s",
 	"configuration removes %s entry: %s": "設定が %s の項目を消す: %s",
 	"configuration adds to %s: %s":       "設定が %s に足す: %s",
-	"the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive": "この変更を判定するのは、この変更の中の設定である。消す、変える、足すと、検査が緩くなりうる",
-	"if the removal is intended, a person approves it; otherwise restore the entry":                                              "意図した変更なら人が認める。そうでなければ項目を元に戻す",
+	"the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive":          "この変更を判定するのは、この変更の中の設定である。消す、変える、足すと、検査が緩くなりうる",
+	"if the removal is intended, a person approves it; otherwise restore the entry":                                                       "意図した変更なら人が認める。そうでなければ項目を元に戻す",
+	"files outside the repository are read only once base's configuration extends them, so this check left out the files the change adds": "リポジトリの外のファイルは、base の設定が extends に並べてから読む。そのため、この検査は変更で足したファイルを読んでいない",
+	"a person checks the files extends names; once the change is merged, checks read them":                                                "extends に並べたファイルを人が確かめる。変更をマージしたあとの検査からは、そのファイルを読む",
 
 	// config/gate-not-run.
 	"gate %s is new in this change and was not run: %s":                                                                              "門番 %s はこの変更で足したもので、実行していない: %s",

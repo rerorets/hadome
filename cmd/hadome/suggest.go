@@ -17,6 +17,7 @@ import (
 	"github.com/rerorets/hadome/internal/adapter"
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
+	"github.com/rerorets/hadome/internal/source"
 	"github.com/rerorets/hadome/internal/suggest"
 )
 
@@ -153,11 +154,11 @@ func initCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return engine.ExitConfig
 	}
-	if _, err := os.Stat(config.FileName); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(config.FileName); !errors.Is(err, fs.ErrNotExist) {
 		fmt.Fprintf(stderr, "hadome: %s already exists; init never overwrites it\n", config.FileName)
 		return engine.ExitConfig
 	}
-	tree := os.DirFS(".")
+	tree := source.Tree(".")
 	langs, err := detectLanguages(tree)
 	if err != nil {
 		fmt.Fprintln(stderr, "hadome:", err)
@@ -168,7 +169,7 @@ func initCmd(args []string, stdout, stderr io.Writer) int {
 		detected = "none yet"
 	}
 	text := fmt.Sprintf(initTemplate, detected, strings.Join(langs, ", "), mutationComment(tree, langs))
-	if err := os.WriteFile(config.FileName, []byte(text), 0o644); err != nil {
+	if err := createNew(config.FileName, []byte(text)); err != nil {
 		fmt.Fprintln(stderr, "hadome:", err)
 		return engine.ExitConfig
 	}

@@ -7,12 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/mutation"
+	"github.com/rerorets/hadome/internal/source"
 )
 
 const usage = `usage:
@@ -46,7 +46,7 @@ func configCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return engine.ExitConfig
 	}
-	c, err := config.Load(os.DirFS("."), ".")
+	c, err := config.Load(source.Tree("."), ".")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return engine.ExitConfig
@@ -88,7 +88,7 @@ func explain(args []string, stdout, stderr io.Writer) int {
 // read about a broken configuration, so a configuration that does not load leaves it in English
 // instead of stopping it.
 func configuredLang() string {
-	c, err := config.Load(os.DirFS("."), ".")
+	c, err := config.Load(source.Tree("."), ".")
 	if err != nil {
 		return ""
 	}

@@ -19,11 +19,14 @@ func introduces(base, head config.Config) bool {
 }
 
 // loosened returns a review for every change that makes head's configuration more permissive than
-// base's. Head's configuration judges head, so loosening it is a decision for a person.
+// base's. Head's configuration judges head, so loosening it is a decision for a person. A change
+// that introduces hadome loosens nothing, except for extends: the files head adds to it are outside
+// the repository and were not read (config.LoadHead), so a person looks at them first.
 func loosened(base, head config.Config) []Finding {
 	var out []Finding
+	introducing := introduces(base, head)
 	for _, c := range config.Diff(base, head) {
-		if !c.Looser {
+		if !c.Looser || introducing && c.Key != config.ExtendsKey {
 			continue
 		}
 		msg := T("configuration changes %s: %s → %s", c.Key, c.Removed, c.Added)
@@ -33,12 +36,17 @@ func loosened(base, head config.Config) []Finding {
 		case c.Removed == "":
 			msg = T("configuration adds to %s: %s", c.Key, c.Added)
 		}
-		out = append(out, Finding{
+		f := Finding{
 			Rule: LoosenedID, File: c.File, Line: c.Line, Anchor: c.Key + "\x00" + c.Removed + "\x00" + c.Added, Review: true,
 			Message: msg,
 			Why:     T("the configuration in this change judges this change; removing, changing or adding to it can make the check more permissive"),
 			Fix:     T("if the removal is intended, a person approves it; otherwise restore the entry"),
-		})
+		}
+		if c.Key == config.ExtendsKey {
+			f.Why = T("files outside the repository are read only once base's configuration extends them, so this check left out the files the change adds")
+			f.Fix = T("a person checks the files extends names; once the change is merged, checks read them")
+		}
+		out = append(out, f)
 	}
 	return out
 }
