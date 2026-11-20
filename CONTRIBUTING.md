@@ -66,6 +66,12 @@ git config core.hooksPath .githooks
 ## Review
 
 - The maintainer reviews and merges pull requests.
+- The maintainer checks:
+  - that the change follows the design documents and [the dependency diagram](docs/design/dependencies.md)
+  - that behaviour that changes has tests, and that the tests follow [how tests are written](docs/model.md)
+  - that hadome's rules hold, for example: no network access, exception markers carry reasons, markers written in users' code do not contain hadome's name
+  - that values from outside (configuration, file names, branch names) are not used unchecked as command arguments or file paths
+  - that the Japanese and English documents agree, and that what users will see change is written in the pull request
 - Only a pull request whose four CI checks pass (the tests on three operating systems and the packaging check) can be merged. A check that did not run counts as passed.
 - There is one maintainer, so an answer may take a few days.
 
