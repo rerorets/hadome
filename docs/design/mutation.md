@@ -103,6 +103,8 @@ classDiagram
     +Analyzer engine.Analyzer
     +Mutator Mutator
     +Trees string
+    +Temp string
+    +GoCache string
     +Run(src engine.Source) (engine.Report, error)
   }
   class Runner {
@@ -125,6 +127,7 @@ classDiagram
 - `Mutant` is a language-neutral fact, so it lives in `facts`. That lets the adapters make mutants without depending on `internal/mutation`
 - The adapters implement `Mutator`, because only they read syntax trees. `Unmutated` lists the languages that have no way of breaking code; functions touched in them go to a person's review as untried. A mutant is a range of text and what replaces it; the adapters run no code, so their invariants (no code run, no process started) still hold
 - `Mutate.Trees` is the working directory the versions' trees are copied into (see "The working directory" below). The `hadome mutate` command works it out with `TreesFor` and passes it; tests pass a temporary directory
+- `Mutate.Temp` and `Mutate.GoCache` are the temporary directory and the build cache the test commands are given (see "Temporary files" and "The Go build cache" below). The `hadome mutate` command works them out with `TempFor` and `GoCacheFor` and passes them. Empty, the test commands get hadome's own. Tests leave them empty or pass a temporary directory
 - `Runner` lives in this package. It copies the version's tree into the working directory, applies a mutant, runs the test command and restores the file. Like the gates (`internal/gate`), starting processes happens outside the engine
 - The report's shape, exception markers and exit codes are the engine's, used as they are. After trying the mutants, `Mutate` hands the results to `engine.Check` as one rule (`mutation/survived`) that returns them per version. The rules of "How to compare" below are exactly the engine's comparison of findings
 - `hadome check` does not know `mutation/survived`, so it would report that rule's exception markers as naming an unknown rule or as unused. `engine.Engine.Elsewhere` names the rules another command reports: `check` leaves `mutation/survived` to `mutate`, and `mutate` leaves every other rule to `check`. Markers of those rules are left alone
@@ -535,6 +538,26 @@ So hadome gives the test command a temporary directory of its own, and empties i
 - **Someone else's.** If the path already exists and is a symbolic link, or a directory not owned by the user running hadome, hadome stops with exit code `2`. This is so as not to write into something another user prepared, in a temporary directory shared with other users such as `/tmp` on Linux. It is made with permissions `0700`
 - **When it cannot be emptied.** The result and the exit code do not change, and one line on standard error says so. What is left is removed again before the next run
 
+### The Go build cache
+
+`go test` writes what it builds to the Go build cache (`GOCACHE`, by default `<cache directory>/go-build`). Every mutant tried adds the results for the broken package and for the packages that import it. Go itself removes only what has gone unused for five days, so days of runs grow it to hundreds of GB. Mixed into the cache the user works with every day, hadome's share cannot even be told apart.
+
+So hadome gives the test commands a build cache of their own, and removes it when the run ends.
+
+| What | Rule |
+|---|---|
+| Path | `<cache directory>/hadome/mutate/<repository mark>/gocache`, inside the working directory above |
+| How it is given | `GOCACHE` in the test command's environment is set to this path, whatever the language. Commands other than Go's do not read it |
+| When it is removed | At the start of a run (after taking the lock) and at its end (before releasing the lock), whether the run gives a result or stops with exit code `2` |
+
+- **Why not during the run.** Later mutants reuse what the first build made. Everything but the broken package and the packages that import it comes from the cache
+- **Why at the end of the run.** Kept, it would let the next run's first build and stage 3, every test, hit the cache. That saves a few minutes a run, though; a cache with no bound on its size costs more
+- **Why at the start too.** To remove what an interrupt or `SIGKILL` kept the end of a run from removing
+- **On an interrupt.** It is not removed. On an interrupt (Ctrl-C and the like), hadome ends the tree, empties the temporary directory and ends at once. The cache can reach a few GB, and the user is not kept waiting while it is removed. The next run removes what is left at its start
+- **A `GOCACHE` the user set.** hadome overrides a `GOCACHE` in its own environment, so that mutants' builds do not swell the user's cache (one CI saves and hands to the next job, say). A `GOCACHE` the test command sets itself (`env GOCACHE=… go test`) wins
+- **Downloaded modules (`GOMODCACHE`).** Left alone: trying mutants does not grow it, and removing it would mean downloading again
+- **When it cannot be removed.** Neither the result nor the exit code changes; one line on standard error says so. The next run tries again at its start
+
 ## Invariants
 
 1. When the tests fail on a tree with nothing broken, `hadome mutate` gives no result and returns exit code `2`
@@ -560,6 +583,7 @@ So hadome gives the test command a temporary directory of its own, and empties i
 18. In a version with two or more Go modules, a mutant is never reported as a survivor without the tests of its file's module having run
 19. With `{module}`, stage 3 runs the tests in every module holding a `_test.go` file
 20. After a run of the test command, the temporary directory hadome gave it is empty, whether the run ended at the time limit, by an interrupt or by the command exiting. After an interrupt on Windows, though, it is emptied before the next run. When it could not be emptied, hadome says so
+21. Once `hadome mutate` has ended, the build cache it gave the test commands is gone, whether it gave a result or stopped with exit code `2`. After an interrupt, though, it is removed at the start of the next run. When it could not be removed, hadome says so
 
 ## Deliberately left out
 

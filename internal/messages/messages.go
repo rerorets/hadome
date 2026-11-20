@@ -234,6 +234,7 @@ var Japanese = map[string]string{
 	"mutate %d/%d %s:%d %s, %s: %s": "変異 %d/%d %s:%d %s、%s: %s",
 	"mutate: %s fails with nothing broken, so it judges no mutant; they go to the next command":                           "変異: 何も壊さなくても %s が落ちるので、このコマンドでは変異を判定しない。次のコマンドに回す",
 	"mutate: %s, the test command's temporary directory, could not be emptied; it is tried again before the next run: %v": "変異: テストのコマンドの一時ディレクトリ %s を空にできなかった。次の実行の前にもう一度空にする: %v",
+	"mutate: %s, the test commands' Go build cache, could not be removed; it is tried again when the next run starts: %v": "変異: テストのコマンドの Go のビルドキャッシュ %s を消せなかった。次の実行のはじめにもう一度消す: %v",
 	"caught":                  "テストが気づいた",
 	"survived":                "どのテストも気づかない",
 	"not built":               "ビルドに入らない",

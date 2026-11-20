@@ -166,7 +166,7 @@ func TestAnInterruptedRunEndsItsTreeThenHadome(t *testing.T) {
 			}
 			cancel()
 		}}
-		if _, err := runTree(ctx, t.TempDir(), "", []string{exe, StandInTree, "hang", w.arg, "-"}, out); err != nil {
+		if _, err := runTree(ctx, t.TempDir(), scratch{}, []string{exe, StandInTree, "hang", w.arg, "-"}, out); err != nil {
 			t.Fatal(err)
 		}
 		if group != nil {
@@ -271,7 +271,7 @@ func StandInAfterRunRun() int {
 		return 2
 	}
 	defer os.RemoveAll(dir)
-	if passed, err := runTree(context.Background(), dir, "", []string{exe, "-test.run=^$"}, io.Discard); !passed || err != nil {
+	if passed, err := runTree(context.Background(), dir, scratch{}, []string{exe, "-test.run=^$"}, io.Discard); !passed || err != nil {
 		fmt.Println("the command did not pass:", err)
 		return 2
 	}

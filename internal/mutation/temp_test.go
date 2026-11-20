@@ -38,6 +38,28 @@ func TestARepositoryGetsTheSameTemporaryDirectoryEveryRun(t *testing.T) {
 	}
 }
 
+// viewpoint: behaviour
+// target: mutation.GoCacheFor
+// Design "The Go build cache": a repository's test commands get a build cache inside its working
+// directory, so removing that directory removes the cache, and another repository gets another one.
+func TestARepositorysBuildCacheIsInItsWorkingDirectory(t *testing.T) {
+	t.Parallel()
+	a, err := TreesFor(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := TreesFor(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := GoCacheFor(a), filepath.Join(a, "gocache"); got != want {
+		t.Errorf("want %s, got %s", want, got)
+	}
+	if GoCacheFor(a) == GoCacheFor(b) {
+		t.Errorf("want another build cache for another repository, got %s for both", GoCacheFor(a))
+	}
+}
+
 // viewpoint: invariant
 // target: mutation.Runner.run
 // Invariant 20: a test command is given the temporary directory, finds it empty even when an
