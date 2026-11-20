@@ -1,7 +1,8 @@
 # Workflow actions are pinned to commit SHAs so a moved tag cannot change
 # what runs with the release secrets. Dependabot raises the pins in one
 # weekly PR, which runs CI like any other. Go modules are kept at their
-# latest versions the same way, in a PR of their own.
+# latest versions the same way, in a PR of their own, and so is the npm the
+# release workflow stages packages with (packaging/npm/tool).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -18,3 +19,7 @@ updates:
     groups:
       modules:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /packaging/npm/tool
+    schedule:
+      interval: weekly

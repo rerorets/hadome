@@ -89,7 +89,7 @@ The npm job does not publish packages; it only stages them (`npm stage publish`)
 | Allow npm dist-tag | off |
 
 - A trusted publisher that is not used within 48 hours of being created expires. npmjs.com shows the deadline in the package's settings. An expired one is deleted and created again. So trusted publishers are created and recreated on the day of the tag.
-- The job runs [packaging/npm/stage.sh](../../packaging/npm/stage.sh). Staging needs npm 11.15.0 or later and Node 22.14.0 or later, so the job installs a pinned npm.
+- The job runs [packaging/npm/stage.sh](../../packaging/npm/stage.sh). Staging needs npm 11.15.0 or later and Node 22.14.0 or later, so the job installs npm with `npm ci` from the `package-lock.json` in [packaging/npm/tool](../../packaging/npm/tool). That pins the contents by hash as well as the version, so a replaced tarball under the same version is never installed. Dependabot opens the PRs that raise it.
 - A trial version (`1.2.0-rc.1`) is staged with the dist-tag `next`, so it never becomes what `npm install hadome` gets.
 - npm attaches provenance by itself to what trusted publishing publishes.
 

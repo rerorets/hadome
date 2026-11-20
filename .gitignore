@@ -7,3 +7,4 @@
 .vscode/
 /hadome
 __pycache__/
+/packaging/npm/tool/node_modules/
