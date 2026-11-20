@@ -15,6 +15,18 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.2 - 2026-11-20
+
+### Fewer false findings and misses
+
+- hadome crashed on a Java or Kotlin test file holding a test method whose body the grammar cannot read, such as a file being written. Such a method is now passed over without reading inside it.
+
+### Other
+
+- `hadome mutate` gives the test commands a Go build cache of their own (`GOCACHE`), and removes it at the start and end of every run. Mutants' builds used to pile up in the user's everyday cache, reaching hundreds of GB over days of runs. Each run's first build and its every-test stage no longer hit a warm cache, so a run takes a few minutes longer. The rules are in "The Go build cache" in [docs/design/mutation.md](docs/design/mutation.md).
+- GitHub releases carry SLSA build provenance for the archives and `SHA256SUMS`, attached as `hadome_<version>.intoto.jsonl`. `gh attestation verify <file> --repo rerorets/hadome` checks that this repository's workflow built a file.
+- The Maven plugin builds against `maven-plugin-api` 3.9.16. The `plexus-utils` 3.5.1 that 3.9.9 brings in has a directory traversal vulnerability (GHSA-6fmv-xxpf-w3cw). The plugin runs on the `plexus-utils` of the user's own Maven, so users were not affected before either.
+
 ## 0.10.1 - 2026-11-19
 
 ### Other
