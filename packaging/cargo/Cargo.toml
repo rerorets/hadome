@@ -8,7 +8,7 @@ description = "Reports the violations a change adds and the tests it weakens."
 license = "MIT"
 repository = "https://github.com/rerorets/hadome"
 readme = "README.md"
-keywords = ["testing", "lint", "ci", "regression"]
+keywords = ["testing", "lint", "ci", "regression", "ai-agents"]
 categories = ["development-tools", "development-tools::testing"]
 
 [[bin]]
