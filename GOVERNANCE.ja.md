@@ -26,3 +26,4 @@ hadomeを誰が、どう決めて進めるかを書きます。
 - [行動規範](CODE_OF_CONDUCT.ja.md)
 - [セキュリティ](SECURITY.ja.md)と[セキュリティの保証](docs/assurance-case.ja.md)
 - [リリース](docs/maintaining/releasing.ja.md)
+- [ロードマップ](ROADMAP.ja.md)
