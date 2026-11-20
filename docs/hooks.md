@@ -77,6 +77,7 @@ Add this to `.claude/settings.json`. A Stop hook needs no `matcher`.
 
 - When the hook exits `2`, Claude receives its standard error as the reason and keeps working.
 - After Stop hooks have stopped Claude eight times in a row, Claude Code lets the next stop through. The count starts again each time Claude calls a tool.
+- The environment variable `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` changes those eight times. If Claude finishes before it has fixed every regression, raise it under `env` in `.claude/settings.json` ([environment variables](https://code.claude.com/docs/en/env-vars)).
 - When a person interrupts (Ctrl+C), the Stop hook does not run.
 
 ## Codex
