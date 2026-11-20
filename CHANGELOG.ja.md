@@ -15,6 +15,18 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
+## 0.10.2 - 2026-11-20
+
+### 誤検知・漏れの修正
+
+- Java と Kotlin のテストのファイルに、本体を読み取れないテストのメソッド（書きかけのファイルなど）があると、hadome が落ちていました。いまはそうしたメソッドの中を読まずに先へ進みます。
+
+### その他
+
+- `hadome mutate` は、テストのコマンドに専用の Go のビルドキャッシュ（`GOCACHE`）を渡し、実行のはじめと終わりに消します。これまではミュータントのビルドが利用者のふだんのキャッシュにたまり、何日も回すと何百 GB にもなりました。実行ごとに最初のビルドと全部のテストがキャッシュに当たらなくなる分、1回の実行は数分ほど長くなります。決まりは [docs/design/mutation.ja.md](docs/design/mutation.ja.md) の「Go のビルドキャッシュ」にあります。
+- GitHub のリリースに、アーカイブと `SHA256SUMS` のビルドの来歴（SLSA provenance）を `hadome_<版>.intoto.jsonl` として付けます。`gh attestation verify <ファイル> --repo rerorets/hadome` で、このリポジトリのワークフローがビルドしたものかを確かめられます。
+- Maven のプラグインを `maven-plugin-api` 3.9.16 でビルドします。3.9.9 が引き込む `plexus-utils` 3.5.1 には、ディレクトリトラバーサルの脆弱性（GHSA-6fmv-xxpf-w3cw）があります。プラグインは利用者の Maven の `plexus-utils` で動くので、これまでも利用者には影響がありませんでした。
+
 ## 0.10.1 - 2026-11-19
 
 ### その他
