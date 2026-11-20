@@ -13,7 +13,7 @@ In issues, pull requests, discussions and every other exchange in this project, 
 | People who build hadome | This document, [the design documents](docs/design), [the dependency diagram](docs/design/dependencies.md) |
 | Maintainers | [Releasing](docs/maintaining/releasing.md), [SQL grammars](docs/maintaining/sql-grammars.md), [the JVM plugins](packaging/jvm/README.md) |
 | People who found a vulnerability | [Security](SECURITY.md), [the security assurance case](docs/assurance-case.md) |
-| People who want to know how the project is run | [Governance](GOVERNANCE.md), [Code of Conduct](CODE_OF_CONDUCT.md) |
+| People who want to know how the project is run | [Governance](GOVERNANCE.md), [Roadmap](ROADMAP.md), [Code of Conduct](CODE_OF_CONDUCT.md) |
 
 ## Running it locally
 

@@ -26,3 +26,4 @@ Who runs hadome, and how decisions are made.
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security](SECURITY.md) and [the security assurance case](docs/assurance-case.md)
 - [Releasing](docs/maintaining/releasing.md)
+- [Roadmap](ROADMAP.md)

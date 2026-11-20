@@ -15,7 +15,7 @@ Issue・プルリクエスト・Discussionsなど、このプロジェクトの�
 | hadomeを作る人 | この文書、[設計書](docs/design)、[依存の図](docs/design/dependencies.ja.md) |
 | メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[SQL の文法](docs/maintaining/sql-grammars.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
 | 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md)、[セキュリティの保証](docs/assurance-case.ja.md) |
-| 運営を知りたい人 | [運営](GOVERNANCE.ja.md)、[行動規範](CODE_OF_CONDUCT.ja.md) |
+| 運営を知りたい人 | [運営](GOVERNANCE.ja.md)、[ロードマップ](ROADMAP.ja.md)、[行動規範](CODE_OF_CONDUCT.ja.md) |
 
 ## 手元で動かす
 
