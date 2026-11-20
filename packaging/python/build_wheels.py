@@ -57,6 +57,7 @@ def build(version, binary, exe, tag, out):
             "Metadata-Version: 2.1\nName: hadome\n"
             f"Version: {version}\nSummary: Reports the violations a change adds and the tests it weakens.\n"
             "Home-page: https://github.com/rerorets/hadome\nLicense: MIT\nRequires-Python: >=3.8\n"
+            "Keywords: testing,regression-testing,mutation-testing,static-analysis,linter,ci,code-quality,ratchet,ai-agents,ai-coding,claude-code,codex\n"
         ).encode(),
         **{f"{dist}.dist-info/licenses/{name}": open(os.path.join(ROOT, name), "rb").read() for name in LEGAL},
         f"{dist}.dist-info/WHEEL": (

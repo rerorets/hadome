@@ -28,7 +28,7 @@ gradlePlugin {
             implementationClass = "io.github.rerorets.hadome.gradle.HadomePlugin"
             displayName = "hadome"
             description = "Reports the violations a change adds and the tests it weakens."
-            tags = listOf("testing", "verification", "regression", "ci")
+            tags = listOf("testing", "verification", "regression", "ci", "mutation-testing", "static-analysis", "ai-agents")
         }
     }
 }

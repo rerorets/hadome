@@ -61,6 +61,7 @@ copyLegal(main);
 writeFileSync(join(main, "package.json"), JSON.stringify({
   name: "hadome", ...common,
   description: "Reports the violations a change adds and the tests it weakens.",
+  keywords: ["testing", "regression-testing", "mutation-testing", "static-analysis", "linter", "ci", "code-quality", "ratchet", "ai-agents", "ai-coding", "claude-code", "codex"],
   bin: { hadome: "bin/hadome.js" }, files: ["bin", "README.md", ...legal],
   optionalDependencies: optional,
   engines: { node: ">=18" },
