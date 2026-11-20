@@ -36,6 +36,7 @@ A Go project that also has TypeScript or Python files gets all eight where a C c
 ## Releases
 
 - One release produces binaries for each supported operating system and architecture (Linux, macOS and Windows; x86-64 and ARM64), each built natively with cgo on GitHub Actions, then publishes them to every ecosystem above
+- Hardening: the parts written in C (the tree-sitter grammars) are compiled with `-fstack-protector-strong` and `-D_FORTIFY_SOURCE=2` on Linux and macOS. The Linux binaries are linked statically, so nothing is linked at run time, and with RELRO. Go builds the Windows and macOS binaries as PIE by default, so ASLR applies to them
 - A release starts from a tag `vX.Y.Z`. The version is stamped into the binary (`hadome version`) and into every package
 - Installed with `go get -tool`, hadome is built from source on the user's machine, without the version a release build stamps. `hadome version` then prints the module version Go embeds in the binary (`1.2.0` for `v1.2.0`)
 - Every binary is published with a checksum in `SHA256SUMS`. Archives also get a minisign signature (`.sig`), because a signature is all `cargo binstall` can check. The archives and `SHA256SUMS` also get build provenance (SLSA), which says which workflow run built them from which commit; it is stored with the repository and attached to the release as `hadome_<version>.intoto.jsonl`, and users can check it with `gh attestation verify <file> --repo rerorets/hadome`. Installers that download binaries verify a checksum or a signature before running anything

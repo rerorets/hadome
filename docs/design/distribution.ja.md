@@ -47,6 +47,7 @@ TypeScript や Python のファイルも持つ Go のプロジェクトは、C �
 ## リリース
 
 - **作るもの**: 1回のリリースで、対応するすべての OS とアーキテクチャのバイナリを作ります。OS は Linux、macOS、Windows、アーキテクチャは x86-64 と ARM64 です。それぞれ GitHub Actions 上で cgo ありでネイティブにビルドし、上のすべてのエコシステムに公開します。
+- **強化**: C で書かれた部分（tree-sitter の文法）は、Linux と macOS で `-fstack-protector-strong` と `-D_FORTIFY_SOURCE=2` を付けてコンパイルします。Linux のバイナリは静的にリンクして実行時の動的リンクを無くし、RELRO を有効にします。Windows と macOS のバイナリは、Go が既定で PIE にするので、ASLR が効きます。
 - **始まり**: リリースはタグ `vX.Y.Z` から始まります。バージョンは、バイナリ（`hadome version`）とすべてのパッケージに刻みます。
 - **`go get -tool` で入れたとき**: 利用者の手元でソースからビルドされるので、リリースのビルドで刻むバージョンは入りません。このときの `hadome version` は、Go がバイナリに埋め込むモジュールのバージョンを出します。例: `v1.2.0` なら `1.2.0`
 - **検証**:
