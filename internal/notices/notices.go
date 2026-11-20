@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package notices writes and checks THIRD_PARTY_NOTICES, the file that carries the licenses of every
 // module linked into hadome next to the binary in every release archive and package. It knows
 // nothing of how the module list is found: the caller lists the modules and reads their license files.

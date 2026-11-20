@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package walk lists the files of a version that hadome reads, skipping what is never the
 // product's own code.
 package walk

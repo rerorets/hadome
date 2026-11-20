@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package config reads, validates and compares hadome's configuration.
 //
 // One table, the specification, describes every key. The JSON Schema, `hadome explain` and the

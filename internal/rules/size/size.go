@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package size holds the size/ rules: upper limits on files, functions and interfaces of product code.
 //
 // Design: docs/design/rules-size.md

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package gate runs product-specific gates: external commands declared in configuration, each
 // turned into a rule that the engine runs and compares like a built-in one.
 //

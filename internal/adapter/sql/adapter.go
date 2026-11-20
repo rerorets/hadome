@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package sql is the SQL adapter: database objects defined in .sql files become symbols, and the
 // SQL strings of tests in other languages become calls to them.
 //

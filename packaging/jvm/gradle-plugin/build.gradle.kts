@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // The Gradle plugin io.github.rerorets.hadome. The installer's sources are compiled in, so the
 // plugin has no dependencies. Build a release as ../README.md says.
 plugins {

@@ -106,3 +106,13 @@ git config core.hooksPath .githooks
 ## ライセンス
 
 hadomeは[MIT](LICENSE)ライセンスです。送ってもらった変更も同じライセンスで公開します。
+
+ソースのファイルの先頭には次の2行を書きます。CIが確かめます。
+
+```go
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+```
+
+- シェル、Python、ワークフローのファイルでは、`//`の代わりに`#`を使います。シェバン（`#!`）があるファイルでは、その次の行に書きます。
+- `testdata`のファイルと、生成したSQLの文法（`internal/adapter/sql/grammar/`の下の各方言）には書きません。文法は元のリポジトリのライセンスに従います。

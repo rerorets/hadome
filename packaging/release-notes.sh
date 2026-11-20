@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Prints the body of one version's section of a changelog: the lines after "## <version>" up to the
 # next "## " heading. Exits non-zero when the section is missing or empty, so a release never goes out
 # without its notes.

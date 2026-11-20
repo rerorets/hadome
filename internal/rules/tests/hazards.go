@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package tests holds the tests/ rules: how tests are written, and what they guard.
 //
 // Design: docs/design/rules-tests.md

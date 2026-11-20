@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package facts holds the language-neutral facts that language adapters extract from one version
 // of a repository, and that rules consume. Nothing here knows any language.
 package facts

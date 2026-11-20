@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 """Writes the Homebrew formula of one release to standard output.
 
     python3 formula.py <version> <SHA256SUMS>

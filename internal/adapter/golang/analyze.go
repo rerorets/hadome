@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package golang is the Go language adapter. It reads Go with the standard library's parser,
 // so it needs no C compiler and identifies facts exactly.
 //

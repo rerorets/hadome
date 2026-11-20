@@ -102,3 +102,13 @@ Versions are `vX.Y.Z` and follow [Semantic Versioning](https://semver.org/).
 ## License
 
 hadome is under the [MIT](LICENSE) license. Changes you send are published under the same license.
+
+Every source file starts with these two lines. CI checks them.
+
+```go
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+```
+
+- Shell, Python and workflow files use `#` instead of `//`. In a file with a shebang (`#!`), they go on the line after it.
+- Files in `testdata` and the generated SQL grammars (each dialect under `internal/adapter/sql/grammar/`) do not carry them. The grammars follow the licenses of the repositories they come from.

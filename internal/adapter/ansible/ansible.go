@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package ansible is the Ansible language adapter. It reads YAML in pure Go, so it reads in builds
 // without cgo too. Ansible has no functions or classes: a role is a unit, the variables of its
 // defaults are its symbols, and each Molecule scenario's verify playbook is a test.

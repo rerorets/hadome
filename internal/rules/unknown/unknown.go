@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package unknown holds the rules about what hadome could not read. Nothing uncertain may block, and
 // nothing uncertain may be hidden, so these findings go to a person (exit code 3).
 //

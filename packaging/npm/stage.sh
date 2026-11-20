@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Stages one release's npm packages for a maintainer to approve with 2FA.
 #   stage.sh <version> <dir that build.mjs wrote>
 #

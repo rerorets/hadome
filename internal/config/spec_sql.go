@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 package config
 
 // SQLSinkLanguages are the languages whose tests hand their strings to the SQL adapter.

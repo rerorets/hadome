@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package comments holds the comments/ rules: TODOs say when, public code says what it is, and
 // references to documents lead somewhere.
 //

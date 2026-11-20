@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package reuse remembers the results of adapter stages within one analysis call, so that a stage
 // called on head returns what it computed on base whenever its input is the same in both.
 //

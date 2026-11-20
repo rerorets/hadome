@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Builds the npm packages of one release from its binaries.
 //
 //   node build.mjs <version> <binaries dir> <out dir>

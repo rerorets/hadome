@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package engine compares two versions of a repository rule by rule and keeps only what got worse.
 // It knows no language and no rule's logic: adapters provide facts, rules turn facts into findings
 // or guarded items, and the engine matches them across versions.

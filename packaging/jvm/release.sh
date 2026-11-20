@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Writes the version and checksums of a release where both JVM plugins read them.
 #   release.sh <version> <SHA256SUMS>
 set -eu

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # A tag vX.Y.Z builds hadome natively on six platforms with cgo, publishes the archives and
 # SHA256SUMS as a GitHub release whose notes are the version's section of CHANGELOG.md, then
 # publishes to every ecosystem whose repository variable PUBLISH_<ECOSYSTEM> is "true"

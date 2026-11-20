@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Builds every package from a pretend release of this machine's Linux binary, and uses each one:
 # what a user would run after installing it must print the version and pass exit codes through.
 #   smoke.sh <version>          SMOKE_SKIP_JVM=1 leaves out Gradle and Maven (they need their registries)

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
 // Package treesitter reads TypeScript, Python, Rust, Java and Kotlin with tree-sitter. Building it
 // needs cgo; without cgo, the languages' files are listed as unread instead.
 //

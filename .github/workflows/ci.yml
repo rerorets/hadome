@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 rerorets
+
 # Every push and pull request: tests in both builds, the rules' own self-tests, the readers of every
 # SQL dialect, the packages, and hadome checking itself against the base branch. A pull request runs
 # only what the files it changes can break; main runs everything.
@@ -86,6 +89,12 @@ jobs:
         run: |
           unformatted=$(gofmt -l cmd internal)
           [ -z "$unformatted" ] || { echo "::error::not formatted with gofmt:"; echo "$unformatted"; exit 1; }
+      - name: Check that every source file names its license
+        if: env.CODE == 'true' && runner.os == 'Linux'
+        run: |
+          missing=$(git ls-files '*.go' '*.java' '*.kts' '*.rs' '*.js' '*.mjs' '*.sh' '*.py' '.github/workflows/*.yml' .githooks/pre-commit |
+            grep -v -E '(^|/)testdata/|^internal/adapter/sql/grammar/[a-z]+/' | xargs grep -L 'SPDX-License-Identifier: MIT' || true)
+          [ -z "$missing" ] || { echo "::error::no SPDX-License-Identifier line:"; echo "$missing"; exit 1; }
       - name: Test with cgo (all eight languages)
         if: env.CODE == 'true'
         run: go test ./...
