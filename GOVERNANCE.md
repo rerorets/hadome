@@ -21,6 +21,20 @@ Who runs hadome, and how decisions are made.
 - Permissions are handed over in this order: review, merge, release.
 - Once there are two or more maintainers, this document lists their names and what each looks after.
 
+## Continuity
+
+If the maintainer can no longer continue, [@nagiurrrr](https://github.com/nagiurrrr) takes over. So that issues can be handled, pull requests merged and versions released within a week, these permissions have already been handed over:
+
+| What | Permission held |
+|---|---|
+| Opening and closing issues, merging pull requests | Write access to the repository |
+| Tagging a release | Creating `v*` tags (the tag ruleset allows the write role) |
+| Approving staged npm releases | Owner of the seven packages `hadome` and `hadome-<os>-<arch>` |
+| Taking over the repository | Successor of the maintainer's GitHub account |
+
+- The release workflow publishes with the credentials kept in the `release` and `pypi` environments. Pushing a tag publishes to every registry other than npm without approval.
+- The credentials' tokens were made with the maintainer's accounts. To keep publishing after they expire, the successor has to be added as an owner on each service, or the namespace `io.github.rerorets` (Maven Central and the Gradle Plugin Portal) has to be moved.
+
 ## Related documents
 
 - [Code of Conduct](CODE_OF_CONDUCT.md)
