@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"unicode/utf8"
 
 	"github.com/rerorets/hadome/internal/config"
 )
@@ -79,55 +81,75 @@ var (
 )
 
 // WriteText writes the report for people, with the findings' wording and the summary in lang.
+// Every value that is not hadome's own wording goes through plain.
 func WriteText(w io.Writer, r Report, lang string) {
 	for _, f := range r.Regressions {
-		fmt.Fprintf(w, "✗ %-28s %s\n  %s\n  why: %s\n  fix: %s\n",
-			f.Rule, f.Message.In(lang), location(f.File, f.Line), f.Why.In(lang), f.Fix.In(lang))
+		fmt.Fprintf(w, "✗ %-28s %s\n  %s\n  why: %s\n  fix: %s\n", plain(f.Rule), plain(f.Message.In(lang)),
+			location(f.File, f.Line), plain(f.Why.In(lang)), plain(f.Fix.In(lang)))
 	}
 	for _, f := range r.Reviews {
-		fmt.Fprintf(w, "? %-28s %s\n  %s\n  why: %s\n", f.Rule, f.Message.In(lang), location(f.File, f.Line), f.Why.In(lang))
+		fmt.Fprintf(w, "? %-28s %s\n  %s\n  why: %s\n", plain(f.Rule), plain(f.Message.In(lang)),
+			location(f.File, f.Line), plain(f.Why.In(lang)))
 	}
 	for _, m := range r.NewExceptions {
-		fmt.Fprintf(w, "? %-28s new exception: %s\n  %s:%d\n", m.Rule, m.Reason, m.File, m.Line)
+		fmt.Fprintf(w, "? %-28s new exception: %s\n  %s:%d\n", plain(m.Rule), plain(m.Reason), plain(m.File), m.Line)
 	}
 	if len(r.Candidates) > 0 {
 		fmt.Fprintln(w, candidatesHeading.In(lang))
 		for _, c := range r.Candidates {
-			fmt.Fprintf(w, "  %s  %s — %s\n", c.Key(), location(c.File, c.Line), c.Why)
+			fmt.Fprintf(w, "  %s  %s — %s\n", plain(c.Key()), location(c.File, c.Line), plain(c.Why))
 		}
 	}
 	if len(r.Unfollowed) > 0 {
 		fmt.Fprintln(w, unfollowedHeading.In(lang))
 		for _, u := range r.Unfollowed {
-			fmt.Fprintf(w, "  %s: %d → %d\n", u.Unit, u.Base, u.Head)
+			fmt.Fprintf(w, "  %s: %d → %d\n", plain(u.Unit), u.Base, u.Head)
 		}
 	}
 	if len(r.Introduced) > 0 {
 		fmt.Fprintln(w, introducedHeading.In(lang))
 		for _, c := range r.Introduced {
-			fmt.Fprintf(w, "  %s  %s  %s\n", c.Key, location(c.File, c.Line), changed(c))
+			fmt.Fprintf(w, "  %s  %s  %s\n", plain(c.Key), location(c.File, c.Line), changed(c))
 		}
 	}
 	fmt.Fprintln(w, summary(r).In(lang))
+}
+
+// plain is a value as the text output writes it. A value with a character that is not printable (a
+// control character such as a newline or ESC, a line separator, a bidirectional override) or with
+// bytes that are not UTF-8 is written quoted and escaped like a Go string literal; any other value
+// is written as it is. File names, exception reasons and gates' messages come from the repository:
+// a newline in one would start a line of its own, which a CI runner can read as a command (GitHub
+// Actions runs a line that starts with "::"), and an escape would reach the terminal.
+func plain(s string) string {
+	if !utf8.ValidString(s) {
+		return strconv.Quote(s)
+	}
+	for _, r := range s {
+		if !strconv.IsPrint(r) {
+			return strconv.Quote(s)
+		}
+	}
+	return s
 }
 
 // changed is a change's values: "removed → added", or only the side it has.
 func changed(c config.Change) string {
 	switch {
 	case c.Removed == "":
-		return c.Added
+		return plain(c.Added)
 	case c.Added == "":
-		return "removed " + c.Removed
+		return "removed " + plain(c.Removed)
 	}
-	return c.Removed + " → " + c.Added
+	return plain(c.Removed) + " → " + plain(c.Added)
 }
 
 // location is "file:line", or just the file for findings about a whole file, such as configuration.
 func location(file string, line int) string {
 	if line == 0 {
-		return file
+		return plain(file)
 	}
-	return fmt.Sprintf("%s:%d", file, line)
+	return fmt.Sprintf("%s:%d", plain(file), line)
 }
 
 func summary(r Report) Text {

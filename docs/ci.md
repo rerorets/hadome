@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0 # hadome reads the base branch from git
       - uses: actions/setup-go@v6
         with:
@@ -49,8 +50,9 @@ jobs:
           if [ "$code" -ne 3 ]; then exit 0; fi
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+            def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+            (.reviews[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\("new exception for " + .rule | prop)::\(("reason: " + .reason) | esc)")
           ' "$report"
           {
             echo "<!-- hadome:review -->"
@@ -61,10 +63,10 @@ jobs:
             echo "| Rule | Where | What | Why |"
             echo "|---|---|---|---|"
             jq -r '
-              def cell: tostring | gsub("\\|"; "\\|") | gsub("\n"; " ");
+              def cell: tostring | gsub("[\r\n]+"; " ") | gsub("(?<c>[\\\\`*_\\[\\]<>|~])"; "\\\(.c)");
               def where: if .line > 0 then "\(.file):\(.line)" else .file end;
-              (.reviews[] | "| `\(.rule)` | `\(where)` | \(.message | cell) | \(.why | cell) |"),
-              (.new_exceptions[] | "| new exception for `\(.rule)` | `\(where)` | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
+              (.reviews[] | "| \(.rule | cell) | \(where | cell) | \(.message | cell) | \(.why | cell) |"),
+              (.new_exceptions[] | "| new exception for \(.rule | cell) | \(where | cell) | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
             ' "$report"
           } > "$RUNNER_TEMP/review.md"
           cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
@@ -91,7 +93,9 @@ jobs:
           fi
       - name: Fail on a regression or a check that could not run
         if: steps.check.outputs.code != '0' && steps.check.outputs.code != '3'
-        run: exit ${{ steps.check.outputs.code }}
+        env:
+          CODE: ${{ steps.check.outputs.code }}
+        run: exit "$CODE"
 ```
 
 ## Trying mutations too
@@ -106,6 +110,7 @@ Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apar
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@v6 # and whatever else the test command needs
         with:
@@ -119,9 +124,10 @@ Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apar
           go tool hadome mutate --base "$BASE" --format json > "$report" || code=$?
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.regressions[] | "::error file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .fix) | esc)"),
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+            def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+            (.regressions[] | "::error file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .fix) | esc)"),
+            (.reviews[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\("new exception for " + .rule | prop)::\(("reason: " + .reason) | esc)")
           ' "$report" 2>/dev/null || true
           case "$code" in 0|3) exit 0 ;; *) exit "$code" ;; esac
 ```
@@ -139,6 +145,11 @@ Once `.hadome.yml` has `mutation`, run `hadome mutate` as a job of its own, apar
 - The comment needs only the job's `pull-requests: write` permission: no label and no repository setting
 - A line warning points at where the item is (the line in `.hadome.yml`, the arrow in the dependency diagram, the exception marker). When that line is in the pull request's diff, it shows on that line in Files changed
 - hadome itself never talks to GitHub. Writing the comment is a step of the CI
+- File names, rules, messages and exception reasons can be written by whoever sends the change, so they are escaped and cannot leave their warning or table cell
+  - Line warnings: `%`, CR and LF are escaped. In the values of `file=` and `title=`, the `:` and `,` that separate them are escaped too
+  - Table cells: newlines become spaces, and the characters Markdown reads (`` ` ``, `|`, `*`, `<` and the like) get a `\` before them
+- The checkouts set `persist-credentials: false`, so no token is left in the working tree. The jobs run the pull request's code but never push
+- `steps.check.outputs.code` is passed through `env`: an expression written straight into a script becomes shell code as it is
 
 ## Pre-push hook
 

@@ -46,6 +46,7 @@ flowchart LR
 | A crafted configuration or test never finishes | The commands of `gates` and the test command of `hadome mutate` have a time limit. A test command over its limit is ended together with its whole process tree ([mutation design](design/mutation.md)) |
 | A symbolic link makes hadome write outside the repository | hadome never rewrites the repository's working tree. If the temporary directory of `hadome mutate` is a symbolic link or belongs to another user, hadome stops with exit code `2` without writing to it |
 | Information is sent out, or configuration is fetched, over the network | hadome does not talk to the network. That it never reads configuration from the network is one of hadome's own invariants (`no-network` in `.hadome.yml`) |
+| A crafted file name or exception reason that slips a forged display or command into the terminal or the CI log | The `text` output writes a value with a control character quoted and escaped. In `json`, `encoding/json` escapes it. [The CI example](ci.md) escapes the values it puts into warning commands and table cells |
 | Loosening the configuration to slip past the check | Exceptions and changes that loosen the configuration go to a person's review with exit code `3`. An exception without a reason has no effect |
 | The shipped binaries are replaced | Releases are built only by GitHub Actions, with SHA256SUMS and minisign signatures. npm, PyPI and crates.io packages are published through trusted publishing, with no tokens stored. The workflows' actions are pinned to commit SHAs |
 

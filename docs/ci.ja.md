@@ -39,6 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0 # hadome reads the base branch from git
       - uses: actions/setup-go@v6
         with:
@@ -56,8 +57,9 @@ jobs:
           if [ "$code" -ne 3 ]; then exit 0; fi
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+            def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+            (.reviews[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\("new exception for " + .rule | prop)::\(("reason: " + .reason) | esc)")
           ' "$report"
           {
             echo "<!-- hadome:review -->"
@@ -68,10 +70,10 @@ jobs:
             echo "| Rule | Where | What | Why |"
             echo "|---|---|---|---|"
             jq -r '
-              def cell: tostring | gsub("\\|"; "\\|") | gsub("\n"; " ");
+              def cell: tostring | gsub("[\r\n]+"; " ") | gsub("(?<c>[\\\\`*_\\[\\]<>|~])"; "\\\(.c)");
               def where: if .line > 0 then "\(.file):\(.line)" else .file end;
-              (.reviews[] | "| `\(.rule)` | `\(where)` | \(.message | cell) | \(.why | cell) |"),
-              (.new_exceptions[] | "| new exception for `\(.rule)` | `\(where)` | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
+              (.reviews[] | "| \(.rule | cell) | \(where | cell) | \(.message | cell) | \(.why | cell) |"),
+              (.new_exceptions[] | "| new exception for \(.rule | cell) | \(where | cell) | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
             ' "$report"
           } > "$RUNNER_TEMP/review.md"
           cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
@@ -98,7 +100,9 @@ jobs:
           fi
       - name: Fail on a regression or a check that could not run
         if: steps.check.outputs.code != '0' && steps.check.outputs.code != '3'
-        run: exit ${{ steps.check.outputs.code }}
+        env:
+          CODE: ${{ steps.check.outputs.code }}
+        run: exit "$CODE"
 ```
 
 ## ミューテーションも試す
@@ -115,6 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@v6 # and whatever else the test command needs
         with:
@@ -128,9 +133,10 @@ jobs:
           go tool hadome mutate --base "$BASE" --format json > "$report" || code=$?
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.regressions[] | "::error file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .fix) | esc)"),
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+            def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+            (.regressions[] | "::error file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .fix) | esc)"),
+            (.reviews[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\("new exception for " + .rule | prop)::\(("reason: " + .reason) | esc)")
           ' "$report" 2>/dev/null || true
           case "$code" in 0|3) exit 0 ;; *) exit "$code" ;; esac
 ```
@@ -148,6 +154,11 @@ jobs:
 - **権限**: コメントに要るのは、ジョブの `pull-requests: write` の権限だけです。ラベルやリポジトリの設定は要りません。
 - **行ごとの警告**: 確認の要るものの場所を指します。例: `.hadome.yml` の行、依存の図の矢印の行、例外の印の行。その行がプルリクエストの差分に入っていれば、Files changed のその行に出ます。
 - **通信**: hadome 自身は GitHub と通信しません。コメントを書くのは CI の手順です。
+- **値のエスケープ**: ファイル名・ルール・メッセージ・例外の理由は、変更を出した人が書けます。そのため、値が警告や表のセルから抜け出さないようにエスケープします。
+  - 行ごとの警告: `%`・CR・LF をエスケープします。`file=` と `title=` の値では、区切りになる `:`・`,` もエスケープします
+  - 表のセル: 改行を空白にし、Markdown が読む文字（`` ` ``・`|`・`*`・`<` など）の前に `\` を付けます
+- **資格情報**: チェックアウトに `persist-credentials: false` を付け、作業ツリーにトークンを残しません。ジョブはプルリクエストのコードを動かしますが、push はしないためです。
+- **終了コード**: `steps.check.outputs.code` は `env` で渡します。式をスクリプトに直接書くと、値がそのままシェルのコードになるためです。
 
 ## push の前のフック
 

@@ -184,6 +184,13 @@ classDiagram
 
 The JSON schema has its own version number and changes only by adding fields.
 
+When a value from the repository holds a character that cannot be shown, `text` writes that value quoted and escaped the way a Go string literal is. Example: `"x\n::error::y.py":3`.
+
+- **Which values**: file names, rule IDs, exception reasons, gates' messages, invariant candidates, configuration values
+- **Characters that cannot be shown**: control characters such as a newline or ESC, line separators, bidirectional overrides. Bytes that are not UTF-8 are treated the same
+- **Why**: a newline in a value starts a new line, and a CI may read that line as a command. Example: GitHub Actions runs a line that starts with `::`. ESC reaches the terminal and rewrites what it shows
+- **`json`**: `encoding/json` escapes the same characters, so it is left as it is
+
 A finding about a whole file still has a line when there is one to point at. Example: `size/file-lines` points at the first line over the limit ([rules-size.md](rules-size.md)). Only a finding with no line to point at has none. Examples: `unknown/unread`, `tests/invariant-unguarded`. Then `text` writes only the file as its place, and `json` sets `line` to `0`.
 
 | Exit code | Meaning |
@@ -368,6 +375,7 @@ The engine loads the configuration of both versions before analysing anything. A
 4. A rule that cannot run makes the check fail with exit code `2`, never pass
 5. The engine never writes to the repository and never opens a network connection
 6. Every built-in rule has at least one self-test case, and all cases pass in a release. A gate is used by `check` only when its self-test passes
+7. In the `text` output, no value from the repository starts a new line or writes a control character
 
 ## Deliberately left out
 

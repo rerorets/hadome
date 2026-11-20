@@ -74,6 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       # The workflow in the cache key keeps this cache apart from the packaging job's, which would
       # otherwise save first, without the grammars' C built for the tests.
@@ -120,6 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -146,6 +148,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -167,6 +171,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -190,6 +196,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -210,11 +217,14 @@ jobs:
           "$RUNNER_TEMP/hadome" check --base "$BASE" --format json > "$report" || code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" -ne 3 ]; then exit 0; fi
-          # A workflow command ends at a newline, so %, CR and LF in a message are escaped.
+          # A workflow command ends at a newline, so %, CR and LF in a message are escaped; in a
+          # property (file=, title=) so are : and , which end it. A table cell escapes newlines and
+          # the characters Markdown reads, so a file name or a reason cannot leave its cell.
           jq -r '
             def esc: tostring | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
-            (.reviews[] | "::warning file=\(.file),line=\([.line, 1] | max),title=\(.rule)::\((.message + " — " + .why) | esc)"),
-            (.new_exceptions[] | "::warning file=\(.file),line=\([.line, 1] | max),title=new exception for \(.rule)::\(("reason: " + .reason) | esc)")
+            def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+            (.reviews[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\(.rule | prop)::\((.message + " — " + .why) | esc)"),
+            (.new_exceptions[] | "::warning file=\(.file | prop),line=\([.line, 1] | max),title=\("new exception for " + .rule | prop)::\(("reason: " + .reason) | esc)")
           ' "$report"
           {
             echo "<!-- hadome:review -->"
@@ -225,10 +235,10 @@ jobs:
             echo "| Rule | Where | What | Why |"
             echo "|---|---|---|---|"
             jq -r '
-              def cell: tostring | gsub("\\|"; "\\|") | gsub("\n"; " ");
+              def cell: tostring | gsub("[\r\n]+"; " ") | gsub("(?<c>[\\\\`*_\\[\\]<>|~])"; "\\\(.c)");
               def where: if .line > 0 then "\(.file):\(.line)" else .file end;
-              (.reviews[] | "| `\(.rule)` | `\(where)` | \(.message | cell) | \(.why | cell) |"),
-              (.new_exceptions[] | "| new exception for `\(.rule)` | `\(where)` | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
+              (.reviews[] | "| \(.rule | cell) | \(where | cell) | \(.message | cell) | \(.why | cell) |"),
+              (.new_exceptions[] | "| new exception for \(.rule | cell) | \(where | cell) | reason: \(.reason | cell) | an exception needs a person to agree with its reason |")
             ' "$report"
           } > "$RUNNER_TEMP/review.md"
           cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
@@ -257,7 +267,9 @@ jobs:
           fi
       - name: Fail on a regression or a check that could not run
         if: steps.check.outputs.code != '0' && steps.check.outputs.code != '3'
-        run: exit ${{ steps.check.outputs.code }}
+        env:
+          CODE: ${{ steps.check.outputs.code }}
+        run: exit "$CODE"
 
   packaging:
     needs: changes
@@ -265,6 +277,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod

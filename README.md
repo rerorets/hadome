@@ -66,6 +66,8 @@ $ hadome check --base main
 
 The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
 
+A value from the repository, such as a file name or an exception's reason, that holds a control character (a newline, ESC) is written quoted and escaped the way a Go string literal is. That way a newline in a value cannot split the line and slip a command line into a CI log.
+
 ## Regression vs. cleanup
 
 When three tests disappear, their number alone cannot tell cleanup from regression. hadome works out the functions and methods each test calls (its targets), and compares the set of targets that active tests reach: the guarded scope.
