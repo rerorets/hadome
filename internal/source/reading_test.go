@@ -26,6 +26,20 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// gitIn runs git with stdin and returns its output, trimmed.
+func gitIn(t *testing.T, dir, stdin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func symlink(t *testing.T, target, link string) {
 	t.Helper()
 	if err := os.Symlink(target, link); err != nil {
@@ -51,13 +65,15 @@ func TestGitRevisionReadsEveryFileAsCommittedWhateverItsName(t *testing.T) {
 		}
 		return id
 	}
-	// The odd name goes into the index directly: not every file system can hold a newline in a
-	// name (Windows cannot), but every git tree can.
+	// The head commit is built from a tree written directly, without the working tree or the index:
+	// not every file system can hold a newline in a name (Windows cannot), and Git for Windows
+	// refuses such a path in the index, but a tree object holds any name but one with a slash.
 	odd := "b\n" + blob("decoy\n")
-	git(t, dir, "update-index", "--add", "--cacheinfo", "100644,"+blob("odd\n")+","+odd)
-	write(t, dir, "c.py", "def f():\n    return 2\n")
-	git(t, dir, "add", "c.py")
-	git(t, dir, "commit", "-q", "-m", "head")
+	entries := "100644 blob " + blob("def f():\n    return 2\n") + "\tc.py\x00" +
+		"100644 blob " + blob("odd\n") + "\t" + odd + "\x00"
+	tree := gitIn(t, dir, entries, "mktree", "-z")
+	commit := gitIn(t, dir, "", "commit-tree", tree, "-p", "main", "-m", "head")
+	git(t, dir, "update-ref", "refs/heads/main", commit)
 
 	head, err := source.Git{Root: dir, BaseRev: "main~1", HeadRev: "main"}.Head()
 	if err != nil {
