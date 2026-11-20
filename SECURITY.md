@@ -28,9 +28,9 @@ Only the latest version gets fixes. If you use an older one, upgrade.
 
 hadome only reads the repository it is pointed at and never talks to the network. Two things do run the repository's code or commands:
 
-- The external commands listed under `gates` in the configuration run with the same permissions as the repository's other scripts.
+- The external commands listed under `gates` in the configuration run with the same permissions as the repository's other scripts. `hadome check` runs only the gates the base branch's configuration declares with the same `id` and the same `run`. A gate a pull request adds, or whose command it changes, is not run and goes to a person's review with exit code `3`.
 - `hadome mutate` runs the repository's test command. It runs it in a copy of the version in a working directory, and never rewrites the repository's working tree.
 
-How to write the external commands is in [product-specific gates](docs/external-gates.md). Before running hadome on a repository you do not trust, read the `gates` in its `.hadome.yml`. Do not run `hadome mutate` on a repository you do not trust.
+How to write the external commands is in [product-specific gates](docs/external-gates.md). Before running hadome on a repository you do not trust, read the `gates` in its `.hadome.yml` and any changes to the gates' scripts. When a pull request rewrites the script of a gate on the base branch, the rewritten script runs. Do not run `hadome mutate` on a repository you do not trust.
 
 What hadome protects, and how, is in [the security assurance case](docs/assurance-case.md).

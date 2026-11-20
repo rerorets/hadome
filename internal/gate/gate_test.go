@@ -204,3 +204,85 @@ func TestACheckDoesNotUseAGateThatFailsItsSelfTest(t *testing.T) {
 		t.Fatalf("a gate that fails its self-test must stop the check: %v", err)
 	}
 }
+
+// recorder is a finding gate that finds nothing and leaves a file in dir: ran--self-test for its
+// self-test, rancheck for a check.
+func recorder(dir string) string {
+	return "#!/bin/sh\ncat >/dev/null\ntouch \"" + dir + "/ran${1:-check}\"\nprintf '{\"schema\":1,\"findings\":[]}\\n'\n"
+}
+
+// ran lists, in name order, the files a recorder left in dir.
+func ran(t *testing.T, dir string) []string {
+	t.Helper()
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range es {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
+// viewpoint: security
+// target: gate.Rules through engine.Engine.Check
+// Gates invariant 5: a gate runs only when base declares it with the same command. A gate the
+// change adds, or whose command it changes, is never started, not even for its self-test, and
+// needs a person's review instead. Markers for it are neither unknown nor unused.
+func TestAGateTheChangeAddsOrChangesDoesNotRun(t *testing.T) {
+	const evil = "  - id: evil/x\n    kind: finding\n    run: [gates/evil]\n"
+	marked := []string{"a.go", "package a\n\n// gate:allow evil/x reason: the gate does not apply here\nfunc A() {}\n"}
+	cases := map[string]fstest.MapFS{
+		"added to a configuration": tree("  []\n"),
+		"command changed":          tree("  - id: evil/x\n    kind: finding\n    run: [gates/other]\n"),
+		"first configuration":      {},
+	}
+	for name, base := range cases {
+		t.Run(name, func(t *testing.T) {
+			rec := t.TempDir()
+			dir := script(t, "evil", recorder(rec))
+			r, _, err := checkWith(t, dir, trees{base, tree(evil, marked...)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := ran(t, rec); len(got) != 0 {
+				t.Fatalf("the gate's command must not run, but it left %v", got)
+			}
+			if r.ExitCode() != engine.ExitReview || len(r.Regressions) != 0 {
+				t.Fatalf("want exit %d without regressions, got %d: %+v", engine.ExitReview, r.ExitCode(), r.Regressions)
+			}
+			var held []engine.Finding
+			for _, f := range r.Reviews {
+				if f.Rule == engine.GateNotRunID {
+					held = append(held, f)
+				}
+			}
+			if len(held) != 1 || held[0].Anchor != "evil/x" || held[0].File != ".hadome.yml" || held[0].Line != 3 {
+				t.Fatalf("want one review of evil/x at .hadome.yml:3, got %+v", r.Reviews)
+			}
+		})
+	}
+}
+
+// viewpoint: behaviour
+// target: gate.Rules through engine.Engine.Check
+// Gates invariant 5, the other side: a gate base declares with the same command runs its self-test
+// and then the check, even when the change edits its other settings.
+func TestAGateBaseAlreadyRunsStillRuns(t *testing.T) {
+	rec := t.TempDir()
+	dir := script(t, "evil", recorder(rec))
+	const gate = "  - id: evil/x\n    kind: finding\n    run: [gates/evil]\n"
+	r, _, err := checkWith(t, dir, trees{tree(gate), tree(gate + "    timeout: 30s\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ran(t, rec), ","); got != "ran--self-test,rancheck" {
+		t.Fatalf("want the self-test and the check to run, got %q", got)
+	}
+	for _, f := range r.Reviews {
+		if f.Rule == engine.GateNotRunID {
+			t.Fatalf("a gate base runs with the same command is not held: %+v", f)
+		}
+	}
+}

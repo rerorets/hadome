@@ -189,7 +189,9 @@ A rule only this product has ("never write UPDATE in the log store") is a small 
 
 A gate that fails, prints anything but the protocol's JSON, or runs past its `timeout` stops the check with exit code `2`. Changing or removing a gate later returns `3`.
 
-Proved by: `hadome self-test` lists the gate's `id`, and `hadome check` runs it.
+In the change that adds a gate, `hadome check` does not run it: it lists `config/gate-not-run` and ends with `3`, so that a command nobody has reviewed yet never runs on the strength of the change's own configuration. Ask the person to review it; once the change is on the base branch, later checks run the gate. Changing `run` works the same way.
+
+Proved by: `hadome self-test` lists the gate's `id`, and `hadome check` lists that gate under `config/gate-not-run`.
 
 ## Stopping changes that must not be made
 
@@ -251,7 +253,7 @@ hadome cannot stop these:
 | A new external endpoint | The dependency diagram (`rules.deps`) counts only imports between the repository's own units |
 | An estimate of call counts or cost | Real counts and prices come from load at run time and price lists, not from the tree |
 
-Proved by: `hadome config check` and `hadome self-test` end with `0`, and `hadome check` runs the gates and reports no `tests/invariant-unguarded`.
+Proved by: `hadome config check` and `hadome self-test` end with `0`, and `hadome check` lists the added gates under `config/gate-not-run` and reports no `tests/invariant-unguarded`.
 
 ## Telling other agents
 
