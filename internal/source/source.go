@@ -88,7 +88,7 @@ func (d dirFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		case t.IsDir(), t.IsRegular():
 			out = append(out, e)
 		case t&fs.ModeSymlink != 0:
-			target, err := os.Readlink(filepath.Join(d.native(name), e.Name()))
+			target, err := readLink(filepath.Join(d.native(name), e.Name()))
 			if err != nil {
 				return nil, err
 			}
@@ -167,7 +167,7 @@ func readEntry(name, p string, info fs.FileInfo) ([]byte, kind, error) {
 	case m.IsDir():
 		return nil, isDir, nil
 	case m&fs.ModeSymlink != 0:
-		target, err := os.Readlink(p)
+		target, err := readLink(p)
 		return []byte(target), isFile, err
 	case !m.IsRegular():
 		return nil, missing, nil
@@ -185,6 +185,13 @@ func readEntry(name, p string, info fs.FileInfo) ([]byte, kind, error) {
 	// The size checked above bounds what is read, even if the file grows meanwhile.
 	data, err := io.ReadAll(io.LimitReader(f, info.Size()))
 	return data, isFile, err
+}
+
+// readLink returns a link's target as git stores it, with / between its parts: on Windows the
+// system gives \, and a version read from a revision would otherwise differ from the working tree.
+func readLink(p string) (string, error) {
+	target, err := os.Readlink(p)
+	return filepath.ToSlash(target), err
 }
 
 func tooLarge(name string) error {

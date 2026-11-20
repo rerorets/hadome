@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/rerorets/hadome/internal/config"
@@ -50,7 +51,7 @@ func TestWritingCommandsNeverFollowALink(t *testing.T) {
 // viewpoint: state integrity
 // target: replaceFile
 // Replacing a file whose path became a link after it was checked replaces the link itself: the
-// file it pointed at is untouched, and a regular file keeps its permissions.
+// file it pointed at is untouched.
 func TestReplaceFileReplacesALinkInsteadOfFollowingIt(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target")
@@ -70,7 +71,16 @@ func TestReplaceFileReplacesALinkInsteadOfFollowingIt(t *testing.T) {
 	if info, err := os.Lstat(link); err != nil || !info.Mode().IsRegular() {
 		t.Errorf("link must now be a regular file: %v", err)
 	}
+}
 
+// viewpoint: state integrity
+// target: replaceFile
+// A regular file replaced keeps its permissions.
+func TestReplaceFileKeepsPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no POSIX permission bits: Go reports every writable file as 0666, so 0600 cannot be kept or observed")
+	}
+	dir := t.TempDir()
 	regular := filepath.Join(dir, "regular")
 	if err := os.WriteFile(regular, []byte("old\n"), 0o600); err != nil {
 		t.Fatal(err)

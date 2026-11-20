@@ -135,7 +135,7 @@ No source follows a symbolic link. As git stores one, a link is read as a file w
 | What the version holds | How it is read |
 |---|---|
 | A regular file | Its content. A file over 128 MiB stops the check with exit code `2`, naming its path |
-| A symbolic link | A file whose content is the path the link points to, whether that is a directory or nothing at all |
+| A symbolic link | A file whose content is the path the link points to, whether that is a directory or nothing at all. On Windows, `\` between its parts becomes `/`, as git stores it |
 | A path through a link (`link/file`) | Does not exist. Git does not make what is behind a link a file of the version either |
 | A FIFO, a device and the like | Not a file of the version. Git does not store them either |
 

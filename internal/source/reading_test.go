@@ -43,18 +43,20 @@ func TestGitRevisionReadsEveryFileAsCommittedWhateverItsName(t *testing.T) {
 	write(t, dir, "c.py", "def f():\n    return 1\n")
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-q", "-m", "base")
-	other := filepath.Join(dir, "other.txt")
-	if err := os.WriteFile(other, []byte("decoy\n"), 0o644); err != nil {
-		t.Fatal(err)
+	blob := func(content string) string {
+		write(t, dir, "blob.tmp", content)
+		id := gitOut(t, dir, "hash-object", "-w", "blob.tmp")
+		if err := os.Remove(filepath.Join(dir, "blob.tmp")); err != nil {
+			t.Fatal(err)
+		}
+		return id
 	}
-	id := gitOut(t, dir, "hash-object", "-w", "other.txt")
-	if err := os.Remove(other); err != nil {
-		t.Fatal(err)
-	}
-	odd := "b\n" + id
-	write(t, dir, odd, "odd\n")
+	// The odd name goes into the index directly: not every file system can hold a newline in a
+	// name (Windows cannot), but every git tree can.
+	odd := "b\n" + blob("decoy\n")
+	git(t, dir, "update-index", "--add", "--cacheinfo", "100644,"+blob("odd\n")+","+odd)
 	write(t, dir, "c.py", "def f():\n    return 2\n")
-	git(t, dir, "add", ".")
+	git(t, dir, "add", "c.py")
 	git(t, dir, "commit", "-q", "-m", "head")
 
 	head, err := source.Git{Root: dir, BaseRev: "main~1", HeadRev: "main"}.Head()
@@ -115,7 +117,8 @@ func TestGitRevisionIsNeverAnOption(t *testing.T) {
 // viewpoint: input and output
 // target: source.Git
 // Integration: in the working tree, as in a revision, a symbolic link is a file holding its target,
-// so a link to a file outside the repository never shows that file.
+// with / between its parts as git stores it, so a link to a file outside the repository never
+// shows that file.
 func TestGitWorkingTreeReadsLinksAsTheirTarget(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "secret")
 	if err := os.WriteFile(outside, []byte("secret\n"), 0o644); err != nil {
@@ -139,7 +142,7 @@ func TestGitWorkingTreeReadsLinksAsTheirTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	for label, fsys := range map[string]fs.FS{"base": base.FS, "working tree": head.FS} {
-		for name, want := range map[string]string{".hadome.yml": outside, "z.py": os.DevNull} {
+		for name, want := range map[string]string{".hadome.yml": filepath.ToSlash(outside), "z.py": filepath.ToSlash(os.DevNull)} {
 			if got, err := fs.ReadFile(fsys, name); err != nil || string(got) != want {
 				t.Errorf("%s: %s must hold the link's target %q, got %q, %v", label, name, want, got, err)
 			}
@@ -183,7 +186,7 @@ func TestDirsReadLinksAsTheirTarget(t *testing.T) {
 	}
 	want := map[string]string{"a.txt": "a\n", "real/b.txt": "b\n"}
 	for name, target := range links {
-		want[name] = target
+		want[name] = filepath.ToSlash(target)
 	}
 	if len(got) != len(want) {
 		t.Errorf("got files %v, want %v", got, want)
