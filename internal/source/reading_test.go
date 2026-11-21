@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/source"
 )
 
@@ -243,14 +244,12 @@ func TestDirsReadLinksAsTheirTarget(t *testing.T) {
 
 // viewpoint: boundaries
 // target: source.Dirs, source.Git
-// A file over the limit stops reading with an error naming it, in a directory and in the working
-// tree, rather than being read whole; a file at the limit is read.
-func TestReadingAFileOverTheLimitFails(t *testing.T) {
+// A file over the limit is left out of the version and listed as too large, in a directory, in the
+// working tree and in a revision, rather than being read whole; a file at the limit is read.
+func TestAFileOverTheLimitIsLeftOutAndListed(t *testing.T) {
 	dir := t.TempDir()
 	git(t, dir, "init", "-q", "-b", "main")
 	write(t, dir, "keep.txt", "keep\n")
-	git(t, dir, "add", ".")
-	git(t, dir, "commit", "-q", "-m", "base")
 	sized := func(name string, size int64) {
 		f, err := os.Create(filepath.Join(dir, name))
 		if err != nil {
@@ -262,21 +261,39 @@ func TestReadingAFileOverTheLimitFails(t *testing.T) {
 		}
 	}
 	sized("at.bin", source.MaxFileSize)
-
-	head, err := source.Git{Root: dir, BaseRev: "main"}.Head()
-	if err != nil {
-		t.Fatalf("a file at the limit must be read: %v", err)
-	}
-	if info, err := fs.Stat(head.FS, "at.bin"); err != nil || info.Size() != source.MaxFileSize {
-		t.Fatalf("at.bin must be read whole: %v", err)
-	}
-
 	sized("big.bin", source.MaxFileSize+1)
-	if _, err := (source.Git{Root: dir, BaseRev: "main"}).Head(); err == nil || !strings.Contains(err.Error(), "big.bin") {
-		t.Errorf("working tree: want an error naming big.bin, got %v", err)
+	git(t, dir, "add", "keep.txt", "at.bin")
+	git(t, dir, "commit", "-q", "-m", "base")
+
+	check := func(where string, v engine.Version, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v", where, err)
+		}
+		if info, err := fs.Stat(v.FS, "at.bin"); err != nil || info.Size() != source.MaxFileSize {
+			t.Errorf("%s: at.bin must be read whole: %v", where, err)
+		}
+		if _, err := fs.Stat(v.FS, "big.bin"); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%s: big.bin must be left out, got %v", where, err)
+		}
+		if len(v.TooLarge) != 1 || v.TooLarge[0] != "big.bin" {
+			t.Errorf("%s: want TooLarge [big.bin], got %v", where, v.TooLarge)
+		}
 	}
-	dirs, _ := source.Dirs{BaseDir: dir, HeadDir: dir}.Head()
-	if _, err := fs.ReadFile(dirs.FS, "big.bin"); err == nil || !strings.Contains(err.Error(), "big.bin") {
-		t.Errorf("directory: want an error naming big.bin, got %v", err)
+	head, err := source.Git{Root: dir, BaseRev: "main"}.Head()
+	check("working tree", head, err)
+	dirs, err := source.Dirs{BaseDir: dir, HeadDir: dir}.Head()
+	check("directory", dirs, err)
+	if entries, err := fs.ReadDir(dirs.FS, "."); err == nil {
+		for _, e := range entries {
+			if e.Name() == "big.bin" {
+				t.Error("directory: big.bin must not be listed")
+			}
+		}
 	}
+
+	git(t, dir, "add", "big.bin")
+	git(t, dir, "commit", "-q", "-m", "big")
+	rev, err := source.Git{Root: dir, BaseRev: "main", HeadRev: "HEAD"}.Head()
+	check("revision", rev, err)
 }

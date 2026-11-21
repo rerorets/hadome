@@ -24,29 +24,13 @@ import (
 	"github.com/rerorets/hadome/internal/engine"
 )
 
-// MaxFileSize is the most hadome reads of one file. A larger file stops the check, since a version
-// read without it could not be judged.
+// MaxFileSize is the most hadome reads of one file. A larger file is left out of the version and
+// listed in its TooLarge, so that a person reviews what hadome did not read.
 const MaxFileSize = 128 << 20
-
-// Dirs compares two directories. It never reports renames.
-type Dirs struct{ BaseDir, HeadDir string }
-
-// Base returns the base directory.
-func (d Dirs) Base() (engine.Version, error) {
-	return engine.Version{Label: "base", FS: Tree(d.BaseDir), Root: d.BaseDir}, nil
-}
-
-// Head returns the head directory.
-func (d Dirs) Head() (engine.Version, error) {
-	return engine.Version{Label: "head", FS: Tree(d.HeadDir), Root: d.HeadDir}, nil
-}
-
-// Renames is always empty for directories.
-func (d Dirs) Renames() (map[string]string, error) { return nil, nil }
 
 // Tree is the directory at root as Git would store it: a symbolic link is a file whose content is
 // the link's target, never the file it leads to, and a path through a link does not exist. Only
-// regular files, links and directories are in it. Reading a file over MaxFileSize is an error.
+// regular files of at most MaxFileSize, links and directories are in it.
 func Tree(root string) fs.FS { return dirFS{root} }
 
 type dirFS struct{ root string }
@@ -85,8 +69,16 @@ func (d dirFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	out := entries[:0]
 	for _, e := range entries {
 		switch t := e.Type(); {
-		case t.IsDir(), t.IsRegular():
+		case t.IsDir():
 			out = append(out, e)
+		case t.IsRegular():
+			info, err := e.Info()
+			if err != nil {
+				return nil, err
+			}
+			if info.Size() <= MaxFileSize {
+				out = append(out, e)
+			}
 		case t&fs.ModeSymlink != 0:
 			target, err := readLink(filepath.Join(d.native(name), e.Name()))
 			if err != nil {
@@ -105,7 +97,7 @@ func (d dirFS) read(op, name string) ([]byte, kind, error) {
 		return nil, missing, &fs.PathError{Op: op, Path: name, Err: fs.ErrInvalid}
 	}
 	data, k, err := readNoFollow(d.root, name)
-	if err == nil && k == missing {
+	if err == nil && (k == missing || k == tooBig) {
 		err = &fs.PathError{Op: op, Path: name, Err: fs.ErrNotExist}
 	}
 	return data, k, err
@@ -132,6 +124,7 @@ const (
 	missing kind = iota // absent, beyond a link, or neither a file, a link nor a directory
 	isFile
 	isDir
+	tooBig // a regular file over MaxFileSize, left unread
 )
 
 // readNoFollow reads name, a slash-separated path under root, without following any symbolic link:
@@ -172,7 +165,7 @@ func readEntry(name, p string, info fs.FileInfo) ([]byte, kind, error) {
 	case !m.IsRegular():
 		return nil, missing, nil
 	case info.Size() > MaxFileSize:
-		return nil, missing, tooLarge(name)
+		return nil, tooBig, nil
 	}
 	f, err := os.Open(p)
 	if err != nil {
@@ -192,10 +185,6 @@ func readEntry(name, p string, info fs.FileInfo) ([]byte, kind, error) {
 func readLink(p string) (string, error) {
 	target, err := os.Readlink(p)
 	return filepath.ToSlash(target), err
-}
-
-func tooLarge(name string) error {
-	return fmt.Errorf("%s is larger than %d MiB, the most hadome reads of one file", name, MaxFileSize>>20)
 }
 
 // Git compares two versions of the repository at Root: the revision BaseRev, and the revision
@@ -227,11 +216,11 @@ func (g Git) revision(rev string) (engine.Version, error) {
 		}
 		blobs = append(blobs, blob{id: fields[2], path: p})
 	}
-	fsys, err := g.catFiles(blobs)
+	fsys, big, err := g.catFiles(blobs)
 	if err != nil {
 		return engine.Version{}, err
 	}
-	return engine.Version{Label: rev, FS: fsys}, nil
+	return engine.Version{Label: rev, FS: fsys, TooLarge: big}, nil
 }
 
 // Head reads the head revision, or the working tree. The working tree is copied into memory so
@@ -245,6 +234,7 @@ func (g Git) Head() (engine.Version, error) {
 		return engine.Version{}, err
 	}
 	fsys := fstest.MapFS{}
+	var big []string
 	for _, n := range names {
 		data, k, err := readNoFollow(g.Root, n)
 		if err != nil {
@@ -252,11 +242,14 @@ func (g Git) Head() (engine.Version, error) {
 		}
 		// Missing is a file tracked but deleted in the working tree. A directory is a submodule,
 		// listed as one path, and not a file of this repository.
-		if k == isFile {
+		switch k {
+		case isFile:
 			fsys[n] = &fstest.MapFile{Data: data}
+		case tooBig:
+			big = append(big, n)
 		}
 	}
-	return engine.Version{Label: "working tree", FS: fsys}, nil
+	return engine.Version{Label: "working tree", FS: fsys, TooLarge: big}, nil
 }
 
 // Renames maps base paths to head paths for files git detects as renamed.
@@ -304,7 +297,7 @@ func (g Git) lines(args ...string) ([]string, error) {
 // catFiles reads many blobs through one git process. It sends object IDs only, never paths: a path
 // may hold a newline, which would split one request in two and shift every answer after it. Each
 // answer must name the object asked for, so a shifted or missing answer stops the check.
-func (g Git) catFiles(blobs []blob) (fstest.MapFS, error) {
+func (g Git) catFiles(blobs []blob) (fstest.MapFS, []string, error) {
 	cmd := exec.Command("git", "cat-file", "--batch")
 	cmd.Dir = g.Root
 	var in bytes.Buffer
@@ -316,48 +309,53 @@ func (g Git) catFiles(blobs []blob) (fstest.MapFS, error) {
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("git cat-file: %w", err)
+		return nil, nil, fmt.Errorf("git cat-file: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("git cat-file: %w", err)
+		return nil, nil, fmt.Errorf("git cat-file: %w", err)
 	}
-	fsys, readErr := readBatch(bufio.NewReader(stdout), blobs)
+	fsys, big, readErr := readBatch(bufio.NewReader(stdout), blobs)
 	if readErr != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		return nil, fmt.Errorf("git cat-file: %w", readErr)
+		return nil, nil, fmt.Errorf("git cat-file: %w", readErr)
 	}
 	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("git cat-file: %v: %s", err, strings.TrimSpace(stderr.String()))
+		return nil, nil, fmt.Errorf("git cat-file: %v: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	return fsys, nil
+	return fsys, big, nil
 }
 
-// readBatch reads cat-file's answers, one per blob in order, without reading more than MaxFileSize
-// of any one.
-func readBatch(r *bufio.Reader, blobs []blob) (fstest.MapFS, error) {
+// readBatch reads cat-file's answers, one per blob in order, and the paths of the blobs over
+// MaxFileSize, which it skips without keeping.
+func readBatch(r *bufio.Reader, blobs []blob) (fstest.MapFS, []string, error) {
 	fsys := fstest.MapFS{}
+	var big []string
 	for _, b := range blobs {
 		header, err := r.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("no answer for %s: %w", b.path, err)
+			return nil, nil, fmt.Errorf("no answer for %s: %w", b.path, err)
 		}
 		parts := strings.Fields(header)
 		if len(parts) != 3 || parts[0] != b.id || parts[1] != "blob" {
-			return nil, fmt.Errorf("asked for %s (%s), got %q", b.id, b.path, strings.TrimSpace(header))
+			return nil, nil, fmt.Errorf("asked for %s (%s), got %q", b.id, b.path, strings.TrimSpace(header))
 		}
 		size, err := strconv.ParseInt(parts[2], 10, 64)
 		if err != nil || size < 0 {
-			return nil, fmt.Errorf("bad header %q", header)
+			return nil, nil, fmt.Errorf("bad header %q", header)
 		}
 		if size > MaxFileSize {
-			return nil, tooLarge(b.path)
+			if _, err := io.CopyN(io.Discard, r, size+1); err != nil {
+				return nil, nil, fmt.Errorf("reading %s: %w", b.path, err)
+			}
+			big = append(big, b.path)
+			continue
 		}
 		data := make([]byte, size+1) // content plus the trailing newline git adds
 		if _, err := io.ReadFull(r, data); err != nil {
-			return nil, fmt.Errorf("reading %s: %w", b.path, err)
+			return nil, nil, fmt.Errorf("reading %s: %w", b.path, err)
 		}
 		fsys[b.path] = &fstest.MapFile{Data: data[:size]}
 	}
-	return fsys, nil
+	return fsys, big, nil
 }

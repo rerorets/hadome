@@ -82,6 +82,7 @@ func (e *Engine) Check(src Source) (Report, error) {
 	}
 	r.Reviews = append(r.Reviews, loosened(baseCfg, headCfg)...)
 	r.Reviews = append(r.Reviews, heldReviews(baseCfg, headCfg, held)...)
+	r.Reviews = append(r.Reviews, tooLargeReviews(bv, hv, renames)...)
 	if err := compareItems(&r, rules.all, base, head); err != nil {
 		return Report{}, err
 	}

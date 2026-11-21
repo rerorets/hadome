@@ -134,13 +134,13 @@ No source follows a symbolic link. As git stores one, a link is read as a file w
 
 | What the version holds | How it is read |
 |---|---|
-| A regular file | Its content. A file over 128 MiB stops the check with exit code `2`, naming its path |
+| A regular file | Its content. A file over 128 MiB is left out of the version unread and goes to a person's review as `unknown/too-large` (exit code `3`). A file base already left out is not listed |
 | A symbolic link | A file whose content is the path the link points to, whether that is a directory or nothing at all. On Windows, `\` between its parts becomes `/`, as git stores it |
 | A path through a link (`link/file`) | Does not exist. Git does not make what is behind a link a file of the version either |
 | A FIFO, a device and the like | Not a file of the version. Git does not store them either |
 
 - **Why links are not followed**: whoever opens a change can make hadome read a file outside the repository by adding a link, `.hadome.yml -> /etc/passwd` say, or an input without end, `z.py -> /dev/zero` or a FIFO. Without following links, hadome reads only what the repository holds
-- **Why a file over the limit stops the check**: going on without it would pass the file without judging it. 128 MiB is above the largest file GitHub accepts (100 MB), so ordinary repositories never reach it
+- **Why a file over the limit goes to a person**: leaving it out silently would pass the file without judging it, and stopping would leave every other file unchecked over a single large data file. So the check goes on with the other files and tells a person what it did not read. 128 MiB is above the largest file GitHub accepts (100 MB), so ordinary repositories never reach it
 - Commands that read the working tree (`hadome config check`, `hadome init`, `hadome suggest diagram` and others) read it the same way (`source.Tree`)
 
 ### Renames
