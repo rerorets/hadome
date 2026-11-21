@@ -172,7 +172,7 @@ func defaultBase() string {
 
 func selfTest(stdout, stderr io.Writer) int {
 	e := newEngine()
-	c, err := config.Load(os.DirFS("."), ".")
+	c, err := config.Load(source.Tree("."), ".")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return engine.ExitConfig

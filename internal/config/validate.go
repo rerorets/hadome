@@ -19,6 +19,25 @@ type validator struct {
 	file  string
 	errs  Errors
 	lines map[string]int // path -> line, for errors found after validation
+	// outside marks a file outside the repository, whose values errors never show.
+	outside bool
+}
+
+// shown is how an error shows a value of the file: as it is, or, for a file outside the
+// repository, not at all.
+func (v *validator) shown(s string) string {
+	if v.outside {
+		return "the value"
+	}
+	return s
+}
+
+// detail is a part of an error that shows a value, left out for a file outside the repository.
+func (v *validator) detail(s string) string {
+	if v.outside {
+		return ""
+	}
+	return s
 }
 
 func (v *validator) fail(n ast.Node, path, problem string, k Key) {
@@ -72,15 +91,15 @@ func (v *validator) str(n ast.Node, path string, k Key) any {
 		return nil
 	}
 	if !allowed(k, s) {
-		v.fail(n, path, fmt.Sprintf("%q is not allowed", s), k)
+		v.fail(n, path, v.shown(strconv.Quote(s))+" is not allowed", k)
 	} else if k.Pattern != "" && !regexp.MustCompile(k.Pattern).MatchString(s) {
-		v.fail(n, path, fmt.Sprintf("%q does not match %s", s, k.Pattern), k)
+		v.fail(n, path, fmt.Sprintf("%s does not match %s", v.shown(strconv.Quote(s)), k.Pattern), k)
 	} else if _, err := regexp.Compile(s); k.Regexp && err != nil {
-		v.fail(n, path, "is not a valid regular expression: "+err.Error(), k)
+		v.fail(n, path, "is not a valid regular expression"+v.detail(": "+err.Error()), k)
 	} else if k.Glob && !validGlob(s) {
-		v.fail(n, path, fmt.Sprintf("%q is not a valid glob", s), k)
+		v.fail(n, path, v.shown(strconv.Quote(s))+" is not a valid glob", k)
 	} else if _, _, ok := GlobPair(s); k.GlobPair && !ok {
-		v.fail(n, path, fmt.Sprintf("%q is not two valid globs joined by <->", s), k)
+		v.fail(n, path, v.shown(strconv.Quote(s))+" is not two valid globs joined by <->", k)
 	}
 	return s
 }
@@ -97,9 +116,9 @@ func (v *validator) integer(n ast.Node, path string, k Key) any {
 		return nil
 	}
 	if !allowed(k, strconv.Itoa(i)) {
-		v.fail(n, path, fmt.Sprintf("%d is not allowed", i), k)
+		v.fail(n, path, v.shown(strconv.Itoa(i))+" is not allowed", k)
 	} else if i < k.Min {
-		v.fail(n, path, fmt.Sprintf("must be at least %d, got %d", k.Min, i), k)
+		v.fail(n, path, fmt.Sprintf("must be at least %d", k.Min)+v.detail(", got "+strconv.Itoa(i)), k)
 	}
 	return i
 }
@@ -123,7 +142,7 @@ func (v *validator) list(n ast.Node, path string, k Key) any {
 		val := v.value(el, fmt.Sprintf("%s[%d]", path, i), elem)
 		if id := identityOf(val, elem, k.Identity); k.Unique && val != nil {
 			if seen[id] {
-				v.fail(el, fmt.Sprintf("%s[%d]", path, i), fmt.Sprintf("%s appears twice; each entry needs its own", id), k)
+				v.fail(el, fmt.Sprintf("%s[%d]", path, i), v.shown(id)+" appears twice; each entry needs its own", k)
 			}
 			seen[id] = true
 		}

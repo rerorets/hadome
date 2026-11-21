@@ -26,7 +26,7 @@ Only the latest version gets fixes. If you use an older one, upgrade.
 
 ## What hadome runs
 
-hadome only reads the repository it is pointed at and never talks to the network. Two things do run the repository's code or commands:
+hadome only reads the repository it is pointed at, and the shared configuration files base's configuration lists in `extends`, and never talks to the network. It never follows a symbolic link in the repository. Two things do run the repository's code or commands:
 
 - The external commands listed under `gates` in the configuration run with the same permissions as the repository's other scripts. `hadome check` runs only the gates the base branch's configuration declares with the same `id` and the same `run`. A gate a pull request adds, or whose command it changes, is not run and goes to a person's review with exit code `3`.
 - `hadome mutate` runs the repository's test command. It runs it in a copy of the version in a working directory, and never rewrites the repository's working tree.

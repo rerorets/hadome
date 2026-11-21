@@ -22,6 +22,8 @@ type Version struct {
 	FS    fs.FS
 	// Root is the version's directory on disk, when it has one. Empty for versions read from history.
 	Root string
+	// TooLarge lists the files left out of FS because they are larger than hadome reads.
+	TooLarge []string
 }
 
 // Source provides the two versions to compare.

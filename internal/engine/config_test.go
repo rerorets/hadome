@@ -6,6 +6,8 @@ package engine_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -142,6 +144,75 @@ func TestIntroducedSettingsAreWrittenOut(t *testing.T) {
 		}
 		if said := strings.Contains(text.String(), "information only"); said != (tc.want == 1) {
 			t.Errorf("%s: the text says the list is information only: %v\n%s", name, said, text.String())
+		}
+	}
+}
+
+// viewpoint: state integrity
+// target: engine.Engine.Check
+// Configuration invariants 5 and 6: head's extends can name any path, so a check reads only the
+// files base already extends. A path a change adds is not read (the file here is not even valid
+// YAML), and the change needs review, also when it introduces hadome.
+// guards: loosening-is-reviewed
+func TestAChangeToExtendsIsReviewedWithoutReadingTheNewFiles(t *testing.T) {
+	workdir := t.TempDir()
+	for name, text := range map[string]string{"shared.yml": "schema: 1\n", "unread.yml": "schema: [\n"} {
+		if err := os.WriteFile(filepath.Join(workdir, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tree := module("")
+	shared := withConfig(tree, "schema: 1\nextends: [shared.yml]\n")
+	both := withConfig(tree, "schema: 1\nextends: [shared.yml, unread.yml]\n")
+	for name, tc := range map[string]struct {
+		src    treeSource
+		review bool
+	}{
+		"unchanged":   {treeSource{base: shared, head: shared}, false},
+		"added":       {treeSource{base: shared, head: both}, true},
+		"introducing": {treeSource{base: tree, head: both}, true},
+	} {
+		e := &engine.Engine{Analyzer: adapter.New(), Rules: tests.All(), Workdir: workdir}
+		r, err := e.Check(tc.src)
+		if err != nil {
+			t.Fatalf("%s: the check must not read unread.yml: %v", name, err)
+		}
+		if got := hasRule(r.Reviews, engine.LoosenedID); got != tc.review || tc.review && r.ExitCode() != engine.ExitReview {
+			t.Errorf("%s: want review %v, got exit %d, reviews %+v", name, tc.review, r.ExitCode(), r.Reviews)
+		}
+		for _, f := range r.Reviews {
+			if !strings.Contains(f.Why.In("en"), "outside the repository") {
+				t.Errorf("%s: the review must say the added files were not read, got %q", name, f.Why.In("en"))
+			}
+		}
+	}
+}
+
+// viewpoint: input and output
+// target: engine.Engine.Check
+// A config/loosened review says which way the configuration moved: an entry removed, an entry
+// added, or a value changed, each with what was there and what is there now. Each is a review.
+func TestLooseningReviewsSayWhatChanged(t *testing.T) {
+	tree := module("")
+	oneInvariant := strings.SplitAfter(twoInvariants, "Rows are kept\n")[0]
+	for name, tc := range map[string]struct{ base, head, want string }{
+		"removed": {twoInvariants, oneInvariant, "configuration removes invariants entry: id=rows-2"},
+		"added":   {"schema: 1\n", "schema: 1\nrules:\n  tests:\n    assertions: [acme.Check]\n", "configuration adds to rules.tests.assertions: acme.Check"},
+		"changed": {"schema: 1\n", "schema: 1\nrules:\n  size:\n    file-lines: 500\n", "configuration changes rules.size.file-lines: 400 → 500"},
+	} {
+		r := check(t, treeSource{base: withConfig(tree, tc.base), head: withConfig(tree, tc.head)})
+		var got []string
+		for _, f := range r.Reviews {
+			got = append(got, f.Message.In("en"))
+			if !f.Review {
+				t.Errorf("%s: a config/loosened finding is a review, not a regression", name)
+			}
+			if strings.Contains(f.Why.In("en"), "outside the repository") {
+				t.Errorf("%s: only a change to extends says files were left unread: %q", name, f.Why.In("en"))
+			}
+		}
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s: want %q, got %q", name, tc.want, got)
 		}
 	}
 }

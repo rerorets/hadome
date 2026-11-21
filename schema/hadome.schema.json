@@ -5,7 +5,7 @@
   "description": "The configuration of hadome, `.hadome.yml` at the repository root.",
   "properties": {
     "extends": {
-      "description": "Local files whose settings this file builds on, relative to this file. Later layers add to or override earlier ones. Never a URL.",
+      "description": "Local files whose settings this file builds on, relative to this file. Later layers add to or override earlier ones. Never a URL. A check reads only the files base's configuration extends, so changing the list needs a person's review.",
       "items": {
         "type": "string"
       },

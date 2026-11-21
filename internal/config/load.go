@@ -7,13 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/goccy/go-yaml/parser"
 )
 
 // FileName is the product layer's file, at the repository root.
@@ -165,6 +161,24 @@ func (c Config) GateLine(id string) int {
 // from workdir (the working tree, since shared files live outside the repository). Without a
 // product file it returns the built-in settings. An error means the check must not run.
 func Load(product fs.FS, workdir string) (Config, error) {
+	return load(product, workdir, nil)
+}
+
+// LoadHead loads head's configuration as Load does, except that of the files head's .hadome.yml
+// extends, it reads only those base's .hadome.yml extends too. Head's extends can name any path, so
+// a path the change adds is not read before a person has seen it: Diff reports the change, and the
+// layers it would add are left out.
+func LoadHead(product fs.FS, workdir string, base Config) (Config, error) {
+	read := map[string]bool{}
+	for _, e := range list(base.raw["extends"]) {
+		read[e.(string)] = true
+	}
+	return load(product, workdir, read)
+}
+
+// load reads the configuration. When extendable is not nil, the product layer extends only the
+// files it holds.
+func load(product fs.FS, workdir string, extendable map[string]bool) (Config, error) {
 	data, err := fs.ReadFile(product, FileName)
 	if errors.Is(err, fs.ErrNotExist) {
 		return decode(map[string]any{"schema": 1}, nil), nil
@@ -172,10 +186,16 @@ func Load(product fs.FS, workdir string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("reading %s: %w", FileName, err)
 	}
-	l := &loader{visiting: map[string]bool{}}
-	raw, err := l.layer(FileName, data, workdir)
+	if len(data) > MaxFileSize {
+		return Config{}, Errors{{File: FileName, Line: 1, Key: "(file)", Problem: "is " + tooLarge}}
+	}
+	l := &loader{visiting: map[string]bool{}, extendable: extendable}
+	raw, err := l.layer(FileName, data, workdir, false)
 	if err != nil {
 		return Config{}, err
+	}
+	if l.extends != nil {
+		raw["extends"] = l.extends
 	}
 	c := decode(raw, l.layers)
 	c.lines = l.lines
@@ -238,144 +258,6 @@ func checkMutation(c Config) Errors {
 
 // PackagesPlaceholder is the element of mutation.test that becomes the packages of the tests run.
 const PackagesPlaceholder = "{packages}"
-
-// loader reads one file and the files it extends, depth first, so earlier layers come first.
-type loader struct {
-	layers   []string
-	visiting map[string]bool
-	lines    map[string]int // of the first layer read: .hadome.yml itself
-}
-
-func (l *loader) layer(name string, data []byte, dir string) (map[string]any, error) {
-	v := &validator{file: name, lines: map[string]int{}}
-	if l.lines == nil {
-		l.lines = v.lines
-	}
-	f, err := parser.ParseBytes(data, 0)
-	if err != nil {
-		return nil, Errors{{File: name, Line: 1, Key: "(file)", Problem: "is not valid YAML: " + firstLine(err.Error())}}
-	}
-	raw := map[string]any{}
-	switch {
-	case len(f.Docs) > 1:
-		v.errs = append(v.errs, Error{File: name, Line: 1, Key: "(file)", Problem: "must hold one YAML document, not several"})
-	case len(f.Docs) == 0 || f.Docs[0].Body == nil:
-		v.fail(nil, "", "is empty", Spec)
-	default:
-		if m, ok := v.value(f.Docs[0].Body, "", Spec).(map[string]any); ok {
-			raw = m
-		}
-	}
-	if len(v.errs) > 0 {
-		return nil, v.errs
-	}
-	merged := map[string]any{}
-	exts, _ := raw["extends"].([]any)
-	for i, e := range exts {
-		base, err := l.extend(name, e.(string), dir, v.lines[fmt.Sprintf("extends[%d]", i)])
-		if err != nil {
-			return nil, err
-		}
-		merged = merge(merged, base, Spec)
-	}
-	delete(raw, "extends")
-	l.layers = append(l.layers, name)
-	return merge(merged, raw, Spec), nil
-}
-
-func (l *loader) extend(from, ref, dir string, line int) (map[string]any, error) {
-	fail := func(problem string) error {
-		return Errors{{File: from, Line: line, Key: "extends", Problem: problem,
-			Example: "extends: [../shared/hadome.yml]"}}
-	}
-	if strings.Contains(ref, "://") {
-		return nil, fail(fmt.Sprintf("%q is a URL; hadome never reads configuration from the network. "+
-			"Check the shared file out locally and point at it", ref))
-	}
-	p := ref
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(dir, p)
-	}
-	p = filepath.Clean(p)
-	if l.visiting[p] {
-		return nil, fail(fmt.Sprintf("%q extends itself through a cycle", ref))
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return nil, fail(fmt.Sprintf("cannot read %q: %v", ref, errors.Unwrap(err)))
-	}
-	l.visiting[p] = true
-	defer delete(l.visiting, p)
-	return l.layer(p, data, filepath.Dir(p))
-}
-
-func firstLine(s string) string {
-	s, _, _ = strings.Cut(s, "\n")
-	return s
-}
-
-// merge lays over on top of under. Objects merge key by key; lists of objects with an identity
-// replace entries with the same identity and keep the rest; lists marked OmittedIsWidest are
-// replaced as a whole; other lists are joined without duplicates; anything else is replaced.
-func merge(under, over map[string]any, k Key) map[string]any {
-	out := map[string]any{}
-	for name, val := range under {
-		out[name] = val
-	}
-	for name, val := range over {
-		f := field(k, name)
-		switch {
-		case f.Kind == KindObject && len(f.Variants) == 0 && out[name] != nil:
-			out[name] = merge(out[name].(map[string]any), val.(map[string]any), f)
-		case f.Kind == KindList && !f.OmittedIsWidest && out[name] != nil:
-			out[name] = joinLists(out[name].([]any), val.([]any), *f.Elem, f.Identity)
-		default:
-			out[name] = val
-		}
-	}
-	return out
-}
-
-func field(k Key, name string) Key {
-	for _, f := range k.Fields {
-		if f.Name == name {
-			return f
-		}
-	}
-	return Key{}
-}
-
-func joinLists(under, over []any, elem Key, identity []string) []any {
-	var out []any
-	at := map[string]int{}
-	for _, list := range [][]any{under, over} {
-		for _, val := range list {
-			id := identityOf(val, elem, identity)
-			if i, ok := at[id]; ok {
-				out[i] = val
-				continue
-			}
-			at[id] = len(out)
-			out = append(out, val)
-		}
-	}
-	return out
-}
-
-// identityOf returns the string that identifies a list entry across layers and versions.
-func identityOf(val any, elem Key, identity []string) string {
-	m, ok := val.(map[string]any)
-	if !ok || elem.Kind != KindObject {
-		return fmt.Sprint(val)
-	}
-	var parts []string
-	for _, name := range identity {
-		if v, ok := m[name]; ok {
-			parts = append(parts, name+"="+fmt.Sprint(v))
-		}
-	}
-	return strings.Join(parts, " ")
-}
 
 // ForBase returns the configuration that judges base: head's settings with base's invariants and
 // base's own diagrams.

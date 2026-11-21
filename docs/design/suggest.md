@@ -254,7 +254,7 @@ It writes the `mutation` setting too, as a comment ([mutation.md](mutation.md)).
 1. Candidates never change an exit code
 2. `hadome agents --write` run twice leaves the file as it was after the first run
 3. When `hadome agents --write` fails, no file has changed
-4. `hadome init` never overwrites a file
+4. `hadome init` never overwrites a file, and neither it nor `hadome agents --write` writes outside the repository through a symbolic link: init writes no path that exists, a link that leads nowhere included, and agents --write writes through a link whose target is a regular file inside the repository (`CLAUDE.md -> AGENTS.md`, say) and stops with exit code `2` when given any other link
 5. With the diagram drafts of a working tree configured, that working tree gets no `deps/not-in-diagram`, `deps/call-not-in-diagram` or `deps/diagram-stale`
 
 ## Deliberately left out

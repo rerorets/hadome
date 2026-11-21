@@ -118,9 +118,30 @@ Giving both revisions and directories leaves it undecided which to compare, so t
 
 The `git` source does not read a submodule as files of this repository, in a revision or in the working tree alike: its content belongs to another repository.
 
-The `dir` source does not read a symbolic link that leads to no file as a file of the version. Read as a file, it would stop the whole check. The links left out are those to a directory and broken ones. The working tree of the `git` source leaves the same links out. A link to a file is read as that file.
+The `git` source reads the files of a revision in these steps:
+
+- `git ls-tree -r -z` gives each file's path and object ID
+- `git cat-file --batch` is given object IDs only, one per line, never paths. A file name holding a newline would split one request in two and shift the content of every file after it
+- When an answer names another ID than the one asked for, or no answer comes, the file is not skipped: the check stops with exit code `2`
+
+Every git command given a revision gets `--end-of-options` before it, so that a revision starting with `-` (`--output=<path>`, say) is never read as an option.
 
 Each version is exposed as a read-only file system. Other version-control systems, or systems that are not git at all, plug in as further sources.
+
+### Symbolic links and special files
+
+No source follows a symbolic link. As git stores one, a link is read as a file whose content is the path it points to, in a revision, the working tree and a directory alike.
+
+| What the version holds | How it is read |
+|---|---|
+| A regular file | Its content. A file over 128 MiB is left out of the version unread and goes to a person's review as `unknown/too-large` (exit code `3`). A file base already left out is not listed |
+| A symbolic link | A file whose content is the path the link points to, whether that is a directory or nothing at all. On Windows, `\` between its parts becomes `/`, as git stores it |
+| A path through a link (`link/file`) | Does not exist. Git does not make what is behind a link a file of the version either |
+| A FIFO, a device and the like | Not a file of the version. Git does not store them either |
+
+- **Why links are not followed**: whoever opens a change can make hadome read a file outside the repository by adding a link, `.hadome.yml -> /etc/passwd` say, or an input without end, `z.py -> /dev/zero` or a FIFO. Without following links, hadome reads only what the repository holds
+- **Why a file over the limit goes to a person**: leaving it out silently would pass the file without judging it, and stopping would leave every other file unchecked over a single large data file. So the check goes on with the other files and tells a person what it did not read. 128 MiB is above the largest file GitHub accepts (100 MB), so ordinary repositories never reach it
+- Commands that read the working tree (`hadome config check`, `hadome init`, `hadome suggest diagram` and others) read it the same way (`source.Tree`)
 
 ### Renames
 
@@ -366,6 +387,7 @@ The engine loads the configuration of both versions before analysing anything. A
 - Head is analysed and judged with head's configuration
 - Base is analysed with head's settings and tables (the hazard, io and assertion tables, built in plus what the configuration adds) (the hazard, io and assertion tables, built in plus what the configuration adds) but its own invariants and its own dependency diagram (`config.ForBase`), so tightening a setting never fails a change on code that was already there, while a new invariant without a guarding test still does
 - Changes that loosen the configuration are reported as `config/loosened` reviews (exit code `3`). This is the engine's own check, not a rule, so no exception marker can silence it
+- Head's configuration is read by `config.LoadHead`. Of the shared layers, only the files base's configuration lists in `extends` are read ([configuration.md](configuration.md), "Reading the shared layers")
 
 ## Invariants
 

@@ -7,11 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/rerorets/hadome/internal/config"
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/rules/deps"
+	"github.com/rerorets/hadome/internal/source"
 )
 
 // draftCmd prints a draft of the dependency diagram (kind diagram) or the call diagram (kind calls),
@@ -41,7 +41,7 @@ func draftCmd(kind string, args []string, stdout, stderr io.Writer) int {
 
 // analyzeTree reads the working tree with its configuration. It reports what went wrong to stderr.
 func analyzeTree(stderr io.Writer) (engine.Input, bool) {
-	tree := os.DirFS(".")
+	tree := source.Tree(".")
 	c, err := config.Load(tree, ".")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
