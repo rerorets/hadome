@@ -53,10 +53,16 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	paths := append([]string{*write}, fl.Args()...)
 	// Every file is checked before any is written, so that a failure leaves no file half done.
 	texts := make([]string, len(paths))
+	targets := make([]string, len(paths))
 	failed := false
 	for i, p := range paths {
 		var err error
-		if texts[i], err = withBlock(p, block); err != nil {
+		if targets[i], err = writeTarget(p); err != nil {
+			fmt.Fprintln(stderr, "hadome:", err)
+			failed = true
+			continue
+		}
+		if texts[i], err = withBlock(targets[i], block); err != nil {
 			fmt.Fprintln(stderr, "hadome:", err)
 			failed = true
 		}
@@ -65,13 +71,47 @@ func agents(args []string, stdout, stderr io.Writer) int {
 		return engine.ExitConfig
 	}
 	for i, p := range paths {
-		if err := replaceFile(p, []byte(texts[i])); err != nil {
+		if err := replaceFile(targets[i], []byte(texts[i])); err != nil {
 			fmt.Fprintln(stderr, "hadome:", err)
 			return engine.ExitConfig
 		}
 		fmt.Fprintf(stdout, "ok: the hadome block in %s is up to date\n", p)
 	}
 	return engine.ExitOK
+}
+
+// writeTarget returns the file to write for path: path itself, or the file a symbolic link at path
+// leads to when that is a regular file under the working directory, as when CLAUDE.md links to the
+// instructions another agent reads. Any other link is refused, so that a write never lands outside
+// the repository.
+func writeTarget(path string) (string, error) {
+	if info, err := os.Lstat(path); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+		return path, nil
+	}
+	refused := fmt.Errorf("%s is a symbolic link that does not lead to a regular file in this directory; hadome writes only inside the repository, so name the file itself", path)
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", refused
+	}
+	root, err := filepath.EvalSymlinks(".")
+	if err != nil {
+		return "", err
+	}
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	if root, err = filepath.Abs(root); err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", refused
+	}
+	if info, err := os.Lstat(target); err != nil || !info.Mode().IsRegular() {
+		return "", refused
+	}
+	return target, nil
 }
 
 // withBlock returns the file's text with the block in it: between the markers, appended when the
@@ -82,7 +122,7 @@ func withBlock(path, block string) (string, error) {
 		return "", fmt.Errorf("%s: the directory %s does not exist", path, filepath.Dir(path))
 	}
 	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a regular file (a symbolic link, say); hadome writes only to regular files, so name the file itself", path)
+		return "", fmt.Errorf("%s is not a regular file; hadome writes only to regular files, so name the file itself", path)
 	}
 	old, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

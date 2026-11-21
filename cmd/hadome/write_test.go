@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/rerorets/hadome/internal/config"
@@ -16,9 +17,9 @@ import (
 
 // viewpoint: state integrity
 // target: hadome init, hadome agents --write
-// Neither command writes through a symbolic link: init refuses a link at .hadome.yml, even one that
-// leads nowhere, and agents --write refuses a link it was asked to update. The places the links
-// point at stay as they were.
+// Neither command writes outside the repository through a symbolic link: init refuses a link at
+// .hadome.yml, even one that leads nowhere, and agents --write refuses a link that leads outside the
+// working directory. The places the links point at stay as they were.
 func TestWritingCommandsNeverFollowALink(t *testing.T) {
 	outside := t.TempDir()
 	t.Chdir(writeTree(t, map[string]string{"go.mod": "module example.com/app\n"}))
@@ -45,6 +46,28 @@ func TestWritingCommandsNeverFollowALink(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(target); string(data) != "mine\n" {
 		t.Errorf("agents --write changed the file the link points at: %q", data)
+	}
+}
+
+// viewpoint: behaviour
+// target: hadome agents --write
+// A link to a regular file inside the repository, such as CLAUDE.md linking to the instructions
+// another agent reads, is written through: the block lands in the file it leads to, and the link
+// stays a link.
+func TestAgentsWritesThroughALinkInsideTheRepository(t *testing.T) {
+	t.Chdir(writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "AGENTS.md": "mine\n"}))
+	if err := os.Symlink("AGENTS.md", "CLAUDE.md"); err != nil {
+		t.Fatalf("this system cannot make symbolic links: %v", err)
+	}
+	if code, out := runIn(t, "agents", "--write", "CLAUDE.md"); code != 0 {
+		t.Fatalf("agents --write through a link inside the repository must succeed, got %d: %s", code, out)
+	}
+	data, _ := os.ReadFile("AGENTS.md")
+	if !strings.HasPrefix(string(data), "mine\n") || !strings.Contains(string(data), beginMarker) {
+		t.Errorf("the block must be added to AGENTS.md after its text, got %q", data)
+	}
+	if info, err := os.Lstat("CLAUDE.md"); err != nil || info.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("CLAUDE.md must stay a link: %v", err)
 	}
 }
 

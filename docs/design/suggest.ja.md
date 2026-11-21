@@ -270,7 +270,7 @@ hadome はこのファイルが無くても動きます。`init` は近道で、
 1. 候補は終了コードを変えない
 2. `hadome agents --write` を2回実行しても、ファイルは1回目の後と同じまま
 3. `hadome agents --write` が失敗したときは、どのファイルも書き換わっていない
-4. `hadome init` はファイルを上書きしない。`hadome init` も `hadome agents --write` も、シンボリックリンクを通して書かない。init は、行き先の無いリンクも含め、既にあるパスには書かない。agents --write は、リンクを指定されると終了コード `2` で止まる
+4. `hadome init` はファイルを上書きしない。`hadome init` も `hadome agents --write` も、シンボリックリンクを通してリポジトリの外に書かない。init は、行き先の無いリンクも含め、既にあるパスには書かない。agents --write は、リンクの行き先がリポジトリの中のふつうのファイルならそこに書き（`CLAUDE.md -> AGENTS.md` など）、それ以外のリンクを指定されると終了コード `2` で止まる
 5. 作業ツリーの図の叩き台を設定すると、その作業ツリーには `deps/not-in-diagram`・`deps/call-not-in-diagram`・`deps/diagram-stale` が何も出ない
 
 ## 意図して入れなかったもの
