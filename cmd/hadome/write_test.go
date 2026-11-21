@@ -41,11 +41,43 @@ func TestWritingCommandsNeverFollowALink(t *testing.T) {
 	if err := os.Symlink(target, "CLAUDE.md"); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := runIn(t, "agents", "--write", "CLAUDE.md"); code != 2 {
-		t.Errorf("agents --write to a link must fail with 2, got %d: %s", code, out)
+	if err := os.WriteFile("README.md", []byte("readme\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := runIn(t, "agents", "--write", "README.md", "CLAUDE.md")
+	if code != 2 || !strings.Contains(out, "CLAUDE.md is a symbolic link") {
+		t.Errorf("agents --write to a link leading outside must fail with 2 and name it, got %d: %s", code, out)
 	}
 	if data, _ := os.ReadFile(target); string(data) != "mine\n" {
 		t.Errorf("agents --write changed the file the link points at: %q", data)
+	}
+	if data, _ := os.ReadFile("README.md"); string(data) != "readme\n" {
+		t.Errorf("a refused link must leave the other files unwritten, got README.md %q", data)
+	}
+}
+
+// viewpoint: errors
+// target: hadome agents --write
+// A file that cannot be replaced, in a directory hadome may not write to, fails with 2 and says why.
+func TestAgentsSaysWhyAFileCannotBeWritten(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores the read-only bit on directories, so no directory refuses a new file")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root writes into any directory, so none can refuse the write")
+	}
+	dir := writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "CLAUDE.md": "mine\n"})
+	t.Chdir(dir)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	code, out := runIn(t, "agents", "--write", "CLAUDE.md")
+	if code != 2 || !strings.Contains(out, "hadome:") {
+		t.Errorf("want exit 2 with the reason, got %d: %s", code, out)
+	}
+	if data, _ := os.ReadFile("CLAUDE.md"); string(data) != "mine\n" {
+		t.Errorf("CLAUDE.md must stay as it was, got %q", data)
 	}
 }
 
