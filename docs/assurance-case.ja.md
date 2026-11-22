@@ -80,3 +80,4 @@ flowchart LR
 - CodeQL がプルリクエストとmainへのpushのたびに、Go・Actionsなどのコードを解析します
 - OpenSSF Scorecard が、リポジトリの設定を毎週確かめます
 - 依存の脆弱性は Dependabot が知らせ、依存は毎週上げます
+- この文書の主張がコードと合っているかを、[セキュリティレビュー](security-review.ja.md)で確かめます
