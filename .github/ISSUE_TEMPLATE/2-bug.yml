@@ -14,7 +14,7 @@ body:
     attributes:
       label: Version / 版
       description: The output of `hadome version`. / `hadome version` の出力
-      placeholder: hadome 0.10.2
+      placeholder: hadome 0.11.0
     validations:
       required: true
   - type: dropdown
