@@ -15,6 +15,38 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.11.0 - 2026-11-22
+
+### Finds more
+
+- New rule `code/config-literal`: adding, inside a function, a value that belongs in configuration (a URL, an IP address, a host and port, a port number, a time limit) is a regression. Every `code/` rule is on by default and measures only the functions and methods of product code. The rules are in [docs/design/rules-code.md](docs/design/rules-code.md).
+- New rule `code/swallowed-error`: adding code that drops an error, such as an empty catch, `except Exception: pass` or Go's `_ = f()`, is a regression.
+- New rule `code/duplicate`: adding a function whose body is the same as another's is a regression.
+- New rule `code/diverged-copy`: changing one of two functions that were copies on base and leaving the other as it was is a regression.
+- `hadome check` no longer runs a gate that the change adds or whose `run` it changes. It goes to review as `config/gate-not-run` (exit 3) instead. The same holds when base has no `.hadome.yml`. `hadome self-test` still runs every gate in the working tree.
+- A file over 128 MiB is left out of the version unread and goes to review as `unknown/too-large` (exit 3). A file base already left out is not listed.
+- In `check` and `mutate`, head too reads only the shared layers that base's `.hadome.yml` lists in `extends`. A change to `extends` goes to review as `config/loosened` (exit 3) without reading the new paths. A change that introduces a `.hadome.yml` with `extends` goes to review once as well.
+- Symbolic links are no longer followed. In a revision, the working tree and `--base-dir`/`--head-dir` alike, a link is a file whose content is its target text, as git stores it. The working tree and `dir` mode used to read a link to a file as that file, and left out links to directories and broken links.
+
+### Fewer false findings and misses
+
+- With `--head REV`, a file whose name held a newline could shift the content read for the files after it. hadome now asks git for files by object ID, and stops (exit 2) instead of skipping when an answer is missing.
+
+### Configuration
+
+- New `rules.code`. `config-literal.paths` are globs of the files that hold configuration; no value in them is counted. `config-literal.names` are names of arguments and fields whose values belong in configuration, such as a page size or a retry count. `duplicate.min-tokens` is the fewest tokens a function must have to be compared, 50 by default.
+- Configuration files must be regular files of at most 1 MiB. A larger one is exit 2.
+
+### Other
+
+- In `hadome check`'s text output, a value from the repository (file name, rule ID, exception reason and the like) that holds a non-printable character or bytes that are not UTF-8 is quoted and escaped like a Go string literal. A file name or reason can no longer become a GitHub Actions workflow command line or send escape sequences to the terminal. JSON output is unchanged.
+- The CI example ([docs/ci.md](docs/ci.md)) escapes the `file=` and `title=` of annotations, and the table cells of the job summary and the PR comment.
+- The instructions `hadome agents` writes tell agents to run `hadome self-test` after adding a gate or changing its `run`. "A gate it did not run" is added to the reasons for exit 3.
+- `hadome agents --write` writes through a link to a regular file inside the repository (`CLAUDE.md -> AGENTS.md`), keeping the link, and stops (exit 2) at any other link.
+- Release builds compile the C of the tree-sitter grammars with stack protection and `_FORTIFY_SOURCE`, and link the Linux binaries with RELRO.
+- The npm and PyPI packages carry search keywords.
+- The hooks guide says how to change Claude Code's limit of eight Stop hook blocks in a row.
+
 ## 0.10.2 - 2026-11-20
 
 ### Fewer false findings and misses
