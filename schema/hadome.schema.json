@@ -239,6 +239,47 @@
       "additionalProperties": false,
       "description": "Settings of the built-in rules. Only what differs from the defaults.",
       "properties": {
+        "code": {
+          "additionalProperties": false,
+          "description": "Settings of the code/ rules. Only product code is read, never tests or generated code.",
+          "properties": {
+            "config-literal": {
+              "additionalProperties": false,
+              "description": "Settings of code/config-literal.",
+              "properties": {
+                "names": {
+                  "description": "Names of arguments, keyword arguments and fields whose literal values belong in configuration, such as a page size, a retry count or a bucket. Names are compared in lower case without _ and -, so max_retries is maxRetries. Removing one needs a person's review.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "paths": {
+                  "description": "Globs of the files where the repository keeps its configuration; code/config-literal counts no value in them. Adding one needs a person's review.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "duplicate": {
+              "additionalProperties": false,
+              "description": "Settings of code/duplicate and code/diverged-copy.",
+              "properties": {
+                "min-tokens": {
+                  "default": 50,
+                  "description": "The fewest tokens a function must have to be compared with others. Default 50. Raising it needs a person's review.",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "comments": {
           "additionalProperties": false,
           "description": "Settings of the comments/ rules.",

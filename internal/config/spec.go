@@ -231,7 +231,7 @@ var rulesKey = Key{
 				"assertions: [acme.MustEqual]", LooserWhenAdded),
 			sqlSinksKey,
 		},
-	}, sizeKey, commentsKey, depsKey},
+	}, sizeKey, commentsKey, depsKey, codeKey},
 }
 
 // patternsDoc ends the documentation of the keys that write a design down, where an agent looks

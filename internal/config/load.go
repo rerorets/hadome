@@ -37,7 +37,8 @@ type Config struct {
 	Size     Limits // limits of the size/ rules, defaults filled in
 	TodoForm string // the regular expression a TODO comment must match
 	// EntryPoints are the framework entry points comments/missing-doc asks no doc comment of.
-	EntryPoints []EntryPoint
+	EntryPoints  []EntryPoint
+	CodeSettings // rules.code
 	// Messages is the language of the wording hadome writes: en (the default) or ja.
 	Messages string
 	// Diagram is the dependency diagram that judges imports: head's, for both versions. Nil when none

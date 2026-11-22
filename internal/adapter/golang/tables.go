@@ -19,6 +19,8 @@ type tables struct {
 	// sinks are the calls configuration adds to those that take SQL: a function or method name, or a
 	// callee as written (db.Run).
 	sinks map[string]bool
+	// names are rules.code.config-literal.names as facts.NameKey keys.
+	names map[string]bool
 }
 
 func newTables(c config.Analysis) *tables {
@@ -36,6 +38,7 @@ func newTables(c config.Analysis) *tables {
 		io:      newIOTable(c.IO),
 		asserts: map[string]bool{},
 		sinks:   map[string]bool{},
+		names:   facts.NameKeys(c.ConfigNames),
 	}
 	for _, e := range c.SQLSinks["go"] {
 		t.sinks[e] = true

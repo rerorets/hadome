@@ -1,0 +1,301 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 rerorets
+
+package config
+
+import (
+	"fmt"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// Change is one difference between the configurations of base and head.
+type Change struct {
+	Key string `json:"key"`
+	// File and Line are where in head the change is: the key in .hadome.yml, or the arrow in the
+	// diagram. A removal points at what holds the removed entry; Line is 0 when nothing does.
+	File    string `json:"file"`
+	Line    int    `json:"line,omitempty"`
+	Removed string `json:"removed,omitempty"`
+	Added   string `json:"added,omitempty"`
+	// Looser means the change makes the rules more permissive than in base.
+	Looser bool `json:"looser"`
+}
+
+// Diff lists what changed from base to head. Which changes are looser comes from the
+// specification, so a new key needs no code here.
+func Diff(base, head Config) []Change {
+	var out []Change
+	diffObject(&out, base.raw, head.raw, Spec, "")
+	for i := range out {
+		out[i].File, out[i].Line = FileName, head.lineOf(out[i])
+	}
+	out = append(out, diffArrows(base.Diagram, head.Diagram)...)
+	out = append(out, diffArrows(base.Calls, head.Calls)...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Key != out[j].Key {
+			return out[i].Key < out[j].Key
+		}
+		return out[i].Removed+out[i].Added < out[j].Removed+out[j].Added
+	})
+	return out
+}
+
+func diffObject(out *[]Change, base, head map[string]any, k Key, path string) {
+	for _, f := range k.Fields {
+		p := joinPath(path, f.Name)
+		b, h := base[f.Name], head[f.Name]
+		switch {
+		case f.OmittedIsOff && b == nil:
+			diffTurnedOn(out, h, f, p)
+		case f.Kind == KindObject:
+			diffObject(out, object(b), object(h), f, p)
+		case f.Kind == KindList:
+			if h == nil && f.OmittedIsWidest {
+				continue
+			}
+			diffList(out, list(b), list(h), f, p)
+		case f.Kind == KindInt:
+			diffInt(out, b, h, f, p)
+		case f.Default != nil:
+			if bs, hs := fmtValue(orDefault(b, f.Default)), fmtValue(orDefault(h, f.Default)); bs != hs {
+				*out = append(*out, Change{Key: p, Removed: bs, Added: hs, Looser: f.Looser == LooserWhenChanged})
+			}
+		case !reflect.DeepEqual(b, h):
+			*out = append(*out, Change{Key: p, Removed: fmtValue(b), Added: fmtValue(h)})
+		}
+	}
+}
+
+// diffTurnedOn lists what an OmittedIsOff object or list holds in head when base has none. Base did
+// not run the feature at all, so nothing in it is looser.
+func diffTurnedOn(out *[]Change, head any, k Key, path string) {
+	var added []Change
+	if k.Kind == KindList {
+		diffList(&added, nil, list(head), k, path)
+	} else {
+		diffObject(&added, nil, object(head), k, path)
+	}
+	for _, c := range added {
+		c.Looser = false
+		*out = append(*out, c)
+	}
+}
+
+func diffInt(out *[]Change, b, h any, k Key, path string) {
+	def, _ := k.Default.(int)
+	bi, hi := intOr(b, def), intOr(h, def)
+	if bi != hi {
+		*out = append(*out, Change{Key: path, Removed: strconv.Itoa(bi), Added: strconv.Itoa(hi),
+			Looser: k.Looser == LooserWhenHigher && hi > bi || k.Looser == LooserWhenLower && hi < bi})
+	}
+}
+
+func diffList(out *[]Change, base, head []any, k Key, path string) {
+	if k.Sequence {
+		if !reflect.DeepEqual(base, head) {
+			*out = append(*out, Change{Key: path, Removed: fmtSequence(base), Added: fmtSequence(head),
+				Looser: k.Looser != LooserNever})
+		}
+		return
+	}
+	ids := func(l []any) map[string]bool {
+		m := map[string]bool{}
+		for _, v := range l {
+			m[identityOf(v, *k.Elem, k.Identity)] = true
+		}
+		return m
+	}
+	b, h := ids(base), ids(head)
+	for id := range b {
+		if !h[id] {
+			*out = append(*out, Change{Key: path, Removed: id, Looser: k.Looser != LooserNever && k.Looser != LooserWhenAdded})
+		}
+	}
+	if k.Looser == LooserWhenChanged || fieldDirections(k) {
+		diffChanged(out, base, head, k, path)
+	}
+	for id := range h {
+		if !b[id] {
+			*out = append(*out, Change{Key: path, Added: id, Looser: k.Looser == LooserWhenAdded || k.Looser == LooserAlways})
+		}
+	}
+}
+
+// diffChanged reports entries that keep their identity but change their content.
+func diffChanged(out *[]Change, base, head []any, k Key, path string) {
+	byID := map[string]any{}
+	for _, v := range base {
+		byID[identityOf(v, *k.Elem, k.Identity)] = v
+	}
+	for _, v := range head {
+		id := identityOf(v, *k.Elem, k.Identity)
+		old, ok := byID[id]
+		switch {
+		case !ok || reflect.DeepEqual(old, v):
+		case fieldDirections(k):
+			*out = append(*out, diffEntry(object(old), object(v), *k.Elem, path, id)...)
+		default:
+			*out = append(*out, Change{Key: path, Removed: fmtValue(old), Added: fmtValue(v), Looser: true})
+		}
+	}
+}
+
+// fieldDirections reports whether the entries of a list of objects say, field by field, which
+// change loosens: an entry that keeps its identity is then compared field by field.
+func fieldDirections(k Key) bool {
+	if k.Elem == nil || k.Elem.Kind != KindObject {
+		return false
+	}
+	for _, f := range k.Elem.Fields {
+		if f.Looser != LooserNever {
+			return true
+		}
+	}
+	return false
+}
+
+// diffEntry compares two versions of one list entry field by field, each by its own direction. The
+// changes are listed under <list>.<field>, each value prefixed with the entry's identity.
+func diffEntry(base, head map[string]any, elem Key, path, id string) []Change {
+	var out []Change
+	for _, f := range elem.Fields {
+		var sub []Change
+		p := joinPath(path, f.Name)
+		switch {
+		case f.Kind == KindList:
+			diffList(&sub, list(base[f.Name]), list(head[f.Name]), f, p)
+		case !reflect.DeepEqual(base[f.Name], head[f.Name]):
+			sub = append(sub, Change{Key: p, Removed: fmtValue(base[f.Name]), Added: fmtValue(head[f.Name]),
+				Looser: f.Looser == LooserWhenChanged || f.Looser == LooserAlways})
+		}
+		for _, c := range sub {
+			if c.Removed != "" {
+				c.Removed = id + ": " + c.Removed
+			}
+			if c.Added != "" {
+				c.Added = id + ": " + c.Added
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// diffArrows compares what the diagrams allow, arrow by arrow, by the labels at their ends: a new
+// arrow, or a label that now names more, loosens the rules. Without a diagram nothing is checked, so
+// adding the first one only tightens, and removing it loosens everything.
+func diffArrows(base, head *Diagram) []Change {
+	switch {
+	case base == nil:
+		return nil
+	case head == nil:
+		return []Change{{Key: base.Key, File: FileName, Removed: base.Path, Looser: true}}
+	}
+	arrows := func(d *Diagram) map[string]int {
+		m := map[string]int{}
+		for _, e := range d.Edges {
+			if a := d.Label(e.From) + " --> " + d.Label(e.To); m[a] == 0 {
+				m[a] = e.Line
+			}
+		}
+		return m
+	}
+	b, h := arrows(base), arrows(head)
+	var out []Change
+	for a, line := range h {
+		if _, ok := b[a]; !ok {
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: line, Added: a, Looser: true})
+		}
+	}
+	for a := range b {
+		if _, ok := h[a]; !ok {
+			out = append(out, Change{Key: head.Key, File: head.Path, Removed: a})
+		}
+	}
+	return append(out, diffClasses(base, head)...)
+}
+
+// diffClasses lists the classes head gives that loosen the rules. Marking planned a box base draws
+// unplanned would take a box that stopped naming anything out of deps/diagram-stale; a new box drawn
+// planned is the intended use, so it is not listed. Marking wiring, on any box, takes its calls out
+// of deps/call-not-in-diagram. Removing either mark tightens.
+func diffClasses(base, head *Diagram) []Change {
+	was := map[string]Node{}
+	for _, n := range base.Nodes {
+		was[n.ID] = n
+	}
+	var out []Change
+	for _, n := range head.Nodes {
+		b, ok := was[n.ID]
+		if ok && !b.Planned && n.Planned {
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: n.PlannedLine,
+				Added: n.ID + " " + PlannedClass, Looser: true})
+		}
+		if n.Wiring && !b.Wiring {
+			out = append(out, Change{Key: head.Key, File: head.Path, Line: n.WiringLine,
+				Added: n.ID + " " + WiringClass, Looser: true})
+		}
+	}
+	return out
+}
+
+// fmtSequence writes a sequence as YAML's flow style writes it, in its own order: [go, test, ./...].
+// An empty or missing one is "".
+func fmtSequence(l []any) string {
+	if len(l) == 0 {
+		return ""
+	}
+	parts := make([]string, len(l))
+	for i, v := range l {
+		parts[i] = fmt.Sprint(v)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func fmtValue(v any) string {
+	if v == nil {
+		return ""
+	}
+	return identityOf(v, Key{}, nil)
+}
+
+// lineOf finds the line of a change in head's .hadome.yml: the added or changed list entry when
+// there is one, or else the key itself, or else the nearest enclosing key that head has.
+func (c Config) lineOf(ch Change) int {
+	if ch.Added != "" {
+		if k, ok := lookup(Spec, strings.Split(ch.Key, ".")); ok && k.Kind == KindList {
+			for i, v := range list(valueAt(c.raw, ch.Key)) {
+				if identityOf(v, *k.Elem, k.Identity) == ch.Added || fmtValue(v) == ch.Added {
+					if line := c.lines[fmt.Sprintf("%s[%d]", ch.Key, i)]; line > 0 {
+						return line
+					}
+				}
+			}
+		}
+	}
+	for p := ch.Key; p != ""; p = parentPath(p) {
+		if line := c.lines[p]; line > 0 {
+			return line
+		}
+	}
+	return 0
+}
+
+// valueAt returns the raw value at a dotted key path.
+func valueAt(raw map[string]any, path string) any {
+	var v any = raw
+	for _, name := range strings.Split(path, ".") {
+		v = object(v)[name]
+	}
+	return v
+}
+
+func parentPath(p string) string {
+	if i := strings.LastIndex(p, "."); i >= 0 {
+		return p[:i]
+	}
+	return ""
+}

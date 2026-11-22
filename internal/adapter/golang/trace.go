@@ -25,6 +25,8 @@ type trace struct {
 	// the value passed, so it is not among the calls.
 	ifaces  map[string]string
 	through map[string]int // -> the line of the first call
+	// swallows are the places the body drops an error (facts.Symbol.Swallows).
+	swallows []facts.Swallow
 }
 
 // throughIDs returns the calls through an interface that are not among the walker's calls, sorted,
@@ -96,7 +98,8 @@ func (t *trace) route(w *walker, c *ast.CallExpr) bool {
 		if lit, ok := a.(*ast.FuncLit); ok {
 			inner := &walker{scope: w.scope, fset: w.fset, tables: w.tables, tParams: map[string]bool{},
 				calls: map[string]*callCount{}, walking: map[string]bool{}, curPath: w.curPath,
-				callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: w.file}
+				callees: map[ast.Expr]bool{}, fields: map[*ast.Ident]bool{}, file: w.file,
+				texts: map[textKey]*textCount{}, sinkKeys: map[textKey]bool{}, noTexts: w.noTexts}
 			inner.local = newBlock(w.local)
 			inner.bindParams(lit.Type, nil)
 			ast.Inspect(lit.Body, inner.visit)
@@ -197,6 +200,8 @@ func traceFile(rd reading, pf parsedFile, syms []facts.Symbol) ([]facts.Symbol, 
 			continue
 		}
 		t.fill(&syms[i], w, pf.pkgPath)
+		syms[i].Body, syms[i].BodyTokens = funcBody(rd.fset, pf.src, d)
+		syms[i].Literals = literals(rd.fset, pf.src, d.Body, imports, rd.tb.names)
 	}
 	return syms, entries
 }
@@ -210,6 +215,7 @@ func (t *trace) fill(s *facts.Symbol, w *walker, pkgPath string) {
 		}
 	}
 	s.IO, s.Calls, s.Asserted, s.CallAt = t.io, callIDs(w), askedIDs(w), callLines(w)
+	s.Swallows = t.swallows
 	s.Through = t.throughIDs(w, s.CallAt)
 	if len(s.CallAt) == 0 {
 		s.CallAt = nil

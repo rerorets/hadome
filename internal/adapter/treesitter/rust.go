@@ -292,14 +292,40 @@ func attributes(f *file, n *node) []string {
 	return out
 }
 
-// testModule reports a module compiled only for tests: #[cfg(test)].
+// testModule reports a module compiled only for tests: #[cfg(test)], or #[cfg(all(test, …))]
+// with test among the conditions that must all hold. #[cfg(any(test, …))] is compiled without
+// tests too.
 func testModule(f *file, n *node) bool {
 	for _, a := range attributes(f, n) {
-		if strings.ReplaceAll(a, " ", "") == "cfg(test)" {
+		a = strings.Join(strings.Fields(a), "")
+		if a == "cfg(test)" {
+			return true
+		}
+		if all, ok := strings.CutPrefix(a, "cfg(all("); ok && slices.Contains(topLevel(strings.TrimSuffix(all, "))")), "test") {
 			return true
 		}
 	}
 	return false
+}
+
+// topLevel splits a list of cfg conditions at its commas outside parentheses.
+func topLevel(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, s[start:])
 }
 
 // rustDoc reports a /// or /** doc comment before n, above its attributes.

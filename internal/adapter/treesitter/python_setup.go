@@ -63,7 +63,7 @@ func pyAutouse(f *file, n *node) bool {
 // setup's own line. Only those hazards are the test's: what the setup calls is not what it guards.
 func (pf *pyFile) setupHazards(t *testFacts, class *node) {
 	sw := &pyWalk{pf: pf, t: newTest(pf.f, "", pf.f.root), vars: map[string]string{}, locals: map[string]bool{},
-		walking: map[string]bool{}}
+		kinds: map[string]vkind{}, walking: map[string]bool{}}
 	for _, name := range pf.autouseInReach() {
 		sw.fixture(name)
 	}

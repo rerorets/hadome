@@ -171,6 +171,17 @@ type Symbol struct {
 	Units []string
 	// IO is true when the body itself uses something that does input or output.
 	IO bool
+	// Literals are the values in the body of a function or method that belong in configuration,
+	// outside named constants (docs/design/rules-code.md).
+	Literals []Literal
+	// Swallows are the places in the body of a function or method that drop an error.
+	Swallows []Swallow
+	// Body is a fingerprint of a function's or method's tokens from its parameters to its end,
+	// without comments and whitespace, with its parameters and local variables numbered in the
+	// order they appear (see Fingerprint). Empty when unknown.
+	Body string
+	// BodyTokens counts the tokens Body was made of.
+	BodyTokens int
 }
 
 // Nested is a function nested in a symbol: an arrow function, lambda, closure, function literal,

@@ -39,6 +39,10 @@ type file struct {
 	// consts are the file's constants that hold a string, by name (see stringConsts); nil
 	// until a test first reads a name of the file.
 	stringConsts map[string]*node
+	// lang is the language's name, and names are rules.code.config-literal.names as facts.NameKey
+	// keys: what the code/ facts of the file's functions need (withCode).
+	lang  string
+	names map[string]bool
 }
 
 func (f *file) text(n *node) string { return n.Utf8Text(f.src) }
@@ -92,6 +96,7 @@ func (l *lang) AnalyzeWithoutTexts(r *reuse.Run, c config.Analysis, paths []stri
 func (l *lang) analyze(r *reuse.Run, c config.Analysis, paths []string, texts bool) (*facts.Analysis, error) {
 	v := engine.Version{Label: r.Label(), FS: r.FS()}
 	rd := l.fresh()
+	names := facts.NameKeys(c.ConfigNames)
 	var files []*file
 	for _, p := range paths {
 		src, err := fs.ReadFile(v.FS, p)
@@ -107,6 +112,7 @@ func (l *lang) analyze(r *reuse.Run, c config.Analysis, paths []string, texts bo
 		gen := config.MatchesAny(c.GeneratedFiles, p)
 		f.testGlob, f.generatedGlob = !gen && config.MatchesAny(c.TestFiles, p), gen
 		f.productGlob = config.MatchesAny(c.ProductFiles, p)
+		f.lang, f.names = l.name, names
 		files = append(files, f)
 	}
 	rd.index(v, files)
