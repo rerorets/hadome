@@ -216,6 +216,7 @@ func (w *walker) visit(n ast.Node) bool {
 	}
 	switch n := n.(type) {
 	case *ast.AssignStmt:
+		w.swallow(n)
 		w.recordVars(n)
 	case *ast.GenDecl: // var, const and type declarations inside the test
 		w.recordDecl(n)

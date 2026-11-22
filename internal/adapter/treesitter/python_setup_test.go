@@ -361,3 +361,28 @@ def test_local():
 `), `test_inline calls=[src/app/store.Store src/app/store.Store.add] unresolved=0
 test_local calls=[src/app/store.Store src/app/store.Store.add] unresolved=0`)
 }
+
+// viewpoint: behaviour
+// target: treesitter.lang.Analyze
+// A setup that binds a name of its own before storing it on self is read for hazards like any other:
+// the clock it reads there is the test's hazard.
+func TestPythonSetupThatBindsANameIsRead(t *testing.T) {
+	a := analyze(t, "python", tree(
+		"app/__init__.py", "",
+		"app/calc.py", "def add(a, b):\n    return a + b\n",
+		"tests/test_calc.py", `import time
+from app.calc import add
+
+
+class TestAdd:
+    def setup_method(self):
+        start = time.time()
+        self.start = start
+
+    def test_add(self):
+        assert add(1, 2) == 3
+`))
+	if len(a.Tests) != 1 || len(a.Tests[0].Hazards) != 1 {
+		t.Fatalf("want one test with the setup's clock as its hazard, got %+v", a.Tests)
+	}
+}

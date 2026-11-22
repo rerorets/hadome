@@ -259,6 +259,7 @@ This repository uses hadome to stop regressions in code and tests.
 | `deps/` | `not-in-diagram`（依存の図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱）・`cycle`（ユニットの間に新しい循環を作るimport。図が無くても動く）・`layer`（内側の層から外側の層へのimport） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
+| `code/` | `config-literal`（関数に書いた、設定に置く値）・`swallowed-error`（捨てたエラー）・`duplicate`（本体が同じ関数）・`diverged-copy`（片方だけ直した写し） |
 | `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル・`import`（確認待ち）: 行き先が実行するまで決まらないimport |
 | `mutation/` | `survived`（`hadome mutate`だけ）: テストが気づかなかった壊し方 |
 | `config/` | `loosened`（確認待ち）: 自分を判定するルールを緩める変更 |

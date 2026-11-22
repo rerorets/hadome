@@ -19,6 +19,8 @@ type Analysis struct {
 	AnsibleFiles   []string
 	Databases      []Database
 	SQLSinks       map[string][]string
+	// ConfigNames are rules.code.config-literal.names, which decide which literals are facts.
+	ConfigNames []string
 }
 
 // Analysis returns the part of the configuration adapters read.
@@ -27,5 +29,6 @@ func (c Config) Analysis() Analysis {
 		Languages: c.Languages, Hazards: c.Hazards, IO: c.IO, Assertions: c.Assertions,
 		TestFiles: c.TestFiles, GeneratedFiles: c.GeneratedFiles, ProductFiles: c.ProductFiles,
 		AnsibleFiles: c.AnsibleFiles, Databases: c.Databases, SQLSinks: c.SQLSinks,
+		ConfigNames: c.ConfigNames,
 	}
 }

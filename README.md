@@ -251,6 +251,7 @@ This repository uses hadome to stop regressions in code and tests.
 | `deps/` | `not-in-diagram` (imports your dependency diagram does not draw) · `call-not-in-diagram` (calls your call diagram does not draw) · `diagram-stale` (boxes that name nothing) · `cycle` (imports that make a new cycle between units, with or without a diagram) · `layer` (imports from an inner layer to an outer one) |
 | `size/` | `file-lines` · `function-lines` · `params` · `complexity` · `interface-methods` |
 | `comments/` | `todo-format` (TODOs without a when) · `missing-doc` · `broken-reference` (comments pointing at missing documents) |
+| `code/` | `config-literal` (values that belong in configuration, written in a function) · `swallowed-error` (errors dropped) · `duplicate` (functions with the same body) · `diverged-copy` (a copy left behind when the other was fixed) |
 | `unknown/` | `unread` (review): a file hadome could not read · `import` (review): an import whose destination is decided only at run time |
 | `mutation/` | `survived` (`hadome mutate` only): a break no test notices |
 | `config/` | `loosened` (review): a change that loosens the rules judging it |

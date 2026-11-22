@@ -18,6 +18,7 @@ import (
 	"github.com/rerorets/hadome/internal/engine"
 	"github.com/rerorets/hadome/internal/gate"
 	"github.com/rerorets/hadome/internal/mutation"
+	"github.com/rerorets/hadome/internal/rules/code"
 	"github.com/rerorets/hadome/internal/rules/comments"
 	"github.com/rerorets/hadome/internal/rules/deps"
 	"github.com/rerorets/hadome/internal/rules/size"
@@ -51,7 +52,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func newEngine() *engine.Engine {
 	var rules []engine.Rule
-	for _, group := range [][]engine.Rule{tests.All(), size.All(), comments.All(), deps.All(), unknown.All()} {
+	for _, group := range [][]engine.Rule{tests.All(), size.All(), comments.All(), deps.All(), code.All(), unknown.All()} {
 		rules = append(rules, group...)
 	}
 	return &engine.Engine{Analyzer: adapter.New(), Rules: rules, Workdir: ".", Candidates: suggest.Candidates, Unfollowed: deps.Unfollowed,

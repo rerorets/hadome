@@ -93,7 +93,7 @@ func funcSymbol(f *file, n *node, s facts.Symbol, params []string, cx counted) f
 		s.Scoped = s.Scoped || facts.IsScopeName(p)
 	}
 	s.Path, s.Line, s.EndLine, s.Params, s.Complexity, s.Nested = f.path, line(n), endLine(n), len(params), cx.own, cx.nested
-	return s
+	return withCode(f, n, s)
 }
 
 // scopeOf returns the position of the scope parameter: the first whose name says user, tenant and

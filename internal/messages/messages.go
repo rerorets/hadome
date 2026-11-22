@@ -211,6 +211,24 @@ var Japanese = map[string]string{
 	"a planned box whose package exists tells readers it is still to be written":                                                                               "パッケージがあるのに予定の箱のままだと、まだ書かれていないと読み手に伝わってしまう",
 	"remove the class planned from node %s": "ノード %s からクラス planned を外す",
 
+	// code/.
+	"a value that belongs in configuration": "設定に置く値",
+	"values in product functions that belong in configuration: URLs with a host, IP addresses, hosts and ports, ports, durations built from literals, and literals passed to the names rules.code.config-literal.names lists; a function with more of them than on base is a regression": "製品の関数の中の、設定に置く値。ホストのある URL、IP アドレス、ホストとポート、ポート、リテラルから作った時間、rules.code.config-literal.names に挙げた名前へのリテラル。base より多くなった関数は後退になる",
+	"the value works where it is, and the next environment, or the next person who changes it, has to find every copy in the code":                                                                                                                                                       "値はその場では動く。次の環境や、次に値を変える人が、コードの中のすべての写しを探すことになる",
+	"read the value from where the repository reads its configuration; if it is the same everywhere and never changes, make it a named constant":                                                                                                                                         "リポジトリが設定を読む場所から値を読む。どの環境でも同じ値で、変えるつもりもないなら、名前の付いた定数にする",
+	"an error dropped": "捨てたエラー",
+	"places in product functions where an error is caught or returned and then dropped: an empty catch or except, a Go error assigned to _, a Rust .ok() whose value is unused; a function with more of them than on base is a regression": "製品の関数の中の、捕まえた、または返されたエラーを捨てる場所。空の catch や except、_ に入れた Go の error、値を使わない Rust の .ok()。base より多くなった関数は後退になる",
+	"the failure disappears without a trace: the change passes its tests, and the problem shows up later somewhere else":                                                                                                                   "失敗が跡を残さずに消える。変更はテストを通り、問題はあとで別の場所に現れる",
+	"return the error, or wrap and re-throw it; when dropping it is the intent, write a reasoned exception":                                                                                                                                "エラーを返すか、包んで投げ直す。捨てるのが意図なら、理由つきの例外を書く",
+	"%d functions have the same body: %s": "%d 個の関数の本体が同じ: %s",
+	"product functions with the same body, ignoring names, comments, whitespace and the names of parameters and local variables, and, in different files, calling the same known functions; a new copy is a regression": "名前、コメント、空白、引数と局所変数の名前を除いて本体が同じ、製品の関数。別のファイルの関数は、呼ぶ分かっている関数も同じときだけ。新しい写しは後退になる",
+	"every fix has to be made in each copy, and a copy that is forgotten keeps the bug":                                                           "直すたびに写しのすべてを直すことになり、忘れた写しにはバグが残る",
+	"delete all but one and call the one that is left; how to share the code is the author's decision":                                            "1つだけ残して消し、残したものを呼ぶ。どう共通にするかは作者が決める",
+	"%s changed; %s still has the body it had":                                                                                                    "%s が変わった。%s は前の本体のまま",
+	"functions that had the same body as another on base and still have it, when the change edits that other one: the copy may need the same fix": "base でほかの関数と本体が同じで、変更がそのほかの関数を変えたのに、前の本体のままの関数。写しにも同じ直しが要るかもしれない",
+	"a fix to one copy may be needed in the other, and the copy is not in the diff, so review does not see it either":                             "片方への直しは、もう片方にも要るかもしれない。写しは差分に出ないので、レビューでも気づけない",
+	"make the same change in the copy, or delete one and call the other; for copies meant to change separately, write a reasoned exception":       "写しにも同じ変更をするか、片方を消してもう片方を呼ぶ。別々に変わってよい写しなら、理由つきの例外を書く",
+
 	// unknown/.
 	"hadome could not read %s":                                                                                      "hadome は %s を読めなかった",
 	"hadome did not read %s: it is larger than 128 MiB":                                                             "hadome は %s を読んでいない: 128 MiB より大きい",
