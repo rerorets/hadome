@@ -80,3 +80,4 @@ flowchart LR
 - CodeQL analyses the Go code, the Actions workflows and the rest on every pull request and push to main
 - OpenSSF Scorecard checks the repository's setup every week
 - Dependabot reports vulnerable dependencies, and dependencies are updated every week
+- [Security reviews](security-review.md) check that the claims in this document match the code

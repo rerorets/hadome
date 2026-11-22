@@ -33,4 +33,4 @@ hadome only reads the repository it is pointed at, and the shared configuration 
 
 How to write the external commands is in [product-specific gates](docs/external-gates.md). Before running hadome on a repository you do not trust, read the `gates` in its `.hadome.yml` and any changes to the gates' scripts. When a pull request rewrites the script of a gate on the base branch, the rewritten script runs. Do not run `hadome mutate` on a repository you do not trust.
 
-What hadome protects, and how, is in [the security assurance case](docs/assurance-case.md).
+What hadome protects, and how, is in [the security assurance case](docs/assurance-case.md). The security reviews done so far, and how what they found was fixed, are in [security review](docs/security-review.md).
