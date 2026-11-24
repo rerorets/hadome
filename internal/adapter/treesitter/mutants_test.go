@@ -178,6 +178,92 @@ fun other(a: Int) = a < 1
 
 // viewpoint: behaviour
 // target: lang.Mutants
+// The condition of a branch or a loop that no other break reaches is negated in each language, so
+// that a branch no test takes is broken too. A condition with a comparison is left to that break,
+// and Rust's if let, which binds names, is not negated.
+func TestMutantsNegateAConditionNoOtherBreakReaches(t *testing.T) {
+	cases := []struct {
+		lang, path, src string
+		want            []string
+	}{
+		{"typescript", "src/calc.ts", `export function fee(total: number, member: boolean): number {
+  if (member) return 0;
+  while (more()) total--;
+  return member ? 1 : total >= 5000 ? 2 : 3;
+}
+`, []string{
+			"2 negate a boolean: member -> !(member)",
+			"3 negate a boolean: more() -> !(more())",
+			"4 return the zero value: member ? 1 : total >= 5000 ? 2 : 3 -> 0",
+			"4 negate a boolean: member -> !(member)",
+			"4 flip a comparison: >= -> <",
+		}},
+		{"python", "src/calc.py", `def fee(total, member) -> int:
+    if member:
+        return 1
+    elif more():
+        return 2
+    while member and more():
+        pass
+    return 3 if member else 4
+`, []string{
+			"2 negate a boolean: member -> not (member)",
+			"3 return the zero value: 1 -> 0",
+			"4 negate a boolean: more() -> not (more())",
+			"5 return the zero value: 2 -> 0",
+			"6 negate a boolean: member and more() -> not (member and more())",
+			"8 return the zero value: 3 if member else 4 -> 0",
+			"8 negate a boolean: member -> not (member)",
+		}},
+		{"rust", "src/calc.rs", `fn fee(total: i32, member: bool) -> i32 {
+    if member { return 1; }
+    if let Some(x) = cached() { return x; }
+    while more() { }
+    2
+}
+`, []string{
+			"2 negate a boolean: member -> !(member)",
+			"2 return the zero value: 1 -> 0",
+			"3 return the zero value: x -> 0",
+			"4 negate a boolean: more() -> !(more())",
+			"5 return the zero value: 2 -> 0",
+		}},
+		{"java", "src/main/java/calc/Calc.java", `class Calc {
+    int fee(int total, boolean member) {
+        if (member) return 1;
+        do { total--; } while (more());
+        return member ? 2 : 3;
+    }
+}
+`, []string{
+			"3 negate a boolean: member -> !(member)",
+			"3 return the zero value: 1 -> 0",
+			"4 negate a boolean: more() -> !(more())",
+			"5 return the zero value: member ? 2 : 3 -> 0",
+			"5 negate a boolean: member -> !(member)",
+		}},
+		{"kotlin", "src/main/kotlin/calc/Calc.kt", `fun fee(total: Int, member: Boolean): Int {
+    if (member) return 1
+    while (more()) { }
+    return 2
+}
+`, []string{
+			"2 negate a boolean: member -> !(member)",
+			"2 return the zero value: 1 -> 0",
+			"3 negate a boolean: more() -> !(more())",
+			"4 return the zero value: 2 -> 0",
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.lang, func(t *testing.T) {
+			got, _ := mutantsOf(t, c.lang, c.path, c.src, "fee")
+			expect(t, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+		})
+	}
+}
+
+// viewpoint: behaviour
+// target: lang.Mutants
 // An anchor holds no line number and no comment: moving the function down and commenting one of
 // its lines leaves every anchor as it was.
 func TestMutantAnchorsSurviveMovingAndCommenting(t *testing.T) {

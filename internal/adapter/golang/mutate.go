@@ -113,6 +113,10 @@ func (m *mutator) function(fn *ast.FuncDecl) {
 			if n.Name == "true" || n.Name == "false" {
 				m.add(negateBoolean, n.Pos(), n.End(), map[string]string{"true": "false", "false": "true"}[n.Name])
 			}
+		case *ast.IfStmt:
+			m.condition(n.Cond)
+		case *ast.ForStmt:
+			m.condition(n.Cond)
 		case *ast.ReturnStmt:
 			m.returnZero(n, zero)
 		case *ast.ExprStmt:
@@ -122,6 +126,34 @@ func (m *mutator) function(fn *ast.FuncDecl) {
 		}
 		return true
 	})
+}
+
+// condition negates the condition of an if or a for, so that a branch no test takes is broken too:
+// if member becomes if !(member). A condition that another break already reaches (a comparison, a
+// negation, a boolean literal, arithmetic) is left to that break.
+func (m *mutator) condition(c ast.Expr) {
+	if c == nil {
+		return
+	}
+	broken := false
+	ast.Inspect(c, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.BinaryExpr:
+			_, flips := flipped[n.Op]
+			_, swaps := swapped[n.Op]
+			broken = broken || flips || swaps
+		case *ast.UnaryExpr:
+			broken = broken || n.Op == token.NOT
+		case *ast.Ident:
+			broken = broken || n.Name == "true" || n.Name == "false"
+		}
+		return !broken
+	})
+	if !broken {
+		m.add(negateBoolean, c.Pos(), c.End(), "!("+m.text(c.Pos(), c.End())+")")
+	}
 }
 
 // returnZero breaks a return of a single result by returning the zero value instead, unless the

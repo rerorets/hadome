@@ -20,6 +20,9 @@ func statementOf(statement string, calls ...string) func(f *file, n *node) bool 
 }
 
 var tsBreaks = &breaks{
+	conditions: map[string]string{"if_statement": "condition", "while_statement": "condition", "do_statement": "condition",
+		"for_statement": "condition", "ternary_expression": "condition"},
+	negated: "!(%s)",
 	functions: set("function_declaration", "generator_function_declaration", "method_definition", "arrow_function",
 		"function_expression", "generator_function"),
 	nested:     set("class_declaration", "class"),
@@ -67,6 +70,9 @@ func tsZero(f *file, fn *node) string {
 }
 
 var pyBreaks = &breaks{
+	conditions: map[string]string{"if_statement": "condition", "elif_clause": "condition", "while_statement": "condition",
+		"conditional_expression": ""},
+	negated:       "not (%s)",
 	functions:     set("function_definition"),
 	nested:        set("lambda", "class_definition"),
 	binary:        set("comparison_operator", "binary_operator"),
@@ -112,19 +118,21 @@ func pyZero(f *file, fn *node) string {
 }
 
 var rustBreaks = &breaks{
-	functions: set("function_item"),
-	nested:    set("closure_expression"),
-	binary:    set("binary_expression"),
-	not:       set("unary_expression"),
-	bools:     set("boolean_literal"),
-	literals:  lowerBools,
-	returns:   set("return_expression"),
-	call:      statementOf("expression_statement", "call_expression"),
-	removed:   ";",
-	tail:      rustTail,
-	body:      bodyField,
-	zero:      rustZero,
-	constants: rustConstants,
+	conditions: map[string]string{"if_expression": "condition", "while_expression": "condition"},
+	negated:    "!(%s)",
+	functions:  set("function_item"),
+	nested:     set("closure_expression"),
+	binary:     set("binary_expression"),
+	not:        set("unary_expression"),
+	bools:      set("boolean_literal"),
+	literals:   lowerBools,
+	returns:    set("return_expression"),
+	call:       statementOf("expression_statement", "call_expression"),
+	removed:    ";",
+	tail:       rustTail,
+	body:       bodyField,
+	zero:       rustZero,
+	constants:  rustConstants,
 	binders: map[string]string{"let_declaration": "pattern", "parameter": "pattern", "for_expression": "pattern",
 		"match_arm": "pattern", "let_condition": "pattern", "closure_parameters": "", "const_item": "name",
 		"static_item": "name", "function_item": "name"},
@@ -173,6 +181,9 @@ func rustZero(f *file, fn *node) string {
 }
 
 var javaBreaks = &breaks{
+	conditions: map[string]string{"if_statement": "condition", "while_statement": "condition", "do_statement": "condition",
+		"for_statement": "condition", "ternary_expression": "condition"},
+	negated:   "!(%s)",
 	functions: set("method_declaration", "constructor_declaration"),
 	nested:    set("lambda_expression", "class_body"),
 	binary:    set("binary_expression"),
@@ -216,6 +227,9 @@ func javaZero(f *file, fn *node) string {
 }
 
 var ktBreaks = &breaks{
+	conditions: map[string]string{"if_expression": "condition", "while_statement": "condition",
+		"do_while_statement": "condition"},
+	negated:   "!(%s)",
 	functions: set("function_declaration"),
 	nested:    set("lambda_literal", "anonymous_function", "object_literal", "class_declaration"),
 	binary:    set("binary_expression"),
