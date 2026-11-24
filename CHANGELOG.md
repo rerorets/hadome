@@ -15,6 +15,23 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.12.0 - 2026-11-24
+
+### Finds more
+
+- `hadome mutate` negates the condition of an `if`, `while`, `for` and the like when it holds no comparison, `!`, boolean literal or arithmetic (`if (member)` → `if (!(member))`). Before, such a branch was not broken anywhere, even when no test took it. The same in Go, TypeScript, Python, Rust, Java and Kotlin. There are more mutants, so a change can reach `mutation.max-mutants` sooner.
+- In TypeScript tests, a method called on a cast of a value read by a dynamic import (`(m as any).makeStore()` with `m` from `await import('./st' + 'ore')`) counts as a call whose target is unknown. A test whose only calls are of this kind can go to review as `tests/target-unknown` (exit 3).
+
+### Fewer false findings and misses
+
+- A method a test calls on a cast value or on an object made in place counts as a call (TypeScript `(o as Store).add(1)` and `new Store().add(1)`, Java `((Store) o).add(1)`, Kotlin `(o as Store).add(1)`). Before, it did not count, so rewriting `const s = new Store(); s.add(1)` as `new Store().add(1)` reported `tests/scope-shrunk`.
+
+### Other
+
+- `hadome agents --write` says what it did to each file: wrote it, added the block, updated the block, or found the block already as it is. In the last case it does not rewrite the file.
+- The Japanese documents and the `--lang ja` output call `gates` ゲート instead of 門番, as the configuration key, `gate:allow` and the English documents do.
+- The README's images show outside GitHub too, such as on package pages.
+
 ## 0.11.0 - 2026-11-22
 
 ### Finds more
