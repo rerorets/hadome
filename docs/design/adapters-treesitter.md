@@ -469,10 +469,19 @@ A `lang` has `Mutants`, which makes it the Mutator of `hadome mutate` ([mutation
 | Break | TypeScript | Python | Rust | Java | Kotlin |
 |---|---|---|---|---|---|
 | Flip a comparison | Go's six, `===` ↔ `!==` | Go's six | Go's six | Go's six | Go's six, `===` ↔ `!==` |
-| Negate a boolean | `!x` → `x`, `true` ↔ `false` | `not x` → `x`, `True` ↔ `False` | `!x` → `x`, `true` ↔ `false` | `!x` → `x`, `true` ↔ `false` | `!x` → `x`, `true` ↔ `false` |
+| Negate a boolean | `!x` → `x`, `true` ↔ `false`, condition `c` → `!(c)` | `not x` → `x`, `True` ↔ `False`, condition `c` → `not (c)` | `!x` → `x`, `true` ↔ `false`, condition `c` → `!(c)` | `!x` → `x`, `true` ↔ `false`, condition `c` → `!(c)` | `!x` → `x`, `true` ↔ `false`, condition `c` → `!(c)` |
 | Swap arithmetic | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal or a template string | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal (f-strings included) | `+` ↔ `-`, `*` ↔ `/` | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal | `+` ↔ `-`, `*` ↔ `/`. Not made when either side is a string literal |
 | Return the zero value | The table below | The table below | The table below | The table below | The table below |
 | Remove a call statement | The statement becomes `;` | The statement becomes `pass` | A statement ending in `;` becomes `;` | The statement becomes `;` | The statement becomes `Unit` |
+
+A condition is negated only where no other break reaches it, in the conditions below ([mutation.md](mutation.md), "How to break"). Parentheses around the condition are dropped before negating it.
+
+| Language | Conditions |
+|---|---|
+| TypeScript and Java | `if`, `while`, `do … while`, `for`, the ternary operator |
+| Python | `if`, `elif`, `while`, `a if c else b` |
+| Rust | `if`, `while`. `if let` and `while let` bind names, so they are not negated |
+| Kotlin | `if`, `while`, `do … while` |
 
 Go's six are `<` → `>=`, `>=` → `<`, `<=` → `>`, `>` → `<=`, and `==` ↔ `!=`.
 

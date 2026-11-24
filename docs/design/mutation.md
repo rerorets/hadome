@@ -157,10 +157,12 @@ A few kinds only. Each changes one place, and most tests can notice it.
 | Kind | Example |
 |---|---|
 | Flip a comparison | `<` → `>=`, `==` → `!=` |
-| Negate a boolean | `ok` → `!ok`, `true` → `false` |
+| Negate a boolean | `!ok` → `ok`, `true` → `false`, `if member` → `if !(member)` |
 | Swap arithmetic | `+` → `-`, `*` → `/` |
 | Return the zero value | `return total` → `return 0` (each language's zero value) |
 | Remove a call statement | remove the line `store.Append(row)` |
+
+A condition is negated only for the condition of an `if` or a `for` that no other break reaches. For example, `if member` and `for more() && member`. A condition with a comparison, a `!`, a boolean literal or arithmetic is broken by those breaks, so it is not negated. Without negating conditions, a branch whose condition has no comparison and no `!` is not broken anywhere, even when no test takes it.
 
 A break that gives back the same value is not made a mutant. It changes nothing, so no test can catch it, and it would be reported as a false survivor.
 

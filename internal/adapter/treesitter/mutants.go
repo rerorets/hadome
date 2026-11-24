@@ -44,6 +44,11 @@ type breaks struct {
 	bools     map[string]bool   // the kinds of boolean literals
 	literals  map[string]string // each boolean literal and its negation
 	returns   map[string]bool   // return statements; their first named child is the value
+	// conditions are the nodes that branch or loop on a condition, each with the field that holds
+	// it, or "" when it is the second named child (Python's a if cond else b).
+	conditions map[string]string
+	// negated writes a condition negated, as fmt.Sprintf(negated, condition).
+	negated string
 	// call reports whether a statement is only a call, which removing it breaks.
 	call func(f *file, n *node) bool
 	// removed replaces a removed call statement.
@@ -185,6 +190,8 @@ func (m *mutator) node(n *node) {
 		}
 	case m.b.returns[kind]:
 		m.returned(value(n))
+	case hasKey(m.b.conditions, kind):
+		m.condition(n)
 	case m.b.call(m.f, n):
 		m.add(removeCall, n.StartByte(), n.EndByte(), m.b.removed)
 	}
@@ -196,6 +203,41 @@ func (m *mutator) negation(n *node) {
 	if op != nil && !op.IsNamed() && (m.f.text(op) == "!" || m.f.text(op) == "not") && n.ChildCount() > 1 {
 		m.add(negateBoolean, op.StartByte(), n.Child(1).StartByte(), "")
 	}
+}
+
+// condition negates the condition of a branch or a loop, so that a branch no test takes is broken
+// too: if (member) becomes if (!(member)). A condition that another break already reaches (a
+// comparison, a negation, a boolean literal, arithmetic) is left to that break, and a condition
+// that binds names (Rust's if let) is not a boolean.
+func (m *mutator) condition(n *node) {
+	field := m.b.conditions[n.Kind()]
+	var c *node
+	if field == "" {
+		if all := named(n); len(all) > 1 {
+			c = all[1]
+		}
+	} else {
+		c = n.ChildByFieldName(field)
+	}
+	for c != nil && c.Kind() == "parenthesized_expression" {
+		c = value(c)
+	}
+	if c == nil || c.Kind() == "let_condition" || c.Kind() == "let_chain" {
+		return
+	}
+	probe := &mutator{b: m.b, f: m.f, fn: m.fn, seen: map[string]int{}}
+	walk(c, func(inner *node) bool {
+		probe.node(inner)
+		return !m.b.functions[inner.Kind()] && !m.b.nested[inner.Kind()]
+	})
+	if len(probe.out) == 0 {
+		m.add(negateBoolean, c.StartByte(), c.EndByte(), fmt.Sprintf(m.b.negated, m.f.text(c)))
+	}
+}
+
+func hasKey(m map[string]string, k string) bool {
+	_, ok := m[k]
+	return ok
 }
 
 // returned breaks a returned value into the zero value, unless negating a boolean already breaks it

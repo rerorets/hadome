@@ -476,6 +476,49 @@ func Name() string { return "x" + "y" }
 
 // viewpoint: behaviour
 // target: golang.Adapter.Mutants
+// The condition of an if or a for that no other break reaches is negated, so that a branch no test
+// takes is broken too. A condition with a comparison or a negation is left to those breaks.
+func TestGoMutantsNegateAConditionNoOtherBreakReaches(t *testing.T) {
+	src := `package calc
+
+func Fee(total int, member bool) int {
+	if member {
+		return 0
+	}
+	for more() && member {
+		total--
+	}
+	if total >= 5000 {
+		return 0
+	}
+	return 500
+}
+
+func more() bool { return false }
+`
+	tree := fstest.MapFS{"go.mod": {Data: []byte("module example.com/app\n")}, "calc/calc.go": {Data: []byte(src)}}
+	funcs := []facts.Symbol{{ID: "example.com/app/calc.Fee", Kind: facts.SymbolFunction, Path: "calc/calc.go", Line: 3}}
+	ms, err := Adapter{}.Mutants(engine.Version{FS: tree}, funcs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		got = append(got, fmt.Sprintf("%d %s: %s -> %s", m.Line, m.Operator, m.Original, m.Replacement))
+	}
+	want := strings.Join([]string{
+		"4 negate a boolean: member -> !(member)",
+		"7 negate a boolean: more() && member -> !(more() && member)",
+		"10 flip a comparison: >= -> <",
+		"13 return the zero value: 500 -> 0",
+	}, "\n")
+	if g := strings.Join(got, "\n"); g != want {
+		t.Errorf("got:\n%s\n\nwant:\n%s", g, want)
+	}
+}
+
+// viewpoint: behaviour
+// target: golang.Adapter.Mutants
 // A file almost always declares more than functions: imports, constants, variables, types. The
 // mutants of its functions come out all the same.
 func TestGoMutantsInAFileWithOtherDeclarations(t *testing.T) {
