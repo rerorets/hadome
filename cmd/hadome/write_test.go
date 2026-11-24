@@ -103,6 +103,40 @@ func TestAgentsWritesThroughALinkInsideTheRepository(t *testing.T) {
 	}
 }
 
+// viewpoint: external contract
+// target: hadome agents --write
+// The line printed for each file says what happened to it: a new file, a block added after the
+// file's own text, a block replaced, or a block already as it is.
+func TestAgentsSaysWhatItDidToEachFile(t *testing.T) {
+	dir := writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "AGENTS.md": "mine\n"})
+	t.Chdir(dir)
+	for _, step := range []struct {
+		name, file, want string
+		before           func()
+	}{
+		{"a missing file", "CLAUDE.md", "ok: wrote CLAUDE.md with the hadome block", func() {}},
+		{"a file without the block", "AGENTS.md", "ok: added the hadome block to AGENTS.md", func() {}},
+		{"a block as it is", "CLAUDE.md", "ok: the hadome block in CLAUDE.md is already up to date", func() {}},
+		{"an edited block", "CLAUDE.md", "ok: updated the hadome block in CLAUDE.md", func() {
+			data, _ := os.ReadFile("CLAUDE.md")
+			edited := strings.Replace(string(data), "## hadome", "## hadome (old)", 1)
+			if err := os.WriteFile("CLAUDE.md", []byte(edited), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		step.before()
+		code, out := runIn(t, "agents", "--write", step.file)
+		if code != 0 || strings.TrimSpace(out) != step.want {
+			t.Errorf("%s: want exit 0 and %q, got %d: %q", step.name, step.want, code, out)
+		}
+	}
+	data, _ := os.ReadFile("CLAUDE.md")
+	if strings.Contains(string(data), "(old)") {
+		t.Errorf("the edited block must be replaced, got %q", data)
+	}
+}
+
 // viewpoint: state integrity
 // target: replaceFile
 // Replacing a file whose path became a link after it was checked replaces the link itself: the

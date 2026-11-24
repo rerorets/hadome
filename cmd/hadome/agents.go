@@ -54,6 +54,7 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	// Every file is checked before any is written, so that a failure leaves no file half done.
 	texts := make([]string, len(paths))
 	targets := make([]string, len(paths))
+	done := make([]string, len(paths))
 	failed := false
 	for i, p := range paths {
 		var err error
@@ -62,7 +63,7 @@ func agents(args []string, stdout, stderr io.Writer) int {
 			failed = true
 			continue
 		}
-		if texts[i], err = withBlock(targets[i], block); err != nil {
+		if texts[i], done[i], err = withBlock(targets[i], block); err != nil {
 			fmt.Fprintln(stderr, "hadome:", err)
 			failed = true
 		}
@@ -71,11 +72,13 @@ func agents(args []string, stdout, stderr io.Writer) int {
 		return engine.ExitConfig
 	}
 	for i, p := range paths {
-		if err := replaceFile(targets[i], []byte(texts[i])); err != nil {
-			fmt.Fprintln(stderr, "hadome:", err)
-			return engine.ExitConfig
+		if done[i] != unchanged {
+			if err := replaceFile(targets[i], []byte(texts[i])); err != nil {
+				fmt.Fprintln(stderr, "hadome:", err)
+				return engine.ExitConfig
+			}
 		}
-		fmt.Fprintf(stdout, "ok: the hadome block in %s is up to date\n", p)
+		fmt.Fprintf(stdout, done[i]+"\n", p)
 	}
 	return engine.ExitOK
 }
@@ -114,32 +117,46 @@ func writeTarget(path string) (string, error) {
 	return target, nil
 }
 
+// What writing the block did to a file, as the line hadome prints for it.
+const (
+	created   = "ok: wrote %s with the hadome block"
+	appended  = "ok: added the hadome block to %s"
+	replaced  = "ok: updated the hadome block in %s"
+	unchanged = "ok: the hadome block in %s is already up to date"
+)
+
 // withBlock returns the file's text with the block in it: between the markers, appended when the
 // markers are absent, or alone when the file does not exist. Running it again changes nothing.
-// A missing directory is an error, so that a typo never creates one.
-func withBlock(path, block string) (string, error) {
+// The second result says which of these it did. A missing directory is an error, so that a typo
+// never creates one.
+func withBlock(path, block string) (string, string, error) {
 	if info, err := os.Stat(filepath.Dir(path)); err != nil || !info.IsDir() {
-		return "", fmt.Errorf("%s: the directory %s does not exist", path, filepath.Dir(path))
+		return "", "", fmt.Errorf("%s: the directory %s does not exist", path, filepath.Dir(path))
 	}
 	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a regular file; hadome writes only to regular files, so name the file itself", path)
+		return "", "", fmt.Errorf("%s is not a regular file; hadome writes only to regular files, so name the file itself", path)
 	}
 	old, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
+	if errors.Is(err, fs.ErrNotExist) {
+		return block, created, nil
+	}
+	if err != nil {
+		return "", "", err
 	}
 	text := string(old)
 	begin, end := strings.Index(text, beginMarker), strings.Index(text, endMarker)
 	switch {
 	case begin >= 0 && end > begin:
 		rest := strings.TrimPrefix(text[end+len(endMarker):], "\n")
-		text = text[:begin] + block + rest
+		if text = text[:begin] + block + rest; text == string(old) {
+			return text, unchanged, nil
+		}
+		return text, replaced, nil
 	case begin >= 0 || end >= 0:
-		return "", fmt.Errorf("%s has only one of %s and %s; fix it by hand", path, beginMarker, endMarker)
+		return "", "", fmt.Errorf("%s has only one of %s and %s; fix it by hand", path, beginMarker, endMarker)
 	case text == "":
-		text = block
+		return block, appended, nil
 	default:
-		text = strings.TrimRight(text, "\n") + "\n\n" + block
+		return strings.TrimRight(text, "\n") + "\n\n" + block, appended, nil
 	}
-	return text, nil
 }
