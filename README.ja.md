@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img src="docs/assets/logo-light.svg" alt="hadome" width="460">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/logo-light.svg" alt="hadome" width="460">
   </picture>
 </p>
 
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="テストだけを消すとtests/scope-shrunkで終了コード1になり、コードごと消すと整理として終了コード0で通る様子">
+  <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/demo.gif" alt="テストだけを消すとtests/scope-shrunkで終了コード1になり、コードごと消すと整理として終了コード0で通る様子">
 </p>
 
 ## 概要
@@ -33,8 +33,8 @@ hadome（歯止め）は変更をmainと比べ、その変更で増えた違反�
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/compare-dark.svg">
-    <img src="docs/assets/compare-light.svg" alt="mainにある3つの違反は報告せず、変更で増えた3つだけを報告して終了コード1になる例" width="760">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/compare-dark.svg">
+    <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/compare-light.svg" alt="mainにある3つの違反は報告せず、変更で増えた3つだけを報告して終了コード1になる例" width="760">
   </picture>
 </p>
 
