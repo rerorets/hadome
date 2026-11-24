@@ -39,6 +39,30 @@ func (w *jvmWalk) bindLocal(name string, k vkind) {
 	}
 }
 
+// receiverKind is what the value the call n is made on is, when it is written as a value rather
+// than a name: a cast, a value in parentheses or a new object, as in ((Store) o).add(1) and
+// new Store().add(1). A receiver that is a name is left to invoke, which reads it as a name.
+func (w *jvmWalk) receiverKind(n *node) vkind {
+	var recv *node
+	kindOf := w.javaKindOf
+	switch n.Kind() {
+	case "method_invocation":
+		recv = n.ChildByFieldName("object")
+	case "call_expression": // Kotlin: the receiver of the navigation it calls
+		if callee := n.NamedChild(0); callee.Kind() == "navigation_expression" && callee.NamedChildCount() == 2 {
+			recv, kindOf = callee.NamedChild(0), w.ktKindOf
+		}
+	}
+	if recv == nil {
+		return vkind{}
+	}
+	switch recv.Kind() {
+	case "parenthesized_expression", "cast_expression", "as_expression", "object_creation_expression":
+		return kindOf(recv)
+	}
+	return vkind{}
+}
+
 // javaKindOf is what a Java value is (vkind): an outside value built from literals, the standard
 // library or other outside values, an object of the product's class, a field of one by its
 // declared type, or unknown.

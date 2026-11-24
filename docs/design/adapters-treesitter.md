@@ -371,6 +371,8 @@ There are three kinds of values.
    - A method of a value of one of the repository's types counts as a target, that type's method. Example: `api.get()` with `export const api = new Api()` is `Api.get`
    - A method of a value its declaration does not decide counts as a target named after the value, as before (`config.load()` is `config.load`)
 
+**Values written in place**: when a method is called on a value written in place rather than on a name, the same steps decide it. For example, `(st as any).makeStore()` is decided by `st`, as `any` decides nothing, and `((Store) o).add(1)`, `(o as Store).add(1)` and `new Store().add(1)` are `Store.add`. A method of what a call returns (`makeStore().add(1)`) is not counted, though: checks such as `expect(x).toBe(1)` and `assertThat(x).isEqualTo(1)` have the same shape, so counting them as unresolved would give almost every test an unresolved call.
+
 **Operators**: in TypeScript and Java, the arithmetic operators (`a + b`) return only numbers and strings, so the result is of an outside type. In Python, Rust and Kotlin a class may define an operator (`Money(1) + Money(2)`), so the result is of an outside type only when both sides are. Comparisons and logical operators give an outside type (a boolean) in every language.
 
 **A helper's parameters**: in TypeScript, a written type decides. Without one, the parameter has the kind of the value the call passes in its position. In the other languages a method of a helper's parameter is still not counted, as before.
@@ -562,7 +564,7 @@ At the top level of a file, the Kotlin grammar may read annotations with argumen
 
 ## Deliberately left out
 
-- Type inference beyond "a variable built by a constructor". Calls on anything else are unresolved
+- Type inference beyond "a variable built by a constructor". Calls on anything else are unresolved, except that a method of what a call returns is not counted ("Values written in place" under "Kinds of values in tests")
 - Every module system's corner cases: dynamic imports other than a test's `import()` named by a string, Python path manipulation, Rust `#[path]`, the parts of TypeScript project references other than aliases. They resolve as external or unresolved
 - A TypeScript `extends` naming a package in `node_modules` (`@tsconfig/node20/tsconfig.json`), and the subpath table of `exports` in `package.json`. Both rarely decide an alias or a package's source
 - Treating a file imported only from test files as a test support file. A file's role is decided before its imports are read, and changing roles after reading the imports would split each language's reading in two

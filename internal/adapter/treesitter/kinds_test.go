@@ -94,6 +94,86 @@ written calls=[] unresolved=0 reads=0`)
 }
 
 // viewpoint: behaviour
+// target: the TypeScript reader
+// A method called on a value written in place counts as a method of a local holding it would: a
+// cast by the type it names, and a cast that names nothing, such as as any, by the value it casts,
+// so that the method is found when the value is known and is unresolved when it is not; a new
+// object as its class. None of them is dropped.
+func TestTypeScriptMethodOfAValueWrittenInPlaceCountsAsOfALocal(t *testing.T) {
+	expect(t, kinds(t, "typescript",
+		"src/store.ts", "export class Store { add(n: number) { return n } }\nexport function makeStore() { return new Store() }\n",
+		"src/cast.test.ts", `import * as st from './store'
+import { Store, makeStore } from './store'
+
+test('module as any', () => { (st as any).makeStore() })
+test('module angle any', () => { (<any>st).makeStore() })
+test('module as unknown as object', () => { (st as unknown as { makeStore(): void }).makeStore() })
+test('repository type', () => { const o = JSON.parse('{}'); (o as Store).add(1) })
+test('outside type', () => { const o = JSON.parse('{}'); (o as string[]).map((x) => x) })
+test('unknown value as any', () => { const s = makeStore(); (s as any).add(1) })
+test('dynamic import as any', async () => { const m = await import('./st' + 'ore'); (m as any).makeStore() })
+test('new object', () => { new Store().add(1) })
+`), `dynamic import as any calls=[] unresolved=1 reads=0
+module angle any calls=[src.makeStore] unresolved=0 reads=0
+module as any calls=[src.makeStore] unresolved=0 reads=0
+module as unknown as object calls=[src.makeStore] unresolved=0 reads=0
+new object calls=[src.Store src.Store.add] unresolved=0 reads=0
+outside type calls=[] unresolved=0 reads=0
+repository type calls=[src.Store.add] unresolved=0 reads=0
+unknown value as any calls=[src.makeStore] unresolved=1 reads=0`)
+}
+
+// viewpoint: behaviour
+// target: the Java and Kotlin readers
+// As in TypeScript, a method called on a cast or a new object counts by the type the cast names or
+// the class: one of the product is that class's method, and one of the standard library counts as
+// nothing.
+func TestJvmMethodOfAValueWrittenInPlaceCountsAsOfALocal(t *testing.T) {
+	t.Run("java", func(t *testing.T) {
+		expect(t, kinds(t, "java",
+			"src/main/java/acme/Store.java", "package acme;\n\npublic class Store {\n    public int add(int n) { return n; }\n    public static Object load() { return null; }\n}\n",
+			"src/test/java/acme/InPlaceTest.java", `package acme;
+
+import org.junit.jupiter.api.Test;
+
+class InPlaceTest {
+    @Test
+    void cast() { Object o = Store.load(); ((Store) o).add(1); }
+
+    @Test
+    void built() { new Store().add(1); }
+
+    @Test
+    void outside() { ((String) Store.load()).length(); }
+}
+`), `InPlaceTest.built calls=[acme.Store acme.Store.add] unresolved=0 reads=0
+InPlaceTest.cast calls=[acme.Store.add acme.Store.load] unresolved=0 reads=0
+InPlaceTest.outside calls=[acme.Store.load] unresolved=0 reads=0`)
+	})
+	t.Run("kotlin", func(t *testing.T) {
+		expect(t, kinds(t, "kotlin",
+			"src/main/kotlin/acme/Store.kt", "package acme\n\nclass Store {\n    fun add(n: Int): Int = n\n}\n\nfun load(): Any = 1\n",
+			"src/test/kotlin/acme/InPlaceTest.kt", `package acme
+
+import org.junit.jupiter.api.Test
+
+class InPlaceTest {
+    @Test
+    fun cast() { val o = load(); (o as Store).add(1) }
+
+    @Test
+    fun safeCast() { val o = load(); (o as? Store)?.add(1) }
+
+    @Test
+    fun outside() { val o = load(); (o as String).trim() }
+}
+`), `InPlaceTest.cast calls=[acme.Store.add acme.load] unresolved=0 reads=0
+InPlaceTest.outside calls=[acme.load] unresolved=0 reads=0
+InPlaceTest.safeCast calls=[acme.Store.add acme.load] unresolved=0 reads=0`)
+	})
+}
+
+// viewpoint: behaviour
 // target: the Python reader
 // As in TypeScript, a method of a local whose written type, value, element or imported declaration
 // is outside the repository counts as nothing; one of the repository's class is that class's

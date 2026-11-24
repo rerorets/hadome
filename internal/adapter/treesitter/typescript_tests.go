@@ -206,6 +206,7 @@ var tsUses = useGrammar{
 	members: map[string]string{"member_expression": "object"},
 	callees: map[string][]string{"call_expression": {"function"}, "new_expression": {"constructor"}},
 	types:   set("type_annotation", "type_arguments", "type_query"),
+	wraps:   set("parenthesized_expression", "as_expression", "satisfies_expression", "non_null_expression", "type_assertion"),
 }
 
 func (w *tsWalk) call(n *node) {
@@ -238,7 +239,16 @@ func (w *tsWalk) call(n *node) {
 			w.follow(callee, n, args)
 		}
 	case "member_expression":
-		if target := w.memberTarget(fn, f.field(fn, "object"), f.field(fn, "property"), args); target != "" {
+		obj, k := w.receiver(fn.ChildByFieldName("object"))
+		target := ""
+		switch {
+		case k.repo != "":
+			target = k.repo + "." + f.field(fn, "property")
+		case k.outside:
+		default:
+			target = w.memberTarget(fn, obj, f.field(fn, "property"), args)
+		}
+		if target != "" {
 			w.t.call(target, scopeArg(w.tf.r.scopes, target, args))
 		}
 	}

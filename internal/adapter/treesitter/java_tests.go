@@ -244,7 +244,7 @@ func (w *jvmWalk) invoke(n *node, obj, name string, args []*node, follow func(*n
 		w.t.hazard(facts.HazardAlwaysTrue, n)
 		return
 	}
-	target := ""
+	target, recv := "", w.receiverKind(n)
 	switch {
 	case obj == "":
 		target = w.unqualified(name, follow)
@@ -256,6 +256,9 @@ func (w *jvmWalk) invoke(n *node, obj, name string, args []*node, follow func(*n
 		if !w.kinds[obj].outside {
 			w.t.test.Unresolved++
 		}
+	case recv.repo != "":
+		target = recv.repo + "." + name
+	case recv.outside:
 	default:
 		target = w.member(obj, name)
 	}

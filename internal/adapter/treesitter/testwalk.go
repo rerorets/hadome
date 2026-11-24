@@ -246,10 +246,12 @@ type useGrammar struct {
 	names   map[string]string   // kind of a member access -> field holding the member's name ("-" = last named child)
 	callees map[string][]string // kind of a call -> fields holding what it calls ("" = first named child)
 	types   map[string]bool     // kinds that hold a type; names inside them are never read
+	wraps   map[string]bool     // kinds that hand on the value they hold, as (a) and a as T do
 }
 
 // readName counts n, an identifier naming product code, as a read unless it is being called or it
-// sits in a type. A.b.c is one use: it is a call only when the whole of it is called.
+// sits in a type. A.b.c is one use: it is a call only when the whole of it is called, and so is
+// (a as T).b.
 func (t *testFacts) readName(n *node, g useGrammar) {
 	if p := n.Parent(); p != nil {
 		if field, ok := g.names[p.Kind()]; ok && isField(p, field, n) {
@@ -258,6 +260,10 @@ func (t *testFacts) readName(n *node, g useGrammar) {
 	}
 	use := n
 	for p := use.Parent(); p != nil; p = p.Parent() {
+		if g.wraps[p.Kind()] {
+			use = p
+			continue
+		}
 		field, ok := g.members[p.Kind()]
 		if !ok || !isField(p, field, use) {
 			break

@@ -64,6 +64,34 @@ func (w *tsWalk) castKind(v *node) (vkind, bool) {
 	return vkind{}, false
 }
 
+// receiver is the value obj.prop() is called on, as memberTarget reads it: the text of obj with the
+// parentheses, casts and non-null assertions around it taken off, or the kind a cast around it
+// names or a new object is. A cast that names no kind, as (st as any), gives way to the value it casts, so that the
+// method is still found or counted as unresolved rather than dropped.
+func (w *tsWalk) receiver(obj *node) (string, vkind) {
+	for obj != nil {
+		switch obj.Kind() {
+		case "parenthesized_expression", "non_null_expression", "satisfies_expression":
+			obj = obj.NamedChild(0)
+		case "as_expression":
+			if k, cast := w.castKind(obj); cast {
+				return "", k
+			}
+			obj = obj.NamedChild(0)
+		case "type_assertion":
+			if k := w.typeKind(obj.NamedChild(0).NamedChild(0)); k.known() {
+				return "", k
+			}
+			obj = obj.NamedChild(1)
+		case "new_expression":
+			return "", w.newKind(obj) // new Store().add(1)
+		default:
+			return w.tf.f.text(obj), vkind{}
+		}
+	}
+	return "", vkind{}
+}
+
 // callKind is what a call returns: an outside value for a built-in or external function, or for a
 // method of a pure value or of a built-in object (JSON.parse(s)); else unknown.
 func (w *tsWalk) callKind(v *node) vkind {
