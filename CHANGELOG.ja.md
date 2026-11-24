@@ -15,6 +15,23 @@ hadome の利用者に見える変更を、版ごとに書きます。書き方�
 
 https://github.com/rerorets/hadome/releases
 
+## 0.12.0 - 2026-11-24
+
+### 検出が増える変更
+
+- `hadome mutate` は、比較も `!` も真偽のリテラルも算術も含まない `if`・`while`・`for` などの条件を反転するミュータントを作ります（`if (member)` → `if (!(member))`）。これまでは、こうした条件の分岐をどのテストも通らなくても、どこも壊しませんでした。Go、TypeScript、Python、Rust、Java、Kotlin のどれでも同じです。ミュータントが増えるので、`mutation.max-mutants` に早く届くことがあります。
+- TypeScript のテストで、動的な import（`await import('./st' + 'ore')`）で読んだ値をキャストして呼んだメソッド（`(m as any).makeStore()`）を、何を呼ぶのか分からない呼び出しとして数えます。呼び出しがこれだけのテストは、`tests/target-unknown` として確認（exit 3）に回ることがあります。
+
+### 誤検知・漏れの修正
+
+- テストの中で、キャストした値や、その場で作ったオブジェクトに対して呼んだメソッドを、呼び出しとして数えます（TypeScript の `(o as Store).add(1)`・`new Store().add(1)`、Java の `((Store) o).add(1)`、Kotlin の `(o as Store).add(1)`）。これまでは数えていなかったので、`const s = new Store(); s.add(1)` を `new Store().add(1)` に書き換えると、`tests/scope-shrunk` が出ていました。
+
+### その他
+
+- `hadome agents --write` は、ファイルごとに何をしたかを出します。ファイルを作った、ブロックを足した、ブロックを書き換えた、すでに同じだった、のどれかです。同じだったときはファイルを書き直しません。
+- 日本語の文書と `--lang ja` の出力で、`gates` の訳を「門番」から「ゲート」に変えました。設定のキー、`gate:allow`、英語の文書と言葉をそろえるためです。
+- README の画像を、GitHub の外（パッケージのページなど）でも表示されるようにしました。
+
 ## 0.11.0 - 2026-11-22
 
 ### 検出が増える変更
