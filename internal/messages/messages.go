@@ -47,10 +47,10 @@ var Japanese = map[string]string{
 	"a person checks the files extends names; once the change is merged, checks read them":                                                "extends に並べたファイルを人が確かめる。変更をマージしたあとの検査からは、そのファイルを読む",
 
 	// config/gate-not-run.
-	"gate %s is new in this change and was not run: %s":                                                                              "門番 %s はこの変更で足したもので、実行していない: %s",
-	"gate %s changes its command in this change and was not run: %s":                                                                 "門番 %s はこの変更でコマンドが変わったので、実行していない: %s",
-	"a gate runs a command, and a command that only this change declares has not been reviewed by anyone, so hadome does not run it": "門番はコマンドを実行する。この変更だけが宣言するコマンドはまだ誰も確かめていないので、hadome は実行しない",
-	"a person reviews the command; once the change is on the base branch, the gate runs in every later check":                        "人がコマンドを確かめる。変更が基準のブランチに入れば、以降のチェックで門番が実行される",
+	"gate %s is new in this change and was not run: %s":                                                                              "ゲート %s はこの変更で足したもので、実行していない: %s",
+	"gate %s changes its command in this change and was not run: %s":                                                                 "ゲート %s はこの変更でコマンドが変わったので、実行していない: %s",
+	"a gate runs a command, and a command that only this change declares has not been reviewed by anyone, so hadome does not run it": "ゲートはコマンドを実行する。この変更だけが宣言するコマンドはまだ誰も確かめていないので、hadome は実行しない",
+	"a person reviews the command; once the change is on the base branch, the gate runs in every later check":                        "人がコマンドを確かめる。変更が基準のブランチに入れば、以降のチェックでゲートが実行される",
 
 	// tests/no-clock, tests/no-sleep, tests/always-true, tests/no-mock.
 	"test reads the clock: %s":                    "テストが時計を読む: %s",
@@ -278,6 +278,6 @@ var Japanese = map[string]string{
 
 	// Product-specific gates of kind measure.
 	"%s: %s is no longer guarded (was: %s)":                                               "%s: %s が守られなくなった（前は %s）",
-	"the product's own gate %s reported it in the base version":                           "製品自身の門番 %s が、base の版でこれを報告していた",
-	"restore it, or, if it was removed on purpose, make the gate answer it as legitimate": "元に戻す。意図して消したなら、門番がそれを正当な削除と答えるようにする",
+	"the product's own gate %s reported it in the base version":                           "製品自身のゲート %s が、base の版でこれを報告していた",
+	"restore it, or, if it was removed on purpose, make the gate answer it as legitimate": "元に戻す。意図して消したなら、ゲートがそれを正当な削除と答えるようにする",
 }
