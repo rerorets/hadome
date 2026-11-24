@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-    <img src="docs/assets/logo-light.svg" alt="hadome" width="460">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/logo-light.svg" alt="hadome" width="460">
   </picture>
 </p>
 
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="Deleting only a test stops with tests/scope-shrunk and exit code 1; deleting the code along with it passes as cleanup with exit code 0">
+  <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/demo.gif" alt="Deleting only a test stops with tests/scope-shrunk and exit code 1; deleting the code along with it passes as cleanup with exit code 0">
 </p>
 
 ## Overview
@@ -33,8 +33,8 @@ hadome (歯止め) compares a change with main and reports the violations the ch
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/compare-dark.svg">
-    <img src="docs/assets/compare-light.svg" alt="An example where the three violations already on main are not reported, and only the three the change adds are, with exit code 1" width="760">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/compare-dark.svg">
+    <img src="https://raw.githubusercontent.com/rerorets/hadome/main/docs/assets/compare-light.svg" alt="An example where the three violations already on main are not reported, and only the three the change adds are, with exit code 1" width="760">
   </picture>
 </p>
 
