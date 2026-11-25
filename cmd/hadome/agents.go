@@ -55,11 +55,18 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	// Every file is checked before any is written, so that a failure leaves no file half done.
 	texts := make([]string, len(paths))
 	targets := make([]string, len(paths))
+	// Each file is printed by its absolute path, so that a person sees which directory it is in:
+	// CLAUDE.md written from the home directory instead of a repository is read by every project
+	// below it.
+	shown := make([]string, len(paths))
 	done := make([]string, len(paths))
 	failed := false
 	for i, p := range paths {
 		var err error
-		if targets[i], err = writeTarget(p); err != nil {
+		if shown[i], err = filepath.Abs(p); err == nil {
+			targets[i], err = writeTarget(p)
+		}
+		if err != nil {
 			fmt.Fprintln(stderr, "hadome:", err)
 			failed = true
 			continue
@@ -72,14 +79,14 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	if failed {
 		return engine.ExitConfig
 	}
-	for i, p := range paths {
+	for i := range paths {
 		if done[i] != unchanged {
 			if err := replaceFile(targets[i], []byte(texts[i])); err != nil {
 				fmt.Fprintln(stderr, "hadome:", err)
 				return engine.ExitConfig
 			}
 		}
-		fmt.Fprintf(stdout, done[i]+"\n", p)
+		fmt.Fprintf(stdout, done[i]+"\n", shown[i])
 	}
 	return engine.ExitOK
 }
