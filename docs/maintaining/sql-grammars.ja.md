@@ -37,7 +37,7 @@ ANTLR_JAR=/path/to/antlr-4.13.1-complete.jar internal/adapter/sql/grammar/genera
 
 - 方言を書かないと、すべての方言を作り直します
 - Java 11 以上が要ります
-- ANTLR の版は、`go.mod` の `github.com/antlr4-go/antlr/v4` と同じ 4.13.1 にします。jar は https://www.antlr.org/download/ から取ります
+- ANTLR のバージョンは、`go.mod` の `github.com/antlr4-go/antlr/v4` と同じ 4.13.1 にします。jar は https://www.antlr.org/download/ から取ります
 - 作り直したら、`go test ./internal/adapter/sql/...` と、各方言の試し（後述の「方言を有効にする条件」）を流します
 
 ## SLL で読めるようにする直し

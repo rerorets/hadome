@@ -3,8 +3,8 @@
 この文書は [adapters.ja.md](adapters.ja.md) のうち Terraform と Ansible の部分を書きます。
 
 - どちらもインフラの構成を書く言語で、関数もクラスもありません
-- そのため、ほかの言語と同じ事実のうち、意味の通るものだけを埋めます
-- 埋めない事実はルールからは空に見えます。そのルールは何も報告しません
+- そのため、ほかの言語と同じ解析結果のうち、意味の通るものだけを埋めます
+- 埋めない解析結果はルールからは空に見えます。そのルールは何も報告しません
 
 ## 形
 
@@ -40,7 +40,7 @@ classDiagram
 - **Terraform のパーサー。** Terraform 自身が使う HCL のパーサー（`hashicorp/hcl/v2` の `hclsyntax`）で読みます。Terraform と同じ読み方になります。tree-sitter の HCL の文法は使いません。tree-sitter は cgo を使うので、cgo の無いビルドで Terraform を読めなくなるからです
 - **ライセンス。** `hashicorp/hcl/v2` のライセンスは MPL-2.0 です。MPL はファイル単位で効くので、hadome のコードは MIT のままでかまいません。配る実行ファイルには MPL-2.0 の本文と、`hashicorp/hcl/v2` のソースの在りかを書いた文書を添えます
 - **Ansible のパーサー。** 設定を読むのに使っている `goccy/go-yaml` で読みます。依存は増えません
-- **依存の図。** `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible` の矢印と、2つから `engine`、`config`、`facts` への矢印を足します
+- **依存関係図。** `internal/adapter --> internal/adapter/terraform & internal/adapter/ansible` の矢印と、2つから `engine`、`config`、`facts` への矢印を足します
 - **`ClaimsConfigured`。** `Claims(path)` はパスしか受け取らないので、設定の `files.ansible` を見られません。そこで、Ansible のアダプタは `ClaimsConfigured(c, path)` も持ちます。`internal/adapter` は、これを持つ言語には `ClaimsConfigured` で受け持つかを尋ねます
 
 ## ファイルと役割
@@ -131,7 +131,7 @@ Terraform の `variable` と `output` はモジュールの入口と出口です
 | Terraform | `#`、`//`、`/* */` | `tflint-ignore`、`checkov:skip`、`trivy:ignore` |
 | Ansible | `#` | `noqa`、`yamllint` |
 
-例外の印（`gate:allow`）はどちらの言語でもコメントに書きます。
+例外コメント（`gate:allow`）はどちらの言語でもコメントに書きます。
 
 ## 効くルール
 
@@ -146,7 +146,7 @@ Terraform の `variable` と `output` はモジュールの入口と出口です
 
 ## 読めなかったファイル
 
-次のファイルには `Unread` の印を付けます。Go のアダプタと同じく、そのファイルからは何も読みません。
+次のファイルには `Unread` を付けます。Go のアダプタと同じく、そのファイルからは何も読みません。
 
 - HCL のパーサーが誤りを返した `*.tf`
 - YAML として読めなかったファイル

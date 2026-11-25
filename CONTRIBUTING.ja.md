@@ -12,7 +12,7 @@ Issue・プルリクエスト・Discussionsなど、このプロジェクトの�
 |---|---|
 | hadomeを使う人 | [README](README.ja.md)、[テストを信じるための3つの段](docs/model.ja.md)、[製品固有のゲート](docs/external-gates.ja.md) |
 | 利用者のリポジトリで動くエージェント | [エージェント向けの手引き](docs/for-agents.ja.md)。`hadome agents`が書き込むブロックの中身は`cmd/hadome/agents.ja.md` |
-| hadomeを作る人 | この文書、[設計書](docs/design)、[依存の図](docs/design/dependencies.ja.md) |
+| hadomeを作る人 | この文書、[設計書](docs/design)、[依存関係図](docs/design/dependencies.ja.md) |
 | メンテナ | [リリース](docs/maintaining/releasing.ja.md)、[SQL の文法](docs/maintaining/sql-grammars.ja.md)、[JVMのプラグイン](packaging/jvm/README.ja.md) |
 | 脆弱性を見つけた人 | [セキュリティ](SECURITY.ja.md)、[セキュリティの保証](docs/assurance-case.ja.md) |
 | 運営を知りたい人 | [運営](GOVERNANCE.ja.md)、[ロードマップ](ROADMAP.ja.md)、[行動規範](CODE_OF_CONDUCT.ja.md) |
@@ -60,7 +60,7 @@ git config core.hooksPath .githooks
 ## 変更の進め方
 
 - 新しいパッケージや、形の大きな変更は、`docs/design/`の設計書から始めます。設計書には責務、しないこと、型とインターフェースのMermaidの図、不変条件、意図して入れなかったものを書きます。設計書だけのプルリクエストで確かめてもらってから、コードを書きます。
-- 新しいパッケージやimportは、[依存の図](docs/design/dependencies.ja.md)に矢印を足すところから始めます。図に無いimportはhadome自身の検査で落ちます。
+- 新しいパッケージやimportは、[依存関係図](docs/design/dependencies.ja.md)に矢印を足すところから始めます。図に無いimportはhadome自身の検査で落ちます。
 - ルールを足すときは、そのルールの自己テストも足します。
 - `go run ./cmd/hadome check`が終了コード`3`を返したら、何を確かめてほしいかをプルリクエストに書きます。
 - プルリクエストはsquashでマージします。プルリクエストのタイトルがmainのコミットメッセージになります。タイトルと本文は、[変更履歴](CHANGELOG.ja.md)の下書きの材料にもなります。
@@ -69,9 +69,9 @@ git config core.hooksPath .githooks
 
 - プルリクエストは、メンテナが確かめてマージします。
 - メンテナは次の点を確かめます。
-  - 設計書と[依存の図](docs/design/dependencies.ja.md)に沿っているか
+  - 設計書と[依存関係図](docs/design/dependencies.ja.md)に沿っているか
   - 振る舞いが変わるところにテストがあり、テストが[テストの書き方](docs/model.ja.md)に沿っているか
-  - hadomeの決まりを守っているか。たとえば、ネットワークに出ない、例外の印には理由を書く、利用者のコードに書く印にhadomeの名前を入れない、など
+  - hadomeの決まりを守っているか。たとえば、ネットワークに出ない、例外コメントには理由を書く、利用者のコードに書く例外コメントにhadomeの名前を入れない、など
   - 外から来る値（設定、ファイルの名前、ブランチの名前）を、確かめずにコマンドの引数やファイルのパスに使っていないか
   - 日本語と英語の文書が揃っているか。利用者から見て変わることが、プルリクエストに書いてあるか
 - マージできるのは、CIの4つのチェックが通ったものだけです。4つのチェックは3つのOSでのテストと、パッケージの確認です。動かさなかったチェックは、通ったものとして扱います。
@@ -98,7 +98,7 @@ git config core.hooksPath .githooks
 |---|---|---|
 | 不具合の修正 | パッチ（0.1.2） | パッチ |
 | ルールの追加、ルールを厳しくすること、新しい言語や設定のキー | マイナー（0.2.0） | マイナー |
-| 設定のキー、JSONの出力の形、終了コードの意味、例外の印の書き方を変えたり消したりすること | マイナー | メジャー |
+| 設定のキー、JSONの出力の形、終了コードの意味、例外コメントの書き方を変えたり消したりすること | マイナー | メジャー |
 
 - ルールを厳しくしてもマイナーで出すのは、hadomeがmainと比べて増えた違反だけを報告するからです。バージョンを上げても、mainにすでにあるコードは落ちません。落ちるのは、そのあとの変更で足したコードだけです。
 - hadomeは、一度受け付けた`schema:`のバージョンを読めなくすることはありません。古い`schema:`で書いた`.hadome.yml`もhadomeを上げたあとで読めます。
