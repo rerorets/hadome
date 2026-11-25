@@ -15,6 +15,15 @@ hadome の利用者に見える変更を、バージョンごとに書きます�
 
 https://github.com/rerorets/hadome/releases
 
+## 0.12.1 - 2026-11-26
+
+### その他
+
+- `hadome agents` と `hadome explain` は、引数のあとに書いたフラグもフラグとして読みます。これまでは、`hadome agents --write CLAUDE.md AGENTS.md --lang ja` が英語のブロックを書き、`--lang` と `ja` という名前のファイルまで作っていました。`hadome explain tests/no-sleep --lang ja` は、終了コード `2` で使い方を出していました。
+- `hadome agents --write` は、書いたファイルを絶対パスで出します。ホームディレクトリで実行して `~/CLAUDE.md` を作ってしまっても、出力で気づけます。
+- `--lang ja` の出力と日本語の文書で、訳しすぎた言葉を、ふだん使う IT 用語に変えました。後退 → 悪化、既存の指摘 → 既存のルール違反、印 → 例外コメント・マーカー、版 → バージョン、依存の図 → 依存関係図、設定の誤り → 設定エラー、などです。
+- `text` の出力の最後の要約は、手を付けずに残した既存のルール違反が無いとき、その数を出しません（`No regressions. 0 existing finding(s) unchanged (not blocking).` → `No regressions.`）。`json` の出力は変わりません。
+
 ## 0.12.0 - 2026-11-24
 
 ### 検出が増える変更
