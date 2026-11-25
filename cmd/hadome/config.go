@@ -63,10 +63,10 @@ func explain(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fl.SetOutput(stderr)
 	lang := fl.String("lang", "", "language of a rule's description: en or ja (default: messages in .hadome.yml, else en)")
-	if err := fl.Parse(args); err != nil || (*lang != "" && !validLang(*lang, stderr)) {
+	args, err := parseAnywhere(fl, args)
+	if err != nil || (*lang != "" && !validLang(*lang, stderr)) {
 		return engine.ExitConfig
 	}
-	args = fl.Args()
 	if len(args) != 1 {
 		fmt.Fprint(stderr, usage)
 		return engine.ExitConfig

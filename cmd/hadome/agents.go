@@ -36,7 +36,8 @@ func agents(args []string, stdout, stderr io.Writer) int {
 	fl.SetOutput(stderr)
 	lang := fl.String("lang", "en", "language of the block: en or ja")
 	write := fl.String("write", "", "put the block into this file, and into each file listed after it, instead of printing it")
-	if err := fl.Parse(args); err != nil || (*write == "" && fl.NArg() != 0) {
+	rest, err := parseAnywhere(fl, args)
+	if err != nil || (*write == "" && len(rest) != 0) {
 		return engine.ExitConfig
 	}
 	if !validLang(*lang, stderr) {
@@ -50,7 +51,7 @@ func agents(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, block)
 		return engine.ExitOK
 	}
-	paths := append([]string{*write}, fl.Args()...)
+	paths := append([]string{*write}, rest...)
 	// Every file is checked before any is written, so that a failure leaves no file half done.
 	texts := make([]string, len(paths))
 	targets := make([]string, len(paths))

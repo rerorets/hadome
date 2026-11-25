@@ -97,6 +97,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// parseAnywhere parses fl's flags wherever they stand among args and returns the other arguments
+// in order. The flag package stops at the first argument that is not a flag, so `--lang ja` after
+// the files of agents --write would be taken for two more file names.
+// Everything after "--" is an argument, even when it starts with a dash.
+func parseAnywhere(fl *flag.FlagSet, args []string) ([]string, error) {
+	var rest []string
+	for {
+		if err := fl.Parse(args); err != nil {
+			return nil, err
+		}
+		left := fl.Args()
+		if len(left) == 0 {
+			return rest, nil
+		}
+		if n := len(args) - len(left); n > 0 && args[n-1] == "--" {
+			return append(rest, left...), nil
+		}
+		rest = append(rest, left[0])
+		args = left[1:]
+	}
+}
+
 func check(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("check", flag.ContinueOnError)
 	fl.SetOutput(stderr)
