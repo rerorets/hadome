@@ -6,7 +6,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 	"unicode"
@@ -182,5 +185,44 @@ func TestExplainWritesARuleInTheChosenLanguage(t *testing.T) {
 				t.Errorf("%s: %q is missing from\n%s", lang, label, got[lang])
 			}
 		}
+	}
+}
+
+// viewpoint: external contract
+// target: hadome agents --write, hadome explain
+// A flag after the arguments is read as a flag: --lang ja at the end writes the Japanese block into
+// every file listed before it, and leaves no file named --lang or ja behind. Only after "--" does an
+// argument that starts with a dash name a file.
+func TestFlagsAfterTheArgumentsAreFlags(t *testing.T) {
+	t.Chdir(writeTree(t, map[string]string{"go.mod": "module example.com/app\n"}))
+	if code, out := runIn(t, "agents", "--write", "CLAUDE.md", "AGENTS.md", "--lang", "ja"); code != 0 {
+		t.Fatalf("want exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md"} {
+		if data, _ := os.ReadFile(name); string(data) != agentBlockJa {
+			t.Errorf("%s must hold the Japanese block, got %q", name, data)
+		}
+	}
+	for _, name := range []string{"--lang", "ja"} {
+		if _, err := os.Lstat(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("a file named %s was written: %v", name, err)
+		}
+	}
+	if code, out := runIn(t, "agents", "--write", "CLAUDE.md", "--", "-dash.md"); code != 0 {
+		t.Fatalf("want exit 0 for a file after --, got %d: %s", code, out)
+	}
+	if data, _ := os.ReadFile("-dash.md"); !strings.Contains(string(data), beginMarker) {
+		t.Errorf("-dash.md after -- must get the block, got %q", data)
+	}
+
+	before, after := new(bytes.Buffer), new(bytes.Buffer)
+	if code := run([]string{"explain", "--lang", "ja", "tests/no-sleep"}, before, io.Discard); code != engine.ExitOK {
+		t.Fatalf("explain --lang ja tests/no-sleep: want exit 0, got %d", code)
+	}
+	if code := run([]string{"explain", "tests/no-sleep", "--lang", "ja"}, after, io.Discard); code != engine.ExitOK {
+		t.Fatalf("explain tests/no-sleep --lang ja: want exit 0, got %d", code)
+	}
+	if before.String() != after.String() {
+		t.Errorf("--lang after the rule must read the same as before it:\n%s\n---\n%s", before, after)
 	}
 }
