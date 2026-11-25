@@ -15,6 +15,15 @@ Changes up to 0.4.0 are in the GitHub releases.
 
 https://github.com/rerorets/hadome/releases
 
+## 0.12.1 - 2026-11-26
+
+### Other
+
+- `hadome agents` and `hadome explain` read a flag written after the arguments as a flag. Before, `hadome agents --write CLAUDE.md AGENTS.md --lang ja` wrote the English block and also created files named `--lang` and `ja`, and `hadome explain tests/no-sleep --lang ja` printed the usage with exit 2.
+- `hadome agents --write` names each file it wrote by its absolute path, so a `~/CLAUDE.md` written by running it from the home directory shows in the output.
+- The `--lang ja` output and the Japanese documents use the IT terms Japanese engineers use instead of over-translated words: 悪化 for regression, 既存のルール違反 for existing finding, 例外コメント and マーカー for marker, バージョン, 依存関係図, 設定エラー, and others.
+- The summary at the end of the `text` output leaves out the count of existing findings when there are none (`No regressions. 0 existing finding(s) unchanged (not blocking).` → `No regressions.`). The `json` output does not change.
+
 ## 0.12.0 - 2026-11-24
 
 ### Finds more
