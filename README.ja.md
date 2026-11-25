@@ -222,6 +222,7 @@ hadome agents --write CLAUDE.md
 
 - `AGENTS.md`など別のファイルも指定できます。`hadome agents --write AGENTS.md CLAUDE.md`のように並べると、それぞれに書きます。
 - ファイルが無ければ作ります。2回目からは同じブロックを書き換えます。
+- 書いたファイルは絶対パスで表示します。ホームディレクトリで実行すると`~/CLAUDE.md`ができ、Claude Codeはその下のすべてのプロジェクトでこのブロックを読むので、表示されたパスがリポジトリの中かを確かめてください。
 - 日本語のブロックにするときは`--lang ja`を付けます。
 - 詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
 - エージェントが終える前に自動で`hadome check`を実行させるには、Claude CodeやCodexのStopフックを使います。[エージェントのフックで使う](docs/hooks.ja.md)にあります。

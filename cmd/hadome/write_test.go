@@ -105,19 +105,25 @@ func TestAgentsWritesThroughALinkInsideTheRepository(t *testing.T) {
 
 // viewpoint: external contract
 // target: hadome agents --write
-// The line printed for each file says what happened to it: a new file, a block added after the
-// file's own text, a block replaced, or a block already as it is.
+// The line printed for each file says what happened to it, a new file, a block added after the
+// file's own text, a block replaced, or a block already as it is, and names the file by its
+// absolute path so that the directory it went to is plain.
 func TestAgentsSaysWhatItDidToEachFile(t *testing.T) {
 	dir := writeTree(t, map[string]string{"go.mod": "module example.com/app\n", "AGENTS.md": "mine\n"})
 	t.Chdir(dir)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, agents := filepath.Join(wd, "CLAUDE.md"), filepath.Join(wd, "AGENTS.md")
 	for _, step := range []struct {
 		name, file, want string
 		before           func()
 	}{
-		{"a missing file", "CLAUDE.md", "ok: wrote CLAUDE.md with the hadome block", func() {}},
-		{"a file without the block", "AGENTS.md", "ok: added the hadome block to AGENTS.md", func() {}},
-		{"a block as it is", "CLAUDE.md", "ok: the hadome block in CLAUDE.md is already up to date", func() {}},
-		{"an edited block", "CLAUDE.md", "ok: updated the hadome block in CLAUDE.md", func() {
+		{"a missing file", "CLAUDE.md", "ok: wrote " + claude + " with the hadome block", func() {}},
+		{"a file without the block", "AGENTS.md", "ok: added the hadome block to " + agents, func() {}},
+		{"a block as it is", "CLAUDE.md", "ok: the hadome block in " + claude + " is already up to date", func() {}},
+		{"an edited block", "CLAUDE.md", "ok: updated the hadome block in " + claude, func() {
 			data, _ := os.ReadFile("CLAUDE.md")
 			edited := strings.Replace(string(data), "## hadome", "## hadome (old)", 1)
 			if err := os.WriteFile("CLAUDE.md", []byte(edited), 0o644); err != nil {

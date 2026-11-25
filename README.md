@@ -214,6 +214,7 @@ hadome agents --write CLAUDE.md
 
 - Any other file, such as `AGENTS.md`, works too. List several, as in `hadome agents --write AGENTS.md CLAUDE.md`, to write into each.
 - The file is created if it is missing. Later runs update the same block.
+- Each file is shown by its absolute path. Run from your home directory, it writes `~/CLAUDE.md`, which Claude Code reads in every project below it, so check that the path shown is inside the repository.
 - Add `--lang ja` for a Japanese block.
 - The details are in [the guide for agents](docs/for-agents.md).
 - To have the agent run `hadome check` by itself before it finishes, use a Claude Code or Codex Stop hook: see [Running hadome from an agent's hook](docs/hooks.md).
