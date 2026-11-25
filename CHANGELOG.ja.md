@@ -1,8 +1,8 @@
 # 変更履歴
 
-hadome の利用者に見える変更を、版ごとに書きます。書き方と版の上げ方は [docs/maintaining/releasing.ja.md](docs/maintaining/releasing.ja.md) にあります。
+hadome の利用者に見える変更を、バージョンごとに書きます。書き方とバージョンの上げ方は [docs/maintaining/releasing.ja.md](docs/maintaining/releasing.ja.md) にあります。
 
-各版の変更は、次の4つに分けます。上げたあとに利用者の CI で何が起きるかが、分類ごとに違うためです。
+各バージョンの変更は、次の4つに分けます。上げたあとに利用者の CI で何が起きるかが、分類ごとに違うためです。
 
 | 分類 | 何が入るか | 上げたあとに起きること |
 |---|---|---|

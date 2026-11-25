@@ -22,20 +22,23 @@ func Catalog(lang string) map[string]string {
 // as they are.
 var Japanese = map[string]string{
 	// The summary line of the text output.
-	"%d regression(s). %d existing finding(s) unchanged (not blocking).":                   "後退 %d 件。既存の指摘 %d 件は変わっていない（止めない）。",
-	"No regressions. %d existing finding(s) unchanged (not blocking).":                     "後退なし。既存の指摘 %d 件は変わっていない（止めない）。",
-	"No regressions. %d item(s) need a person's review. %d existing finding(s) unchanged.": "後退なし。人の確認が要るものが %d 件。既存の指摘 %d 件は変わっていない。",
+	"%d regression(s). %d existing finding(s) unchanged (not blocking).":                   "悪化 %d 件（既存のルール違反 %d 件は対象外）。",
+	"No regressions. %d existing finding(s) unchanged (not blocking).":                     "悪化なし（既存のルール違反 %d 件は対象外）。",
+	"No regressions. %d item(s) need a person's review. %d existing finding(s) unchanged.": "悪化なし。人の確認が要るもの %d 件（既存のルール違反 %d 件は対象外）。",
+	"%d regression(s).": "悪化 %d 件。",
+	"No regressions.":   "悪化なし。",
+	"No regressions. %d item(s) need a person's review.": "悪化なし。人の確認が要るもの %d 件。",
 
 	// Exception markers.
 	"exception for %s has no reason":                                        "%s の例外に理由が無い",
 	"an exception without a reason cannot be reviewed, so it has no effect": "理由の無い例外は確かめようがないので、効かない",
-	"write the reason after 'reason:', or remove the marker":                "'reason:' の後に理由を書くか、印を消す",
+	"write the reason after 'reason:', or remove the marker":                "'reason:' の後に理由を書くか、例外コメントを消す",
 	"exception names an unknown rule: %s":                                   "例外が知らないルールを指している: %s",
-	"a marker for a rule that does not exist suppresses nothing":            "無いルールの印は何も抑えない",
-	"use a rule id that hadome reports, or remove the marker":               "hadome が報告するルールの ID を使うか、印を消す",
+	"a marker for a rule that does not exist suppresses nothing":            "無いルールの例外コメントは何も抑えない",
+	"use a rule id that hadome reports, or remove the marker":               "hadome が報告するルールの ID を使うか、例外コメントを消す",
 	"exception for %s suppresses nothing":                                   "%s の例外が何も抑えていない",
 	"stale exceptions pile up and hide what is really excepted":             "古い例外は積もり、本当に例外にしているものを隠す",
-	"remove the marker": "印を消す",
+	"remove the marker": "例外コメントを消す",
 
 	// config/loosened.
 	"configuration changes %s: %s → %s":  "設定が %s を変える: %s → %s",
@@ -103,7 +106,7 @@ var Japanese = map[string]string{
 	"the test passes whatever the code returns, and fails only if something panics or throws": "コードが何を返してもテストは通り、panic か例外のときだけ落ちる",
 	"assert on the behaviour the test means to check; if the function is an assertion hadome does not know, add it to rules.tests.assertions; if the test only checks that nothing throws, add an exception with the reason": "テストで確かめたい振る舞いを assert する。hadome の知らない assert の関数なら rules.tests.assertions に足す。例外が起きないことだけを確かめるテストなら、理由つきの例外を書く",
 	"%d tests have the same body: %s": "%d 本のテストの本体が同じ: %s",
-	"tests with the same body, ignoring names, comments and whitespace, and, in different files, the same known targets; a new copy is a regression": "名前、コメント、空白を除いて本体が同じテスト。別のファイルのテストは、分かっている対象も同じときだけ。新しい写しは後退になる",
+	"tests with the same body, ignoring names, comments and whitespace, and, in different files, the same known targets; a new copy is a regression": "名前、コメント、空白を除いて本体が同じテスト。別のファイルのテストは、分かっている対象も同じときだけ。新しい写しは悪化になる",
 	"checking the same thing twice guards nothing more, and a change of behaviour has to be made in every copy":                                      "同じことを2回確かめても守るものは増えない。振る舞いを変えるときは、写しのすべてを直すことになる",
 	"delete all but one, or change the input if they were meant to check different cases":                                                            "1本だけ残して消す。別の場合を確かめるつもりだったなら、入力を変える",
 
@@ -137,7 +140,7 @@ var Japanese = map[string]string{
 	"%s: %s %d, limit %d":                            "%s: %s %d（上限 %d）",
 	"the function in %s at line %d: %s %d, limit %d": "%s の %d 行目の関数: %s %d（上限 %d）",
 	"%s; grew from %d":                               "%s。base の %d から増えた",
-	"product code over the %s limit (%s); an existing one that grows is a regression too":                                "%s の上限（%s）を超えた製品のコード。既にあるものが大きくなるのも後退になる",
+	"product code over the %s limit (%s); an existing one that grows is a regression too":                                "%s の上限（%s）を超えた製品のコード。既にあるものが大きくなるのも悪化になる",
 	"past the limit, the code no longer fits in one reading, and changes to it are made without understanding all of it": "上限を超えると、コードは一度に読み切れなくなり、全体を分からないまま変更されるようになる",
 	"%s; raising the limit (rules.size.%s) is a change a person reviews":                                                 "%s。上限（rules.size.%s）を上げるのは、人が確かめる変更である",
 	"lines":                 "行数",
@@ -165,7 +168,7 @@ var Japanese = map[string]string{
 	"callers read the doc comment instead of the body; without it, every caller reads the implementation and guesses":                                                                                                                    "呼ぶ側は本体ではなく doc コメントを読む。無ければ、呼ぶ側はみな実装を読んで推し量ることになる",
 	"write one sentence that starts with the name and says what it does or is, and what a caller would otherwise get wrong; in TypeScript, JavaScript, Java and Kotlin write it as /** */, since a // line comment is not a doc comment": "名前で始まる1文で、何をするか、何であるか、書かなければ呼ぶ側が取り違えることを書く。TypeScript・JavaScript・Java・Kotlin では /** */ で書く。// の行コメントは doc コメントに数えない",
 	"comment refers to %s, which does not exist":                                                                 "コメントが指す %s が無い",
-	"a comment that names a Markdown file the version does not have":                                             "その版に無い Markdown のファイルを指すコメント",
+	"a comment that names a Markdown file the version does not have":                                             "そのバージョンに無い Markdown のファイルを指すコメント",
 	"a pointer to a document promises that the reasoning is written down; a broken one sends the reader nowhere": "文書を指すことは、理由が書き残してあるという約束である。指す先が無ければ、読み手はどこにもたどり着けない",
 	"point at the document's current path, or remove the reference":                                              "文書の今のパスを指すか、参照を消す",
 
@@ -196,12 +199,12 @@ var Japanese = map[string]string{
 	"no node covers the importing unit": "import する側のユニットを覆うノードが無い",
 	"no node covers the imported unit":  "import される側のユニットを覆うノードが無い",
 	"no arrow %s --> %s":                "矢印 %s --> %s が無い",
-	"an import between the repository's own units that the dependency diagram does not draw":                                                                   "リポジトリ自身のユニットの間の、依存の図に描かれていない import",
+	"an import between the repository's own units that the dependency diagram does not draw":                                                                   "リポジトリ自身のユニットの間の、依存関係図に描かれていない import",
 	"the diagram is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                             "人とエージェントは、何が何に依存してよいかを図で知る。図に描かれていない import は、図を誤りにする",
 	"the diagram (%s) is how people and agents know what may depend on what; an import it does not draw makes it wrong":                                        "人とエージェントは、何が何に依存してよいかを図（%s）で知る。図に描かれていない import は、図を誤りにする",
 	"depend on what the diagram allows, often through an interface the importing unit declares; if the design changed, draw the arrow, which a person reviews": "図が許すものに依存する。import する側のユニットが宣言するインターフェースを通すことが多い。設計が変わったなら矢印を描く。矢印は人が確かめる",
 	"the diagram's node %s names %s, which holds no unit":                                                                                                      "図のノード %s が指す %s に、ユニットが無い",
-	"a node of either diagram whose label names no unit of the version, or a planned node whose directory already holds one":                                   "依存の図か呼び出しの図のノードのうち、ラベルがその版のどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
+	"a node of either diagram whose label names no unit of the version, or a planned node whose directory already holds one":                                   "依存関係図か呼び出しの図のノードのうち、ラベルがそのバージョンのどのユニットも指さないもの。または、ディレクトリにもうユニットがある予定の箱",
 	"a box that names nothing makes the diagram look complete when it is not":                                                                                  "何も指さない箱があると、図が完全でないのに完全に見える",
 	"correct the label to the unit's directory, remove the node, or mark a box not created yet with the class planned":                                         "ラベルをユニットのディレクトリに直すか、ノードを消す。まだ作っていない箱なら、クラス planned を付ける",
 	"correct the label to the unit's directory, or to %s to take in the units under it; remove the node; or mark a box not created yet as planned":             "ラベルをユニットのディレクトリに直すか、ノードを消す。配下のユニットをまとめて1つの箱にするなら %s と書く。まだ作っていない箱なら、クラス planned を付ける",
@@ -213,15 +216,15 @@ var Japanese = map[string]string{
 
 	// code/.
 	"a value that belongs in configuration": "設定に置く値",
-	"values in product functions that belong in configuration: URLs with a host, IP addresses, hosts and ports, ports, durations built from literals, and literals passed to the names rules.code.config-literal.names lists; a function with more of them than on base is a regression": "製品の関数の中の、設定に置く値。ホストのある URL、IP アドレス、ホストとポート、ポート、リテラルから作った時間、rules.code.config-literal.names に挙げた名前へのリテラル。base より多くなった関数は後退になる",
+	"values in product functions that belong in configuration: URLs with a host, IP addresses, hosts and ports, ports, durations built from literals, and literals passed to the names rules.code.config-literal.names lists; a function with more of them than on base is a regression": "製品の関数の中の、設定に置く値。ホストのある URL、IP アドレス、ホストとポート、ポート、リテラルから作った時間、rules.code.config-literal.names に挙げた名前へのリテラル。base より多くなった関数は悪化になる",
 	"the value works where it is, and the next environment, or the next person who changes it, has to find every copy in the code":                                                                                                                                                       "値はその場では動く。次の環境や、次に値を変える人が、コードの中のすべての写しを探すことになる",
 	"read the value from where the repository reads its configuration; if it is the same everywhere and never changes, make it a named constant":                                                                                                                                         "リポジトリが設定を読む場所から値を読む。どの環境でも同じ値で、変えるつもりもないなら、名前の付いた定数にする",
 	"an error dropped": "捨てたエラー",
-	"places in product functions where an error is caught or returned and then dropped: an empty catch or except, a Go error assigned to _, a Rust .ok() whose value is unused; a function with more of them than on base is a regression": "製品の関数の中の、捕まえた、または返されたエラーを捨てる場所。空の catch や except、_ に入れた Go の error、値を使わない Rust の .ok()。base より多くなった関数は後退になる",
+	"places in product functions where an error is caught or returned and then dropped: an empty catch or except, a Go error assigned to _, a Rust .ok() whose value is unused; a function with more of them than on base is a regression": "製品の関数の中の、捕まえた、または返されたエラーを捨てる場所。空の catch や except、_ に入れた Go の error、値を使わない Rust の .ok()。base より多くなった関数は悪化になる",
 	"the failure disappears without a trace: the change passes its tests, and the problem shows up later somewhere else":                                                                                                                   "失敗が跡を残さずに消える。変更はテストを通り、問題はあとで別の場所に現れる",
 	"return the error, or wrap and re-throw it; when dropping it is the intent, write a reasoned exception":                                                                                                                                "エラーを返すか、包んで投げ直す。捨てるのが意図なら、理由つきの例外を書く",
 	"%d functions have the same body: %s": "%d 個の関数の本体が同じ: %s",
-	"product functions with the same body, ignoring names, comments, whitespace and the names of parameters and local variables, and, in different files, calling the same known functions; a new copy is a regression": "名前、コメント、空白、引数と局所変数の名前を除いて本体が同じ、製品の関数。別のファイルの関数は、呼ぶ分かっている関数も同じときだけ。新しい写しは後退になる",
+	"product functions with the same body, ignoring names, comments, whitespace and the names of parameters and local variables, and, in different files, calling the same known functions; a new copy is a regression": "名前、コメント、空白、引数と局所変数の名前を除いて本体が同じ、製品の関数。別のファイルの関数は、呼ぶ分かっている関数も同じときだけ。新しい写しは悪化になる",
 	"every fix has to be made in each copy, and a copy that is forgotten keeps the bug":                                                           "直すたびに写しのすべてを直すことになり、忘れた写しにはバグが残る",
 	"delete all but one and call the one that is left; how to share the code is the author's decision":                                            "1つだけ残して消し、残したものを呼ぶ。どう共通にするかは作者が決める",
 	"%s changed; %s still has the body it had":                                                                                                    "%s が変わった。%s は前の本体のまま",
@@ -278,6 +281,6 @@ var Japanese = map[string]string{
 
 	// Product-specific gates of kind measure.
 	"%s: %s is no longer guarded (was: %s)":                                               "%s: %s が守られなくなった（前は %s）",
-	"the product's own gate %s reported it in the base version":                           "製品自身のゲート %s が、base の版でこれを報告していた",
+	"the product's own gate %s reported it in the base version":                           "製品自身のゲート %s が、base でこれを報告していた",
 	"restore it, or, if it was removed on purpose, make the gate answer it as legitimate": "元に戻す。意図して消したなら、ゲートがそれを正当な削除と答えるようにする",
 }

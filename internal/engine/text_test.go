@@ -136,6 +136,57 @@ func TestTextSummaryIsInTheChosenLanguage(t *testing.T) {
 	}
 }
 
+// viewpoint: writing rule
+// target: engine.WriteText
+// The summary counts the existing findings only when there are some: "0 existing findings" reads
+// as if a search had come back empty. The rest of the line stays, whatever the outcome.
+func TestTheSummaryCountsExistingFindingsOnlyWhenThereAreSome(t *testing.T) {
+	found := []engine.Finding{{Rule: "tests/no-sleep", File: "a_test.go", Line: 1}}
+	outcomes := map[string]engine.Report{
+		"regression": {Regressions: found},
+		"review":     {Reviews: found},
+		"clean":      {},
+	}
+	existing := map[string]string{"en": "existing finding", "ja": "既存のルール違反"}
+	for name, r := range outcomes {
+		for _, untouched := range []int{0, 3} {
+			r.Untouched = untouched
+			for lang, word := range existing {
+				var out bytes.Buffer
+				engine.WriteText(&out, r, lang)
+				lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+				last := lines[len(lines)-1]
+				if has := strings.Contains(last, word); has != (untouched > 0) {
+					t.Errorf("%s, %d existing, %s: the summary %q should mention %q: %v", name, untouched, lang, last, word, untouched > 0)
+				}
+				if untouched > 0 && !strings.Contains(last, "3") {
+					t.Errorf("%s, %s: the summary %q must give the count of existing findings", name, lang, last)
+				}
+			}
+		}
+	}
+}
+
+// viewpoint: writing rule
+// target: engine.WriteText
+// The summary of a run that needs review counts the findings to review and the new exceptions
+// together, with or without existing findings.
+func TestTheReviewSummaryCountsFindingsAndNewExceptionsTogether(t *testing.T) {
+	r := engine.Report{
+		Reviews:       []engine.Finding{{Rule: "config/loosened", File: ".hadome.yml"}},
+		NewExceptions: []engine.Marker{{Rule: "tests/no-sleep", Reason: "the mock answers only after 50ms", File: "a_test.go", Line: 3}},
+	}
+	for _, untouched := range []int{0, 5} {
+		r.Untouched = untouched
+		var out bytes.Buffer
+		engine.WriteText(&out, r, "en")
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		if last := lines[len(lines)-1]; !strings.Contains(last, " 2 item(s)") {
+			t.Errorf("%d existing: one finding and one new exception make 2 items to review, got %q", untouched, last)
+		}
+	}
+}
+
 // viewpoint: state integrity
 // target: engine.Engine.Check
 // Messages invariant 1: wording plays no part in comparing versions. A finding already in base

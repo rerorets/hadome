@@ -152,14 +152,26 @@ func location(file string, line int) string {
 	return fmt.Sprintf("%s:%d", plain(file), line)
 }
 
+// summary leaves out the count of existing findings when there are none, since "0 existing
+// findings" reads as if hadome had looked for something and come back empty.
 func summary(r Report) Text {
+	none := r.Untouched == 0
 	switch r.ExitCode() {
 	case ExitRegression:
+		if none {
+			return T("%d regression(s).", len(r.Regressions))
+		}
 		return T("%d regression(s). %d existing finding(s) unchanged (not blocking).", len(r.Regressions), r.Untouched)
 	case ExitReview:
-		return T("No regressions. %d item(s) need a person's review. %d existing finding(s) unchanged.",
-			len(r.Reviews)+len(r.NewExceptions), r.Untouched)
+		reviews := len(r.Reviews) + len(r.NewExceptions)
+		if none {
+			return T("No regressions. %d item(s) need a person's review.", reviews)
+		}
+		return T("No regressions. %d item(s) need a person's review. %d existing finding(s) unchanged.", reviews, r.Untouched)
 	default:
+		if none {
+			return T("No regressions.")
+		}
 		return T("No regressions. %d existing finding(s) unchanged (not blocking).", r.Untouched)
 	}
 }

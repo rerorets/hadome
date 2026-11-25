@@ -38,7 +38,7 @@ hadome（歯止め）は変更をmainと比べ、その変更で増えた違反�
   </picture>
 </p>
 
-見るのは、コードの書き方（依存の向き・大きさ・コメント）と、テストの書き方です。テストは本数ではなく、テストが呼んでいる関数の範囲で比べます。テストを消して範囲が狭まれば、後退として報告します。
+見るのは、コードの書き方（依存の向き・大きさ・コメント）と、テストの書き方です。テストは本数ではなく、テストが呼んでいる関数の範囲で比べます。テストを消して範囲が狭まれば、悪化として報告します。
 
 Claude CodeやCodexのようなAIエージェントがコードの大半を書くリポジトリで使うことを想定しています。エージェントがタスクを通すためにテストを消す、理由を書かずにスキップする、assertを消して何も確かめないテストにする、といった変更を止めます。結果はJSONでも出せて、エージェントはそれを読んで直します。
 
@@ -46,7 +46,7 @@ TypeScript・Python・Java・Kotlin・Go・Rust・Terraform・Ansibleを、1つ�
 
 ## 出力の例
 
-`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存の図に無いimportをした変更の結果です。
+`store.Append`の唯一のテストを消し、別のテストにsleepを足し、依存関係図に無いimportをした変更の結果です。
 
 ```console
 $ hadome check --base main
@@ -62,7 +62,7 @@ $ hadome check --base main
   store/store_test.go:9
   why: the behaviour of example.com/app/store.Append can now change without any test noticing
   fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
-3 regression(s). 0 existing finding(s) unchanged (not blocking).
+3 regression(s).
 ```
 
 出力は既定で英語です。`--lang ja`を付けると日本語で出ます。
@@ -74,9 +74,9 @@ $ hadome check --base main
 
 ファイル名や例外の理由のような、リポジトリから来た値に制御文字（改行・ESC など）が入っていると、その値は引用符で囲み、Go の文字列リテラルと同じ形でエスケープして出します。値の改行で行が分かれて、CI のログにコマンドの行が紛れ込まないようにするためです。
 
-## 後退と整理
+## 悪化と整理
 
-hadomeはテストの本数ではなく「守っている範囲」を比べて、整理と後退を見分けます。テストが3本減っても、それが整理なのか後退なのかは、本数だけでは分かりません。
+hadomeはテストの本数ではなく「守っている範囲」を比べて、整理と悪化を見分けます。テストが3本減っても、それが整理なのか悪化なのかは、本数だけでは分かりません。
 
 - **対象**: テストが呼んでいる関数やメソッド。hadomeが割り出します
 - **守っている範囲**: 有効なテストが届く対象の集合
@@ -85,7 +85,7 @@ hadomeはテストの本数ではなく「守っている範囲」を比べて�
 |---|---|---|---|
 | 重複していた3本を1本にまとめた | 減る | 変わらない | 整理 |
 | コードを消し、そのテストも消した | 減る | 対象ごと消えた | 整理 |
-| テストだけを消した・弱くした | 減るか同じ | 狭まった | 後退 |
+| テストだけを消した・弱くした | 減るか同じ | 狭まった | 悪化 |
 
 要らなくなった振る舞いは、テストだけでなくコードごと消すと、整理として通ります。
 
@@ -99,9 +99,9 @@ hadomeはテストの本数ではなく「守っている範囲」を比べて�
 cd path/to/your-repo
 ```
 
-### 1. 入れる
+### 1. インストール
 
-使っている言語の項目を開きます。どれもバージョンを固定して入れます。どの入れ方でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。詳しくは[配布の設計](docs/design/distribution.ja.md)にあります。
+使っている言語の項目を開きます。どれもバージョンを固定して入れます。どのインストール方法でも、中身は同じバイナリで、設定も同じ`.hadome.yml`です。詳しくは[配布の設計](docs/design/distribution.ja.md)にあります。
 
 以降は`hadome …`と書きます。`npx hadome …`や`go tool hadome …`など、入れた方法の呼び方に読み替えてください。
 
@@ -191,7 +191,7 @@ brew install rerorets/tap/hadome
 hadome check
 ```
 
-[リリース](https://github.com/rerorets/hadome/releases)のアーカイブから直接入れることもできます。Homebrew の無い Windows では、この方法か Python の入れ方を使います。次の手順で、`hadome`を PATH の通る場所に置きます。Windows では PATH を足したあとに開いたターミナルから呼べます。
+[リリース](https://github.com/rerorets/hadome/releases)のアーカイブから直接インストールすることもできます。Homebrew の無い Windows では、この方法か Python のインストール方法を使います。次の手順で、`hadome`を PATH の通る場所に置きます。Windows では PATH を足したあとに開いたターミナルから呼べます。
 
 ```powershell
 # Windows (PowerShell); on an arm64 machine, use windows_arm64
@@ -258,12 +258,12 @@ This repository uses hadome to stop regressions in code and tests.
 | 分類 | ルール |
 |---|---|
 | `tests/` | `scope-shrunk`（テストが守る範囲の縮小）・`invariant-unguarded`・`no-clock`・`no-sleep`・`always-true`・`skip-without-reason`・`no-mock`（純粋なコードのテストのモック）・`guards-nothing`（製品のコードを呼ばないテスト）・`no-assertion`（assert の無いテスト）・`duplicate`（本体が同じテスト）・`purity-lost`と`target-unknown`（確認待ち） |
-| `deps/` | `not-in-diagram`（依存の図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱）・`cycle`（ユニットの間に新しい循環を作るimport。図が無くても動く）・`layer`（内側の層から外側の層へのimport） |
+| `deps/` | `not-in-diagram`（依存関係図に無いimport）・`call-not-in-diagram`（呼び出しの図に無い呼び出し）・`diagram-stale`（何も指さない箱）・`cycle`（ユニットの間に新しい循環を作るimport。図が無くても動く）・`layer`（内側の層から外側の層へのimport） |
 | `size/` | `file-lines`・`function-lines`・`params`・`complexity`・`interface-methods` |
 | `comments/` | `todo-format`（いつやるかの無いTODO）・`missing-doc`・`broken-reference`（無い文書を指すコメント） |
 | `code/` | `config-literal`（関数に書いた、設定に置く値）・`swallowed-error`（捨てたエラー）・`duplicate`（本体が同じ関数）・`diverged-copy`（片方だけ直した写し） |
 | `unknown/` | `unread`（確認待ち）: hadomeが読めなかったファイル・`import`（確認待ち）: 行き先が実行するまで決まらないimport |
-| `mutation/` | `survived`（`hadome mutate`だけ）: テストが気づかなかった壊し方 |
+| `mutation/` | `survived`（`hadome mutate`だけ）: テストが気づかなかったミュータント |
 | `config/` | `loosened`（確認待ち）: 自分を判定するルールを緩める変更 |
 
 どのルールもなぜ問題かと直し方を一緒に出します。ルールの仕様は[docs/design](docs/design)にあります。
@@ -272,28 +272,28 @@ This repository uses hadome to stop regressions in code and tests.
 
 | 場面 | 呼ぶもの | 返ってくるもの |
 |---|---|---|
-| エージェントのループの中 | `hadome check --format json` | 後退ごとに、ルール・ファイルと行・なぜ困るか・直し方 |
-| エージェントが終えようとするとき | Stopフック（[エージェントのフックで使う](docs/hooks.ja.md)） | 後退があれば、エージェントは終えずに直し続ける |
+| エージェントのループの中 | `hadome check --format json` | 悪化ごとに、ルール・ファイルと行・なぜ困るか・直し方 |
+| エージェントが終えようとするとき | Stopフック（[エージェントのフックで使う](docs/hooks.ja.md)） | 悪化があれば、エージェントは終えずに直し続ける |
 | pushの前 | `hadome check --head HEAD`（pushの前のフックとして） | 読みやすい一覧 |
 | プルリクエストごとのCI | `hadome check --base origin/main` | 終了コードと、コメントに貼れる要約 |
-| 変更を仕上げる前（手元） | `hadome mutate` | テストが気づかなかった壊し方の一覧 |
+| 変更を仕上げる前（手元） | `hadome mutate` | テストが気づかなかったミュータントの一覧 |
 
 | 終了コード | 意味 |
 |---|---|
-| `0` | 後退なし |
-| `1` | 後退が1つ以上ある |
-| `2` | 設定の誤り。チェックの結果を信じられないので通さない |
-| `3` | 後退は無いが、人の確認が要るもの（新しい例外、ルールを緩める設定など）がある |
+| `0` | 悪化なし |
+| `1` | 悪化が1つ以上ある |
+| `2` | 設定エラー。チェックの結果を信じられないので通さない |
+| `3` | 悪化は無いが、人の確認が要るもの（新しい例外、ルールを緩める設定など）がある |
 
 hadomeはリポジトリを読むだけで、GitHubなどのサービスとは通信しません。要約をコメントに貼るなら、CIの側で貼ります。GitHub Actions の例は[CI で使う](docs/ci.ja.md)にあります。
 
 ## 設定と例外
 
-設定は`.hadome.yml`に書きます。例: 上限の数字、依存の図、不変条件。ファイルが無くても動きます。
+設定は`.hadome.yml`に書きます。例: 上限の数字、依存関係図、不変条件。ファイルが無くても動きます。
 
 `hadome init`で最小の`.hadome.yml`を作れます。すでにあるファイルは上書きしません。出力をいつも日本語にするなら、そこに`messages: ja`を書きます。`--lang`を付けたときは、`--lang`を優先します。
 
-依存の図は`hadome suggest diagram`で、呼び出しの図は`hadome suggest calls`で、叩き台を作れます。叩き台は、いまのコードのとおりに描いた図です。ファイルに書いて`rules.deps.diagram`と`rules.deps.calls`に書くと、図より悪くする変更が落ちるようになります。
+依存関係図は`hadome suggest diagram`で、呼び出しの図は`hadome suggest calls`で、叩き台を作れます。叩き台は、いまのコードのとおりに描いた図です。ファイルに書いて`rules.deps.diagram`と`rules.deps.calls`に書くと、図より悪くする変更が落ちるようになります。
 
 ```sh
 hadome suggest diagram > docs/dependencies.md
@@ -315,18 +315,18 @@ time.Sleep(50 * time.Millisecond)
 
 ### 自分の製品だけのルール
 
-「ログの置き場にUPDATEを書かない」のようなルールは、自分のリポジトリに小さなプログラムとして書きます。言語は問いません。hadomeはそれを組み込みのルールと同じように扱い、後退だけを報告し、理由つきの例外も効かせます。書き方は[製品固有のゲート](docs/external-gates.ja.md)にあります。
+「ログの置き場にUPDATEを書かない」のようなルールは、自分のリポジトリに小さなプログラムとして書きます。言語は問いません。hadomeはそれを組み込みのルールと同じように扱い、悪化だけを報告し、理由つきの例外も効かせます。書き方は[製品固有のゲート](docs/external-gates.ja.md)にあります。
 
 ## ミューテーションを試す
 
-`.hadome.yml`に`mutation`を書くと、`hadome mutate`で、変更が触れた関数を1か所ずつ壊し、テストが気づくかを試せます。どのテストも気づかなかった壊し方は、`mutation/survived`の後退として報告します。テストを流すビルドがコンパイルしない Go のファイル（`//go:build !cgo` など）の壊し方は、テストを流さず、生き残りとも数えずに、人の確認に回します。
+`.hadome.yml`に`mutation`を書くと、`hadome mutate`で、変更が触れた関数を1か所ずつ壊し、テストが気づくかを試せます。どのテストも気づかなかったミュータントは、`mutation/survived`の悪化として報告します。テストを流すビルドがコンパイルしない Go のファイル（`//go:build !cgo` など）のミュータントは、テストを流さず、生き残りとも数えずに、人の確認に回します。
 
 ```yaml
 mutation:
   test: [go, test, ./...]
 ```
 
-壊し方ごとにテストを1回動かすので、`check`よりずっと時間がかかります。手元で、変更を仕上げる前に回すことを想定しています。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
+ミュータントごとにテストを1回動かすので、`check`よりずっと時間がかかります。手元で、変更を仕上げる前に回すことを想定しています。詳しくは[エージェント向けの手引き](docs/for-agents.ja.md)にあります。
 
 ## 他の道具との違い
 
@@ -334,13 +334,13 @@ hadomeは変更の前（base）と後（head）の両方を検査して、結果
 
 | 道具（例） | 比べ方 | hadomeとの違い |
 |---|---|---|
-| 差分の行だけを見るlinter（golangci-lintの`--new-from-rev`、reviewdog） | 変更した行に出た違反だけを出す | 変更した行の外で起きた後退は見えません。例: テストを消したせいで、触っていない関数がどのテストからも呼ばれなくなった |
+| 差分の行だけを見るlinter（golangci-lintの`--new-from-rev`、reviewdog） | 変更した行に出た違反だけを出す | 変更した行の外で起きた悪化は見えません。例: テストを消したせいで、触っていない関数がどのテストからも呼ばれなくなった |
 | 結果を記録して悪化を止める道具（Betterer） | 前回の結果をファイルに保存し、それより悪くなったら落とす | hadomeは結果を保存せず、毎回baseを検査し直します。記録のファイルを更新し続ける手間がありません |
 | 新しいコードだけを判定する仕組み（SonarQubeのNew Code） | サーバーに結果を貯めて、新しいコードを判定する | hadomeはサーバーを持たず、手元でもCIでも同じバイナリが動きます |
 | カバレッジの差分（Codecovなど） | テストを動かし、通った行を測る | `hadome check`はテストを動かさず、テストが呼ぶ関数を読みます。言語ごとのテストランナーに依存しません。実行するまで呼び先が決まらない呼び出しは読めないので、人の確認に回します |
 | AIのコードレビュー | 変更をLLMに読ませる | hadomeはLLMを使わず、通信もしません。同じ変更には毎回同じ結果を返します |
 | エージェントの操作を見張るフック（AgentTrail Guard） | ツールを呼ぶ前にコマンドやパスを照合し、テストのファイルを消す操作で人に聞く | hadomeは操作ではなく、変更の結果を見ます。テストを空にする、assertを消すといったファイルの中の弱め方も、スクリプトを通した削除も、結果に出れば拾います |
-| テストを2つの版で動かす道具（trustbut、goalline） | 新しいテストを前のコードで、または前のテストを新しいコードで動かす。差分からスキップやassertの数の減りを数える | 期待値の書き換えのように、動かして初めて分かる弱め方は、こちらが向いています。hadomeはテストを動かさないので、それは拾いません。代わりに数ではなくテストが呼ぶ関数の集合で比べるので、消した分を別の場所で足して数を合わせても、守る範囲が縮めば報告します |
+| テストを2つのバージョンで動かす道具（trustbut、goalline） | 新しいテストを前のコードで、または前のテストを新しいコードで動かす。差分からスキップやassertの数の減りを数える | 期待値の書き換えのように、動かして初めて分かる弱め方は、こちらが向いています。hadomeはテストを動かさないので、それは拾いません。代わりに数ではなくテストが呼ぶ関数の集合で比べるので、消した分を別の場所で足して数を合わせても、守る範囲が縮めば報告します |
 
 ## 名前の由来
 

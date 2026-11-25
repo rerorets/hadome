@@ -62,7 +62,7 @@ $ hadome check --base main
   store/store_test.go:9
   why: the behaviour of example.com/app/store.Append can now change without any test noticing
   fix: keep or restore a test that calls example.com/app/store.Append, or remove example.com/app/store.Append itself if it is no longer needed
-3 regression(s). 0 existing finding(s) unchanged (not blocking).
+3 regression(s).
 ```
 
 The output is in English by default. With `--lang ja` it comes out in Japanese: the findings' wording (`message`, `why`, `fix`), `hadome explain <rule>` and the summary line. JSON keys, rule IDs and exit codes do not change. The setting that makes it Japanese without the flag is under "Configuration and exceptions" below.
